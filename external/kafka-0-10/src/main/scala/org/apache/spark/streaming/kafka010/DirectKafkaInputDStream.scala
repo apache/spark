@@ -70,7 +70,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   @transient private var kc: Consumer[K, V] = null
   def consumer(): Consumer[K, V] = this.synchronized {
     if (null == kc) {
-      kc = consumerStrategy.onStart(currentOffsets.mapValues(l => new java.lang.Long(l)).asJava)
+      kc = consumerStrategy.onStart(currentOffsets.mapValues(l => java.lang.Long.valueOf(l)).asJava)
     }
     kc
   }
@@ -108,7 +108,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
     }
   }
 
-  // Keep this consistent with how other streams are named (e.g. "Flume polling stream [2]")
   private[streaming] override def name: String = s"Kafka 0.10 direct stream [$id]"
 
   protected[streaming] override val checkpointData =
@@ -154,7 +153,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
     if (effectiveRateLimitPerPartition.values.sum > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
       Some(effectiveRateLimitPerPartition.map {
-        case (tp, limit) => tp -> Math.max((secsPerBatch * limit).toLong, 1L)
+        case (tp, limit) => tp -> Math.max((secsPerBatch * limit).toLong,
+          ppc.minRatePerPartition(tp))
       })
     } else {
       None
@@ -166,6 +166,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
    * which would throw off consumer position.  Fix position if this happens.
    */
   private def paranoidPoll(c: Consumer[K, V]): Unit = {
+    // don't actually want to consume any messages, so pause all partitions
+    c.pause(c.assignment())
     val msgs = c.poll(0)
     if (!msgs.isEmpty) {
       // position should be minimum offset per topicpartition
@@ -204,8 +206,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
     // position for new partitions determined by auto.offset.reset if no commit
     currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
 
-    // don't want to consume messages, so pause
-    c.pause(newPartitions.asJava)
     // find latest available offsets
     c.seekToEnd(currentOffsets.keySet.asJava)
     parts.map(tp => tp -> c.position(tp)).toMap
@@ -262,9 +262,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
         tp -> c.position(tp)
       }.toMap
     }
-
-    // don't actually want to consume any messages, so pause all partitions
-    c.pause(currentOffsets.keySet.asJava)
   }
 
   override def stop(): Unit = this.synchronized {

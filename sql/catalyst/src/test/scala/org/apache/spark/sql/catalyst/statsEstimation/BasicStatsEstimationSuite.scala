@@ -38,24 +38,6 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     // row count * (overhead + column size)
     size = Some(10 * (8 + 4)))
 
-  test("BroadcastHint estimation") {
-    val filter = Filter(Literal(true), plan)
-    val filterStatsCboOn = Statistics(sizeInBytes = 10 * (8 +4),
-      rowCount = Some(10), attributeStats = AttributeMap(Seq(attribute -> colStat)))
-    val filterStatsCboOff = Statistics(sizeInBytes = 10 * (8 +4))
-    checkStats(
-      filter,
-      expectedStatsCboOn = filterStatsCboOn,
-      expectedStatsCboOff = filterStatsCboOff)
-
-    val broadcastHint = ResolvedHint(filter, HintInfo(broadcast = true))
-    checkStats(
-      broadcastHint,
-      expectedStatsCboOn = filterStatsCboOn.copy(hints = HintInfo(broadcast = true)),
-      expectedStatsCboOff = filterStatsCboOff.copy(hints = HintInfo(broadcast = true))
-    )
-  }
-
   test("range") {
     val range = Range(1, 5, 1, None)
     val rangeStats = Statistics(sizeInBytes = 4 * 8)

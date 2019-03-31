@@ -19,8 +19,6 @@ package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
 
@@ -67,7 +65,7 @@ private[spark] class KafkaRDD[K, V](
 
   // TODO is it necessary to have separate configs for initial poll time vs ongoing poll time?
   private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms",
-    conf.getTimeAsMs("spark.network.timeout", "120s"))
+    conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L)
   private val cacheInitialCapacity =
     conf.getInt("spark.streaming.kafka.consumer.cache.initialCapacity", 16)
   private val cacheMaxCapacity =
@@ -239,26 +237,18 @@ private class KafkaRDDIterator[K, V](
   cacheLoadFactor: Float
 ) extends Iterator[ConsumerRecord[K, V]] {
 
-  val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+  context.addTaskCompletionListener[Unit](_ => closeIfNeeded())
 
-  context.addTaskCompletionListener(_ => closeIfNeeded())
-
-  val consumer = if (useConsumerCache) {
-    CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
-    if (context.attemptNumber >= 1) {
-      // just in case the prior attempt failures were cache related
-      CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
-    }
-    CachedKafkaConsumer.get[K, V](groupId, part.topic, part.partition, kafkaParams)
-  } else {
-    CachedKafkaConsumer.getUncached[K, V](groupId, part.topic, part.partition, kafkaParams)
+  val consumer = {
+    KafkaDataConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
+    KafkaDataConsumer.acquire[K, V](part.topicPartition(), kafkaParams, context, useConsumerCache)
   }
 
   var requestOffset = part.fromOffset
 
   def closeIfNeeded(): Unit = {
-    if (!useConsumerCache && consumer != null) {
-      consumer.close()
+    if (consumer != null) {
+      consumer.release()
     }
   }
 

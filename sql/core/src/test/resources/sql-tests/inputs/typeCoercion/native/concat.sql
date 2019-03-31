@@ -148,6 +148,8 @@ SELECT
     (tinyint_array1 || smallint_array2) ts_array,
     (smallint_array1 || int_array2) si_array,
     (int_array1 || bigint_array2) ib_array,
+    (bigint_array1 || decimal_array2) bd_array,
+    (decimal_array1 || double_array2) dd_array,
     (double_array1 || float_array2) df_array,
     (string_array1 || data_array2) std_array,
     (timestamp_array1 || string_array2) tst_array,

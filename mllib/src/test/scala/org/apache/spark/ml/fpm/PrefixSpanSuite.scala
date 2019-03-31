@@ -29,8 +29,11 @@ class PrefixSpanSuite extends MLTest {
 
   test("PrefixSpan projections with multiple partial starts") {
     val smallDataset = Seq(Seq(Seq(1, 2), Seq(1, 2, 3))).toDF("sequence")
-    val result = PrefixSpan.findFrequentSequentialPatterns(smallDataset, "sequence",
-      minSupport = 1.0, maxPatternLength = 2, maxLocalProjDBSize = 32000000)
+    val result = new PrefixSpan()
+      .setMinSupport(1.0)
+      .setMaxPatternLength(2)
+      .setMaxLocalProjDBSize(32000000)
+      .findFrequentSequentialPatterns(smallDataset)
       .as[(Seq[Seq[Int]], Long)].collect()
     val expected = Array(
       (Seq(Seq(1)), 1L),
@@ -90,8 +93,11 @@ class PrefixSpanSuite extends MLTest {
 
   test("PrefixSpan Integer type, variable-size itemsets") {
     val df = smallTestData.toDF("sequence")
-    val result = PrefixSpan.findFrequentSequentialPatterns(df, "sequence",
-      minSupport = 0.5, maxPatternLength = 5, maxLocalProjDBSize = 32000000)
+    val result = new PrefixSpan()
+      .setMinSupport(0.5)
+      .setMaxPatternLength(5)
+      .setMaxLocalProjDBSize(32000000)
+      .findFrequentSequentialPatterns(df)
       .as[(Seq[Seq[Int]], Long)].collect()
 
     compareResults[Int](smallTestDataExpectedResult, result)
@@ -99,8 +105,11 @@ class PrefixSpanSuite extends MLTest {
 
   test("PrefixSpan input row with nulls") {
     val df = (smallTestData :+ null).toDF("sequence")
-    val result = PrefixSpan.findFrequentSequentialPatterns(df, "sequence",
-      minSupport = 0.5, maxPatternLength = 5, maxLocalProjDBSize = 32000000)
+    val result = new PrefixSpan()
+      .setMinSupport(0.5)
+      .setMaxPatternLength(5)
+      .setMaxLocalProjDBSize(32000000)
+      .findFrequentSequentialPatterns(df)
       .as[(Seq[Seq[Int]], Long)].collect()
 
     compareResults[Int](smallTestDataExpectedResult, result)
@@ -111,8 +120,11 @@ class PrefixSpanSuite extends MLTest {
     val df = smallTestData
       .map(seq => seq.map(itemSet => itemSet.map(intToString)))
       .toDF("sequence")
-    val result = PrefixSpan.findFrequentSequentialPatterns(df, "sequence",
-      minSupport = 0.5, maxPatternLength = 5, maxLocalProjDBSize = 32000000)
+    val result = new PrefixSpan()
+      .setMinSupport(0.5)
+      .setMaxPatternLength(5)
+      .setMaxLocalProjDBSize(32000000)
+      .findFrequentSequentialPatterns(df)
       .as[(Seq[Seq[String]], Long)].collect()
 
     val expected = smallTestDataExpectedResult.map { case (seq, freq) =>

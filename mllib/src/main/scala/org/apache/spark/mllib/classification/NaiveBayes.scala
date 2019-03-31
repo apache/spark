@@ -83,7 +83,7 @@ class NaiveBayesModel private[spark] (
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>
       // This should never happen.
-      throw new UnknownError(s"Invalid modelType: $modelType.")
+      throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
   }
 
   @Since("1.0.0")
@@ -170,8 +170,6 @@ class NaiveBayesModel private[spark] (
     val data = NaiveBayesModel.SaveLoadV2_0.Data(labels, pi, theta, modelType)
     NaiveBayesModel.SaveLoadV2_0.save(sc, path, data)
   }
-
-  override protected def formatVersion: String = "2.0"
 }
 
 @Since("1.3.0")

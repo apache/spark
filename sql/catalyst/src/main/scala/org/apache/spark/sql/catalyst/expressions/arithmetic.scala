@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -220,6 +222,74 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
+// Common base trait for Divide and Remainder, since these two classes are almost identical
+trait DivModLike extends BinaryArithmetic {
+
+  override def nullable: Boolean = true
+
+  final override def eval(input: InternalRow): Any = {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
+      null
+    } else {
+      val input1 = left.eval(input)
+      if (input1 == null) {
+        null
+      } else {
+        evalOperation(input1, input2)
+      }
+    }
+  }
+
+  def evalOperation(left: Any, right: Any): Any
+
+  /**
+   * Special case handling due to division/remainder by 0 => null.
+   */
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.value}.isZero()"
+    } else {
+      s"${eval2.value} == 0"
+    }
+    val javaType = CodeGenerator.javaType(dataType)
+    val operation = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.value}.$decimalMethod(${eval2.value})"
+    } else {
+      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
+    }
+    if (!left.nullable && !right.nullable) {
+      ev.copy(code = code"""
+        ${eval2.code}
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        if ($isZero) {
+          ${ev.isNull} = true;
+        } else {
+          ${eval1.code}
+          ${ev.value} = $operation;
+        }""")
+    } else {
+      ev.copy(code = code"""
+        ${eval2.code}
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        if (${eval2.isNull} || $isZero) {
+          ${ev.isNull} = true;
+        } else {
+          ${eval1.code}
+          if (${eval1.isNull}) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = $operation;
+          }
+        }""")
+    }
+  }
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It always performs floating point division.",
@@ -231,77 +301,54 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
        1.0
   """)
 // scalastyle:on line.size.limit
-case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Divide(left: Expression, right: Expression) extends DivModLike {
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
-  override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
   }
 
-  override def eval(input: InternalRow): Any = {
-    val input2 = right.eval(input)
-    if (input2 == null || input2 == 0) {
-      null
-    } else {
-      val input1 = left.eval(input)
-      if (input1 == null) {
-        null
-      } else {
-        div(input1, input2)
-      }
-    }
+  override def evalOperation(left: Any, right: Any): Any = div(left, right)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2` rounded to the long integer. It returns NULL if an operand is NULL or `expr2` is 0.",
+  examples = """
+    Examples:
+      > SELECT 3 _FUNC_ 2;
+       1
+  """,
+  since = "3.0.0")
+// scalastyle:on line.size.limit
+case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
+
+  override def inputType: AbstractDataType = IntegralType
+  override def dataType: DataType = if (SQLConf.get.integralDivideReturnLong) {
+    LongType
+  } else {
+    left.dataType
   }
 
-  /**
-   * Special case handling due to division by 0 => null.
-   */
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval1 = left.genCode(ctx)
-    val eval2 = right.genCode(ctx)
-    val isZero = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval2.value}.isZero()"
-    } else {
-      s"${eval2.value} == 0"
-    }
-    val javaType = CodeGenerator.javaType(dataType)
-    val divide = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval1.value}.$decimalMethod(${eval2.value})"
-    } else {
-      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
-    }
-    if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if ($isZero) {
-          ${ev.isNull} = true;
-        } else {
-          ${eval1.code}
-          ${ev.value} = $divide;
-        }""")
-    } else {
-      ev.copy(code = s"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if (${eval2.isNull} || $isZero) {
-          ${ev.isNull} = true;
-        } else {
-          ${eval1.code}
-          if (${eval1.isNull}) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = $divide;
-          }
-        }""")
-    }
+  override def symbol: String = "/"
+  override def sqlOperator: String = "div"
+
+  private lazy val div: (Any, Any) => Any = left.dataType match {
+    case i: IntegralType =>
+      val divide = i.integral.asInstanceOf[Integral[Any]].quot _
+      if (SQLConf.get.integralDivideReturnLong) {
+        val toLong = i.integral.asInstanceOf[Integral[Any]].toLong _
+        (x, y) => toLong(divide(x, y))
+      } else {
+        divide
+      }
   }
+
+  override def evalOperation(left: Any, right: Any): Any = div(left, right)
 }
 
 @ExpressionDescription(
@@ -313,82 +360,30 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
       > SELECT MOD(2, 1.8);
        0.2
   """)
-case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
+case class Remainder(left: Expression, right: Expression) extends DivModLike {
 
   override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
-  override def nullable: Boolean = true
 
-  private lazy val integral = dataType match {
-    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
-    case i: FractionalType => i.asIntegral.asInstanceOf[Integral[Any]]
+  private lazy val mod: (Any, Any) => Any = dataType match {
+    // special cases to make float/double primitive types faster
+    case DoubleType =>
+      (left, right) => left.asInstanceOf[Double] % right.asInstanceOf[Double]
+    case FloatType =>
+      (left, right) => left.asInstanceOf[Float] % right.asInstanceOf[Float]
+
+    // catch-all cases
+    case i: IntegralType =>
+      val integral = i.integral.asInstanceOf[Integral[Any]]
+      (left, right) => integral.rem(left, right)
+    case i: FractionalType => // should only be DecimalType for now
+      val integral = i.asIntegral.asInstanceOf[Integral[Any]]
+      (left, right) => integral.rem(left, right)
   }
 
-  override def eval(input: InternalRow): Any = {
-    val input2 = right.eval(input)
-    if (input2 == null || input2 == 0) {
-      null
-    } else {
-      val input1 = left.eval(input)
-      if (input1 == null) {
-        null
-      } else {
-        input1 match {
-          case d: Double => d % input2.asInstanceOf[java.lang.Double]
-          case f: Float => f % input2.asInstanceOf[java.lang.Float]
-          case _ => integral.rem(input1, input2)
-        }
-      }
-    }
-  }
-
-  /**
-   * Special case handling for x % 0 ==> null.
-   */
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval1 = left.genCode(ctx)
-    val eval2 = right.genCode(ctx)
-    val isZero = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval2.value}.isZero()"
-    } else {
-      s"${eval2.value} == 0"
-    }
-    val javaType = CodeGenerator.javaType(dataType)
-    val remainder = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval1.value}.$decimalMethod(${eval2.value})"
-    } else {
-      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
-    }
-    if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if ($isZero) {
-          ${ev.isNull} = true;
-        } else {
-          ${eval1.code}
-          ${ev.value} = $remainder;
-        }""")
-    } else {
-      ev.copy(code = s"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if (${eval2.isNull} || $isZero) {
-          ${ev.isNull} = true;
-        } else {
-          ${eval1.code}
-          if (${eval1.isNull}) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = $remainder;
-          }
-        }""")
-    }
-  }
+  override def evalOperation(left: Any, right: Any): Any = mod(left, right)
 }
 
 @ExpressionDescription(
@@ -479,7 +474,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
     }
 
     if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -490,7 +485,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
           $result
         }""")
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -556,7 +551,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        2
   """)
-case class Least(children: Seq[Expression]) extends Expression {
+case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -567,16 +562,14 @@ case class Least(children: Seq[Expression]) extends Expression {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least two arguments")
-    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+    } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
-          s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
+          s" got LEAST(${children.map(_.dataType.catalogString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
-
-  override def dataType: DataType = children.head.dataType
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {
@@ -612,7 +605,7 @@ case class Least(children: Seq[Expression]) extends Expression {
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
     ev.copy(code =
-      s"""
+      code"""
          |${ev.isNull} = true;
          |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |$codes
@@ -631,7 +624,7 @@ case class Least(children: Seq[Expression]) extends Expression {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        10
   """)
-case class Greatest(children: Seq[Expression]) extends Expression {
+case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -642,16 +635,14 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least two arguments")
-    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
+    } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
-          s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
+          s" got GREATEST(${children.map(_.dataType.catalogString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
-
-  override def dataType: DataType = children.head.dataType
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {
@@ -687,7 +678,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
         """.stripMargin,
       foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
     ev.copy(code =
-      s"""
+      code"""
          |${ev.isNull} = true;
          |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |$codes

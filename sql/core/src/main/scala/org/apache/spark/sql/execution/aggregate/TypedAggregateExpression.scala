@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 object TypedAggregateExpression {
   def apply[BUF : Encoder, OUT : Encoder](
@@ -37,18 +38,14 @@ object TypedAggregateExpression {
     val bufferSerializer = bufferEncoder.namedExpressions
 
     val outputEncoder = encoderFor[OUT]
-    val outputType = if (outputEncoder.flat) {
-      outputEncoder.schema.head.dataType
-    } else {
-      outputEncoder.schema
-    }
+    val outputType = outputEncoder.objSerializer.dataType
 
-    // Checks if the buffer object is simple, i.e. the buffer encoder is flat and the serializer
-    // expression is an alias of `BoundReference`, which means the buffer object doesn't need
-    // serialization.
+    // Checks if the buffer object is simple, i.e. the `BUF` type is not serialized as struct
+    // and the serializer expression is an alias of `BoundReference`, which means the buffer
+    // object doesn't need serialization.
     val isSimpleBuffer = {
       bufferSerializer.head match {
-        case Alias(_: BoundReference, _) if bufferEncoder.flat => true
+        case Alias(_: BoundReference, _) if !bufferEncoder.isSerializedAsStruct => true
         case _ => false
       }
     }
@@ -70,7 +67,7 @@ object TypedAggregateExpression {
         outputEncoder.serializer,
         outputEncoder.deserializer.dataType,
         outputType,
-        !outputEncoder.flat || outputEncoder.schema.head.nullable)
+        outputEncoder.objSerializer.nullable)
     } else {
       ComplexTypedAggregateExpression(
         aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
@@ -79,9 +76,9 @@ object TypedAggregateExpression {
         None,
         bufferSerializer,
         bufferEncoder.resolveAndBind().deserializer,
-        outputEncoder.serializer,
+        outputEncoder.objSerializer,
         outputType,
-        !outputEncoder.flat || outputEncoder.schema.head.nullable)
+        outputEncoder.objSerializer.nullable)
     }
   }
 }
@@ -109,7 +106,9 @@ trait TypedAggregateExpression extends AggregateFunction {
     s"$nodeName($input)"
   }
 
-  override def nodeName: String = aggregator.getClass.getSimpleName.stripSuffix("$")
+  // aggregator.getClass.getSimpleName can cause Malformed class name error,
+  // call safer `Utils.getSimpleName` instead
+  override def nodeName: String = Utils.getSimpleName(aggregator.getClass).stripSuffix("$");
 }
 
 // TODO: merge these 2 implementations once we refactor the `AggregateFunction` interface.
@@ -214,7 +213,7 @@ case class ComplexTypedAggregateExpression(
     inputSchema: Option[StructType],
     bufferSerializer: Seq[NamedExpression],
     bufferDeserializer: Expression,
-    outputSerializer: Seq[Expression],
+    outputSerializer: Expression,
     dataType: DataType,
     nullable: Boolean,
     mutableAggBufferOffset: Int = 0,
@@ -246,13 +245,7 @@ case class ComplexTypedAggregateExpression(
     aggregator.merge(buffer, input)
   }
 
-  private lazy val resultObjToRow = dataType match {
-    case _: StructType =>
-      UnsafeProjection.create(CreateStruct(outputSerializer))
-    case _ =>
-      assert(outputSerializer.length == 1)
-      UnsafeProjection.create(outputSerializer.head)
-  }
+  private lazy val resultObjToRow = UnsafeProjection.create(outputSerializer)
 
   override def eval(buffer: Any): Any = {
     val resultObj = aggregator.finish(buffer)

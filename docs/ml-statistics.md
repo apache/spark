@@ -2,6 +2,21 @@
 layout: global
 title: Basic Statistics
 displayTitle: Basic Statistics
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 
@@ -87,6 +102,34 @@ Refer to the [`ChiSquareTest` Java docs](api/java/org/apache/spark/ml/stat/ChiSq
 Refer to the [`ChiSquareTest` Python docs](api/python/index.html#pyspark.ml.stat.ChiSquareTest$) for details on the API.
 
 {% include_example python/ml/chi_square_test_example.py %}
+</div>
+
+</div>
+
+## Summarizer
+
+We provide vector column summary statistics for `Dataframe` through `Summarizer`.
+Available metrics are the column-wise max, min, mean, variance, and number of nonzeros, as well as the total count.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+The following example demonstrates using [`Summarizer`](api/scala/index.html#org.apache.spark.ml.stat.Summarizer$)
+to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
+
+{% include_example scala/org/apache/spark/examples/ml/SummarizerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+The following example demonstrates using [`Summarizer`](api/java/org/apache/spark/ml/stat/Summarizer.html)
+to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
+
+{% include_example java/org/apache/spark/examples/ml/JavaSummarizerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [`Summarizer` Python docs](api/python/index.html#pyspark.ml.stat.Summarizer$) for details on the API.
+
+{% include_example python/ml/summarizer_example.py %}
 </div>
 
 </div>

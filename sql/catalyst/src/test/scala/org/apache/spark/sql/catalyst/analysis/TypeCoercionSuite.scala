@@ -54,8 +54,9 @@ class TypeCoercionSuite extends AnalysisTest {
   // | NullType             | ByteType | ShortType | IntegerType | LongType | DoubleType | FloatType | Dec(10, 2) | BinaryType | BooleanType | StringType | DateType | TimestampType | ArrayType  | MapType  | StructType  | NullType | CalendarIntervalType | DecimalType(38, 18) | DoubleType  | IntegerType  |
   // | CalendarIntervalType | X        | X         | X           | X        | X          | X         | X          | X          | X           | X          | X        | X             | X          | X        | X           | X        | CalendarIntervalType | X                   | X           | X            |
   // +----------------------+----------+-----------+-------------+----------+------------+-----------+------------+------------+-------------+------------+----------+---------------+------------+----------+-------------+----------+----------------------+---------------------+-------------+--------------+
-  // Note: MapType*, StructType* are castable only when the internal child types also match; otherwise, not castable.
+  // Note: StructType* is castable when all the internal child types are castable according to the table.
   // Note: ArrayType* is castable when the element type is castable according to the table.
+  // Note: MapType* is castable when both the key type and the value type are castable according to the table.
   // scalastyle:on line.size.limit
 
   private def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
@@ -128,17 +129,17 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   private def checkWidenType(
-      widenFunc: (DataType, DataType, Boolean) => Option[DataType],
+      widenFunc: (DataType, DataType) => Option[DataType],
       t1: DataType,
       t2: DataType,
       expected: Option[DataType],
       isSymmetric: Boolean = true): Unit = {
-    var found = widenFunc(t1, t2, conf.caseSensitiveAnalysis)
+    var found = widenFunc(t1, t2)
     assert(found == expected,
       s"Expected $expected as wider common type for $t1 and $t2, found $found")
     // Test both directions to make sure the widening is symmetric.
     if (isSymmetric) {
-      found = widenFunc(t2, t1, conf.caseSensitiveAnalysis)
+      found = widenFunc(t2, t1)
       assert(found == expected,
         s"Expected $expected as wider common type for $t2 and $t1, found $found")
     }
@@ -256,12 +257,43 @@ class TypeCoercionSuite extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
-  test("implicit type cast - MapType(StringType, StringType)") {
-    val checkedType = MapType(StringType, StringType)
-    checkTypeCasting(checkedType, castableTypes = Seq(checkedType))
-    shouldNotCast(checkedType, DecimalType)
-    shouldNotCast(checkedType, NumericType)
-    shouldNotCast(checkedType, IntegralType)
+  test("implicit type cast between two Map types") {
+    val sourceType = MapType(IntegerType, IntegerType, true)
+    val castableTypes = numericTypes ++ Seq(StringType).filter(!Cast.forceNullable(IntegerType, _))
+    val targetTypes = numericTypes.filter(!Cast.forceNullable(IntegerType, _)).map { t =>
+      MapType(t, sourceType.valueType, valueContainsNull = true)
+    }
+    val nonCastableTargetTypes = allTypes.filterNot(castableTypes.contains(_)).map {t =>
+      MapType(t, sourceType.valueType, valueContainsNull = true)
+    }
+
+    // Tests that its possible to setup implicit casts between two map types when
+    // source map's key type is integer and the target map's key type are either Byte, Short,
+    // Long, Double, Float, Decimal(38, 18) or String.
+    targetTypes.foreach { targetType =>
+      shouldCast(sourceType, targetType, targetType)
+    }
+
+    // Tests that its not possible to setup implicit casts between two map types when
+    // source map's key type is integer and the target map's key type are either Binary,
+    // Boolean, Date, Timestamp, Array, Struct, CaleandarIntervalType or NullType
+    nonCastableTargetTypes.foreach { targetType =>
+      shouldNotCast(sourceType, targetType)
+    }
+
+    // Tests that its not possible to cast from nullable map type to not nullable map type.
+    val targetNotNullableTypes = allTypes.filterNot(_ == IntegerType).map { t =>
+      MapType(t, sourceType.valueType, valueContainsNull = false)
+    }
+    val sourceMapExprWithValueNull =
+      CreateMap(Seq(Literal.default(sourceType.keyType),
+        Literal.create(null, sourceType.valueType)))
+    targetNotNullableTypes.foreach { targetType =>
+      val castDefault =
+        TypeCoercion.ImplicitTypeCasts.implicitCast(sourceMapExprWithValueNull, targetType)
+      assert(castDefault.isEmpty,
+        s"Should not be able to cast $sourceType to $targetType, but got $castDefault")
+    }
   }
 
   test("implicit type cast - StructType().add(\"a1\", StringType)") {
@@ -396,7 +428,7 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTest(
       StructType(Seq(StructField("a", IntegerType, nullable = false))),
       StructType(Seq(StructField("a", DoubleType, nullable = false))),
-      None)
+      Some(StructType(Seq(StructField("a", DoubleType, nullable = false)))))
 
     widenTest(
       StructType(Seq(StructField("a", IntegerType, nullable = false))),
@@ -453,15 +485,18 @@ class TypeCoercionSuite extends AnalysisTest {
     def widenTestWithStringPromotion(
         t1: DataType,
         t2: DataType,
-        expected: Option[DataType]): Unit = {
-      checkWidenType(TypeCoercion.findWiderTypeForTwo, t1, t2, expected)
+        expected: Option[DataType],
+        isSymmetric: Boolean = true): Unit = {
+      checkWidenType(TypeCoercion.findWiderTypeForTwo, t1, t2, expected, isSymmetric)
     }
 
     def widenTestWithoutStringPromotion(
         t1: DataType,
         t2: DataType,
-        expected: Option[DataType]): Unit = {
-      checkWidenType(TypeCoercion.findWiderTypeWithoutStringPromotionForTwo, t1, t2, expected)
+        expected: Option[DataType],
+        isSymmetric: Boolean = true): Unit = {
+      checkWidenType(
+        TypeCoercion.findWiderTypeWithoutStringPromotionForTwo, t1, t2, expected, isSymmetric)
     }
 
     // Decimal
@@ -487,12 +522,140 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(ArrayType(IntegerType), containsNull = false),
       ArrayType(ArrayType(LongType), containsNull = false),
       Some(ArrayType(ArrayType(LongType), containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(MapType(IntegerType, FloatType), containsNull = false),
+      ArrayType(MapType(LongType, DoubleType), containsNull = false),
+      Some(ArrayType(MapType(LongType, DoubleType), containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(new StructType().add("num", ShortType), containsNull = false),
+      ArrayType(new StructType().add("num", LongType), containsNull = false),
+      Some(ArrayType(new StructType().add("num", LongType), containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(IntegerType, containsNull = false),
+      ArrayType(DecimalType.IntDecimal, containsNull = false),
+      Some(ArrayType(DecimalType.IntDecimal, containsNull = false)))
+    widenTestWithStringPromotion(
+      ArrayType(DecimalType(36, 0), containsNull = false),
+      ArrayType(DecimalType(36, 35), containsNull = false),
+      Some(ArrayType(DecimalType(38, 35), containsNull = true)))
+
+    // MapType
+    widenTestWithStringPromotion(
+      MapType(ShortType, TimestampType, valueContainsNull = true),
+      MapType(DoubleType, StringType, valueContainsNull = false),
+      Some(MapType(DoubleType, StringType, valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, ArrayType(TimestampType), valueContainsNull = false),
+      MapType(LongType, ArrayType(StringType), valueContainsNull = true),
+      Some(MapType(LongType, ArrayType(StringType), valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, MapType(ShortType, TimestampType), valueContainsNull = false),
+      MapType(LongType, MapType(DoubleType, StringType), valueContainsNull = false),
+      Some(MapType(LongType, MapType(DoubleType, StringType), valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, new StructType().add("num", ShortType), valueContainsNull = false),
+      MapType(LongType, new StructType().add("num", LongType), valueContainsNull = false),
+      Some(MapType(LongType, new StructType().add("num", LongType), valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(StringType, IntegerType, valueContainsNull = false),
+      MapType(StringType, DecimalType.IntDecimal, valueContainsNull = false),
+      Some(MapType(StringType, DecimalType.IntDecimal, valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(StringType, DecimalType(36, 0), valueContainsNull = false),
+      MapType(StringType, DecimalType(36, 35), valueContainsNull = false),
+      Some(MapType(StringType, DecimalType(38, 35), valueContainsNull = true)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, StringType, valueContainsNull = false),
+      MapType(DecimalType.IntDecimal, StringType, valueContainsNull = false),
+      Some(MapType(DecimalType.IntDecimal, StringType, valueContainsNull = false)))
+    widenTestWithStringPromotion(
+      MapType(DecimalType(36, 0), StringType, valueContainsNull = false),
+      MapType(DecimalType(36, 35), StringType, valueContainsNull = false),
+      None)
+
+    // StructType
+    widenTestWithStringPromotion(
+      new StructType()
+        .add("num", ShortType, nullable = true).add("ts", StringType, nullable = false),
+      new StructType()
+        .add("num", DoubleType, nullable = false).add("ts", TimestampType, nullable = true),
+      Some(new StructType()
+        .add("num", DoubleType, nullable = true).add("ts", StringType, nullable = true)))
+    widenTestWithStringPromotion(
+      new StructType()
+        .add("arr", ArrayType(ShortType, containsNull = false), nullable = false),
+      new StructType()
+        .add("arr", ArrayType(DoubleType, containsNull = true), nullable = false),
+      Some(new StructType()
+        .add("arr", ArrayType(DoubleType, containsNull = true), nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType()
+        .add("map", MapType(ShortType, TimestampType, valueContainsNull = true), nullable = false),
+      new StructType()
+        .add("map", MapType(DoubleType, StringType, valueContainsNull = false), nullable = false),
+      Some(new StructType()
+        .add("map", MapType(DoubleType, StringType, valueContainsNull = true), nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType().add("num", IntegerType, nullable = false),
+      new StructType().add("num", DecimalType.IntDecimal, nullable = false),
+      Some(new StructType().add("num", DecimalType.IntDecimal, nullable = false)))
+    widenTestWithStringPromotion(
+      new StructType().add("num", DecimalType(36, 0), nullable = false),
+      new StructType().add("num", DecimalType(36, 35), nullable = false),
+      Some(new StructType().add("num", DecimalType(38, 35), nullable = true)))
+
+    widenTestWithStringPromotion(
+      new StructType().add("num", IntegerType),
+      new StructType().add("num", LongType).add("str", StringType),
+      None)
+    widenTestWithoutStringPromotion(
+      new StructType().add("num", IntegerType),
+      new StructType().add("num", LongType).add("str", StringType),
+      None)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      widenTestWithStringPromotion(
+        new StructType().add("a", IntegerType),
+        new StructType().add("A", LongType),
+        None)
+      widenTestWithoutStringPromotion(
+        new StructType().add("a", IntegerType),
+        new StructType().add("A", LongType),
+        None)
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      widenTestWithStringPromotion(
+        new StructType().add("a", IntegerType),
+        new StructType().add("A", LongType),
+        Some(new StructType().add("a", LongType)),
+        isSymmetric = false)
+      widenTestWithoutStringPromotion(
+        new StructType().add("a", IntegerType),
+        new StructType().add("A", LongType),
+        Some(new StructType().add("a", LongType)),
+        isSymmetric = false)
+    }
 
     // Without string promotion
     widenTestWithoutStringPromotion(IntegerType, StringType, None)
     widenTestWithoutStringPromotion(StringType, TimestampType, None)
     widenTestWithoutStringPromotion(ArrayType(LongType), ArrayType(StringType), None)
     widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
+    widenTestWithoutStringPromotion(
+      MapType(LongType, IntegerType), MapType(StringType, IntegerType), None)
+    widenTestWithoutStringPromotion(
+      MapType(IntegerType, LongType), MapType(IntegerType, StringType), None)
+    widenTestWithoutStringPromotion(
+      MapType(StringType, IntegerType), MapType(TimestampType, IntegerType), None)
+    widenTestWithoutStringPromotion(
+      MapType(IntegerType, StringType), MapType(IntegerType, TimestampType), None)
+    widenTestWithoutStringPromotion(
+      new StructType().add("a", IntegerType),
+      new StructType().add("a", StringType),
+      None)
+    widenTestWithoutStringPromotion(
+      new StructType().add("a", StringType),
+      new StructType().add("a", IntegerType),
+      None)
 
     // String promotion
     widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
@@ -501,6 +664,30 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(LongType), ArrayType(StringType), Some(ArrayType(StringType)))
     widenTestWithStringPromotion(
       ArrayType(StringType), ArrayType(TimestampType), Some(ArrayType(StringType)))
+    widenTestWithStringPromotion(
+      MapType(LongType, IntegerType),
+      MapType(StringType, IntegerType),
+      Some(MapType(StringType, IntegerType)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, LongType),
+      MapType(IntegerType, StringType),
+      Some(MapType(IntegerType, StringType)))
+    widenTestWithStringPromotion(
+      MapType(StringType, IntegerType),
+      MapType(TimestampType, IntegerType),
+      Some(MapType(StringType, IntegerType)))
+    widenTestWithStringPromotion(
+      MapType(IntegerType, StringType),
+      MapType(IntegerType, TimestampType),
+      Some(MapType(IntegerType, StringType)))
+    widenTestWithStringPromotion(
+      new StructType().add("a", IntegerType),
+      new StructType().add("a", StringType),
+      Some(new StructType().add("a", StringType)))
+    widenTestWithStringPromotion(
+      new StructType().add("a", StringType),
+      new StructType().add("a", IntegerType),
+      Some(new StructType().add("a", StringType)))
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
@@ -524,11 +711,11 @@ class TypeCoercionSuite extends AnalysisTest {
   test("cast NullType for expressions that implement ExpectsInputTypes") {
     import TypeCoercionSuite._
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts(conf),
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
       AnyTypeUnaryExpression(Literal.create(null, NullType)),
       AnyTypeUnaryExpression(Literal.create(null, NullType)))
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts(conf),
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
   }
@@ -536,17 +723,17 @@ class TypeCoercionSuite extends AnalysisTest {
   test("cast NullType for binary operators") {
     import TypeCoercionSuite._
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts(conf),
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       AnyTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)))
 
-    ruleTest(TypeCoercion.ImplicitTypeCasts(conf),
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
       NumericTypeBinaryOperator(Literal.create(null, NullType), Literal.create(null, NullType)),
       NumericTypeBinaryOperator(Literal.create(null, DoubleType), Literal.create(null, DoubleType)))
   }
 
   test("coalesce casts") {
-    val rule = TypeCoercion.FunctionArgumentConversion(conf)
+    val rule = TypeCoercion.FunctionArgumentConversion
 
     val intLit = Literal(1)
     val longLit = Literal.create(1L)
@@ -555,7 +742,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val nullLit = Literal.create(null, NullType)
     val floatNullLit = Literal.create(null, FloatType)
     val floatLit = Literal.create(1.0f, FloatType)
-    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
     val tsArrayLit = Literal(Array(new Timestamp(System.currentTimeMillis())))
     val strArrayLit = Literal(Array("c"))
@@ -563,70 +750,67 @@ class TypeCoercionSuite extends AnalysisTest {
 
     ruleTest(rule,
       Coalesce(Seq(doubleLit, intLit, floatLit)),
-      Coalesce(Seq(Cast(doubleLit, DoubleType),
-        Cast(intLit, DoubleType), Cast(floatLit, DoubleType))))
+      Coalesce(Seq(doubleLit, Cast(intLit, DoubleType), Cast(floatLit, DoubleType))))
 
     ruleTest(rule,
       Coalesce(Seq(longLit, intLit, decimalLit)),
       Coalesce(Seq(Cast(longLit, DecimalType(22, 0)),
-        Cast(intLit, DecimalType(22, 0)), Cast(decimalLit, DecimalType(22, 0)))))
+        Cast(intLit, DecimalType(22, 0)), decimalLit)))
 
     ruleTest(rule,
       Coalesce(Seq(nullLit, intLit)),
-      Coalesce(Seq(Cast(nullLit, IntegerType), Cast(intLit, IntegerType))))
+      Coalesce(Seq(Cast(nullLit, IntegerType), intLit)))
 
     ruleTest(rule,
       Coalesce(Seq(timestampLit, stringLit)),
-      Coalesce(Seq(Cast(timestampLit, StringType), Cast(stringLit, StringType))))
+      Coalesce(Seq(Cast(timestampLit, StringType), stringLit)))
 
     ruleTest(rule,
       Coalesce(Seq(nullLit, floatNullLit, intLit)),
-      Coalesce(Seq(Cast(nullLit, FloatType), Cast(floatNullLit, FloatType),
-        Cast(intLit, FloatType))))
+      Coalesce(Seq(Cast(nullLit, FloatType), floatNullLit, Cast(intLit, FloatType))))
 
     ruleTest(rule,
       Coalesce(Seq(nullLit, intLit, decimalLit, doubleLit)),
       Coalesce(Seq(Cast(nullLit, DoubleType), Cast(intLit, DoubleType),
-        Cast(decimalLit, DoubleType), Cast(doubleLit, DoubleType))))
+        Cast(decimalLit, DoubleType), doubleLit)))
 
     ruleTest(rule,
       Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
       Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
-        Cast(doubleLit, StringType), Cast(stringLit, StringType))))
+        Cast(doubleLit, StringType), stringLit)))
 
     ruleTest(rule,
       Coalesce(Seq(timestampLit, intLit, stringLit)),
-      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType),
-        Cast(stringLit, StringType))))
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType), stringLit)))
 
     ruleTest(rule,
       Coalesce(Seq(tsArrayLit, intArrayLit, strArrayLit)),
       Coalesce(Seq(Cast(tsArrayLit, ArrayType(StringType)),
-        Cast(intArrayLit, ArrayType(StringType)), Cast(strArrayLit, ArrayType(StringType)))))
+        Cast(intArrayLit, ArrayType(StringType)), strArrayLit)))
   }
 
   test("CreateArray casts") {
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateArray(Literal(1.0)
         :: Literal(1)
-        :: Literal.create(1.0, FloatType)
+        :: Literal.create(1.0f, FloatType)
         :: Nil),
-      CreateArray(Cast(Literal(1.0), DoubleType)
+      CreateArray(Literal(1.0)
         :: Cast(Literal(1), DoubleType)
-        :: Cast(Literal.create(1.0, FloatType), DoubleType)
+        :: Cast(Literal.create(1.0f, FloatType), DoubleType)
         :: Nil))
 
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateArray(Literal(1.0)
         :: Literal(1)
         :: Literal("a")
         :: Nil),
       CreateArray(Cast(Literal(1.0), StringType)
         :: Cast(Literal(1), StringType)
-        :: Cast(Literal("a"), StringType)
+        :: Literal("a")
         :: Nil))
 
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateArray(Literal.create(null, DecimalType(5, 3))
         :: Literal(1)
         :: Nil),
@@ -634,54 +818,54 @@ class TypeCoercionSuite extends AnalysisTest {
         :: Literal(1).cast(DecimalType(13, 3))
         :: Nil))
 
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateArray(Literal.create(null, DecimalType(5, 3))
         :: Literal.create(null, DecimalType(22, 10))
         :: Literal.create(null, DecimalType(38, 38))
         :: Nil),
       CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(38, 38))
         :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 38))
-        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 38))
         :: Nil))
   }
 
   test("CreateMap casts") {
     // type coercion for map keys
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
         :: Literal("a")
-        :: Literal.create(2.0, FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil),
       CreateMap(Cast(Literal(1), FloatType)
         :: Literal("a")
-        :: Cast(Literal.create(2.0, FloatType), FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil))
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal.create(null, DecimalType(5, 3))
         :: Literal("a")
-        :: Literal.create(2.0, FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil),
       CreateMap(Literal.create(null, DecimalType(5, 3)).cast(DoubleType)
         :: Literal("a")
-        :: Literal.create(2.0, FloatType).cast(DoubleType)
+        :: Literal.create(2.0f, FloatType).cast(DoubleType)
         :: Literal("b")
         :: Nil))
     // type coercion for map values
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
         :: Literal("a")
         :: Literal(2)
         :: Literal(3.0)
         :: Nil),
       CreateMap(Literal(1)
-        :: Cast(Literal("a"), StringType)
+        :: Literal("a")
         :: Literal(2)
         :: Cast(Literal(3.0), StringType)
         :: Nil))
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
         :: Literal.create(null, DecimalType(38, 0))
         :: Literal(2)
@@ -690,52 +874,52 @@ class TypeCoercionSuite extends AnalysisTest {
       CreateMap(Literal(1)
         :: Literal.create(null, DecimalType(38, 0)).cast(DecimalType(38, 38))
         :: Literal(2)
-        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 38))
         :: Nil))
     // type coercion for both map keys and values
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
         :: Literal("a")
         :: Literal(2.0)
         :: Literal(3.0)
         :: Nil),
       CreateMap(Cast(Literal(1), DoubleType)
-        :: Cast(Literal("a"), StringType)
-        :: Cast(Literal(2.0), DoubleType)
+        :: Literal("a")
+        :: Literal(2.0)
         :: Cast(Literal(3.0), StringType)
         :: Nil))
   }
 
   test("greatest/least cast") {
     for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
-      ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1.0)
           :: Literal(1)
-          :: Literal.create(1.0, FloatType)
+          :: Literal.create(1.0f, FloatType)
           :: Nil),
-        operator(Cast(Literal(1.0), DoubleType)
+        operator(Literal(1.0)
           :: Cast(Literal(1), DoubleType)
-          :: Cast(Literal.create(1.0, FloatType), DoubleType)
+          :: Cast(Literal.create(1.0f, FloatType), DoubleType)
           :: Nil))
-      ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1L)
           :: Literal(1)
           :: Literal(new java.math.BigDecimal("1000000000000000000000"))
           :: Nil),
         operator(Cast(Literal(1L), DecimalType(22, 0))
           :: Cast(Literal(1), DecimalType(22, 0))
-          :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
+          :: Literal(new java.math.BigDecimal("1000000000000000000000"))
           :: Nil))
-      ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1.0)
           :: Literal.create(null, DecimalType(10, 5))
           :: Literal(1)
           :: Nil),
-        operator(Literal(1.0).cast(DoubleType)
+        operator(Literal(1.0)
           :: Literal.create(null, DecimalType(10, 5)).cast(DoubleType)
           :: Literal(1).cast(DoubleType)
           :: Nil))
-      ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal.create(null, DecimalType(15, 0))
           :: Literal.create(null, DecimalType(10, 5))
           :: Literal(1)
@@ -744,7 +928,7 @@ class TypeCoercionSuite extends AnalysisTest {
           :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(20, 5))
           :: Literal(1).cast(DecimalType(20, 5))
           :: Nil))
-      ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal.create(2L, LongType)
           :: Literal(1)
           :: Literal.create(null, DecimalType(10, 5))
@@ -757,32 +941,32 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("nanvl casts") {
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0f, FloatType), Literal.create(1.0, DoubleType)),
       NaNvl(Cast(Literal.create(1.0f, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0f, FloatType)),
       NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0f, FloatType), DoubleType)))
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)),
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)))
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0f, FloatType), Literal.create(null, NullType)),
       NaNvl(Literal.create(1.0f, FloatType), Cast(Literal.create(null, NullType), FloatType)))
-    ruleTest(TypeCoercion.FunctionArgumentConversion(conf),
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(null, NullType)),
       NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(null, NullType), DoubleType)))
   }
 
   test("type coercion for If") {
-    val rule = TypeCoercion.IfCoercion(conf)
+    val rule = TypeCoercion.IfCoercion
     val intLit = Literal(1)
     val doubleLit = Literal(1.0)
     val trueLit = Literal.create(true, BooleanType)
     val falseLit = Literal.create(false, BooleanType)
     val stringLit = Literal.create("c", StringType)
     val floatLit = Literal.create(1.0f, FloatType)
-    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
 
     ruleTest(rule,
@@ -823,23 +1007,25 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("type coercion for CaseKeyWhen") {
-    ruleTest(TypeCoercion.ImplicitTypeCasts(conf),
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
       CaseKeyWhen(Literal(1.toShort), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Cast(Literal(1.toShort), IntegerType), Seq(Literal(1), Literal("a")))
     )
-    ruleTest(TypeCoercion.CaseWhenCoercion(conf),
+    ruleTest(TypeCoercion.CaseWhenCoercion,
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a"))),
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
     )
-    ruleTest(TypeCoercion.CaseWhenCoercion(conf),
-      CaseWhen(Seq((Literal(true), Literal(1.2))), Literal.create(1, DecimalType(7, 2))),
+    ruleTest(TypeCoercion.CaseWhenCoercion,
       CaseWhen(Seq((Literal(true), Literal(1.2))),
-        Cast(Literal.create(1, DecimalType(7, 2)), DoubleType))
+        Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Literal(1.2))),
+        Cast(Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2)), DoubleType))
     )
-    ruleTest(TypeCoercion.CaseWhenCoercion(conf),
-      CaseWhen(Seq((Literal(true), Literal(100L))), Literal.create(1, DecimalType(7, 2))),
+    ruleTest(TypeCoercion.CaseWhenCoercion,
+      CaseWhen(Seq((Literal(true), Literal(100L))),
+        Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2))),
       CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
-        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
+        Cast(Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2)), DecimalType(22, 2)))
     )
   }
 
@@ -1085,7 +1271,7 @@ class TypeCoercionSuite extends AnalysisTest {
   private val timeZoneResolver = ResolveTimeZone(new SQLConf)
 
   private def widenSetOperationTypes(plan: LogicalPlan): LogicalPlan = {
-    timeZoneResolver(TypeCoercion.WidenSetOperationTypes(conf)(plan))
+    timeZoneResolver(TypeCoercion.WidenSetOperationTypes(plan))
   }
 
   test("WidenSetOperationTypes for except and intersect") {
@@ -1102,8 +1288,10 @@ class TypeCoercionSuite extends AnalysisTest {
 
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val r1 = widenSetOperationTypes(Except(firstTable, secondTable)).asInstanceOf[Except]
-    val r2 = widenSetOperationTypes(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
+    val r1 = widenSetOperationTypes(
+      Except(firstTable, secondTable, isAll = false)).asInstanceOf[Except]
+    val r2 = widenSetOperationTypes(
+      Intersect(firstTable, secondTable, isAll = false)).asInstanceOf[Intersect]
     checkOutput(r1.left, expectedTypes)
     checkOutput(r1.right, expectedTypes)
     checkOutput(r2.left, expectedTypes)
@@ -1168,8 +1356,10 @@ class TypeCoercionSuite extends AnalysisTest {
     val expectedType1 = Seq(DecimalType(10, 8))
 
     val r1 = widenSetOperationTypes(Union(left1, right1)).asInstanceOf[Union]
-    val r2 = widenSetOperationTypes(Except(left1, right1)).asInstanceOf[Except]
-    val r3 = widenSetOperationTypes(Intersect(left1, right1)).asInstanceOf[Intersect]
+    val r2 = widenSetOperationTypes(
+      Except(left1, right1, isAll = false)).asInstanceOf[Except]
+    val r3 = widenSetOperationTypes(
+      Intersect(left1, right1, isAll = false)).asInstanceOf[Intersect]
 
     checkOutput(r1.children.head, expectedType1)
     checkOutput(r1.children.last, expectedType1)
@@ -1189,16 +1379,20 @@ class TypeCoercionSuite extends AnalysisTest {
         AttributeReference("r", rType)())
 
       val r1 = widenSetOperationTypes(Union(plan1, plan2)).asInstanceOf[Union]
-      val r2 = widenSetOperationTypes(Except(plan1, plan2)).asInstanceOf[Except]
-      val r3 = widenSetOperationTypes(Intersect(plan1, plan2)).asInstanceOf[Intersect]
+      val r2 = widenSetOperationTypes(
+        Except(plan1, plan2, isAll = false)).asInstanceOf[Except]
+      val r3 = widenSetOperationTypes(
+        Intersect(plan1, plan2, isAll = false)).asInstanceOf[Intersect]
 
       checkOutput(r1.children.last, Seq(expectedType))
       checkOutput(r2.right, Seq(expectedType))
       checkOutput(r3.right, Seq(expectedType))
 
       val r4 = widenSetOperationTypes(Union(plan2, plan1)).asInstanceOf[Union]
-      val r5 = widenSetOperationTypes(Except(plan2, plan1)).asInstanceOf[Except]
-      val r6 = widenSetOperationTypes(Intersect(plan2, plan1)).asInstanceOf[Intersect]
+      val r5 = widenSetOperationTypes(
+        Except(plan2, plan1, isAll = false)).asInstanceOf[Except]
+      val r6 = widenSetOperationTypes(
+        Intersect(plan2, plan1, isAll = false)).asInstanceOf[Intersect]
 
       checkOutput(r4.children.last, Seq(expectedType))
       checkOutput(r5.left, Seq(expectedType))
@@ -1256,7 +1450,7 @@ class TypeCoercionSuite extends AnalysisTest {
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
     "in aggregation function like sum") {
-    val rules = Seq(FunctionArgumentConversion(conf), Division)
+    val rules = Seq(FunctionArgumentConversion, Division)
     // Casts Integer to Double
     ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
     // Left expression is Double, right expression is Int. Another rule ImplicitTypeCasts will
@@ -1275,7 +1469,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("SPARK-17117 null type coercion in divide") {
-    val rules = Seq(FunctionArgumentConversion(conf), Division, ImplicitTypeCasts(conf))
+    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
@@ -1298,7 +1492,7 @@ class TypeCoercionSuite extends AnalysisTest {
         DoubleType)))
     Seq(true, false).foreach { convertToTS =>
       withSQLConf(
-        "spark.sql.typeCoercion.compareDateTimestampInTimestamp" -> convertToTS.toString) {
+        "spark.sql.legacy.compareDateTimestampInTimestamp" -> convertToTS.toString) {
         val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
         val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
         val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))

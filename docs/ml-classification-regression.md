@@ -2,6 +2,21 @@
 layout: global
 title: Classification and regression
 displayTitle: Classification and regression
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 
@@ -941,9 +956,9 @@ Essentially isotonic regression is a
 best fitting the original data points.
 
 We implement a
-[pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
+[pool adjacent violators algorithm](https://doi.org/10.1198/TECH.2010.10111)
 which uses an approach to
-[parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
+[parallelizing isotonic regression](https://doi.org/10.1007/978-3-642-99789-1_10).
 The training input is a DataFrame which contains three columns
 label, features and weight. Additionally, IsotonicRegression algorithm has one
 optional parameter called $isotonic$ defaulting to true.

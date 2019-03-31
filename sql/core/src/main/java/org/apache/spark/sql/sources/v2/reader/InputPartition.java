@@ -19,43 +19,36 @@ package org.apache.spark.sql.sources.v2.reader;
 
 import java.io.Serializable;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
- * An input partition returned by {@link DataSourceReader#planInputPartitions()} and is
- * responsible for creating the actual data reader. The relationship between
- * {@link InputPartition} and {@link InputPartitionReader}
- * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
+ * A serializable representation of an input partition returned by
+ * {@link Batch#planInputPartitions()} and the corresponding ones in streaming .
  *
- * Note that input partitions will be serialized and sent to executors, then the partition reader
- * will be created on executors and do the actual reading. So {@link InputPartition} must be
- * serializable and {@link InputPartitionReader} doesn't need to be.
+ * Note that {@link InputPartition} will be serialized and sent to executors, then
+ * {@link PartitionReader} will be created by
+ * {@link PartitionReaderFactory#createReader(InputPartition)} or
+ * {@link PartitionReaderFactory#createColumnarReader(InputPartition)} on executors to do
+ * the actual reading. So {@link InputPartition} must be serializable while {@link PartitionReader}
+ * doesn't need to be.
  */
-@InterfaceStability.Evolving
-public interface InputPartition<T> extends Serializable {
+@Evolving
+public interface InputPartition extends Serializable {
 
   /**
-   * The preferred locations where the data reader returned by this partition can run faster,
-   * but Spark does not guarantee to run the data reader on these locations.
+   * The preferred locations where the input partition reader returned by this partition can run
+   * faster, but Spark does not guarantee to run the input partition reader on these locations.
    * The implementations should make sure that it can be run on any location.
    * The location is a string representing the host name.
    *
    * Note that if a host name cannot be recognized by Spark, it will be ignored as it was not in
-   * the returned locations. By default this method returns empty string array, which means this
-   * task has no location preference.
+   * the returned locations. The default return value is empty string array, which means this
+   * input partition's reader has no location preference.
    *
-   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    */
   default String[] preferredLocations() {
     return new String[0];
   }
-
-  /**
-   * Returns a data reader to do the actual reading work.
-   *
-   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
-   * get retried until hitting the maximum retry times.
-   */
-  InputPartitionReader<T> createPartitionReader();
 }

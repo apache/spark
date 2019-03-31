@@ -117,10 +117,10 @@ object SubExprUtils extends PredicateHelper {
   def hasNullAwarePredicateWithinNot(condition: Expression): Boolean = {
     splitConjunctivePredicates(condition).exists {
       case _: Exists | Not(_: Exists) => false
-      case In(_, Seq(_: ListQuery)) | Not(In(_, Seq(_: ListQuery))) => false
+      case _: InSubquery | Not(_: InSubquery) => false
       case e => e.find { x =>
         x.isInstanceOf[Not] && e.find {
-          case In(_, Seq(_: ListQuery)) => true
+          case _: InSubquery => true
           case _ => false
         }.isDefined
       }.isDefined
@@ -248,7 +248,10 @@ case class ScalarSubquery(
     children: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(plan, children, exprId) with Unevaluable {
-  override def dataType: DataType = plan.schema.fields.head.dataType
+  override def dataType: DataType = {
+    assert(plan.schema.fields.nonEmpty, "Scalar subquery should have only one column")
+    plan.schema.fields.head.dataType
+  }
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import java.util
+import java.util.Collections
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -25,28 +27,49 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
 import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.{SupportsStreamingWrite, TableCapability}
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkBase with Logging {
-  override def createStreamWriter(
-      queryId: String,
-      schema: StructType,
-      mode: OutputMode,
-      options: DataSourceOptions): StreamWriter = {
-    new MemoryStreamWriter(this, mode)
+class MemorySinkV2 extends SupportsStreamingWrite with MemorySinkBase with Logging {
+
+  override def name(): String = "MemorySinkV2"
+
+  override def schema(): StructType = StructType(Nil)
+
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+    new WriteBuilder with SupportsTruncate {
+      private var needTruncate: Boolean = false
+      private var inputSchema: StructType = _
+
+      override def truncate(): WriteBuilder = {
+        this.needTruncate = true
+        this
+      }
+
+      override def withInputDataSchema(schema: StructType): WriteBuilder = {
+        this.inputSchema = schema
+        this
+      }
+
+      override def buildForStreaming(): StreamingWrite = {
+        new MemoryStreamingWrite(MemorySinkV2.this, inputSchema, needTruncate)
+      }
+    }
   }
 
   private case class AddedData(batchId: Long, data: Array[Row])
@@ -81,27 +104,20 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
     }.mkString("\n")
   }
 
-  def write(batchId: Long, outputMode: OutputMode, newRows: Array[Row]): Unit = {
+  def write(batchId: Long, needTruncate: Boolean, newRows: Array[Row]): Unit = {
     val notCommitted = synchronized {
       latestBatchId.isEmpty || batchId > latestBatchId.get
     }
     if (notCommitted) {
       logDebug(s"Committing batch $batchId to $this")
-      outputMode match {
-        case Append | Update =>
-          val rows = AddedData(batchId, newRows)
-          synchronized { batches += rows }
-
-        case Complete =>
-          val rows = AddedData(batchId, newRows)
-          synchronized {
-            batches.clear()
-            batches += rows
-          }
-
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Output mode $outputMode is not supported by MemorySinkV2")
+      val rows = AddedData(batchId, newRows)
+      if (needTruncate) {
+        synchronized {
+          batches.clear()
+          batches += rows
+        }
+      } else {
+        synchronized { batches += rows }
       }
     } else {
       logDebug(s"Skipping already committed batch: $batchId")
@@ -115,35 +131,22 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
   override def toString(): String = "MemorySinkV2"
 }
 
-case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row]) extends WriterCommitMessage {}
+case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row])
+  extends WriterCommitMessage {}
 
-class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
-  extends DataSourceWriter with Logging {
+class MemoryStreamingWrite(
+    val sink: MemorySinkV2, schema: StructType, needTruncate: Boolean)
+  extends StreamingWrite {
 
-  override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
-
-  def commit(messages: Array[WriterCommitMessage]): Unit = {
-    val newRows = messages.flatMap {
-      case message: MemoryWriterCommitMessage => message.data
-    }
-    sink.write(batchId, outputMode, newRows)
+  override def createStreamingWriterFactory: MemoryWriterFactory = {
+    MemoryWriterFactory(schema)
   }
-
-  override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    // Don't accept any of the new input.
-  }
-}
-
-class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
-  extends StreamWriter {
-
-  override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
     }
-    sink.write(epochId, outputMode, newRows)
+    sink.write(epochId, needTruncate, newRows)
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
@@ -151,22 +154,32 @@ class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
   }
 }
 
-case class MemoryWriterFactory(outputMode: OutputMode) extends DataWriterFactory[Row] {
-  override def createDataWriter(
+case class MemoryWriterFactory(schema: StructType)
+  extends DataWriterFactory with StreamingDataWriterFactory {
+
+  override def createWriter(
       partitionId: Int,
-      attemptNumber: Int,
-      epochId: Long): DataWriter[Row] = {
-    new MemoryDataWriter(partitionId, outputMode)
+      taskId: Long): DataWriter[InternalRow] = {
+    new MemoryDataWriter(partitionId, schema)
+  }
+
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = {
+    createWriter(partitionId, taskId)
   }
 }
 
-class MemoryDataWriter(partition: Int, outputMode: OutputMode)
-  extends DataWriter[Row] with Logging {
+class MemoryDataWriter(partition: Int, schema: StructType)
+  extends DataWriter[InternalRow] with Logging {
 
   private val data = mutable.Buffer[Row]()
 
-  override def write(row: Row): Unit = {
-    data.append(row)
+  private val encoder = RowEncoder(schema).resolveAndBind()
+
+  override def write(row: InternalRow): Unit = {
+    data.append(encoder.fromRow(row))
   }
 
   override def commit(): MemoryWriterCommitMessage = {

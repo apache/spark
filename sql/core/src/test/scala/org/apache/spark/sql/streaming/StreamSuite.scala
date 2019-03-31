@@ -27,14 +27,17 @@ import scala.util.control.ControlThrowable
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, TaskContext}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -93,18 +96,16 @@ class StreamSuite extends StreamTest {
     val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
       case s: StreamingRelationV2 => s
     }
-    assert(streamingRelation.nonEmpty, "cannot find StreamingExecutionRelation")
+    assert(streamingRelation.nonEmpty, "cannot find StreamingRelationV2")
     assert(
       streamingRelation.head.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("StreamingExecutionRelation.computeStats") {
-    val streamingExecutionRelation = MemoryStream[Int].toDF.logicalPlan collect {
-      case s: StreamingExecutionRelation => s
-    }
-    assert(streamingExecutionRelation.nonEmpty, "cannot find StreamingExecutionRelation")
-    assert(streamingExecutionRelation.head.computeStats.sizeInBytes
-      == spark.sessionState.conf.defaultSizeInBytes)
+    val memoryStream = MemoryStream[Int]
+    val executionRelation = StreamingExecutionRelation(
+      memoryStream, memoryStream.encoder.schema.toAttributes)(memoryStream.sqlContext.sparkSession)
+    assert(executionRelation.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
 
   test("explain join with a normal source") {
@@ -309,7 +310,7 @@ class StreamSuite extends StreamTest {
 
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
-      StartStream(ProcessingTime("10 seconds"), new StreamManualClock),
+      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock),
 
       /* -- batch 0 ----------------------- */
       // Add some data in batch 0
@@ -350,7 +351,7 @@ class StreamSuite extends StreamTest {
 
       /* Stop then restart the Stream  */
       StopStream,
-      StartStream(ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
+      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
       /* -- batch 1 no rerun ----------------- */
       // batch 1 would not re-run because the latest batch id logged in commit log is 1
@@ -492,9 +493,9 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("Streaming RelationV2 MemoryStreamDataSource".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("ScanV2 MemoryStreamDataSource".r
+      assert("BatchScan".r
         .findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
@@ -502,15 +503,129 @@ class StreamSuite extends StreamTest {
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("Streaming RelationV2 MemoryStreamDataSource".r
+      assert("StreamingDataSourceV2Relation".r
         .findAllMatchIn(explainWithExtended).size === 3)
-      assert("ScanV2 MemoryStreamDataSource".r
+      assert("BatchScan".r
         .findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))
     } finally {
       q.stop()
     }
+  }
+
+  test("explain-continuous") {
+    val inputData = ContinuousMemoryStream[Int]
+    val df = inputData.toDS().map(_ * 2).filter(_ > 5)
+
+    // Test `df.explain`
+    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explainString =
+      spark.sessionState
+        .executePlan(explain)
+        .executedPlan
+        .executeCollect()
+        .map(_.getString(0))
+        .mkString("\n")
+    assert(explainString.contains("Filter"))
+    assert(explainString.contains("MapElements"))
+    assert(!explainString.contains("LocalTableScan"))
+
+    // Test StreamingQuery.display
+    val q = df.writeStream.queryName("memory_continuous_explain")
+      .outputMode(OutputMode.Update()).format("memory")
+      .trigger(Trigger.Continuous("1 seconds"))
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      // in continuous mode, the query will be run even there's no data
+      // sleep a bit to ensure initialization
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        assert(q.lastExecution != null)
+      }
+
+      val explainWithoutExtended = q.explainInternal(false)
+
+      // `extended = false` only displays the physical plan.
+      assert("StreamingDataSourceV2Relation".r
+        .findAllMatchIn(explainWithoutExtended).size === 0)
+      assert("ContinuousScan".r
+        .findAllMatchIn(explainWithoutExtended).size === 1)
+
+      val explainWithExtended = q.explainInternal(true)
+      // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+      // plan.
+      assert("StreamingDataSourceV2Relation".r
+        .findAllMatchIn(explainWithExtended).size === 3)
+      assert("ContinuousScan".r
+        .findAllMatchIn(explainWithExtended).size === 1)
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("codegen-microbatch") {
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDS().map(_ * 2).filter(_ > 5)
+
+    // Test StreamingQuery.codegen
+    val q = df.writeStream.queryName("memory_microbatch_codegen")
+      .outputMode(OutputMode.Update)
+      .format("memory")
+      .trigger(Trigger.ProcessingTime("1 seconds"))
+      .start()
+
+    try {
+      import org.apache.spark.sql.execution.debug._
+      assert("No physical plan. Waiting for data." === codegenString(q))
+      assert(codegenStringSeq(q).isEmpty)
+
+      inputData.addData(1, 2, 3, 4, 5)
+      q.processAllAvailable()
+
+      assertDebugCodegenResult(q)
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("codegen-continuous") {
+    val inputData = ContinuousMemoryStream[Int]
+    val df = inputData.toDS().map(_ * 2).filter(_ > 5)
+
+    // Test StreamingQuery.codegen
+    val q = df.writeStream.queryName("memory_continuous_codegen")
+      .outputMode(OutputMode.Update)
+      .format("memory")
+      .trigger(Trigger.Continuous("1 seconds"))
+      .start()
+
+    try {
+      // in continuous mode, the query will be run even there's no data
+      // sleep a bit to ensure initialization
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        assert(q.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution != null)
+      }
+
+      assertDebugCodegenResult(q)
+    } finally {
+      q.stop()
+    }
+  }
+
+  private def assertDebugCodegenResult(query: StreamingQuery): Unit = {
+    import org.apache.spark.sql.execution.debug._
+
+    val codegenStr = codegenString(query)
+    assert(codegenStr.contains("Found 1 WholeStageCodegen subtrees."))
+    // assuming that code is generated for the test query
+    assert(codegenStr.contains("Generated code:"))
+
+    val codegenStrSeq = codegenStringSeq(query)
+    assert(codegenStrSeq.nonEmpty)
+    assert(codegenStrSeq.head._1.contains("*(1)"))
+    assert(codegenStrSeq.head._2.contains("codegenStageId=1"))
   }
 
   test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
@@ -672,7 +787,7 @@ class StreamSuite extends StreamTest {
     val query = input
       .toDS()
       .map { i =>
-        while (!org.apache.spark.TaskContext.get().isInterrupted()) {
+        while (!TaskContext.get().isInterrupted()) {
           // keep looping till interrupted by query.stop()
           Thread.sleep(100)
         }
@@ -805,6 +920,142 @@ class StreamSuite extends StreamTest {
     }
   }
 
+  test("streaming limit without state") {
+    val inputData1 = MemoryStream[Int]
+    testStream(inputData1.toDF().limit(0))(
+      AddData(inputData1, 1 to 8: _*),
+      CheckAnswer())
+
+    val inputData2 = MemoryStream[Int]
+    testStream(inputData2.toDF().limit(4))(
+      AddData(inputData2, 1 to 8: _*),
+      CheckAnswer(1 to 4: _*))
+  }
+
+  test("streaming limit with state") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDF().limit(4))(
+      AddData(inputData, 1 to 2: _*),
+      CheckAnswer(1 to 2: _*),
+      AddData(inputData, 3 to 6: _*),
+      CheckAnswer(1 to 4: _*),
+      AddData(inputData, 7 to 9: _*),
+      CheckAnswer(1 to 4: _*))
+  }
+
+  test("streaming limit with other operators") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDF().where("value % 2 = 1").limit(4))(
+      AddData(inputData, 1 to 5: _*),
+      CheckAnswer(1, 3, 5),
+      AddData(inputData, 6 to 9: _*),
+      CheckAnswer(1, 3, 5, 7),
+      AddData(inputData, 10 to 12: _*),
+      CheckAnswer(1, 3, 5, 7))
+  }
+
+  test("streaming limit with multiple limits") {
+    val inputData1 = MemoryStream[Int]
+    testStream(inputData1.toDF().limit(4).limit(2))(
+      AddData(inputData1, 1),
+      CheckAnswer(1),
+      AddData(inputData1, 2 to 8: _*),
+      CheckAnswer(1, 2))
+
+    val inputData2 = MemoryStream[Int]
+    testStream(inputData2.toDF().limit(4).limit(100).limit(3))(
+      AddData(inputData2, 1, 2),
+      CheckAnswer(1, 2),
+      AddData(inputData2, 3 to 8: _*),
+      CheckAnswer(1 to 3: _*))
+  }
+
+  test("streaming limit in complete mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(5).groupBy("value").count()
+    testStream(limited, OutputMode.Complete())(
+      AddData(inputData, 1 to 3: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
+      AddData(inputData, 1 to 9: _*),
+      CheckAnswer(Row(1, 2), Row(2, 2), Row(3, 2), Row(4, 1), Row(5, 1)))
+  }
+
+  test("streaming limits in complete mode") {
+    val inputData = MemoryStream[Int]
+    val limited = inputData.toDF().limit(4).groupBy("value").count().orderBy("value").limit(3)
+    testStream(limited, OutputMode.Complete())(
+      AddData(inputData, 1 to 9: _*),
+      CheckAnswer(Row(1, 1), Row(2, 1), Row(3, 1)),
+      AddData(inputData, 2 to 6: _*),
+      CheckAnswer(Row(1, 1), Row(2, 2), Row(3, 2)))
+  }
+
+  test("streaming limit in update mode") {
+    val inputData = MemoryStream[Int]
+    val e = intercept[AnalysisException] {
+      testStream(inputData.toDF().limit(5), OutputMode.Update())(
+        AddData(inputData, 1 to 3: _*)
+      )
+    }
+    assert(e.getMessage.contains(
+      "Limits are not supported on streaming DataFrames/Datasets in Update output mode"))
+  }
+
+  test("streaming limit in multiple partitions") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDF().repartition(2).limit(7))(
+      AddData(inputData, 1 to 10: _*),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 10)),
+        false),
+      AddData(inputData, 11 to 20: _*),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 10)),
+        false))
+  }
+
+  test("streaming limit in multiple partitions by column") {
+    val inputData = MemoryStream[(Int, Int)]
+    val df = inputData.toDF().repartition(2, $"_2").limit(7)
+    testStream(df)(
+      AddData(inputData, (1, 0), (2, 0), (3, 1), (4, 1)),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 4 && rows.forall(r => r.getInt(0) <= 4)),
+        false),
+      AddData(inputData, (5, 0), (6, 0), (7, 1), (8, 1)),
+      CheckAnswerRowsByFunc(
+        rows => assert(rows.size == 7 && rows.forall(r => r.getInt(0) <= 8)),
+        false))
+  }
+
+  test("is_continuous_processing property should be false for microbatch processing") {
+    val input = MemoryStream[Int]
+    val df = input.toDS()
+      .map(i => TaskContext.get().getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
+    testStream(df) (
+      AddData(input, 1),
+      CheckAnswer("false")
+    )
+  }
+
+  test("is_continuous_processing property should be true for continuous processing") {
+    val input = ContinuousMemoryStream[Int]
+    val stream = input.toDS()
+      .map(i => TaskContext.get().getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
+      .writeStream.format("memory")
+      .queryName("output")
+      .trigger(Trigger.Continuous("1 seconds"))
+      .start()
+    try {
+      input.addData(1)
+      stream.processAllAvailable()
+    } finally {
+      stream.stop()
+    }
+
+    checkAnswer(spark.sql("select * from output"), Row("true"))
+  }
+
   for (e <- Seq(
     new InterruptedException,
     new InterruptedIOException,
@@ -828,6 +1079,47 @@ class StreamSuite extends StreamTest {
       query.stop()
       assert(query.exception.isEmpty)
     }
+  }
+
+  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
+    " to Dataset - use v2 sink") {
+    testCurrentTimestampOnStreamingQuery(useV2Sink = true)
+  }
+
+  test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
+    " to Dataset - use v1 sink") {
+    testCurrentTimestampOnStreamingQuery(useV2Sink = false)
+  }
+
+  private def testCurrentTimestampOnStreamingQuery(useV2Sink: Boolean): Unit = {
+    val input = MemoryStream[Int]
+    val df = input.toDS().withColumn("cur_timestamp", lit(current_timestamp()))
+
+    def assertBatchOutputAndUpdateLastTimestamp(
+        rows: Seq[Row],
+        curTimestamp: Long,
+        curDate: Int,
+        expectedValue: Int): Long = {
+      assert(rows.size === 1)
+      val row = rows.head
+      assert(row.getInt(0) === expectedValue)
+      assert(row.getTimestamp(1).getTime >= curTimestamp)
+      row.getTimestamp(1).getTime
+    }
+
+    var lastTimestamp = System.currentTimeMillis()
+    val currentDate = DateTimeUtils.millisToDays(lastTimestamp)
+    testStream(df, useV2Sink = useV2Sink) (
+      AddData(input, 1),
+      CheckLastBatch { rows: Seq[Row] =>
+        lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 1)
+      },
+      Execute { _ => Thread.sleep(1000) },
+      AddData(input, 2),
+      CheckLastBatch { rows: Seq[Row] =>
+        lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 2)
+      }
+    )
   }
 }
 

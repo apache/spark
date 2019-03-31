@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-from py4j.protocol import Py4JJavaError
-
-from pyspark.serializers import PairDeserializer, NoOpSerializer
+from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming import DStream
+from pyspark.util import _print_missing_jar
+
 
 __all__ = ['KinesisUtils', 'InitialPositionInStream', 'utf8_decoder']
 
@@ -84,7 +84,11 @@ class KinesisUtils(object):
             helper = ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
-                KinesisUtils._printErrorMsg(ssc.sparkContext)
+                _print_missing_jar(
+                    "Streaming's Kinesis",
+                    "streaming-kinesis-asl",
+                    "streaming-kinesis-asl-assembly",
+                    ssc.sparkContext.version)
             raise
         jstream = helper.createStream(ssc._jssc, kinesisAppName, streamName, endpointUrl,
                                       regionName, initialPositionInStream, jduration, jlevel,
@@ -92,28 +96,6 @@ class KinesisUtils(object):
                                       stsSessionName, stsExternalId)
         stream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))
-
-    @staticmethod
-    def _printErrorMsg(sc):
-        print("""
-________________________________________________________________________________________________
-
-  Spark Streaming's Kinesis libraries not found in class path. Try one of the following.
-
-  1. Include the Kinesis library and its dependencies with in the
-     spark-submit command as
-
-     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kinesis-asl:%s ...
-
-  2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
-     Group Id = org.apache.spark, Artifact Id = spark-streaming-kinesis-asl-assembly, Version = %s.
-     Then, include the jar in the spark-submit command as
-
-     $ bin/spark-submit --jars <spark-streaming-kinesis-asl-assembly.jar> ...
-
-________________________________________________________________________________________________
-
-""" % (sc.version, sc.version))
 
 
 class InitialPositionInStream(object):

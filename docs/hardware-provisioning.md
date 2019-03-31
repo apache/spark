@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Hardware Provisioning
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 A common question received by Spark developers is how to configure hardware for it. While the right
@@ -37,7 +52,7 @@ use the same disks as HDFS.
 
 # Memory
 
-In general, Spark can run well with anywhere from **8 GB to hundreds of gigabytes** of memory per
+In general, Spark can run well with anywhere from **8 GiB to hundreds of gigabytes** of memory per
 machine. In all cases, we recommend allocating only at most 75% of the memory for Spark; leave the
 rest for the operating system and buffer cache.
 
@@ -47,7 +62,7 @@ Storage tab of Spark's monitoring UI (`http://<driver-node>:4040`) to see its si
 Note that memory usage is greatly affected by storage level and serialization format -- see
 the [tuning guide](tuning.html) for tips on how to reduce it.
 
-Finally, note that the Java VM does not always behave well with more than 200 GB of RAM. If you
+Finally, note that the Java VM does not always behave well with more than 200 GiB of RAM. If you
 purchase machines with more RAM than this, you can run _multiple worker JVMs per node_. In
 Spark's [standalone mode](spark-standalone.html), you can set the number of workers per node
 with the `SPARK_WORKER_INSTANCES` variable in `conf/spark-env.sh`, and the number of cores

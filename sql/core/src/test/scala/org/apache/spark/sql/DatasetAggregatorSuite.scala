@@ -22,7 +22,7 @@ import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
 
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
@@ -147,6 +147,79 @@ object VeryComplexResultAgg extends Aggregator[Row, String, ComplexAggData] {
   override def outputEncoder: Encoder[ComplexAggData] = Encoders.product[ComplexAggData]
 }
 
+
+case class OptionBooleanData(name: String, isGood: Option[Boolean])
+case class OptionBooleanIntData(name: String, isGood: Option[(Boolean, Int)])
+
+case class OptionBooleanAggregator(colName: String)
+    extends Aggregator[Row, Option[Boolean], Option[Boolean]] {
+
+  override def zero: Option[Boolean] = None
+
+  override def reduce(buffer: Option[Boolean], row: Row): Option[Boolean] = {
+    val index = row.fieldIndex(colName)
+    val value = if (row.isNullAt(index)) {
+      Option.empty[Boolean]
+    } else {
+      Some(row.getBoolean(index))
+    }
+    merge(buffer, value)
+  }
+
+  override def merge(b1: Option[Boolean], b2: Option[Boolean]): Option[Boolean] = {
+    if ((b1.isDefined && b1.get) || (b2.isDefined && b2.get)) {
+      Some(true)
+    } else if (b1.isDefined) {
+      b1
+    } else {
+      b2
+    }
+  }
+
+  override def finish(reduction: Option[Boolean]): Option[Boolean] = reduction
+
+  override def bufferEncoder: Encoder[Option[Boolean]] = OptionalBoolEncoder
+  override def outputEncoder: Encoder[Option[Boolean]] = OptionalBoolEncoder
+
+  def OptionalBoolEncoder: Encoder[Option[Boolean]] = ExpressionEncoder()
+}
+
+case class OptionBooleanIntAggregator(colName: String)
+    extends Aggregator[Row, Option[(Boolean, Int)], Option[(Boolean, Int)]] {
+
+  override def zero: Option[(Boolean, Int)] = None
+
+  override def reduce(buffer: Option[(Boolean, Int)], row: Row): Option[(Boolean, Int)] = {
+    val index = row.fieldIndex(colName)
+    val value = if (row.isNullAt(index)) {
+      Option.empty[(Boolean, Int)]
+    } else {
+      val nestedRow = row.getStruct(index)
+      Some((nestedRow.getBoolean(0), nestedRow.getInt(1)))
+    }
+    merge(buffer, value)
+  }
+
+  override def merge(
+      b1: Option[(Boolean, Int)],
+      b2: Option[(Boolean, Int)]): Option[(Boolean, Int)] = {
+    if ((b1.isDefined && b1.get._1) || (b2.isDefined && b2.get._1)) {
+      val newInt = b1.map(_._2).getOrElse(0) + b2.map(_._2).getOrElse(0)
+      Some((true, newInt))
+    } else if (b1.isDefined) {
+      b1
+    } else {
+      b2
+    }
+  }
+
+  override def finish(reduction: Option[(Boolean, Int)]): Option[(Boolean, Int)] = reduction
+
+  override def bufferEncoder: Encoder[Option[(Boolean, Int)]] = OptionalBoolIntEncoder
+  override def outputEncoder: Encoder[Option[(Boolean, Int)]] = OptionalBoolIntEncoder
+
+  def OptionalBoolIntEncoder: Encoder[Option[(Boolean, Int)]] = ExpressionEncoder()
+}
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -321,9 +394,9 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 3, 2, 5).toDS()
     assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
     val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
-    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
+    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable)
     val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
-    assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
+    assert(ds3.select(NameAgg.toColumn).schema.head.nullable)
   }
 
   test("SPARK-18147: very complex aggregator result type") {
@@ -332,5 +405,54 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy($"i").agg(VeryComplexResultAgg.toColumn),
       Row(1, Row(Row(1, "a"), Row(1, "a"))) :: Row(2, Row(Row(2, "bc"), Row(2, "bc"))) :: Nil)
+  }
+
+  test("SPARK-24569: Aggregator with output type Option[Boolean] creates column of type Row") {
+    val df = Seq(
+      OptionBooleanData("bob", Some(true)),
+      OptionBooleanData("bob", Some(false)),
+      OptionBooleanData("bob", None)).toDF()
+    val group = df
+      .groupBy("name")
+      .agg(OptionBooleanAggregator("isGood").toColumn.alias("isGood"))
+    assert(df.schema == group.schema)
+    checkAnswer(group, Row("bob", true) :: Nil)
+    checkDataset(group.as[OptionBooleanData], OptionBooleanData("bob", Some(true)))
+  }
+
+  test("SPARK-24569: groupByKey with Aggregator of output type Option[Boolean]") {
+    val df = Seq(
+      OptionBooleanData("bob", Some(true)),
+      OptionBooleanData("bob", Some(false)),
+      OptionBooleanData("bob", None)).toDF()
+    val grouped = df.groupByKey((r: Row) => r.getString(0))
+      .agg(OptionBooleanAggregator("isGood").toColumn).toDF("name", "isGood")
+
+    assert(grouped.schema == df.schema)
+    checkDataset(grouped.as[OptionBooleanData], OptionBooleanData("bob", Some(true)))
+  }
+
+  test("SPARK-24762: Aggregator should be able to use Option of Product encoder") {
+    val df = Seq(
+      OptionBooleanIntData("bob", Some((true, 1))),
+      OptionBooleanIntData("bob", Some((false, 2))),
+      OptionBooleanIntData("bob", None)).toDF()
+
+    val group = df
+      .groupBy("name")
+      .agg(OptionBooleanIntAggregator("isGood").toColumn.alias("isGood"))
+
+    val expectedSchema = new StructType()
+      .add("name", StringType, nullable = true)
+      .add("isGood",
+        new StructType()
+          .add("_1", BooleanType, nullable = false)
+          .add("_2", IntegerType, nullable = false),
+        nullable = true)
+
+    assert(df.schema == expectedSchema)
+    assert(group.schema == expectedSchema)
+    checkAnswer(group, Row("bob", Row(true, 3)) :: Nil)
+    checkDataset(group.as[OptionBooleanIntData], OptionBooleanIntData("bob", Some((true, 3))))
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.scheduler.SparkListenerEvent
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 abstract class StreamingQueryListener {
 
   import StreamingQueryListener._
@@ -67,14 +67,14 @@ abstract class StreamingQueryListener {
  * Companion object of [[StreamingQueryListener]] that defines the listener events.
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 object StreamingQueryListener {
 
   /**
    * Base type of [[StreamingQueryListener]] events
    * @since 2.0.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   trait Event extends SparkListenerEvent
 
   /**
@@ -84,7 +84,7 @@ object StreamingQueryListener {
    * @param name User-specified name of the query, null if not specified.
    * @since 2.1.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   class QueryStartedEvent private[sql](
       val id: UUID,
       val runId: UUID,
@@ -95,7 +95,7 @@ object StreamingQueryListener {
    * @param progress The query progress updates.
    * @since 2.1.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event
 
   /**
@@ -107,7 +107,7 @@ object StreamingQueryListener {
    *                  with an exception. Otherwise, it will be `None`.
    * @since 2.1.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   class QueryTerminatedEvent private[sql](
       val id: UUID,
       val runId: UUID,

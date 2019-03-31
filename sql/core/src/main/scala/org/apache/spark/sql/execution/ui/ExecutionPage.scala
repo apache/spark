@@ -30,8 +30,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private val sqlStore = parent.sqlStore
 
   override def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterExecutionId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterExecutionId = request.getParameter("id")
     require(parameterExecutionId != null && parameterExecutionId.nonEmpty,
       "Missing execution id parameter")
 
@@ -49,7 +48,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
           <li>
             <strong>{label} </strong>
             {jobs.toSeq.sorted.map { jobId =>
-              <a href={jobURL(jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>
+              <a href={jobURL(request, jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>
             }}
           </li>
         } else {
@@ -77,27 +76,31 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       val graph = sqlStore.planGraph(executionId)
 
       summary ++
-        planVisualization(metrics, graph) ++
+        planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription)
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }
 
-    UIUtils.headerSparkPage(s"Details for Query $executionId", content, parent, Some(5000))
+    UIUtils.headerSparkPage(
+      request, s"Details for Query $executionId", content, parent)
   }
 
 
-  private def planVisualizationResources: Seq[Node] = {
+  private def planVisualizationResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
-    <link rel="stylesheet" href={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.css")} type="text/css"/>
-    <script src={UIUtils.prependBaseUri("/static/d3.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/dagre-d3.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/graphlib-dot.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.js")}></script>
+    <link rel="stylesheet" href={UIUtils.prependBaseUri(request, "/static/sql/spark-sql-viz.css")} type="text/css"/>
+    <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+    <script src={UIUtils.prependBaseUri(request, "/static/dagre-d3.min.js")}></script>
+    <script src={UIUtils.prependBaseUri(request, "/static/graphlib-dot.min.js")}></script>
+    <script src={UIUtils.prependBaseUri(request, "/static/sql/spark-sql-viz.js")}></script>
     // scalastyle:on
   }
 
-  private def planVisualization(metrics: Map[Long, String], graph: SparkPlanGraph): Seq[Node] = {
+  private def planVisualization(
+      request: HttpServletRequest,
+      metrics: Map[Long, String],
+      graph: SparkPlanGraph): Seq[Node] = {
     val metadata = graph.allNodes.flatMap { node =>
       val nodeId = s"plan-meta-data-${node.id}"
       <div id={nodeId}>{node.desc}</div>
@@ -112,13 +115,13 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         <div id="plan-viz-metadata-size">{graph.allNodes.size.toString}</div>
         {metadata}
       </div>
-      {planVisualizationResources}
+      {planVisualizationResources(request)}
       <script>$(function() {{ renderPlanViz(); }})</script>
     </div>
   }
 
-  private def jobURL(jobId: Long): String =
-    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+  private def jobURL(request: HttpServletRequest, jobId: Long): String =
+    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>

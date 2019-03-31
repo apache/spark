@@ -427,12 +427,12 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       assert(errMsg.startsWith("Parquet column cannot be converted in file"))
       val file = errMsg.substring("Parquet column cannot be converted in file ".length,
         errMsg.indexOf(". "))
-      val col = spark.read.parquet(file).schema.fields.filter(_.name.equals("a"))
+      val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
-        assert(errMsg.contains("Column: [a], Expected: IntegerType, Found: BINARY"))
+        assert(errMsg.contains("Column: [a], Expected: int, Found: BINARY"))
       } else {
-        assert(errMsg.endsWith("Column: [a], Expected: StringType, Found: INT32"))
+        assert(errMsg.endsWith("Column: [a], Expected: string, Found: INT32"))
       }
     }
   }
@@ -1014,19 +1014,21 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
-      expectedSchema: String): Unit = {
+      expectedSchema: String,
+      caseSensitive: Boolean = true): Unit = {
     testSchemaClipping(testName, parquetSchema, catalystSchema,
-      MessageTypeParser.parseMessageType(expectedSchema))
+      MessageTypeParser.parseMessageType(expectedSchema), caseSensitive)
   }
 
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
-      expectedSchema: MessageType): Unit = {
+      expectedSchema: MessageType,
+      caseSensitive: Boolean): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
-        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
+        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive)
 
       try {
         expectedSchema.checkContains(actual)
@@ -1387,7 +1389,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE)
+    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE,
+    caseSensitive = true)
 
   testSchemaClipping(
     "disjoint field sets",
@@ -1544,4 +1547,52 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin)
+
+  testSchemaClipping(
+    "case-insensitive resolution: no ambiguity",
+    parquetSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+    catalystSchema = {
+      val nestedType = new StructType().add("b", IntegerType, nullable = true)
+      new StructType()
+        .add("a", nestedType, nullable = true)
+        .add("c", IntegerType, nullable = true)
+    },
+    expectedSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+    caseSensitive = false)
+
+    test("Clipping - case-insensitive resolution: more than one field is matched") {
+      val parquetSchema =
+        """message root {
+          |  required group A {
+          |    optional int32 B;
+          |  }
+          |  optional int32 c;
+          |  optional int32 a;
+          |}
+        """.stripMargin
+      val catalystSchema = {
+        val nestedType = new StructType().add("b", IntegerType, nullable = true)
+        new StructType()
+          .add("a", nestedType, nullable = true)
+          .add("c", IntegerType, nullable = true)
+      }
+      assertThrows[RuntimeException] {
+        ParquetReadSupport.clipParquetSchema(
+          MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive = false)
+      }
+    }
 }

@@ -270,7 +270,7 @@ class RowMatrix(DistributedMatrix):
         Reference:
          Paul G. Constantine, David F. Gleich. "Tall and skinny QR
          factorizations in MapReduce architectures"
-         ([[http://dx.doi.org/10.1145/1996092.1996103]])
+         ([[https://doi.org/10.1145/1996092.1996103]])
 
         :param: computeQ: whether to computeQ
         :return: QRDecomposition(Q: RowMatrix, R: Matrix), where
@@ -1364,9 +1364,15 @@ class BlockMatrix(DistributedMatrix):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
     from pyspark.mllib.linalg import Matrices
     import pyspark.mllib.linalg.distributed
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.linalg.distributed.__dict__.copy()
     spark = SparkSession.builder\
         .master("local[2]")\

@@ -48,7 +48,7 @@ install:
   - cmd: R -e "packageVersion('knitr'); packageVersion('rmarkdown'); packageVersion('testthat'); packageVersion('e1071'); packageVersion('survival')"
 
 build_script:
-  - cmd: mvn -DskipTests -Psparkr -Phive -Phive-thriftserver package
+  - cmd: mvn -DskipTests -Psparkr -Phive package
 
 environment:
   NOT_CRAN: true

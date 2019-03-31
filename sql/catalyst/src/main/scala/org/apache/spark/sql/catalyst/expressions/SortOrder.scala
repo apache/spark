@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 
 abstract sealed class SortDirection {
@@ -71,7 +73,7 @@ case class SortOrder(
     if (RowOrdering.isOrderable(dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.simpleString}")
+      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.catalogString}")
     }
   }
 
@@ -147,7 +149,41 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       (!child.isAscending && child.nullOrdering == NullsLast)
   }
 
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  private lazy val calcPrefix: Any => Long = child.child.dataType match {
+    case BooleanType => (raw) =>
+      if (raw.asInstanceOf[Boolean]) 1 else 0
+    case DateType | TimestampType | _: IntegralType => (raw) =>
+      raw.asInstanceOf[java.lang.Number].longValue()
+    case FloatType | DoubleType => (raw) => {
+      val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
+      DoublePrefixComparator.computePrefix(dVal)
+    }
+    case StringType => (raw) =>
+      StringPrefixComparator.computePrefix(raw.asInstanceOf[UTF8String])
+    case BinaryType => (raw) =>
+      BinaryPrefixComparator.computePrefix(raw.asInstanceOf[Array[Byte]])
+    case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+      _.asInstanceOf[Decimal].toUnscaledLong
+    case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+      val p = Decimal.MAX_LONG_DIGITS
+      val s = p - (dt.precision - dt.scale)
+      (raw) => {
+        val value = raw.asInstanceOf[Decimal]
+        if (value.changePrecision(p, s)) value.toUnscaledLong else Long.MinValue
+      }
+    case dt: DecimalType => (raw) =>
+      DoublePrefixComparator.computePrefix(raw.asInstanceOf[Decimal].toDouble)
+    case _ => (Any) => 0L
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.child.eval(input)
+    if (value == null) {
+      null
+    } else {
+      calcPrefix(value)
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.child.genCode(ctx)
@@ -181,7 +217,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
     }
 
     ev.copy(code = childCode.code +
-      s"""
+      code"""
          |long ${ev.value} = 0L;
          |boolean ${ev.isNull} = ${childCode.isNull};
          |if (!${childCode.isNull}) {

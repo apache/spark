@@ -20,26 +20,28 @@ package org.apache.spark.sql.util
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark._
+import org.apache.spark.sql.{LocalSparkSession, SparkSession}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.StaticSQLConf._
 
-class ExecutionListenerManagerSuite extends SparkFunSuite {
+class ExecutionListenerManagerSuite extends SparkFunSuite with LocalSparkSession {
 
   import CountingQueryExecutionListener._
 
   test("register query execution listeners using configuration") {
     val conf = new SparkConf(false)
       .set(QUERY_EXECUTION_LISTENERS, Seq(classOf[CountingQueryExecutionListener].getName()))
+    spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
 
-    val mgr = new ExecutionListenerManager(conf)
+    spark.sql("select 1").collect()
+    spark.sparkContext.listenerBus.waitUntilEmpty(1000)
     assert(INSTANCE_COUNT.get() === 1)
-    mgr.onSuccess(null, null, 42L)
     assert(CALLBACK_COUNT.get() === 1)
 
-    val clone = mgr.clone()
+    val cloned = spark.cloneSession()
+    cloned.sql("select 1").collect()
+    spark.sparkContext.listenerBus.waitUntilEmpty(1000)
     assert(INSTANCE_COUNT.get() === 1)
-
-    clone.onSuccess(null, null, 42L)
     assert(CALLBACK_COUNT.get() === 2)
   }
 

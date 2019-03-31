@@ -21,6 +21,8 @@ import java.io.{FileNotFoundException, IOException}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
+import org.apache.spark.deploy.SparkHadoopUtil
+
 private[streaming] object HdfsUtils {
 
   def getOutputStream(path: String, conf: Configuration): FSDataOutputStream = {
@@ -37,7 +39,8 @@ private[streaming] object HdfsUtils {
           throw new IllegalStateException("File exists and there is no append support!")
         }
       } else {
-        dfs.create(dfsPath)
+        // we dont' want to use hdfs erasure coding, as that lacks support for append and hflush
+        SparkHadoopUtil.createNonECFile(dfs, dfsPath)
       }
     }
     stream

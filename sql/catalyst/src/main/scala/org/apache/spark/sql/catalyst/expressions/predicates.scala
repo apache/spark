@@ -22,8 +22,10 @@ import scala.collection.immutable.TreeSet
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -128,6 +130,13 @@ case class Not(child: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
+  // +---------+-----------+
+  // | CHILD   | NOT CHILD |
+  // +---------+-----------+
+  // | TRUE    | FALSE     |
+  // | FALSE   | TRUE      |
+  // | UNKNOWN | UNKNOWN   |
+  // +---------+-----------+
   protected override def nullSafeEval(input: Any): Any = !input.asInstanceOf[Boolean]
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -135,6 +144,64 @@ case class Not(child: Expression)
   }
 
   override def sql: String = s"(NOT ${child.sql})"
+}
+
+/**
+ * Evaluates to `true` if `values` are returned in `query`'s result set.
+ */
+case class InSubquery(values: Seq[Expression], query: ListQuery)
+  extends Predicate with Unevaluable {
+
+  @transient private lazy val value: Expression = if (values.length > 1) {
+    CreateNamedStruct(values.zipWithIndex.flatMap {
+      case (v: NamedExpression, _) => Seq(Literal(v.name), v)
+      case (v, idx) => Seq(Literal(s"_$idx"), v)
+    })
+  } else {
+    values.head
+  }
+
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (values.length != query.childOutputs.length) {
+      TypeCheckResult.TypeCheckFailure(
+        s"""
+           |The number of columns in the left hand side of an IN subquery does not match the
+           |number of columns in the output of subquery.
+           |#columns in left hand side: ${values.length}.
+           |#columns in right hand side: ${query.childOutputs.length}.
+           |Left side columns:
+           |[${values.map(_.sql).mkString(", ")}].
+           |Right side columns:
+           |[${query.childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
+    } else if (!DataType.equalsStructurally(
+      query.dataType, value.dataType, ignoreNullability = true)) {
+
+      val mismatchedColumns = values.zip(query.childOutputs).flatMap {
+        case (l, r) if l.dataType != r.dataType =>
+          Seq(s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})")
+        case _ => None
+      }
+      TypeCheckResult.TypeCheckFailure(
+        s"""
+           |The data type of one or more elements in the left hand side of an IN subquery
+           |is not compatible with the data type of the output of the subquery
+           |Mismatched columns:
+           |[${mismatchedColumns.mkString(", ")}]
+           |Left side:
+           |[${values.map(_.dataType.catalogString).mkString(", ")}].
+           |Right side:
+           |[${query.childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
+    } else {
+      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+    }
+  }
+
+  override def children: Seq[Expression] = values :+ query
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def toString: String = s"$value IN ($query)"
+  override def sql: String = s"(${value.sql} IN (${query.sql}))"
 }
 
 
@@ -168,44 +235,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
       ignoreNullability = true))
     if (mismatchOpt.isDefined) {
-      list match {
-        case ListQuery(_, _, _, childOutputs) :: Nil =>
-          val valExprs = value match {
-            case cns: CreateNamedStruct => cns.valExprs
-            case expr => Seq(expr)
-          }
-          if (valExprs.length != childOutputs.length) {
-            TypeCheckResult.TypeCheckFailure(
-              s"""
-                 |The number of columns in the left hand side of an IN subquery does not match the
-                 |number of columns in the output of subquery.
-                 |#columns in left hand side: ${valExprs.length}.
-                 |#columns in right hand side: ${childOutputs.length}.
-                 |Left side columns:
-                 |[${valExprs.map(_.sql).mkString(", ")}].
-                 |Right side columns:
-                 |[${childOutputs.map(_.sql).mkString(", ")}].""".stripMargin)
-          } else {
-            val mismatchedColumns = valExprs.zip(childOutputs).flatMap {
-              case (l, r) if l.dataType != r.dataType =>
-                s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
-              case _ => None
-            }
-            TypeCheckResult.TypeCheckFailure(
-              s"""
-                 |The data type of one or more elements in the left hand side of an IN subquery
-                 |is not compatible with the data type of the output of the subquery
-                 |Mismatched columns:
-                 |[${mismatchedColumns.mkString(", ")}]
-                 |Left side:
-                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
-                 |Right side:
-                 |[${childOutputs.map(_.dataType.catalogString).mkString(", ")}].""".stripMargin)
-          }
-        case _ =>
-          TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-            s"${value.dataType.simpleString} != ${mismatchOpt.get.dataType.simpleString}")
-      }
+      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
+        s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
     }
@@ -290,7 +321,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       }.mkString("\n"))
 
     ev.copy(code =
-      s"""
+      code"""
          |${valueGen.code}
          |byte $tmpResult = $HAS_NULL;
          |if (!${valueGen.isNull}) {
@@ -306,9 +337,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   }
 
   override def sql: String = {
-    val childrenSQL = children.map(_.sql)
-    val valueSQL = childrenSQL.head
-    val listSQL = childrenSQL.tail.mkString(", ")
+    val valueSQL = value.sql
+    val listSQL = list.map(_.sql).mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }
@@ -338,31 +368,67 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient lazy val set: Set[Any] = child.dataType match {
-    case _: AtomicType => hset
+    case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
     case _: NullType => hset
     case _ =>
       // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
+      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (hset - null)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setTerm = ctx.addReferenceObj("set", set)
-    val childGen = child.genCode(ctx)
-    val setIsNull = if (hasNull) {
-      s"${ev.isNull} = !${ev.value};"
+    if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
+      genCodeWithSwitch(ctx, ev)
     } else {
-      ""
+      genCodeWithSet(ctx, ev)
     }
-    ev.copy(code =
+  }
+
+  private def canBeComputedUsingSwitch: Boolean = child.dataType match {
+    case ByteType | ShortType | IntegerType | DateType => true
+    case _ => false
+  }
+
+  private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val setTerm = ctx.addReferenceObj("set", set)
+      val setIsNull = if (hasNull) {
+        s"${ev.isNull} = !${ev.value};"
+      } else {
+        ""
+      }
       s"""
-         |${childGen.code}
-         |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
-         |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $setTerm.contains(${childGen.value});
-         |  $setIsNull
-         |}
-       """.stripMargin)
+         |${ev.value} = $setTerm.contains($c);
+         |$setIsNull
+       """.stripMargin
+    })
+  }
+
+  // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
+  // so the code size should not exceed 64KB
+  private def genCodeWithSwitch(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val caseValuesGen = hset.filter(_ != null).map(Literal(_).genCode(ctx))
+    val valueGen = child.genCode(ctx)
+
+    val caseBranches = caseValuesGen.map(literal =>
+      code"""
+        case ${literal.value}:
+          ${ev.value} = true;
+          break;
+       """)
+
+    ev.copy(code =
+      code"""
+        ${valueGen.code}
+        ${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${valueGen.isNull};
+        ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
+        if (!${valueGen.isNull}) {
+          switch (${valueGen.value}) {
+            ${caseBranches.mkString("\n")}
+            default:
+              ${ev.isNull} = $hasNull;
+          }
+        }
+       """)
   }
 
   override def sql: String = {
@@ -382,6 +448,13 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override def sqlOperator: String = "AND"
 
+  // +---------+---------+---------+---------+
+  // | AND     | TRUE    | FALSE   | UNKNOWN |
+  // +---------+---------+---------+---------+
+  // | TRUE    | TRUE    | FALSE   | UNKNOWN |
+  // | FALSE   | FALSE   | FALSE   | FALSE   |
+  // | UNKNOWN | UNKNOWN | FALSE   | UNKNOWN |
+  // +---------+---------+---------+---------+
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
     if (input1 == false) {
@@ -406,7 +479,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
     // The result should be `false`, if any of them is `false` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.value} = false;
 
@@ -415,7 +488,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
           ${ev.value} = ${eval2.value};
         }""", isNull = FalseLiteral)
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.value} = false;
@@ -445,6 +518,13 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override def sqlOperator: String = "OR"
 
+  // +---------+---------+---------+---------+
+  // | OR      | TRUE    | FALSE   | UNKNOWN |
+  // +---------+---------+---------+---------+
+  // | TRUE    | TRUE    | TRUE    | TRUE    |
+  // | FALSE   | TRUE    | FALSE   | UNKNOWN |
+  // | UNKNOWN | TRUE    | UNKNOWN | UNKNOWN |
+  // +---------+---------+---------+---------+
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
     if (input1 == true) {
@@ -470,7 +550,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
       ev.isNull = FalseLiteral
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.value} = true;
 
@@ -479,7 +559,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
           ${ev.value} = ${eval2.value};
         }""", isNull = FalseLiteral)
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${eval1.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.value} = true;
@@ -568,6 +648,13 @@ case class EqualTo(left: Expression, right: Expression)
 
   override def symbol: String = "="
 
+  // +---------+---------+---------+---------+
+  // | =       | TRUE    | FALSE   | UNKNOWN |
+  // +---------+---------+---------+---------+
+  // | TRUE    | TRUE    | FALSE   | UNKNOWN |
+  // | FALSE   | FALSE   | TRUE    | UNKNOWN |
+  // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+  // +---------+---------+---------+---------+
   protected override def nullSafeEval(left: Any, right: Any): Any = ordering.equiv(left, right)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -605,6 +692,13 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 
   override def nullable: Boolean = false
 
+  // +---------+---------+---------+---------+
+  // | <=>     | TRUE    | FALSE   | UNKNOWN |
+  // +---------+---------+---------+---------+
+  // | TRUE    | TRUE    | FALSE   | FALSE   |
+  // | FALSE   | FALSE   | TRUE    | FALSE   |
+  // | UNKNOWN | FALSE   | FALSE   | TRUE    |
+  // +---------+---------+---------+---------+
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
     val input2 = right.eval(input)
@@ -621,7 +715,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
     val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
-    ev.copy(code = eval1.code + eval2.code + s"""
+    ev.copy(code = eval1.code + eval2.code + code"""
         boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
            (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = FalseLiteral)
   }

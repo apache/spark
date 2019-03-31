@@ -65,6 +65,57 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
     testStopWordsRemover(remover, dataSet)
   }
 
+  test("StopWordsRemover with localed input (case insensitive)") {
+    val stopWords = Array("milk", "cookie")
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
+      .setStopWords(stopWords)
+      .setCaseSensitive(false)
+      .setLocale("tr")  // Turkish alphabet: has no Q, W, X but has dotted and dotless 'I's.
+    val dataSet = Seq(
+      // scalastyle:off
+      (Seq("mİlk", "and", "nuts"), Seq("and", "nuts")),
+      // scalastyle:on
+      (Seq("cookIe", "and", "nuts"), Seq("cookIe", "and", "nuts")),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    ).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
+  }
+
+  test("StopWordsRemover with localed input (case sensitive)") {
+    val stopWords = Array("milk", "cookie")
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
+      .setStopWords(stopWords)
+      .setCaseSensitive(true)
+      .setLocale("tr")  // Turkish alphabet: has no Q, W, X but has dotted and dotless 'I's.
+    val dataSet = Seq(
+      // scalastyle:off
+      (Seq("mİlk", "and", "nuts"), Seq("mİlk", "and", "nuts")),
+      // scalastyle:on
+      (Seq("cookIe", "and", "nuts"), Seq("cookIe", "and", "nuts")),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    ).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
+  }
+
+  test("StopWordsRemover with invalid locale") {
+    intercept[IllegalArgumentException] {
+      val stopWords = Array("test", "a", "an", "the")
+      new StopWordsRemover()
+        .setInputCol("raw")
+        .setOutputCol("filtered")
+        .setStopWords(stopWords)
+        .setLocale("rt")  // invalid locale
+    }
+  }
+
   test("StopWordsRemover case sensitive") {
     val remover = new StopWordsRemover()
       .setInputCol("raw")

@@ -49,7 +49,7 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
 
   /** return a copy of the RandomSampler object */
   override def clone: RandomSampler[T, U] =
-    throw new NotImplementedError("clone() is not implemented.")
+    throw new UnsupportedOperationException("clone() is not implemented.")
 }
 
 private[spark]

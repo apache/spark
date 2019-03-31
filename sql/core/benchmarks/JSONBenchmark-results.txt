@@ -1,0 +1,55 @@
+================================================================================================
+Benchmark for performance of JSON parsing
+================================================================================================
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Linux 3.16.0-31-generic
+Intel(R) Xeon(R) CPU @ 2.50GHz
+JSON schema inferring:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 80821 / 82526          1.2         808.2       1.0X
+UTF-8 is set                              129478 / 130381          0.8        1294.8       0.6X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Linux 3.16.0-31-generic
+Intel(R) Xeon(R) CPU @ 2.50GHz
+count a short column:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 16804 / 16948          6.0         168.0       1.0X
+UTF-8 is set                                16648 / 16757          6.0         166.5       1.0X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Linux 3.16.0-31-generic
+Intel(R) Xeon(R) CPU @ 2.50GHz
+count a wide column:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 30949 / 31058          0.3        3094.9       1.0X
+UTF-8 is set                                30629 / 33896          0.3        3062.9       1.0X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Linux 3.16.0-31-generic
+Intel(R) Xeon(R) CPU @ 2.50GHz
+select wide row:                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                               123050 / 124199          0.0      246099.8       1.0X
+UTF-8 is set                              139306 / 142569          0.0      278612.7       0.9X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Linux 3.16.0-31-generic
+Intel(R) Xeon(R) CPU @ 2.50GHz
+Select a subset of 10 columns:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Select 10 columns + count()                 19539 / 19896          0.5        1953.9       1.0X
+Select 1 column + count()                   16412 / 16445          0.6        1641.2       1.2X
+
+Preparing data for benchmarking ...
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Linux 3.16.0-31-generic
+Intel(R) Xeon(R) CPU @ 2.50GHz
+creation of JSON parser per line:        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Short column without encoding                 9576 / 9612          1.0         957.6       1.0X
+Short column with UTF-8                     13555 / 13698          0.7        1355.5       0.7X
+Wide column without encoding              174761 / 175665          0.1       17476.1       0.1X
+Wide column with UTF-8                    203219 / 205151          0.0       20321.9       0.0X
+
+

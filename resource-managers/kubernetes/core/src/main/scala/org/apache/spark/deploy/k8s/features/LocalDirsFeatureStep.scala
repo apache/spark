@@ -16,15 +16,15 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import java.nio.file.Paths
 import java.util.UUID
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, VolumeBuilder, VolumeMountBuilder}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config._
 
 private[spark] class LocalDirsFeatureStep(
-    conf: KubernetesConf[_ <: KubernetesRoleSpecificConf],
+    conf: KubernetesConf,
     defaultLocalDir: String = s"/var/data/spark-${UUID.randomUUID}")
   extends KubernetesFeatureConfigStep {
 
@@ -37,6 +37,7 @@ private[spark] class LocalDirsFeatureStep(
     .orElse(conf.getOption("spark.local.dir"))
     .getOrElse(defaultLocalDir)
     .split(",")
+  private val useLocalDirTmpFs = conf.get(KUBERNETES_LOCAL_DIRS_TMPFS)
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val localDirVolumes = resolvedLocalDirs
@@ -45,6 +46,7 @@ private[spark] class LocalDirsFeatureStep(
         new VolumeBuilder()
           .withName(s"spark-local-dir-${index + 1}")
           .withNewEmptyDir()
+            .withMedium(if (useLocalDirTmpFs) "Memory" else null)
           .endEmptyDir()
           .build()
       }
@@ -70,8 +72,4 @@ private[spark] class LocalDirsFeatureStep(
       .build()
     SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
   }
-
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

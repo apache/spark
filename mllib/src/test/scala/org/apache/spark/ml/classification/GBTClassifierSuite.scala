@@ -24,7 +24,7 @@ import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
-import org.apache.spark.ml.tree.RegressionLeafNode
+import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
@@ -69,7 +70,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("params") {
     ParamsSuite.checkParams(new GBTClassifier)
     val model = new GBTClassificationModel("gbtc",
-      Array(new DecisionTreeRegressionModel("dtr", new RegressionLeafNode(0.0, 0.0, null), 1)),
+      Array(new DecisionTreeRegressionModel("dtr", new LeafNode(0.0, 0.0, null), 1)),
       Array(1.0), 1, 2)
     ParamsSuite.checkParams(model)
   }
@@ -344,7 +345,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("Tests of feature subset strategy") {
     val numClasses = 2
     val gbt = new GBTClassifier()
-      .setSeed(123)
+      .setSeed(42)
       .setMaxDepth(3)
       .setMaxIter(5)
       .setFeatureSubsetStrategy("all")
@@ -362,7 +363,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
     val mostIF = importanceFeatures.argmax
-    assert(mostImportantFeature !== mostIF)
+    assert(mostIF === 1)
+    assert(importances(mostImportantFeature) !== importanceFeatures(mostIF))
   }
 
   test("model evaluateEachIteration") {
@@ -392,6 +394,51 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     assert(evalArr(2) ~== lossErr3 relTol 1E-3)
   }
 
+  test("runWithValidation stops early and performs better on a validation dataset") {
+    val validationIndicatorCol = "validationIndicator"
+    val trainDF = trainData.toDF().withColumn(validationIndicatorCol, lit(false))
+    val validationDF = validationData.toDF().withColumn(validationIndicatorCol, lit(true))
+
+    val numIter = 20
+    for (lossType <- GBTClassifier.supportedLossTypes) {
+      val gbt = new GBTClassifier()
+        .setSeed(123)
+        .setMaxDepth(2)
+        .setLossType(lossType)
+        .setMaxIter(numIter)
+      val modelWithoutValidation = gbt.fit(trainDF)
+
+      gbt.setValidationIndicatorCol(validationIndicatorCol)
+      val modelWithValidation = gbt.fit(trainDF.union(validationDF))
+
+      assert(modelWithoutValidation.numTrees === numIter)
+      // early stop
+      assert(modelWithValidation.numTrees < numIter)
+
+      val (errorWithoutValidation, errorWithValidation) = {
+        val remappedRdd = validationData.map(x => new LabeledPoint(2 * x.label - 1, x.features))
+        (GradientBoostedTrees.computeError(remappedRdd, modelWithoutValidation.trees,
+          modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType),
+          GradientBoostedTrees.computeError(remappedRdd, modelWithValidation.trees,
+            modelWithValidation.treeWeights, modelWithValidation.getOldLossType))
+      }
+      assert(errorWithValidation < errorWithoutValidation)
+
+      val evaluationArray = GradientBoostedTrees
+        .evaluateEachIteration(validationData, modelWithoutValidation.trees,
+          modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
+          OldAlgo.Classification)
+      assert(evaluationArray.length === numIter)
+      assert(evaluationArray(modelWithValidation.numTrees) >
+        evaluationArray(modelWithValidation.numTrees - 1))
+      var i = 1
+      while (i < modelWithValidation.numTrees) {
+        assert(evaluationArray(i) <= evaluationArray(i - 1))
+        i += 1
+      }
+    }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -402,6 +449,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
         model2: GBTClassificationModel): Unit = {
       TreeTests.checkEqual(model, model2)
       assert(model.numFeatures === model2.numFeatures)
+      assert(model.featureImportances == model2.featureImportances)
     }
 
     val gbt = new GBTClassifier()

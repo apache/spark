@@ -56,6 +56,7 @@ public class ChunkFetchIntegrationSuite {
   static final int BUFFER_CHUNK_INDEX = 0;
   static final int FILE_CHUNK_INDEX = 1;
 
+  static TransportContext context;
   static TransportServer server;
   static TransportClientFactory clientFactory;
   static StreamManager streamManager;
@@ -117,7 +118,7 @@ public class ChunkFetchIntegrationSuite {
         return streamManager;
       }
     };
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
   }
@@ -127,6 +128,7 @@ public class ChunkFetchIntegrationSuite {
     bufferChunk.release();
     server.close();
     clientFactory.close();
+    context.close();
     testFile.delete();
   }
 
@@ -143,37 +145,39 @@ public class ChunkFetchIntegrationSuite {
   }
 
   private FetchResult fetchChunks(List<Integer> chunkIndices) throws Exception {
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-    final Semaphore sem = new Semaphore(0);
-
     final FetchResult res = new FetchResult();
-    res.successChunks = Collections.synchronizedSet(new HashSet<Integer>());
-    res.failedChunks = Collections.synchronizedSet(new HashSet<Integer>());
-    res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
 
-    ChunkReceivedCallback callback = new ChunkReceivedCallback() {
-      @Override
-      public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
-        buffer.retain();
-        res.successChunks.add(chunkIndex);
-        res.buffers.add(buffer);
-        sem.release();
+    try (TransportClient client =
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
+      final Semaphore sem = new Semaphore(0);
+
+      res.successChunks = Collections.synchronizedSet(new HashSet<Integer>());
+      res.failedChunks = Collections.synchronizedSet(new HashSet<Integer>());
+      res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
+
+      ChunkReceivedCallback callback = new ChunkReceivedCallback() {
+        @Override
+        public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
+          buffer.retain();
+          res.successChunks.add(chunkIndex);
+          res.buffers.add(buffer);
+          sem.release();
+        }
+
+        @Override
+        public void onFailure(int chunkIndex, Throwable e) {
+          res.failedChunks.add(chunkIndex);
+          sem.release();
+        }
+      };
+
+      for (int chunkIndex : chunkIndices) {
+        client.fetchChunk(STREAM_ID, chunkIndex, callback);
       }
-
-      @Override
-      public void onFailure(int chunkIndex, Throwable e) {
-        res.failedChunks.add(chunkIndex);
-        sem.release();
+      if (!sem.tryAcquire(chunkIndices.size(), 60, TimeUnit.SECONDS)) {
+        fail("Timeout getting response from the server");
       }
-    };
-
-    for (int chunkIndex : chunkIndices) {
-      client.fetchChunk(STREAM_ID, chunkIndex, callback);
     }
-    if (!sem.tryAcquire(chunkIndices.size(), 5, TimeUnit.SECONDS)) {
-      fail("Timeout getting response from the server");
-    }
-    client.close();
     return res;
   }
 

@@ -44,7 +44,6 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -79,8 +78,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop() // stop the state store maintenance thread and unload store providers
+    try {
+      super.afterAll()
+    } finally {
+      StateStore.stop() // stop the state store maintenance thread and unload store providers
+    }
   }
 
   protected val defaultTrigger = Trigger.ProcessingTime(0)
@@ -199,15 +201,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   case class CheckAnswerRowsByFunc(
       globalCheckFunction: Seq[Row] => Unit,
       lastOnly: Boolean) extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"$operatorName"
-    private def operatorName = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
+    override def toString: String = if (lastOnly) "CheckLastBatchByFunc" else "CheckAnswerByFunc"
   }
 
   case class CheckNewAnswerRows(expectedAnswer: Seq[Row])
     extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
-
-    private def operatorName = "CheckNewAnswer"
+    override def toString: String = s"CheckNewAnswer: ${expectedAnswer.mkString(",")}"
   }
 
   object CheckNewAnswer {
@@ -218,6 +217,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
       CheckNewAnswerRows((data +: moreData).map(d => toExternalRow.fromRow(encoder.toRow(d))))
     }
+
+    def apply(rows: Row*): CheckNewAnswerRows = CheckNewAnswerRows(rows)
   }
 
   /** Stops the stream. It must currently be running. */
@@ -292,8 +293,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
   /** Execute arbitrary code */
   object Execute {
-    def apply(func: StreamExecution => Any): AssertOnQuery =
-      AssertOnQuery(query => { func(query); true })
+    def apply(name: String)(func: StreamExecution => Any): AssertOnQuery =
+      AssertOnQuery(query => { func(query); true }, "name")
+
+    def apply(func: StreamExecution => Any): AssertOnQuery = apply("Execute")(func)
   }
 
   object AwaitEpoch {
@@ -466,7 +469,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       // Block until all data added has been processed for all the source
       awaiting.foreach { case (sourceIndex, offset) =>
         failAfter(streamingTimeout) {
-          currentStream.awaitOffset(sourceIndex, offset)
+          currentStream.awaitOffset(sourceIndex, offset, streamingTimeout.toMillis)
           // Make sure all processing including no-data-batches have been executed
           if (!currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
             currentStream.processAllAvailable()
@@ -513,7 +516,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       logInfo(s"Processing test stream action: $action")
       action match {
         case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
-          verify(currentStream == null, "stream already running")
+          verify(currentStream == null || !currentStream.isActive, "stream already running")
           verify(triggerClock.isInstanceOf[SystemClock]
             || triggerClock.isInstanceOf[StreamManualClock],
             "Use either SystemClock or StreamManualClock to start the stream")
@@ -684,8 +687,14 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             def findSourceIndex(plan: LogicalPlan): Option[Int] = {
               plan
                 .collect {
+                  // v1 source
                   case r: StreamingExecutionRelation => r.source
-                  case r: StreamingDataSourceV2Relation => r.reader
+                  // v2 source
+                  case r: StreamingDataSourceV2Relation => r.stream
+                  // We can add data to memory stream before starting it. Then the input plan has
+                  // not been processed by the streaming engine and contains `StreamingRelationV2`.
+                  case r: StreamingRelationV2 if r.sourceName == "memory" =>
+                    r.table.asInstanceOf[MemoryStreamTable].stream
                 }
                 .zipWithIndex
                 .find(_._1 == source)
@@ -734,7 +743,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           }
 
         case CheckAnswerRowsByFunc(globalCheckFunction, lastOnly) =>
-          val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+          val sparkAnswer = currentStream match {
+            case null => fetchStreamAnswer(lastStream, lastOnly)
+            case s => fetchStreamAnswer(s, lastOnly)
+          }
           try {
             globalCheckFunction(sparkAnswer)
           } catch {
@@ -747,7 +759,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             error => failTest(error)
           }
       }
-      pos += 1
     }
 
     try {
@@ -761,8 +772,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           currentStream.asInstanceOf[MicroBatchExecution].withProgressLocked {
             actns.foreach(executeAction)
           }
+          pos += 1
 
-        case action: StreamAction => executeAction(action)
+        case action: StreamAction =>
+          executeAction(action)
+          pos += 1
       }
       if (streamThreadDeathCause != null) {
         failTest("Stream Thread Died", streamThreadDeathCause)

@@ -21,11 +21,10 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable,
-  SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.DoubleType
@@ -107,15 +106,21 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   @Since("2.3.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, $(featuresCol))
     SchemaUtils.checkNumericType(dataset.schema, $(predictionCol))
+
+    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
+    val df = dataset.select(col($(predictionCol)),
+      vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata))
 
     ($(metricName), $(distanceMeasure)) match {
       case ("silhouette", "squaredEuclidean") =>
         SquaredEuclideanSilhouette.computeSilhouetteScore(
-          dataset, $(predictionCol), $(featuresCol))
+          df, $(predictionCol), $(featuresCol))
       case ("silhouette", "cosine") =>
-        CosineSilhouette.computeSilhouetteScore(dataset, $(predictionCol), $(featuresCol))
+        CosineSilhouette.computeSilhouetteScore(df, $(predictionCol), $(featuresCol))
+      case (mn, dm) =>
+        throw new IllegalArgumentException(s"No support for metric $mn, distance $dm")
     }
   }
 }

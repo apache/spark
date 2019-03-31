@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
@@ -48,6 +47,17 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
     maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
     maybeBlock.nonEmpty
+  }
+
+  // Blocking uncache table for tests
+  private def uncacheTable(tableName: String): Unit = {
+    val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
+    spark.sharedState.cacheManager.uncacheQuery(
+      spark,
+      spark.table(tableName).logicalPlan,
+      cascade = cascade,
+      blocking = true)
   }
 
   test("cache table") {
@@ -97,24 +107,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("DROP nonexistant table") {
-    sql("DROP TABLE IF EXISTS nonexistantTable")
+  test("DROP nonexistent table") {
+    sql("DROP TABLE IF EXISTS nonexistentTable")
   }
 
-  test("uncache of nonexistant tables") {
-    val expectedErrorMsg = "Table or view not found: nonexistantTable"
+  test("uncache of nonexistent tables") {
+    val expectedErrorMsg = "Table or view not found: nonexistentTable"
     // make sure table doesn't exist
-    var e = intercept[AnalysisException](spark.table("nonexistantTable")).getMessage
+    var e = intercept[AnalysisException](spark.table("nonexistentTable")).getMessage
     assert(e.contains(expectedErrorMsg))
     e = intercept[AnalysisException] {
-      spark.catalog.uncacheTable("nonexistantTable")
+      uncacheTable("nonexistentTable")
     }.getMessage
     assert(e.contains(expectedErrorMsg))
     e = intercept[AnalysisException] {
-      sql("UNCACHE TABLE nonexistantTable")
+      sql("UNCACHE TABLE nonexistentTable")
     }.getMessage
     assert(e.contains(expectedErrorMsg))
-    sql("UNCACHE TABLE IF EXISTS nonexistantTable")
+    sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }
 
   test("no error on uncache of non-cached table") {
@@ -122,9 +132,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(a INT)")
       // no error will be reported in the following three ways to uncache a table.
-      spark.catalog.uncacheTable(tableName)
+      uncacheTable(tableName)
       sql("UNCACHE TABLE newTable")
-      sparkSession.table(tableName).unpersist()
+      sparkSession.table(tableName).unpersist(blocking = true)
     }
   }
 

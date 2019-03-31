@@ -71,7 +71,7 @@ public class FilterService implements Service {
   }
 
   @Override
-  public STATE getServiceState() {
+  public Service.STATE getServiceState() {
     return service.getServiceState();
   }
 

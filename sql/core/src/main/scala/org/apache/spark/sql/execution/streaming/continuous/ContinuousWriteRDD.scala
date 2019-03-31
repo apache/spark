@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.atomic.AtomicLong
-
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTask.{logError, logInfo}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.DataWriter
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingDataWriterFactory
 import org.apache.spark.util.Utils
 
 /**
@@ -34,7 +32,7 @@ import org.apache.spark.util.Utils
  *
  * We keep repeating prev.compute() and writing new epochs until the query is shut down.
  */
-class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactory[InternalRow])
+class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDataWriterFactory)
     extends RDD[Unit](prev) {
 
   override val partitioner = prev.partitioner
@@ -45,28 +43,33 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
     val epochCoordinator = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       SparkEnv.get)
-    var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
-
+    EpochTracker.initializeCurrentEpoch(
+      context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
     while (!context.isInterrupted() && !context.isCompleted()) {
       var dataWriter: DataWriter[InternalRow] = null
       // write the data and commit this writer.
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         try {
           val dataIterator = prev.compute(split, context)
-          dataWriter = writeTask.createDataWriter(
-            context.partitionId(), context.attemptNumber(), currentEpoch)
+          dataWriter = writerFactory.createWriter(
+            context.partitionId(),
+            context.taskAttemptId(),
+            EpochTracker.getCurrentEpoch.get)
           while (dataIterator.hasNext) {
             dataWriter.write(dataIterator.next())
           }
           logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch $currentEpoch is committing.")
+            s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
           val msg = dataWriter.commit()
           epochCoordinator.send(
-            CommitPartitionEpoch(context.partitionId(), currentEpoch, msg)
+            CommitPartitionEpoch(
+              context.partitionId(),
+              EpochTracker.getCurrentEpoch.get,
+              msg)
           )
           logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch $currentEpoch committed.")
-          currentEpoch += 1
+            s"in epoch ${EpochTracker.getCurrentEpoch.get} committed.")
+          EpochTracker.incrementCurrentEpoch()
         } catch {
           case _: InterruptedException =>
           // Continuous shutdown always involves an interrupt. Just finish the task.

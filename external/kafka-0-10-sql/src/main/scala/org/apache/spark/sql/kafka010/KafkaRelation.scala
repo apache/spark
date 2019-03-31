@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.{util => ju}
 import java.util.UUID
 
 import org.apache.kafka.common.TopicPartition
@@ -48,7 +47,9 @@ private[kafka010] class KafkaRelation(
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
     "kafkaConsumer.pollTimeoutMs",
-    sqlContext.sparkContext.conf.getTimeAsMs("spark.network.timeout", "120s").toString
+    (sqlContext.sparkContext.conf.getTimeAsSeconds(
+      "spark.network.timeout",
+      "120s") * 1000L).toString
   ).toLong
 
   override def schema: StructType = KafkaOffsetReader.kafkaSchema
@@ -88,11 +89,10 @@ private[kafka010] class KafkaRelation(
 
     // Calculate offset ranges
     val offsetRanges = untilPartitionOffsets.keySet.map { tp =>
-      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
-          // This should not happen since topicPartitions contains all partitions not in
-          // fromPartitionOffsets
-          throw new IllegalStateException(s"$tp doesn't have a from offset")
-      }
+      val fromOffset = fromPartitionOffsets.getOrElse(tp,
+        // This should not happen since topicPartitions contains all partitions not in
+        // fromPartitionOffsets
+        throw new IllegalStateException(s"$tp doesn't have a from offset"))
       val untilOffset = untilPartitionOffsets(tp)
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, None)
     }.toArray
@@ -115,7 +115,7 @@ private[kafka010] class KafkaRelation(
         DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)),
         cr.timestampType.id)
     }
-    sqlContext.internalCreateDataFrame(rdd, schema).rdd
+    sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema).rdd
   }
 
   private def getPartitionOffsets(

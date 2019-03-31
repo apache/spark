@@ -20,11 +20,35 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+class SimpleInsertSource extends SchemaRelationProvider {
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation = {
+    SimpleInsert(schema)(sqlContext.sparkSession)
+  }
+}
+
+case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSession: SparkSession)
+  extends BaseRelation with InsertableRelation {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
+
+  override def schema: StructType = userSpecifiedSchema
+
+  override def insert(input: DataFrame, overwrite: Boolean): Unit = {
+    input.collect
+  }
+}
 
 class InsertSuite extends DataSourceTest with SharedSQLContext {
   import testImplicits._
@@ -146,7 +170,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
-    spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt2")
+    spark.read.json(rdd2.toDS()).createOrReplaceTempView("jt2")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
@@ -518,6 +542,51 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
         checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
+    withTempPath { path =>
+      Seq((1, 1), (2, 2)).toDF("i", "part")
+        .write.partitionBy("part")
+        .parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1) :: Row(2, 2) :: Nil)
+
+      Seq((1, 2), (1, 3)).toDF("i", "part")
+        .write.partitionBy("part").mode("overwrite")
+        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath),
+        Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
+
+      Seq((1, 2), (1, 3)).toDF("i", "part")
+        .write.partitionBy("part").mode("overwrite")
+        .option("partitionOverwriteMode", "static").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 2) :: Row(1, 3) :: Nil)
+    }
+  }
+
+  test("SPARK-24583 Wrong schema type in InsertIntoDataSourceCommand") {
+    withTable("test_table") {
+      val schema = new StructType()
+        .add("i", LongType, false)
+        .add("s", StringType, false)
+      val newTable = CatalogTable(
+        identifier = TableIdentifier("test_table", None),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serde = None,
+          compressed = false,
+          properties = Map.empty),
+        schema = schema,
+        provider = Some(classOf[SimpleInsertSource].getName))
+
+      spark.sessionState.catalog.createTable(newTable, false)
+
+      sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
+      sql("INSERT INTO TABLE test_table SELECT 2, null")
     }
   }
 }

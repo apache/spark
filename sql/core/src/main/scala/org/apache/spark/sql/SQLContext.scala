@@ -23,8 +23,8 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.annotation._
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
@@ -54,7 +54,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
-@InterfaceStability.Stable
+@Stable
 class SQLContext private[sql](val sparkSession: SparkSession)
   extends Logging with Serializable {
 
@@ -64,15 +64,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   // Note: Since Spark 2.0 this class has become a wrapper of SparkSession, where the
   // real functionality resides. This class remains mainly for backward compatibility.
-
-  @deprecated("Use SparkSession.builder instead", "2.0.0")
-  def this(sc: SparkContext) = {
-    this(SparkSession.builder().sparkContext(sc).getOrCreate())
-  }
-
-  @deprecated("Use SparkSession.builder instead", "2.0.0")
-  def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
-
   // TODO: move this logic into SparkSession
 
   private[sql] def sessionState: SessionState = sparkSession.sessionState
@@ -95,7 +86,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * that listen for execution metrics.
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
 
   /**
@@ -167,7 +158,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   @Experimental
   @transient
-  @InterfaceStability.Unstable
+  @Unstable
   def experimental: ExperimentalMethods = sparkSession.experimental
 
   /**
@@ -253,7 +244,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   object implicits extends SQLImplicits with Serializable {
     protected override def _sqlContext: SQLContext = self
   }
@@ -267,7 +258,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     sparkSession.createDataFrame(rdd)
   }
@@ -280,7 +271,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     sparkSession.createDataFrame(data)
   }
@@ -328,18 +319,9 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
-  }
-
-  /**
-   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
-   * converted to Catalyst rows.
-   */
-  private[sql]
-  def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
-    sparkSession.createDataFrame(rowRDD, schema, needsConversion)
   }
 
   /**
@@ -372,7 +354,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -410,7 +392,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -437,7 +419,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
@@ -452,7 +434,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.6.0
    */
   @DeveloperApi
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rows, schema)
   }
@@ -516,7 +498,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *
    * @since 2.0.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   def readStream: DataStreamReader = sparkSession.readStream
 
 
@@ -640,7 +622,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def range(end: Long): DataFrame = sparkSession.range(end).toDF()
 
   /**
@@ -652,7 +634,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
 
   /**
@@ -664,7 +646,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def range(start: Long, end: Long, step: Long): DataFrame = {
     sparkSession.range(start, end, step).toDF()
   }
@@ -679,7 +661,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
     sparkSession.range(start, end, step, numPartitions).toDF()
   }
@@ -755,289 +737,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
     sessionState.catalog.listTables(databaseName).map(_.table).toArray
   }
 
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
-  // Deprecated methods
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
-   */
-  @deprecated("Use createDataFrame instead.", "1.3.0")
-  def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD, schema)
-  }
-
-  /**
-   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
-   */
-  @deprecated("Use createDataFrame instead.", "1.3.0")
-  def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD, schema)
-  }
-
-  /**
-   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
-   */
-  @deprecated("Use createDataFrame instead.", "1.3.0")
-  def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
-    createDataFrame(rdd, beanClass)
-  }
-
-  /**
-   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
-   */
-  @deprecated("Use createDataFrame instead.", "1.3.0")
-  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
-    createDataFrame(rdd, beanClass)
-  }
-
-  /**
-   * Loads a Parquet file, returning the result as a `DataFrame`. This function returns an empty
-   * `DataFrame` if no paths are passed in.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().parquet()`.
-   */
-  @deprecated("Use read.parquet() instead.", "1.4.0")
-  @scala.annotation.varargs
-  def parquetFile(paths: String*): DataFrame = {
-    if (paths.isEmpty) {
-      emptyDataFrame
-    } else {
-      read.parquet(paths : _*)
-    }
-  }
-
-  /**
-   * Loads a JSON file (one object per line), returning the result as a `DataFrame`.
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonFile(path: String): DataFrame = {
-    read.json(path)
-  }
-
-  /**
-   * Loads a JSON file (one object per line) and applies the given schema,
-   * returning the result as a `DataFrame`.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonFile(path: String, schema: StructType): DataFrame = {
-    read.schema(schema).json(path)
-  }
-
-  /**
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonFile(path: String, samplingRatio: Double): DataFrame = {
-    read.option("samplingRatio", samplingRatio.toString).json(path)
-  }
-
-  /**
-   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * `DataFrame`.
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
-
-  /**
-   * Loads an RDD[String] storing JSON objects (one object per record), returning the result as a
-   * `DataFrame`.
-   * It goes through the entire dataset once to determine the schema.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
-
-  /**
-   * Loads an RDD[String] storing JSON objects (one object per record) and applies the given schema,
-   * returning the result as a `DataFrame`.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
-    read.schema(schema).json(json)
-  }
-
-  /**
-   * Loads an JavaRDD[String] storing JSON objects (one object per record) and applies the given
-   * schema, returning the result as a `DataFrame`.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
-    read.schema(schema).json(json)
-  }
-
-  /**
-   * Loads an RDD[String] storing JSON objects (one object per record) inferring the
-   * schema, returning the result as a `DataFrame`.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
-    read.option("samplingRatio", samplingRatio.toString).json(json)
-  }
-
-  /**
-   * Loads a JavaRDD[String] storing JSON objects (one object per record) inferring the
-   * schema, returning the result as a `DataFrame`.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`.
-   */
-  @deprecated("Use read.json() instead.", "1.4.0")
-  def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
-    read.option("samplingRatio", samplingRatio.toString).json(json)
-  }
-
-  /**
-   * Returns the dataset stored at path as a DataFrame,
-   * using the default data source configured by spark.sql.sources.default.
-   *
-   * @group genericdata
-   * @deprecated As of 1.4.0, replaced by `read().load(path)`.
-   */
-  @deprecated("Use read.load(path) instead.", "1.4.0")
-  def load(path: String): DataFrame = {
-    read.load(path)
-  }
-
-  /**
-   * Returns the dataset stored at path as a DataFrame, using the given data source.
-   *
-   * @group genericdata
-   * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
-   */
-  @deprecated("Use read.format(source).load(path) instead.", "1.4.0")
-  def load(path: String, source: String): DataFrame = {
-    read.format(source).load(path)
-  }
-
-  /**
-   * (Java-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame.
-   *
-   * @group genericdata
-   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
-   */
-  @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
-  def load(source: String, options: java.util.Map[String, String]): DataFrame = {
-    read.options(options).format(source).load()
-  }
-
-  /**
-   * (Scala-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame.
-   *
-   * @group genericdata
-   * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
-   */
-  @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
-  def load(source: String, options: Map[String, String]): DataFrame = {
-    read.options(options).format(source).load()
-  }
-
-  /**
-   * (Java-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
-   *
-   * @group genericdata
-   * @deprecated As of 1.4.0, replaced by
-   *            `read().format(source).schema(schema).options(options).load()`.
-   */
-  @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
-  def load(
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    read.format(source).schema(schema).options(options).load()
-  }
-
-  /**
-   * (Scala-specific) Returns the dataset specified by the given data source and
-   * a set of options as a DataFrame, using the given schema as the schema of the DataFrame.
-   *
-   * @group genericdata
-   * @deprecated As of 1.4.0, replaced by
-   *            `read().format(source).schema(schema).options(options).load()`.
-   */
-  @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
-  def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
-    read.format(source).schema(schema).options(options).load()
-  }
-
-  /**
-   * Construct a `DataFrame` representing the database table accessible via JDBC URL
-   * url named table.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
-   */
-  @deprecated("Use read.jdbc() instead.", "1.4.0")
-  def jdbc(url: String, table: String): DataFrame = {
-    read.jdbc(url, table, new Properties)
-  }
-
-  /**
-   * Construct a `DataFrame` representing the database table accessible via JDBC URL
-   * url named table.  Partitions of the table will be retrieved in parallel based on the parameters
-   * passed to this function.
-   *
-   * @param columnName the name of a column of integral type that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` used to decide partition stride
-   * @param upperBound the maximum value of `columnName` used to decide partition stride
-   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
-   *                      evenly into this many partitions
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
-   */
-  @deprecated("Use read.jdbc() instead.", "1.4.0")
-  def jdbc(
-      url: String,
-      table: String,
-      columnName: String,
-      lowerBound: Long,
-      upperBound: Long,
-      numPartitions: Int): DataFrame = {
-    read.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions, new Properties)
-  }
-
-  /**
-   * Construct a `DataFrame` representing the database table accessible via JDBC URL
-   * url named table. The theParts parameter gives a list expressions
-   * suitable for inclusion in WHERE clauses; each one defines one partition
-   * of the `DataFrame`.
-   *
-   * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
-   */
-  @deprecated("Use read.jdbc() instead.", "1.4.0")
-  def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
-    read.jdbc(url, table, theParts, new Properties)
-  }
 }
 
 /**
@@ -1051,45 +750,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 object SQLContext {
 
   /**
-   * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
-   *
-   * This function can be used to create a singleton SQLContext object that can be shared across
-   * the JVM.
-   *
-   * If there is an active SQLContext for current thread, it will be returned instead of the global
-   * one.
-   *
-   * @since 1.5.0
-   */
-  @deprecated("Use SparkSession.builder instead", "2.0.0")
-  def getOrCreate(sparkContext: SparkContext): SQLContext = {
-    SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
-  }
-
-  /**
-   * Changes the SQLContext that will be returned in this thread and its children when
-   * SQLContext.getOrCreate() is called. This can be used to ensure that a given thread receives
-   * a SQLContext with an isolated session, instead of the global (first created) context.
-   *
-   * @since 1.6.0
-   */
-  @deprecated("Use SparkSession.setActiveSession instead", "2.0.0")
-  def setActive(sqlContext: SQLContext): Unit = {
-    SparkSession.setActiveSession(sqlContext.sparkSession)
-  }
-
-  /**
-   * Clears the active SQLContext for current thread. Subsequent calls to getOrCreate will
-   * return the first created context instead of a thread-local override.
-   *
-   * @since 1.6.0
-   */
-  @deprecated("Use SparkSession.clearActiveSession instead", "2.0.0")
-  def clearActive(): Unit = {
-    SparkSession.clearActiveSession()
-  }
-
-  /**
    * Converts an iterator of Java Beans to InternalRow using the provided
    * bean info & schema. This is not related to the singleton, but is a static
    * method for internal use.
@@ -1098,16 +758,29 @@ object SQLContext {
       data: Iterator[_],
       beanClass: Class[_],
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
-    val extractors =
-      JavaTypeInference.getJavaBeanReadableProperties(beanClass).map(_.getReadMethod)
-    val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
-      (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+    def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
+      val methodConverters =
+        JavaTypeInference.getJavaBeanReadableProperties(cls).zip(fieldTypes)
+          .map { case (property, fieldType) =>
+            val method = property.getReadMethod
+            method -> createConverter(method.getReturnType, fieldType)
+          }
+      value =>
+        if (value == null) {
+          null
+        } else {
+          new GenericInternalRow(
+            methodConverters.map { case (method, converter) =>
+              converter(method.invoke(value))
+            })
+        }
     }
-    data.map { element =>
-      new GenericInternalRow(
-        methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }
-      ): InternalRow
+    def createConverter(cls: Class[_], dataType: DataType): Any => Any = dataType match {
+      case struct: StructType => createStructConverter(cls, struct.map(_.dataType))
+      case _ => CatalystTypeConverters.createToCatalystConverter(dataType)
     }
+    val dataConverter = createStructConverter(beanClass, attrs.map(_.dataType))
+    data.map(dataConverter)
   }
 
   /**

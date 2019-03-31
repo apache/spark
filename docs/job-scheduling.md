@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Job Scheduling
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -264,3 +279,11 @@ within it for the various settings. For example:
 A full example is also available in `conf/fairscheduler.xml.template`. Note that any pools not
 configured in the XML file will simply get default values for all settings (scheduling mode FIFO,
 weight 1, and minShare 0).
+
+## Scheduling using JDBC Connections
+To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
+users can set the `spark.sql.thriftserver.scheduler.pool` variable:
+
+{% highlight SQL %}
+SET spark.sql.thriftserver.scheduler.pool=accounting;
+{% endhighlight %}

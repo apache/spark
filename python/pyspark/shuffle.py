@@ -28,6 +28,7 @@ import sys
 import pyspark.heapq3 as heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
     CompressedSerializer, AutoBatchedSerializer
+from pyspark.util import fail_on_stopiteration
 
 
 try:
@@ -36,7 +37,7 @@ try:
     process = None
 
     def get_used_memory():
-        """ Return the used memory in MB """
+        """ Return the used memory in MiB """
         global process
         if process is None or process._pid != os.getpid():
             process = psutil.Process(os.getpid())
@@ -49,7 +50,7 @@ try:
 except ImportError:
 
     def get_used_memory():
-        """ Return the used memory in MB """
+        """ Return the used memory in MiB """
         if platform.system() == 'Linux':
             for line in open('/proc/self/status'):
                 if line.startswith('VmRSS:'):
@@ -94,9 +95,9 @@ class Aggregator(object):
     """
 
     def __init__(self, createCombiner, mergeValue, mergeCombiners):
-        self.createCombiner = createCombiner
-        self.mergeValue = mergeValue
-        self.mergeCombiners = mergeCombiners
+        self.createCombiner = fail_on_stopiteration(createCombiner)
+        self.mergeValue = fail_on_stopiteration(mergeValue)
+        self.mergeCombiners = fail_on_stopiteration(mergeCombiners)
 
 
 class SimpleAggregator(Aggregator):

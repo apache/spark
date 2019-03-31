@@ -16,94 +16,21 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep}
+import io.fabric8.kubernetes.client.KubernetesClient
 
-class KubernetesDriverBuilderSuite extends SparkFunSuite {
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s._
+import org.apache.spark.internal.config.ConfigEntry
 
-  private val BASIC_STEP_TYPE = "basic"
-  private val CREDENTIALS_STEP_TYPE = "credentials"
-  private val SERVICE_STEP_TYPE = "service"
-  private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
-  private val SECRETS_STEP_TYPE = "mount-secrets"
+class KubernetesDriverBuilderSuite extends PodBuilderSuite {
 
-  private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    BASIC_STEP_TYPE, classOf[BasicDriverFeatureStep])
-
-  private val credentialsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    CREDENTIALS_STEP_TYPE, classOf[DriverKubernetesCredentialsFeatureStep])
-
-  private val serviceStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    SERVICE_STEP_TYPE, classOf[DriverServiceFeatureStep])
-
-  private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
-
-  private val secretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
-
-  private val builderUnderTest: KubernetesDriverBuilder =
-    new KubernetesDriverBuilder(
-      _ => basicFeatureStep,
-      _ => credentialsStep,
-      _ => serviceStep,
-      _ => secretsStep,
-      _ => localDirsStep)
-
-  test("Apply fundamental steps all the time.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        None,
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE)
+  override protected def templateFileConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE
   }
 
-  test("Apply secrets step if secrets are present.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        None,
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map("secret" -> "secretMountPath"),
-      Map.empty)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      SECRETS_STEP_TYPE)
+  override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    new KubernetesDriverBuilder().buildFromFeatures(conf, client).pod
   }
 
-  private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
-    : Unit = {
-    assert(resolvedSpec.systemProperties.size === stepTypes.size)
-    stepTypes.foreach { stepType =>
-      assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
-      assert(resolvedSpec.driverKubernetesResources.containsSlice(
-        KubernetesFeaturesTestUtils.getSecretsForStepType(stepType)))
-      assert(resolvedSpec.systemProperties(stepType) === stepType)
-    }
-  }
 }

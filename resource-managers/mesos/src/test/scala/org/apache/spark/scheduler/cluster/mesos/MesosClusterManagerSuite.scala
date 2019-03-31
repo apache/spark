@@ -18,11 +18,12 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import org.apache.spark._
+import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.config._
 
 class MesosClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
     def testURL(masterURL: String, expectedClass: Class[_], coarse: Boolean) {
-      val conf = new SparkConf().set("spark.mesos.coarse", coarse.toString)
+      val conf = new SparkConf().set(mesosConfig.COARSE_MODE, coarse)
       sc = new SparkContext("local", "test", conf)
       val clusterManager = new MesosClusterManager()
 

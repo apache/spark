@@ -278,7 +278,7 @@ class HadoopRDD[K, V](
             null
         }
       // Register an on-task-completion callback to close the input stream.
-      context.addTaskCompletionListener { context =>
+      context.addTaskCompletionListener[Unit] { context =>
         // Update the bytes read before closing is to make sure lingering bytesRead statistics in
         // this thread get correctly added.
         updateBytesRead()

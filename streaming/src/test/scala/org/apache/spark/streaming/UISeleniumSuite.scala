@@ -27,6 +27,7 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 /**
@@ -61,7 +62,7 @@ class UISeleniumSuite
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      .set("spark.ui.enabled", "true")
+      .set(UI_ENABLED, true)
     val ssc = new StreamingContext(conf, Seconds(1))
     assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
     ssc
@@ -77,7 +78,12 @@ class UISeleniumSuite
     inputStream.foreachRDD { rdd =>
       rdd.foreach(_ => {})
       try {
-        rdd.foreach(_ => throw new RuntimeException("Oops"))
+        rdd.foreach { _ =>
+          // Failing the task with id 15 to ensure only one task fails
+          if (TaskContext.get.taskAttemptId() % 15 == 0) {
+            throw new RuntimeException("Oops")
+          }
+        }
       } catch {
         case e: SparkException if e.getMessage.contains("Oops") =>
       }
@@ -166,7 +172,7 @@ class UISeleniumSuite
 
         // Check job progress
         findAll(cssSelector(""".progress-cell""")).map(_.text).toList should be (
-          List("4/4", "4/4", "4/4", "0/4 (1 failed)"))
+          List("4/4", "4/4", "4/4", "3/4 (1 failed)"))
 
         // Check stacktrace
         val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.underlying).toSeq

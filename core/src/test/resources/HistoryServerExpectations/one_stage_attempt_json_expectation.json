@@ -35,7 +35,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 456,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -74,7 +74,10 @@
           "writeTime" : 76000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 19,
+      "gettingResultTime" : 0
     },
     "14" : {
       "taskId" : 14,
@@ -82,7 +85,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.832GMT",
       "duration" : 450,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -121,7 +124,10 @@
           "writeTime" : 88000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 13,
+      "gettingResultTime" : 0
     },
     "9" : {
       "taskId" : 9,
@@ -129,7 +135,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 454,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -168,7 +174,10 @@
           "writeTime" : 98000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
+      "gettingResultTime" : 0
     },
     "13" : {
       "taskId" : 13,
@@ -176,7 +185,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.831GMT",
       "duration" : 452,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -215,7 +224,10 @@
           "writeTime" : 73000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 14,
+      "gettingResultTime" : 0
     },
     "12" : {
       "taskId" : 12,
@@ -223,7 +235,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.831GMT",
       "duration" : 454,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -262,7 +274,10 @@
           "writeTime" : 101000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
+      "gettingResultTime" : 0
     },
     "11" : {
       "taskId" : 11,
@@ -270,7 +285,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 454,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -309,7 +324,10 @@
           "writeTime" : 83000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
+      "gettingResultTime" : 0
     },
     "8" : {
       "taskId" : 8,
@@ -317,7 +335,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.829GMT",
       "duration" : 454,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -356,7 +374,10 @@
           "writeTime" : 94000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 16,
+      "gettingResultTime" : 0
     },
     "15" : {
       "taskId" : 15,
@@ -364,7 +385,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.833GMT",
       "duration" : 450,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -403,11 +424,14 @@
           "writeTime" : 79000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 13,
+      "gettingResultTime" : 0
     }
   },
   "executorSummary" : {
-    "<driver>" : {
+    "driver" : {
       "taskTime" : 3624,
       "failedTasks" : 0,
       "succeededTasks" : 8,

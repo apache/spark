@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.util.{Random, Try}
 import scala.util.control.NonFatal
 
+import org.mockito.Mockito._
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
@@ -54,6 +55,8 @@ class UnsafeFixedWidthAggregationMapSuite
   private var memoryManager: TestMemoryManager = null
   private var taskMemoryManager: TaskMemoryManager = null
 
+  private var taskContext: TaskContext = null
+
   def testWithMemoryLeakDetection(name: String)(f: => Unit) {
     def cleanup(): Unit = {
       if (taskMemoryManager != null) {
@@ -67,6 +70,8 @@ class UnsafeFixedWidthAggregationMapSuite
       val conf = new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false")
       memoryManager = new TestMemoryManager(conf)
       taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+      taskContext = mock(classOf[TaskContext])
+      when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
 
       TaskContext.setTaskContext(new TaskContextImpl(
         stageId = 0,
@@ -111,7 +116,7 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      taskMemoryManager,
+      taskContext,
       1024, // initial capacity,
       PAGE_SIZE_BYTES
     )
@@ -124,7 +129,7 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      taskMemoryManager,
+      taskContext,
       1024, // initial capacity
       PAGE_SIZE_BYTES
     )
@@ -151,7 +156,7 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      taskMemoryManager,
+      taskContext,
       128, // initial capacity
       PAGE_SIZE_BYTES
     )
@@ -176,7 +181,7 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      taskMemoryManager,
+      taskContext,
       128, // initial capacity
       PAGE_SIZE_BYTES
     )
@@ -223,7 +228,7 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      taskMemoryManager,
+      taskContext,
       128, // initial capacity
       PAGE_SIZE_BYTES
     )
@@ -263,7 +268,7 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       StructType(Nil),
       StructType(Nil),
-      taskMemoryManager,
+      taskContext,
       128, // initial capacity
       PAGE_SIZE_BYTES
     )
@@ -307,7 +312,7 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      taskMemoryManager,
+      taskContext,
       128, // initial capacity
       pageSize
     )
@@ -344,7 +349,7 @@ class UnsafeFixedWidthAggregationMapSuite
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
-      taskMemoryManager,
+      taskContext,
       128, // initial capacity
       pageSize
     )

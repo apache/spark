@@ -27,7 +27,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
@@ -109,7 +109,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val serInstance = serializer.newInstance()
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
-  private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
+  private val fileBufferSize = conf.get(config.SHUFFLE_FILE_BUFFER_SIZE).toInt * 1024
 
   // Size of object batches when reading/writing from serializers.
   //
@@ -118,7 +118,7 @@ private[spark] class ExternalSorter[K, V, C](
   //
   // NOTE: Setting this too low can cause excessive copying when serializing, since some serializers
   // grow internal data structures by growing + copying every time the number of objects doubles.
-  private val serializerBatchSize = conf.getLong("spark.shuffle.spill.batchSize", 10000)
+  private val serializerBatchSize = conf.get(config.SHUFFLE_SPILL_BATCH_SIZE)
 
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
@@ -368,8 +368,8 @@ private[spark] class ExternalSorter[K, V, C](
     val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
     type Iter = BufferedIterator[Product2[K, C]]
     val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
-      // Use the reverse of comparator.compare because PriorityQueue dequeues the max
-      override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)
+      // Use the reverse order because PriorityQueue dequeues the max
+      override def compare(x: Iter, y: Iter): Int = comparator.compare(y.head._1, x.head._1)
     })
     heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {
@@ -727,9 +727,10 @@ private[spark] class ExternalSorter[K, V, C](
     spills.clear()
     forceSpillFiles.foreach(s => s.file.delete())
     forceSpillFiles.clear()
-    if (map != null || buffer != null) {
+    if (map != null || buffer != null || readingIterator != null) {
       map = null // So that the memory can be garbage-collected
       buffer = null // So that the memory can be garbage-collected
+      readingIterator = null // So that the memory can be garbage-collected
       releaseMemory()
     }
   }
@@ -793,8 +794,8 @@ private[spark] class ExternalSorter[K, V, C](
 
           def nextPartition(): Int = cur._1._1
         }
-        logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
-          s" it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
+        logInfo(s"Task ${TaskContext.get().taskAttemptId} force spilling in-memory map to disk " +
+          s"and it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
         forceSpillFiles += spillFile
         val spillReader = new SpillReader(spillFile)

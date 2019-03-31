@@ -31,8 +31,8 @@ import scala.language.{implicitConversions, postfixOps}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{eq => meq, _}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
+import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
@@ -83,7 +83,7 @@ abstract class CommonWriteAheadLogTests(
 
     val logDirectoryPath = new Path(testDir)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
-    assert(fileSystem.exists(logDirectoryPath) === true)
+    assert(fileSystem.exists(logDirectoryPath))
 
     // Read data using manager and verify
     val readData = readDataUsingWriteAheadLog(testDir, closeFileAfterWrite, allowBatching)

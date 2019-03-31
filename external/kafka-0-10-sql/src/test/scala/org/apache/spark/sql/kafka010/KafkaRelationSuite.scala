@@ -20,14 +20,17 @@ package org.apache.spark.sql.kafka010
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConverters._
+import scala.util.Random
+
+import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLContext {
+class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest {
 
   import testImplicits._
 
@@ -48,9 +51,12 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
   }
 
   override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
+    try {
+      if (testUtils != null) {
+        testUtils.teardown()
+        testUtils = null
+      }
+    } finally {
       super.afterAll()
     }
   }
@@ -234,5 +240,124 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
     testBadOptions("assign" -> "")("no topicpartitions to assign")
     testBadOptions("subscribe" -> "")("no topics to subscribe")
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
+  }
+
+  test("allow group.id overriding") {
+    // Tests code path KafkaSourceProvider.createRelation(.)
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
+
+    val customGroupId = "id-" + Random.nextInt()
+    val df = createDF(topic, withOptions = Map("kafka.group.id" -> customGroupId))
+    checkAnswer(df, (1 to 30).map(_.toString).toDF())
+
+    val consumerGroups = testUtils.listConsumerGroups()
+    val validGroups = consumerGroups.valid().get()
+    val validGroupsId = validGroups.asScala.map(_.groupId())
+    assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
+      s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
+      s"expected group id: $customGroupId")
+  }
+
+  test("read Kafka transactional messages: read_committed") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+    testUtils.withTranscationalProducer { producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_committed")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+
+      producer.beginTransaction()
+      (1 to 5).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+
+      // Should not read any messages before they are committed
+      assert(df.isEmpty)
+
+      producer.commitTransaction()
+
+      // Should read all committed messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      producer.beginTransaction()
+      (6 to 10).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.abortTransaction()
+
+      // Should not read aborted messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      producer.beginTransaction()
+      (11 to 15).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.commitTransaction()
+
+      // Should skip aborted messages and read new committed ones.
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
+      checkAnswer(df, ((1 to 5) ++ (11 to 15)).map(_.toString).toDF)
+    }
+  }
+
+  test("read Kafka transactional messages: read_uncommitted") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+    testUtils.withTranscationalProducer { producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_uncommitted")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+
+      producer.beginTransaction()
+      (1 to 5).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+
+      // "read_uncommitted" should see all messages including uncommitted ones
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 5)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      producer.commitTransaction()
+
+      // Should read all committed messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      producer.beginTransaction()
+      (6 to 10).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.abortTransaction()
+
+      // "read_uncommitted" should see all messages including uncommitted or aborted ones
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
+      checkAnswer(df, (1 to 10).map(_.toString).toDF)
+
+      producer.beginTransaction()
+      (11 to 15).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.commitTransaction()
+
+      // Should read all messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
+      checkAnswer(df, (1 to 15).map(_.toString).toDF)
+    }
   }
 }

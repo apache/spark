@@ -20,11 +20,12 @@ package org.apache.spark.sql.streaming.continuous
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
+import org.apache.spark.sql.execution.datasources.v2.ContinuousScanExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
 
@@ -41,7 +42,7 @@ class ContinuousSuiteBase extends StreamTest {
       case s: ContinuousExecution =>
         assert(numTriggers >= 2, "must wait for at least 2 triggers to ensure query is initialized")
         val reader = s.lastExecution.executedPlan.collectFirst {
-          case DataSourceV2ScanExec(_, _, _, _, r: RateStreamContinuousReader) => r
+          case ContinuousScanExec(_, _, r: RateStreamContinuousStream, _) => r
         }.get
 
         val deltaMs = numTriggers * 1000 + 300
@@ -241,10 +242,10 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
     testStream(df, useV2Sink = true)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
-      Execute(waitForRateSourceTriggers(_, 201)),
+      Execute(waitForRateSourceTriggers(_, 10)),
       IncrementEpoch(),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_)))
+      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_)))
     )
   }
 
@@ -259,10 +260,10 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
     testStream(df, useV2Sink = true)(
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(0),
-      Execute(waitForRateSourceTriggers(_, 201)),
+      Execute(waitForRateSourceTriggers(_, 10)),
       IncrementEpoch(),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
+      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
   }
 
   test("restarts") {
@@ -274,26 +275,102 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .select('value)
 
     testStream(df, useV2Sink = true)(
-      StartStream(Trigger.Continuous(2012)),
-      AwaitEpoch(10),
+      StartStream(Trigger.Continuous(1012)),
+      AwaitEpoch(2),
       StopStream,
-      StartStream(Trigger.Continuous(2012)),
-      AwaitEpoch(20),
+      StartStream(Trigger.Continuous(1012)),
+      AwaitEpoch(4),
       StopStream,
-      StartStream(Trigger.Continuous(2012)),
-      AwaitEpoch(21),
+      StartStream(Trigger.Continuous(1012)),
+      AwaitEpoch(5),
       StopStream,
-      StartStream(Trigger.Continuous(2012)),
-      AwaitEpoch(22),
+      StartStream(Trigger.Continuous(1012)),
+      AwaitEpoch(6),
       StopStream,
-      StartStream(Trigger.Continuous(2012)),
-      AwaitEpoch(25),
+      StartStream(Trigger.Continuous(1012)),
+      AwaitEpoch(8),
       StopStream,
-      StartStream(Trigger.Continuous(2012)),
+      StartStream(Trigger.Continuous(1012)),
       StopStream,
-      StartStream(Trigger.Continuous(2012)),
-      AwaitEpoch(50),
+      StartStream(Trigger.Continuous(1012)),
+      AwaitEpoch(15),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
+      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
+  }
+}
+
+class ContinuousMetaSuite extends ContinuousSuiteBase {
+  import testImplicits._
+
+  // We need to specify spark.sql.streaming.minBatchesToRetain to do the following test.
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[10]",
+      "continuous-stream-test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")
+        .set("spark.sql.streaming.minBatchesToRetain", "2")))
+
+  test("SPARK-24351: check offsetLog/commitLog retained in the checkpoint directory") {
+    withTempDir { checkpointDir =>
+      val input = ContinuousMemoryStream[Int]
+      val df = input.toDF().mapPartitions(iter => {
+        // Sleep the task thread for 300 ms to make sure epoch processing time 3 times
+        // longer than epoch creating interval. So the gap between last committed
+        // epoch and currentBatchId grows over time.
+        Thread.sleep(300)
+        iter.map(row => row.getInt(0) * 2)
+      })
+
+      testStream(df)(
+        StartStream(trigger = Trigger.Continuous(100),
+          checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(input, 1),
+        CheckAnswer(2),
+        // Make sure epoch 2 has been committed before the following validation.
+        AwaitEpoch(2),
+        StopStream,
+        AssertOnQuery(q => {
+          q.commitLog.getLatest() match {
+            case Some((latestEpochId, _)) =>
+              val commitLogValidateResult = q.commitLog.get(latestEpochId - 1).isDefined &&
+                q.commitLog.get(latestEpochId - 2).isEmpty
+              val offsetLogValidateResult = q.offsetLog.get(latestEpochId - 1).isDefined &&
+                q.offsetLog.get(latestEpochId - 2).isEmpty
+              commitLogValidateResult && offsetLogValidateResult
+            case None => false
+          }
+        })
+      )
+    }
+  }
+}
+
+class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
+  import testImplicits._
+
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[1]",
+      "continuous-stream-test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")))
+
+  // This test forces the backlog to overflow by not standing up enough executors for the query
+  // to make progress.
+  test("epoch backlog overflow") {
+    withSQLConf((CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE.key, "10")) {
+      val df = spark.readStream
+        .format("rate")
+        .option("numPartitions", "2")
+        .option("rowsPerSecond", "500")
+        .load()
+        .select('value)
+
+      testStream(df, useV2Sink = true)(
+        StartStream(Trigger.Continuous(1)),
+        ExpectFailure[IllegalStateException] { e =>
+          e.getMessage.contains("queue has exceeded its maximum")
+        }
+      )
+    }
   }
 }

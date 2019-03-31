@@ -988,14 +988,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
       // Verify the results of the row.
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 1)
-      assert(batch.rowIterator().hasNext == true)
-      assert(batch.rowIterator().hasNext == true)
+      assert(batch.rowIterator().hasNext)
+      assert(batch.rowIterator().hasNext)
 
       assert(columns(0).getInt(0) == 1)
       assert(columns(0).isNullAt(0) == false)
       assert(columns(1).getDouble(0) == 1.1)
       assert(columns(1).isNullAt(0) == false)
-      assert(columns(2).isNullAt(0) == true)
+      assert(columns(2).isNullAt(0))
       assert(columns(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
@@ -1006,7 +1006,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(row.isNullAt(0) == false)
       assert(row.getDouble(1) == 1.1)
       assert(row.isNullAt(1) == false)
-      assert(row.isNullAt(2) == true)
+      assert(row.isNullAt(2))
       assert(columns(3).getUTF8String(0).toString == "Hello")
       assert(it.hasNext == false)
       assert(it.hasNext == false)
@@ -1123,7 +1123,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             compareStruct(childFields, r1.getStruct(ordinal, fields.length),
               r2.getStruct(ordinal), seed)
           case _ =>
-            throw new NotImplementedError("Not implemented " + field.dataType)
+            throw new UnsupportedOperationException("Not implemented " + field.dataType)
         }
       }
     }

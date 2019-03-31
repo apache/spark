@@ -42,8 +42,7 @@ class ErrorParserSuite extends SparkFunSuite {
   }
 
   test("no viable input") {
-    intercept("select ((r + 1) ", 1, 16, 16,
-      "no viable alternative at input", "----------------^^^")
+    intercept("select ((r + 1) ", 1, 16, 16, "no viable alternative at input", "----------------^^^")
   }
 
   test("extraneous input") {
@@ -61,9 +60,6 @@ class ErrorParserSuite extends SparkFunSuite {
   test("semantic errors") {
     intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
-      "^^^")
-    intercept("select * from r except all select * from t", 1, 0, 41,
-      "EXCEPT ALL is not supported",
       "^^^")
   }
 }

@@ -21,17 +21,11 @@ import java.util.regex.{Matcher, Pattern}
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
-import org.apache.spark.internal.config._
+import org.apache.spark.SecurityManager
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
@@ -186,21 +180,6 @@ object YarnSparkHadoopUtil {
   def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
     ConverterUtils.toContainerId(containerIdString)
-  }
-
-  /** The filesystems for which YARN should fetch delegation tokens. */
-  def hadoopFSsToAccess(
-      sparkConf: SparkConf,
-      hadoopConf: Configuration): Set[FileSystem] = {
-    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .toSet
-
-    val stagingFS = sparkConf.get(STAGING_DIR)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .getOrElse(FileSystem.get(hadoopConf))
-
-    filesystemsToAccess + stagingFS
   }
 
 }

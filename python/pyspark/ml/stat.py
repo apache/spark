@@ -336,7 +336,7 @@ class Summarizer(object):
          - numNonzeros: a vector with the number of non-zeros for each coefficients
          - max: the maximum for each coefficient.
          - min: the minimum for each coefficient.
-         - normL2: the Euclidian norm for each coefficient.
+         - normL2: the Euclidean norm for each coefficient.
          - normL1: the L1 norm of each coefficient (sum of the absolute values).
 
         :param metrics:
@@ -388,8 +388,14 @@ class SummaryBuilder(JavaWrapper):
 
 if __name__ == "__main__":
     import doctest
+    import numpy
     import pyspark.ml.stat
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
 
     globs = pyspark.ml.stat.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,

@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -68,7 +68,7 @@ object ExtractValue {
           case StructType(_) =>
             s"Field name should be String Literal, but it's $extraction"
           case other =>
-            s"Can't extract value from $child: need struct type but got ${other.simpleString}"
+            s"Can't extract value from $child: need struct type but got ${other.catalogString}"
         }
         throw new AnalysisException(errorMsg)
     }
@@ -221,7 +221,8 @@ case class GetArrayStructFields(
  * We need to do type checking here as `ordinal` expression maybe unresolved.
  */
 case class GetArrayItem(child: Expression, ordinal: Expression)
-  extends BinaryExpression with ExpectsInputTypes with ExtractValue with NullIntolerant {
+  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue
+  with NullIntolerant {
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
@@ -231,10 +232,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
   override def left: Expression = child
   override def right: Expression = ordinal
-
-  /** `Null` is returned for invalid ordinals. */
-  override def nullable: Boolean = true
-
+  override def nullable: Boolean = computeNullabilityFromArray(left, right)
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
@@ -268,12 +266,36 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 }
 
 /**
- * Common base class for [[GetMapValue]] and [[ElementAt]].
+ * Common trait for [[GetArrayItem]] and [[ElementAt]].
  */
+trait GetArrayItemUtil {
 
-abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
+  /** `Null` is returned for invalid ordinals. */
+  protected def computeNullabilityFromArray(child: Expression, ordinal: Expression): Boolean = {
+    if (ordinal.foldable && !ordinal.nullable) {
+      val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
+      child match {
+        case CreateArray(ar) if intOrdinal < ar.length =>
+          ar(intOrdinal).nullable
+        case GetArrayStructFields(CreateArray(elements), field, _, _, _)
+          if intOrdinal < elements.length =>
+          elements(intOrdinal).nullable || field.nullable
+        case _ =>
+          true
+      }
+    } else {
+      true
+    }
+  }
+}
+
+/**
+ * Common trait for [[GetMapValue]] and [[ElementAt]].
+ */
+trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
+
   // todo: current search is O(n), improve it.
-  def getValueEval(value: Any, ordinal: Any, keyType: DataType): Any = {
+  def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
@@ -282,7 +304,7 @@ abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTy
     var i = 0
     var found = false
     while (i < length && !found) {
-      if (keys.get(i, keyType) == ordinal) {
+      if (ordering.equiv(keys.get(i, keyType), ordinal)) {
         found = true
       } else {
         i += 1
@@ -345,7 +367,18 @@ abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTy
 case class GetMapValue(child: Expression, key: Expression)
   extends GetMapValueUtil with ExtractValue with NullIntolerant {
 
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(keyType)
+
   private def keyType = child.dataType.asInstanceOf[MapType].keyType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case f: TypeCheckResult.TypeCheckFailure => f
+      case TypeCheckResult.TypeCheckSuccess =>
+        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
+    }
+  }
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
@@ -356,14 +389,19 @@ case class GetMapValue(child: Expression, key: Expression)
   override def left: Expression = child
   override def right: Expression = key
 
-  /** `Null` is returned for invalid ordinals. */
+  /**
+   * `Null` is returned for invalid ordinals.
+   *
+   * TODO: We could make nullability more precise in foldable cases (e.g., literal input).
+   * But, since the key search is O(n), it takes much time to compute nullability.
+   * If we find efficient key searches, revisit this.
+   */
   override def nullable: Boolean = true
-
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
 
   // todo: current search is O(n), improve it.
   override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    getValueEval(value, ordinal, keyType)
+    getValueEval(value, ordinal, keyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

@@ -36,7 +36,8 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.ml.util.Instrumentation.instrumented
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -168,6 +169,12 @@ final class OneVsRestModel private[ml] (
     // Check schema
     transformSchema(dataset.schema, logging = true)
 
+    if (getPredictionCol == "" && getRawPredictionCol == "") {
+      logWarning(s"$uid: OneVsRestModel.transform() was called as NOOP" +
+        " since no output columns were set.")
+      return dataset.toDF
+    }
+
     // determine the input columns: these need to be passed through
     val origCols = dataset.schema.map(f => col(f.name))
 
@@ -208,6 +215,9 @@ final class OneVsRestModel private[ml] (
       newDataset.unpersist()
     }
 
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
+
     if (getRawPredictionCol != "") {
       val numClass = models.length
 
@@ -218,24 +228,24 @@ final class OneVsRestModel private[ml] (
         Vectors.dense(predArray)
       }
 
-      // output the index of the classifier with highest confidence as prediction
-      val labelUDF = udf { (rawPredictions: Vector) => rawPredictions.argmax.toDouble }
+      predictionColNames = predictionColNames :+ getRawPredictionCol
+      predictionColumns = predictionColumns :+ rawPredictionUDF(col(accColName))
+    }
 
-      // output confidence as raw prediction, label and label metadata as prediction
-      aggregatedDataset
-        .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
-        .withColumn(getPredictionCol, labelUDF(col(getRawPredictionCol)), labelMetadata)
-        .drop(accColName)
-    } else {
+    if (getPredictionCol != "") {
       // output the index of the classifier with highest confidence as prediction
       val labelUDF = udf { (predictions: Map[Int, Double]) =>
         predictions.maxBy(_._2)._1.toDouble
       }
-      // output label and label metadata as prediction
-      aggregatedDataset
-        .withColumn(getPredictionCol, labelUDF(col(accColName)), labelMetadata)
-        .drop(accColName)
+
+      predictionColNames = predictionColNames :+ getPredictionCol
+      predictionColumns = predictionColumns :+ labelUDF(col(accColName))
+        .as(getPredictionCol, labelMetadata)
     }
+
+    aggregatedDataset
+      .withColumns(predictionColNames, predictionColumns)
+      .drop(accColName)
   }
 
   @Since("1.4.1")
@@ -362,11 +372,13 @@ final class OneVsRest @Since("1.4.0") (
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): OneVsRestModel = {
+  override def fit(dataset: Dataset[_]): OneVsRestModel = instrumented { instr =>
     transformSchema(dataset.schema)
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, predictionCol, parallelism, rawPredictionCol)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol,
+      rawPredictionCol, parallelism)
     instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
 
     // determine number of classes either from metadata if provided, or via computation.
@@ -440,7 +452,6 @@ final class OneVsRest @Since("1.4.0") (
       case attr: Attribute => attr
     }
     val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
-    instr.logSuccess(model)
     copyValues(model)
   }
 
