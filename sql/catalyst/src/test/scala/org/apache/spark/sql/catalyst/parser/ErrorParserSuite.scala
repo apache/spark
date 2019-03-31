@@ -42,7 +42,8 @@ class ErrorParserSuite extends SparkFunSuite {
   }
 
   test("no viable input") {
-    intercept("select ((r + 1) ", 1, 16, 16, "no viable alternative at input", "----------------^^^")
+    intercept("select ((r + 1) ", 1, 16, 16,
+      "no viable alternative at input", "----------------^^^")
   }
 
   test("extraneous input") {
