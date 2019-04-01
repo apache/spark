@@ -58,9 +58,9 @@ class PartiallySerializedBlockSuite
 
     val bbos: ChunkedByteBufferOutputStream = {
       val spy = Mockito.spy(new ChunkedByteBufferOutputStream(128, ByteBuffer.allocate))
-      Mockito.doAnswer((invocationOnMock: InvocationOnMock) =>
+      Mockito.doAnswer { (invocationOnMock: InvocationOnMock) =>
         Mockito.spy(invocationOnMock.callRealMethod().asInstanceOf[ChunkedByteBuffer])
-      ).when(spy).toChunkedByteBuffer
+      }.when(spy).toChunkedByteBuffer
       spy
     }
 

@@ -373,8 +373,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     when(request.getRequestURI()).thenReturn("http://localhost:18080/history/local-123/jobs/job/")
     when(request.getQueryString()).thenReturn("id=2")
     val resp = mock[HttpServletResponse]
-    when(resp.encodeRedirectURL(any())).thenAnswer((invocationOnMock: InvocationOnMock) =>
-      invocationOnMock.getArguments()(0).asInstanceOf[String])
+    when(resp.encodeRedirectURL(any())).thenAnswer { (invocationOnMock: InvocationOnMock) =>
+      invocationOnMock.getArguments()(0).asInstanceOf[String]
+    }
     filter.doFilter(request, resp, null)
     verify(resp).sendRedirect("http://localhost:18080/history/local-123/jobs/job/?id=2")
   }

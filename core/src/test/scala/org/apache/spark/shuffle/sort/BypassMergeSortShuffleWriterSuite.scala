@@ -104,8 +104,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       temporaryFilesCreated += file
       (blockId, file)
     })
-    when(diskBlockManager.getFile(any[BlockId])).thenAnswer((invocation: InvocationOnMock) =>
-      blockIdToFileMap(invocation.getArguments.head.asInstanceOf[BlockId]))
+    when(diskBlockManager.getFile(any[BlockId])).thenAnswer { (invocation: InvocationOnMock) =>
+      blockIdToFileMap(invocation.getArguments.head.asInstanceOf[BlockId])
+    }
   }
 
   override def afterEach(): Unit = {
