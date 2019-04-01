@@ -63,7 +63,10 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           Literal(null, ga.dataType)
         }
       case GetMapValue(CreateMap(elems), key) => CaseKeyWhen(key, elems)
-      case GetMapValue(Literal(map: MapData, MapType(kt, vt, _)), key) =>
+      // The case below happens when the map is foldable, but the key is not, so ConstantFolding
+      // converts the map in a Literal, but the GetMapValue is still there since the key is not
+      // foldable. It cannot happen in any other case.
+      case GetMapValue(Literal(map: MapData, MapType(kt, vt, _)), key) if !key.foldable =>
         val elems = new mutable.ListBuffer[Literal]
         map.foreach(kt, vt, (key, value) => {
           elems.append(Literal(key, kt))
