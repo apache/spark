@@ -85,9 +85,11 @@ abstract class BaseSessionStateBuilder(
    * merged with its [[SparkConf]].
    */
   protected lazy val conf: SQLConf = {
-    val conf = parentState.map(_.conf.clone()).getOrElse(new SQLConf)
-    mergeSparkConf(conf, session.sparkContext.conf)
-    conf
+    parentState.map(_.conf.clone()).getOrElse {
+      val conf = new SQLConf
+      mergeSparkConf(conf, session.sparkContext.conf)
+      conf
+    }
   }
 
   /**
