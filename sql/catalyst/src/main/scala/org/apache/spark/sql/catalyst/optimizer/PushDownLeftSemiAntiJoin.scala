@@ -85,10 +85,12 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
           if (stayUp.isEmpty) {
             newAgg
           } else {
-            // In case of left anti join, the join is pushed down when the entire join condition
-            // is eligible to be pushed down to preserve the semantics of left anti join.
             joinType match {
+              // In case of Left semi join, the part of the join condition which does not refer to
+              // to child attributes of the aggregate operator are kept as a Filter over window.
               case LeftSemi => Filter(stayUp.reduce(And), newAgg)
+              // In case of left anti join, the join is pushed down when the entire join condition
+              // is eligible to be pushed down to preserve the semantics of left anti join.
               case _ => join
             }
           }
@@ -115,8 +117,8 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
 
         // Check if the remaining predicates do not contain columns from the right
         // hand side of the join. In case of LeftSemi join, since remaining predicates
-        // will be kept as a filter over aggregate, this check is necessary after the left semi join
-        // is moved below aggregate. The reason is, for this kind of join, we only output from the
+        // will be kept as a filter over window, this check is necessary after the left semi join
+        // is moved below window. The reason is, for this kind of join, we only output from the
         // left leg of the join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
@@ -126,10 +128,12 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
           if (stayUp.isEmpty) {
             newPlan
           } else {
-            // In case of left anti join, the join is pushed down when the entire join condition
-            // is eligible to be pushed down to preserve the semantics of left anti join.
             joinType match {
+              // In case of Left semi join, the part of the join condition which does not refer to
+              // to partition attributes of the window operator are kept as a Filter over window.
               case LeftSemi => Filter(stayUp.reduce(And), newPlan)
+              // In case of left anti join, the join is pushed down when the entire join condition
+              // is eligible to be pushed down to preserve the semantics of left anti join.
               case _ => join
             }
           }
