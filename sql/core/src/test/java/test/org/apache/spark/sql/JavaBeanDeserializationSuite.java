@@ -18,6 +18,8 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 
 import org.apache.spark.sql.*;
@@ -508,5 +510,87 @@ public class JavaBeanDeserializationSuite implements Serializable {
     public void setId(Integer id) {
       this.id = id;
     }
+  }
+
+  @Test
+  public void testSpark30() {
+    List<Row> inputRows = new ArrayList<>();
+    List<RecordSpark30> expectedRecords = new ArrayList<>();
+
+    for (long idx = 0 ; idx < 5 ; idx++) {
+      Row row = createRecordSpark30Row(idx);
+      inputRows.add(row);
+      expectedRecords.add(createRecordSpark30(row));
+    }
+
+    Encoder<RecordSpark30> encoder = Encoders.bean(RecordSpark30.class);
+
+    StructType schema = new StructType()
+      .add("localDateField", DataTypes.DateType)
+      .add("instantField", DataTypes.TimestampType);
+
+    Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+    Dataset<RecordSpark30> dataset = dataFrame.as(encoder);
+
+    List<RecordSpark30> records = dataset.collectAsList();
+
+    Assert.assertEquals(expectedRecords, records);
+  }
+
+  public static final class RecordSpark30 {
+    private String localDateField;
+    private String instantField;
+
+    public RecordSpark30() { }
+
+    public String getLocalDateField() {
+      return localDateField;
+    }
+
+    public void setLocalDateField(String localDateField) {
+      this.localDateField = localDateField;
+    }
+
+    public String getInstantField() {
+      return instantField;
+    }
+
+    public void setInstantField(String instantField) {
+      this.instantField = instantField;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      RecordSpark30 that = (RecordSpark30) o;
+      return Objects.equals(localDateField, that.localDateField) &&
+        Objects.equals(instantField, that.instantField);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(localDateField, instantField);
+    }
+
+    @Override
+    public String toString() {
+      return com.google.common.base.Objects.toStringHelper(this)
+        .add("localDateField", localDateField)
+        .add("instantField", instantField)
+        .toString();
+    }
+  }
+
+  private static Row createRecordSpark30Row(Long index) {
+    Object[] values = new Object[] { LocalDate.ofEpochDay(42), Instant.ofEpochSecond(42) };
+    return new GenericRow(values);
+  }
+
+  private static RecordSpark30 createRecordSpark30(Row recordRow) {
+    RecordSpark30 record = new RecordSpark30();
+    record.setLocalDateField(String.valueOf(recordRow.getLocalDate(0)));
+    record.setInstantField(String.valueOf(recordRow.getInstant(1)));
+    return record;
   }
 }
