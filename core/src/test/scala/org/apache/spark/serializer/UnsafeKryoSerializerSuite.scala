@@ -35,7 +35,7 @@ class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
     super.afterAll()
   }
 
-  test("SPARK-27216: kryo serialization with RoaringBitmap") {
+  test("SPARK-27216: Upgrade RoaringBitmap to 0.7.45 to fix Kryo unsafe ser/dser issue") {
     val expected = new RoaringBitmap
     expected.add(1787)
 
@@ -47,6 +47,6 @@ class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
     conf.set(KRYO_USE_UNSAFE, true)
     val unsafeSer = new KryoSerializer(conf).newInstance()
     actual = unsafeSer.deserialize(unsafeSer.serialize(expected))
-    assert(actual !== expected)
+    assert(actual === expected)
   }
 }
