@@ -70,15 +70,15 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
     Configuration.setConfiguration(new KafkaJaasConfiguration)
   }
 
-  protected def addTokenToUGI(): Unit = {
+  protected def addTokenToUGI(identifier: String): Unit = {
     val token = new Token[KafkaDelegationTokenIdentifier](
       tokenId.getBytes,
       tokenPassword.getBytes,
       KafkaTokenUtil.TOKEN_KIND,
-      KafkaTokenUtil.TOKEN_SERVICE
+      KafkaTokenUtil.getTokenService(identifier)
     )
     val creds = new Credentials()
-    creds.addToken(KafkaTokenUtil.TOKEN_SERVICE, token)
+    creds.addToken(token.getService, token)
     UserGroupInformation.getCurrentUser.addCredentials(creds)
   }
 

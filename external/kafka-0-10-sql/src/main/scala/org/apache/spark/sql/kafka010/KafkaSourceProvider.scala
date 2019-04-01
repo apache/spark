@@ -144,9 +144,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String],
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
+    val tokenClusterId = parameters.get(TOKEN_CLUSTER_ID_OPTION_KEY).map(_.trim)
     val defaultTopic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
-    new KafkaSink(sqlContext, specifiedKafkaParams, defaultTopic)
+    new KafkaSink(sqlContext, specifiedKafkaParams, tokenClusterId, defaultTopic)
   }
 
   override def createRelation(
@@ -161,10 +162,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           s"${SaveMode.ErrorIfExists} (default).")
       case _ => // good
     }
+    val tokenClusterId = parameters.get(TOKEN_CLUSTER_ID_OPTION_KEY).map(_.trim)
     val topic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
     KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution, specifiedKafkaParams,
-      topic)
+      tokenClusterId, topic)
 
     /* This method is suppose to return a relation that reads the data that was written.
      * We cannot support this for Kafka. Therefore, in order to make things consistent,
@@ -182,18 +184,20 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  private def strategy(caseInsensitiveParams: Map[String, String]) =
-      caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
-    case ("assign", value) =>
-      AssignStrategy(JsonUtils.partitions(value))
-    case ("subscribe", value) =>
-      SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
-    case ("subscribepattern", value) =>
-      SubscribePatternStrategy(value.trim())
-    case _ =>
-      // Should never reach here as we are already matching on
-      // matched strategy names
-      throw new IllegalArgumentException("Unknown option")
+  private def strategy(caseInsensitiveParams: Map[String, String]) = {
+    val tokenClusterId = caseInsensitiveParams.get(TOKEN_CLUSTER_ID_OPTION_KEY).map(_.trim)
+    caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+      case ("assign", value) =>
+        AssignStrategy(JsonUtils.partitions(value), tokenClusterId)
+      case ("subscribe", value) =>
+        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty), tokenClusterId)
+      case ("subscribepattern", value) =>
+        SubscribePatternStrategy(value.trim(), tokenClusterId)
+      case _ =>
+        // Should never reach here as we are already matching on
+        // matched strategy names
+        throw new IllegalArgumentException("Unknown option")
+    }
   }
 
   private def failOnDataLoss(caseInsensitiveParams: Map[String, String]) =
@@ -377,9 +381,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           import scala.collection.JavaConverters._
 
           assert(inputSchema != null)
+          val tokenClusterId = Option(options.get(TOKEN_CLUSTER_ID_OPTION_KEY)).map(_.trim)
           val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)
           val producerParams = kafkaParamsForProducer(options.asScala.toMap)
-          new KafkaStreamingWrite(topic, producerParams, inputSchema)
+          new KafkaStreamingWrite(tokenClusterId, topic, producerParams, inputSchema)
         }
       }
     }
@@ -461,6 +466,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
   private val GROUP_ID_PREFIX = "groupidprefix"
+  private[kafka010] val TOKEN_CLUSTER_ID_OPTION_KEY = "tokenclusterid"
 
   val TOPIC_OPTION_KEY = "topic"
 

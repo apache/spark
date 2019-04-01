@@ -25,7 +25,6 @@ import org.apache.kafka.common.config.SaslConfigs
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Kafka
 
 /**
  * Class to conveniently update Kafka config params, while logging the changes
@@ -48,7 +47,7 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
     this
   }
 
-  def setAuthenticationConfigIfNeeded(): this.type = {
+  def setAuthenticationConfigIfNeeded(tokenClusterId: Option[String]): this.type = {
     // There are multiple possibilities to log in and applied in the following order:
     // - JVM global security provided -> try to log in with JVM global security configuration
     //   which can be configured for example with 'java.security.auth.login.config'.
@@ -57,14 +56,17 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
     //   configuration.
     if (KafkaTokenUtil.isGlobalJaasConfigurationProvided) {
       logDebug("JVM global security configuration detected, using it for login.")
-    } else if (KafkaTokenUtil.isTokenAvailable()) {
+    } else if (tokenClusterId.isDefined) {
+      val kafkaTokenClusterConf = new KafkaTokenSparkConf(SparkEnv.get.conf).getClusterConfig(
+        tokenClusterId.get)
+      require(KafkaTokenUtil.isTokenAvailable(kafkaTokenClusterConf),
+        "Delegation token cluster identifier configured but no valid token found.")
       logDebug("Delegation token detected, using it for login.")
-      val jaasParams = KafkaTokenUtil.getTokenJaasParams(SparkEnv.get.conf)
+      val jaasParams = KafkaTokenUtil.getTokenJaasParams(SparkEnv.get.conf, kafkaTokenClusterConf)
       set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
-      val mechanism = SparkEnv.get.conf.get(Kafka.TOKEN_SASL_MECHANISM)
-      require(mechanism.startsWith("SCRAM"),
+      require(kafkaTokenClusterConf.tokenMechanism.startsWith("SCRAM"),
         "Delegation token works only with SCRAM mechanism.")
-      set(SaslConfigs.SASL_MECHANISM, mechanism)
+      set(SaslConfigs.SASL_MECHANISM, kafkaTokenClusterConf.tokenMechanism)
     }
     this
   }

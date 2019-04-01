@@ -21,13 +21,14 @@ import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 
 class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
+  private val identifier = "cluster1"
   private val bootStrapServers = "127.0.0.1:0"
   private val trustStoreLocation = "/path/to/trustStore"
   private val trustStorePassword = "trustStoreSecret"
@@ -59,88 +60,65 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     )
   }
 
-  test("createAdminClientProperties without bootstrap servers should throw exception") {
-    val thrown = intercept[IllegalArgumentException] {
-      KafkaTokenUtil.createAdminClientProperties(sparkConf)
-    }
-    assert(thrown.getMessage contains
-      "Tried to obtain kafka delegation token but bootstrap servers not configured.")
-  }
-
   test("createAdminClientProperties with SASL_PLAINTEXT protocol should not include " +
       "keystore and truststore config") {
-    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_PLAINTEXT.name)
-    sparkConf.set(Kafka.TRUSTSTORE_LOCATION, trustStoreLocation)
-    sparkConf.set(Kafka.TRUSTSTORE_PASSWORD, trustStoreLocation)
-    sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
-    sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
-    sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
+    val clusterConf = createClusterConf(SASL_PLAINTEXT.name)
 
-    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SASL_PLAINTEXT.name)
-    assert(!adminClientProperties.containsKey("ssl.truststore.location"))
-    assert(!adminClientProperties.containsKey("ssl.truststore.password"))
-    assert(!adminClientProperties.containsKey("ssl.keystore.location"))
-    assert(!adminClientProperties.containsKey("ssl.keystore.password"))
-    assert(!adminClientProperties.containsKey("ssl.key.password"))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEY_PASSWORD_CONFIG))
   }
 
   test("createAdminClientProperties with SASL_SSL protocol should include truststore config") {
-    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
-    sparkConf.set(Kafka.TRUSTSTORE_LOCATION, trustStoreLocation)
-    sparkConf.set(Kafka.TRUSTSTORE_PASSWORD, trustStorePassword)
-    sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
-    sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
-    sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
+    val clusterConf = createClusterConf(SASL_SSL.name)
 
-    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SASL_SSL.name)
-    assert(adminClientProperties.get("ssl.truststore.location") === trustStoreLocation)
-    assert(adminClientProperties.get("ssl.truststore.password") === trustStorePassword)
-    assert(!adminClientProperties.containsKey("ssl.keystore.location"))
-    assert(!adminClientProperties.containsKey("ssl.keystore.password"))
-    assert(!adminClientProperties.containsKey("ssl.key.password"))
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG) ===
+      trustStoreLocation)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG) ===
+      trustStorePassword)
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG))
+    assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEY_PASSWORD_CONFIG))
   }
 
   test("createAdminClientProperties with SSL protocol should include keystore and truststore " +
       "config") {
-    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(Kafka.SECURITY_PROTOCOL, SSL.name)
-    sparkConf.set(Kafka.TRUSTSTORE_LOCATION, trustStoreLocation)
-    sparkConf.set(Kafka.TRUSTSTORE_PASSWORD, trustStorePassword)
-    sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
-    sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
-    sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
+    val clusterConf = createClusterConf(SSL.name)
 
-    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SSL.name)
-    assert(adminClientProperties.get("ssl.truststore.location") === trustStoreLocation)
-    assert(adminClientProperties.get("ssl.truststore.password") === trustStorePassword)
-    assert(adminClientProperties.get("ssl.keystore.location") === keyStoreLocation)
-    assert(adminClientProperties.get("ssl.keystore.password") === keyStorePassword)
-    assert(adminClientProperties.get("ssl.key.password") === keyPassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG) ===
+      trustStoreLocation)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG) ===
+      trustStorePassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG) === keyStoreLocation)
+    assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG) === keyStorePassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG) === keyPassword)
   }
 
   test("createAdminClientProperties with global config should not set dynamic jaas config") {
-    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
+    val clusterConf = createClusterConf(SASL_SSL.name)
     setGlobalKafkaClientConfig()
 
-    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
@@ -151,12 +129,11 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties with keytab should set keytab dynamic jaas config") {
-    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
     sparkConf.set(KEYTAB, keytab)
     sparkConf.set(PRINCIPAL, principal)
+    val clusterConf = createClusterConf(SASL_SSL.name)
 
-    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
@@ -169,10 +146,9 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties without keytab should set ticket cache dynamic jaas config") {
-    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
+    val clusterConf = createClusterConf(SASL_SSL.name)
 
-    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
@@ -195,23 +171,40 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("isTokenAvailable without token should return false") {
-    assert(!KafkaTokenUtil.isTokenAvailable())
+    val clusterConf = createClusterConf(SASL_SSL.name)
+    assert(!KafkaTokenUtil.isTokenAvailable(clusterConf))
   }
 
   test("isTokenAvailable with token should return true") {
-    addTokenToUGI()
+    addTokenToUGI(identifier)
+    val clusterConf = createClusterConf(SASL_SSL.name)
 
-    assert(KafkaTokenUtil.isTokenAvailable())
+    assert(KafkaTokenUtil.isTokenAvailable(clusterConf))
   }
 
   test("getTokenJaasParams with token should return scram module") {
-    addTokenToUGI()
+    addTokenToUGI(identifier)
+    val clusterConf = createClusterConf(SASL_SSL.name)
 
-    val jaasParams = KafkaTokenUtil.getTokenJaasParams(new SparkConf())
+    val jaasParams = KafkaTokenUtil.getTokenJaasParams(new SparkConf(), clusterConf)
 
     assert(jaasParams.contains("ScramLoginModule required"))
     assert(jaasParams.contains("tokenauth=true"))
     assert(jaasParams.contains(tokenId))
     assert(jaasParams.contains(tokenPassword))
+  }
+
+  private def createClusterConf(securityProtocol: String): KafkaTokenClusterConf = {
+    KafkaTokenClusterConf(
+      identifier,
+      bootStrapServers,
+      securityProtocol,
+      KafkaTokenSparkConf.DEFAULT_SASL_KERBEROS_SERVICE_NAME,
+      Some(trustStoreLocation),
+      Some(trustStorePassword),
+      Some(keyStoreLocation),
+      Some(keyStorePassword),
+      Some(keyPassword),
+      KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
   }
 }

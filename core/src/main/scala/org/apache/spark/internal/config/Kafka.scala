@@ -19,73 +19,10 @@ package org.apache.spark.internal.config
 
 private[spark] object Kafka {
 
-  val BOOTSTRAP_SERVERS =
-    ConfigBuilder("spark.kafka.bootstrap.servers")
-      .doc("A list of coma separated host/port pairs to use for establishing the initial " +
-        "connection to the Kafka cluster. For further details please see kafka documentation. " +
-        "Only used to obtain delegation token.")
+  val CLUSTERS =
+    ConfigBuilder("spark.kafka.clusters")
+      .doc("A list of comma separated cluster identifiers. Please see Kafka integration guide " +
+        "for further details.")
       .stringConf
       .createOptional
-
-  val SECURITY_PROTOCOL =
-    ConfigBuilder("spark.kafka.security.protocol")
-      .doc("Protocol used to communicate with brokers. For further details please see kafka " +
-        "documentation. Only used to obtain delegation token.")
-      .stringConf
-      .createWithDefault("SASL_SSL")
-
-  val KERBEROS_SERVICE_NAME =
-    ConfigBuilder("spark.kafka.sasl.kerberos.service.name")
-      .doc("The Kerberos principal name that Kafka runs as. This can be defined either in " +
-        "Kafka's JAAS config or in Kafka's config. For further details please see kafka " +
-        "documentation. Only used to obtain delegation token.")
-      .stringConf
-      .createWithDefault("kafka")
-
-  val TRUSTSTORE_LOCATION =
-    ConfigBuilder("spark.kafka.ssl.truststore.location")
-      .doc("The location of the trust store file. For further details please see kafka " +
-        "documentation. Only used to obtain delegation token.")
-      .stringConf
-      .createOptional
-
-  val TRUSTSTORE_PASSWORD =
-    ConfigBuilder("spark.kafka.ssl.truststore.password")
-      .doc("The store password for the trust store file. This is optional for client and only " +
-        "needed if ssl.truststore.location is configured. For further details please see kafka " +
-        "documentation. Only used to obtain delegation token.")
-      .stringConf
-      .createOptional
-
-  val KEYSTORE_LOCATION =
-    ConfigBuilder("spark.kafka.ssl.keystore.location")
-      .doc("The location of the key store file. This is optional for client and can be used for " +
-        "two-way authentication for client. For further details please see kafka documentation. " +
-        "Only used to obtain delegation token.")
-      .stringConf
-      .createOptional
-
-  val KEYSTORE_PASSWORD =
-    ConfigBuilder("spark.kafka.ssl.keystore.password")
-      .doc("The store password for the key store file. This is optional for client and only " +
-        "needed if ssl.keystore.location is configured. For further details please see kafka " +
-        "documentation. Only used to obtain delegation token.")
-      .stringConf
-      .createOptional
-
-  val KEY_PASSWORD =
-    ConfigBuilder("spark.kafka.ssl.key.password")
-      .doc("The password of the private key in the key store file. This is optional for client. " +
-        "For further details please see kafka documentation. Only used to obtain delegation token.")
-      .stringConf
-      .createOptional
-
-  val TOKEN_SASL_MECHANISM =
-    ConfigBuilder("spark.kafka.sasl.token.mechanism")
-      .doc("SASL mechanism used for client connections with delegation token. Because SCRAM " +
-        "login module used for authentication a compatible mechanism has to be set here. " +
-        "For further details please see kafka documentation (sasl.mechanism). Only used to " +
-        "authenticate against Kafka broker with delegation token.")
-      .stringConf
-      .createWithDefault("SCRAM-SHA-512")
 }

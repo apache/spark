@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.TOKEN_CLUSTER_ID_OPTION_KEY
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
@@ -51,6 +52,8 @@ private[kafka010] class KafkaRelation(
       "spark.network.timeout",
       "120s") * 1000L).toString
   ).toLong
+
+  private val tokenClusterId = sourceOptions.get(TOKEN_CLUSTER_ID_OPTION_KEY).map(_.trim)
 
   override def schema: StructType = KafkaOffsetReader.kafkaSchema
 
@@ -104,7 +107,7 @@ private[kafka010] class KafkaRelation(
     val executorKafkaParams =
       KafkaSourceProvider.kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId)
     val rdd = new KafkaSourceRDD(
-      sqlContext.sparkContext, executorKafkaParams, offsetRanges,
+      sqlContext.sparkContext, executorKafkaParams, tokenClusterId, offsetRanges,
       pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer = false).map { cr =>
       InternalRow(
         cr.key,

@@ -26,7 +26,6 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, S
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Kafka
 import org.apache.spark.security.HadoopDelegationTokenProvider
 
 private[spark] class KafkaDelegationTokenProvider
@@ -39,24 +38,49 @@ private[spark] class KafkaDelegationTokenProvider
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     try {
-      logDebug("Attempting to fetch Kafka security token.")
-      val (token, nextRenewalDate) = KafkaTokenUtil.obtainToken(sparkConf)
-      creds.addToken(token.getService, token)
-      return Some(nextRenewalDate)
+      var lowestNextRenewalDate: Option[Long] = None
+      new KafkaTokenSparkConf(sparkConf).getAllClusterConfigs().foreach { clusterConf =>
+        if (delegationTokensRequired(clusterConf)) {
+          try {
+            logDebug(
+              s"Attempting to fetch Kafka security token for cluster ${clusterConf.identifier}.")
+            val (token, nextRenewalDate) = KafkaTokenUtil.obtainToken(sparkConf, clusterConf)
+            creds.addToken(token.getService, token)
+            if (lowestNextRenewalDate.isEmpty || nextRenewalDate < lowestNextRenewalDate.get) {
+              lowestNextRenewalDate = Some(nextRenewalDate)
+            }
+          } catch {
+            case NonFatal(e) =>
+              logWarning(s"Failed to get token from service: $serviceName " +
+                s"cluster: ${clusterConf.identifier}", e)
+          }
+        } else {
+          logDebug(
+            s"Cluster ${clusterConf.identifier} not requires delegation token, skipping.")
+        }
+      }
+      lowestNextRenewalDate
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to get token from service $serviceName", e)
+        logWarning(s"Failed to get token cluster configuration", e)
+        None
     }
-    None
   }
 
   override def delegationTokensRequired(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Boolean = {
-    val protocol = sparkConf.get(Kafka.SECURITY_PROTOCOL)
-    sparkConf.contains(Kafka.BOOTSTRAP_SERVERS) &&
-      (protocol == SASL_SSL.name ||
-        protocol == SSL.name ||
-        protocol == SASL_PLAINTEXT.name)
+    try {
+      new KafkaTokenSparkConf(sparkConf).getAllClusterConfigs().exists(delegationTokensRequired(_))
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to get token cluster configuration", e)
+        false
+    }
   }
+
+  private def delegationTokensRequired(clusterConf: KafkaTokenClusterConf): Boolean =
+    clusterConf.securityProtocol == SASL_SSL.name ||
+      clusterConf.securityProtocol == SSL.name ||
+      clusterConf.securityProtocol == SASL_PLAINTEXT.name
 }

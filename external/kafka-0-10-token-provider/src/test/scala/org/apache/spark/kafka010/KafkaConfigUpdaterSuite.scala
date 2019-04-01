@@ -20,9 +20,10 @@ package org.apache.spark.kafka010
 import org.apache.kafka.common.config.SaslConfigs
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Kafka
 
 class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTest {
+  private val identifier = "cluster1"
   private val testModule = "testModule"
   private val testKey = "testKey"
   private val testValue = "testValue"
@@ -66,35 +67,59 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     setGlobalKafkaClientConfig()
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
-      .setAuthenticationConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded(None)
       .build()
 
     assert(updatedParams.size() === 0)
   }
 
-  test("setAuthenticationConfigIfNeeded with token should set values") {
+  test("setAuthenticationConfigIfNeeded with invalid tokenClusterId should throw exception") {
     val params = Map.empty[String, String]
     setSparkEnv(Map.empty)
-    addTokenToUGI()
+
+    val e = intercept[NoSuchElementException] {
+      KafkaConfigUpdater(testModule, params)
+        .setAuthenticationConfigIfNeeded(Some("intentionally_invalid"))
+        .build()
+    }
+
+    assert(e.getMessage.contains("intentionally_invalid"))
+  }
+
+  test("setAuthenticationConfigIfNeeded with token should set values") {
+    val params = Map.empty[String, String]
+    setSparkEnv(
+      Map(
+        Kafka.CLUSTERS.key -> identifier,
+        s"spark.kafka.$identifier.bootstrap.servers" -> "127.0.0.1:0"
+      )
+    )
+    addTokenToUGI(identifier)
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
-      .setAuthenticationConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded(Some(identifier))
       .build()
 
     assert(updatedParams.size() === 2)
     assert(updatedParams.containsKey(SaslConfigs.SASL_JAAS_CONFIG))
     assert(updatedParams.get(SaslConfigs.SASL_MECHANISM) ===
-      Kafka.TOKEN_SASL_MECHANISM.defaultValueString)
+      KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
   }
 
-  test("setAuthenticationConfigIfNeeded with token and invalid mechanism should throw exception") {
+  test("setAuthenticationConfigIfNeeded with invalid mechanism should throw exception") {
     val params = Map.empty[String, String]
-    setSparkEnv(Map[String, String](Kafka.TOKEN_SASL_MECHANISM.key -> "INVALID"))
-    addTokenToUGI()
+    setSparkEnv(
+      Map(
+        Kafka.CLUSTERS.key -> identifier,
+        s"spark.kafka.$identifier.bootstrap.servers" -> "127.0.0.1:0",
+        s"spark.kafka.$identifier.sasl.token.mechanism" -> "intentionally_invalid"
+      )
+    )
+    addTokenToUGI(identifier)
 
     val e = intercept[IllegalArgumentException] {
       KafkaConfigUpdater(testModule, params)
-        .setAuthenticationConfigIfNeeded()
+        .setAuthenticationConfigIfNeeded(Some(identifier))
         .build()
     }
 
@@ -105,7 +130,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     val params = Map.empty[String, String]
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
-      .setAuthenticationConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded(None)
       .build()
 
     assert(updatedParams.size() === 0)

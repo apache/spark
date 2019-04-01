@@ -113,7 +113,7 @@ private[kafka010] class InternalKafkaConsumer[K, V](
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer: KafkaConsumer[K, V] = {
     val updatedKafkaParams = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
-      .setAuthenticationConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded(None)
       .build()
     val c = new KafkaConsumer[K, V](updatedKafkaParams)
     val topics = ju.Arrays.asList(topicPartition)

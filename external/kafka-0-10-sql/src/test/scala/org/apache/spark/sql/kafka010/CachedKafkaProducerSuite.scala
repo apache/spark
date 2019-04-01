@@ -42,8 +42,8 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val producer = CachedKafkaProducer.getOrCreate(kafkaParams)
-    val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
+    val producer = CachedKafkaProducer.getOrCreate(kafkaParams, None)
+    val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams, None)
     assert(producer == producer2)
 
     val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
@@ -57,9 +57,9 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val producer: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
+    val producer: KP = CachedKafkaProducer.getOrCreate(kafkaParams, None)
     kafkaParams.put("acks", "1")
-    val producer2: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
+    val producer2: KP = CachedKafkaProducer.getOrCreate(kafkaParams, None)
     // With updated conf, a new producer instance should be created.
     assert(producer != producer2)
 

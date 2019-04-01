@@ -81,11 +81,12 @@ private[kafka010] object KafkaWriter extends Logging {
       sparkSession: SparkSession,
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
-      topic: Option[String] = None): Unit = {
+      tokenClusterId: Option[String],
+      topic: Option[String]): Unit = {
     val schema = queryExecution.analyzed.output
     validateQuery(schema, kafkaParameters, topic)
     queryExecution.toRdd.foreachPartition { iter =>
-      val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic)
+      val writeTask = new KafkaWriteTask(kafkaParameters, schema, tokenClusterId, topic)
       Utils.tryWithSafeFinally(block = writeTask.execute(iter))(
         finallyBlock = writeTask.close())
     }

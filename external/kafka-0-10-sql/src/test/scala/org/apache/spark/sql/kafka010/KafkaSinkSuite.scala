@@ -405,7 +405,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     options.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
     val inputSchema = Seq(AttributeReference("value", BinaryType)())
     val data = new Array[Byte](15000) // large value
-    val writeTask = new KafkaWriteTask(options, inputSchema, Some(topic))
+    val writeTask = new KafkaWriteTask(options, inputSchema, None, Some(topic))
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)

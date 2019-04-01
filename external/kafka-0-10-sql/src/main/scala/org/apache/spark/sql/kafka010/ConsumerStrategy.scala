@@ -44,19 +44,21 @@ sealed trait ConsumerStrategy {
    * Updates the parameters with security if needed.
    * Added a function to hide internals and reduce code duplications because all strategy uses it.
    */
-  protected def setAuthenticationConfigIfNeeded(kafkaParams: ju.Map[String, Object]) =
+  protected def setAuthenticationConfigIfNeeded(kafkaParams: ju.Map[String, Object],
+      tokenClusterId: Option[String]) =
     KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
-      .setAuthenticationConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded(tokenClusterId)
       .build()
 }
 
 /**
  * Specify a fixed collection of partitions.
  */
-case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStrategy {
+case class AssignStrategy(partitions: Array[TopicPartition],
+    tokenClusterId: Option[String]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams, tokenClusterId)
     val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     consumer.assign(ju.Arrays.asList(partitions: _*))
     consumer
@@ -68,10 +70,11 @@ case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStr
 /**
  * Subscribe to a fixed collection of topics.
  */
-case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
+case class SubscribeStrategy(topics: Seq[String],
+    tokenClusterId: Option[String]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams, tokenClusterId)
     val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     consumer.subscribe(topics.asJava)
     consumer
@@ -83,10 +86,11 @@ case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
 /**
  * Use a regex to specify topics of interest.
  */
-case class SubscribePatternStrategy(topicPattern: String) extends ConsumerStrategy {
+case class SubscribePatternStrategy(topicPattern: String,
+    tokenClusterId: Option[String]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
-    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams, tokenClusterId)
     val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     consumer.subscribe(
       ju.regex.Pattern.compile(topicPattern),

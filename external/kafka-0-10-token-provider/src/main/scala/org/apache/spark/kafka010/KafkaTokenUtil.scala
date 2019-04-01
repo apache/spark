@@ -41,16 +41,19 @@ import org.apache.spark.internal.config._
 
 private[spark] object KafkaTokenUtil extends Logging {
   val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
-  val TOKEN_SERVICE = new Text("kafka.server.delegation.token")
+  private val TOKEN_SERVICE_PREFIX = "kafka.server.delegation.token"
+
+  def getTokenService(identifier: String): Text = new Text(s"$TOKEN_SERVICE_PREFIX.$identifier")
 
   private[spark] class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
     override def getKind: Text = TOKEN_KIND
   }
 
-  private[kafka010] def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
+  private[kafka010] def obtainToken(sparkConf: SparkConf,
+      clusterConf: KafkaTokenClusterConf): (Token[_ <: TokenIdentifier], Long) = {
     checkProxyUser()
 
-    val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
+    val adminClient = AdminClient.create(createAdminClientProperties(sparkConf, clusterConf))
     val createDelegationTokenOptions = new CreateDelegationTokenOptions()
     val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
     val token = createResult.delegationToken().get()
@@ -60,7 +63,7 @@ private[spark] object KafkaTokenUtil extends Logging {
       token.tokenInfo.tokenId.getBytes,
       token.hmacAsBase64String.getBytes,
       TOKEN_KIND,
-      TOKEN_SERVICE
+      getTokenService(clusterConf.identifier)
     ), token.tokenInfo.expiryTimestamp)
   }
 
@@ -72,23 +75,22 @@ private[spark] object KafkaTokenUtil extends Logging {
       "user is not yet supported.")
   }
 
-  private[kafka010] def createAdminClientProperties(sparkConf: SparkConf): ju.Properties = {
+  private[kafka010] def createAdminClientProperties(sparkConf: SparkConf,
+    clusterConf: KafkaTokenClusterConf): ju.Properties = {
     val adminClientProperties = new ju.Properties
 
-    val bootstrapServers = sparkConf.get(Kafka.BOOTSTRAP_SERVERS)
-    require(bootstrapServers.nonEmpty, s"Tried to obtain kafka delegation token but bootstrap " +
-      "servers not configured.")
-    adminClientProperties.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers.get)
+    adminClientProperties.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
+      clusterConf.bootstrapServers)
 
-    val protocol = sparkConf.get(Kafka.SECURITY_PROTOCOL)
-    adminClientProperties.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, protocol)
-    protocol match {
+    adminClientProperties.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG,
+      clusterConf.securityProtocol)
+    clusterConf.securityProtocol match {
       case SASL_SSL.name =>
-        setTrustStoreProperties(sparkConf, adminClientProperties)
+        setTrustStoreProperties(clusterConf, adminClientProperties)
 
       case SSL.name =>
-        setTrustStoreProperties(sparkConf, adminClientProperties)
-        setKeyStoreProperties(sparkConf, adminClientProperties)
+        setTrustStoreProperties(clusterConf, adminClientProperties)
+        setKeyStoreProperties(clusterConf, adminClientProperties)
         logWarning("Obtaining kafka delegation token with SSL protocol. Please " +
           "configure 2-way authentication on the broker side.")
 
@@ -113,11 +115,11 @@ private[spark] object KafkaTokenUtil extends Logging {
       adminClientProperties.put(SaslConfigs.SASL_MECHANISM, SaslConfigs.GSSAPI_MECHANISM)
       if (sparkConf.contains(KEYTAB)) {
         logDebug("Keytab detected, using it for login.")
-        val jaasParams = getKeytabJaasParams(sparkConf)
+        val jaasParams = getKeytabJaasParams(sparkConf, clusterConf)
         adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
       } else {
         logDebug("Using ticket cache for login.")
-        val jaasParams = getTicketCacheJaasParams(sparkConf)
+        val jaasParams = getTicketCacheJaasParams(sparkConf, clusterConf)
         adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
       }
     }
@@ -134,33 +136,36 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  private def setTrustStoreProperties(sparkConf: SparkConf, properties: ju.Properties): Unit = {
-    sparkConf.get(Kafka.TRUSTSTORE_LOCATION).foreach { truststoreLocation =>
+  private def setTrustStoreProperties(clusterConf: KafkaTokenClusterConf,
+    properties: ju.Properties): Unit = {
+    clusterConf.trustStoreLocation.foreach { truststoreLocation =>
       properties.put("ssl.truststore.location", truststoreLocation)
     }
-    sparkConf.get(Kafka.TRUSTSTORE_PASSWORD).foreach { truststorePassword =>
+    clusterConf.trustStorePassword.foreach { truststorePassword =>
       properties.put("ssl.truststore.password", truststorePassword)
     }
   }
 
-  private def setKeyStoreProperties(sparkConf: SparkConf, properties: ju.Properties): Unit = {
-    sparkConf.get(Kafka.KEYSTORE_LOCATION).foreach { keystoreLocation =>
+  private def setKeyStoreProperties(clusterConf: KafkaTokenClusterConf,
+    properties: ju.Properties): Unit = {
+    clusterConf.keyStoreLocation.foreach { keystoreLocation =>
       properties.put("ssl.keystore.location", keystoreLocation)
     }
-    sparkConf.get(Kafka.KEYSTORE_PASSWORD).foreach { keystorePassword =>
+    clusterConf.keyStorePassword.foreach { keystorePassword =>
       properties.put("ssl.keystore.password", keystorePassword)
     }
-    sparkConf.get(Kafka.KEY_PASSWORD).foreach { keyPassword =>
+    clusterConf.keyPassword.foreach { keyPassword =>
       properties.put("ssl.key.password", keyPassword)
     }
   }
 
-  private def getKeytabJaasParams(sparkConf: SparkConf): String = {
+  private def getKeytabJaasParams(sparkConf: SparkConf,
+    clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
       | useKeyTab=true
-      | serviceName="${sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)}"
+      | serviceName="${clusterConf.kerberosServiceName}"
       | keyTab="${sparkConf.get(KEYTAB).get}"
       | principal="${sparkConf.get(PRINCIPAL).get}";
       """.stripMargin.replace("\n", "")
@@ -168,15 +173,13 @@ private[spark] object KafkaTokenUtil extends Logging {
     params
   }
 
-  private def getTicketCacheJaasParams(sparkConf: SparkConf): String = {
-    val serviceName = sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)
-    require(serviceName.nonEmpty, "Kerberos service name must be defined")
-
+  private def getTicketCacheJaasParams(sparkConf: SparkConf,
+    clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
       | useTicketCache=true
-      | serviceName="${sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)}";
+      | serviceName="${clusterConf.kerberosServiceName}";
       """.stripMargin.replace("\n", "")
     logDebug(s"Krb ticket cache JAAS params: $params")
     params
@@ -210,14 +213,14 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  def isTokenAvailable(): Boolean = {
+  def isTokenAvailable(clusterConf: KafkaTokenClusterConf): Boolean = {
     UserGroupInformation.getCurrentUser().getCredentials.getToken(
-      KafkaTokenUtil.TOKEN_SERVICE) != null
+      getTokenService(clusterConf.identifier)) != null
   }
 
-  def getTokenJaasParams(sparkConf: SparkConf): String = {
+  def getTokenJaasParams(sparkConf: SparkConf, clusterConf: KafkaTokenClusterConf): String = {
     val token = UserGroupInformation.getCurrentUser().getCredentials.getToken(
-      KafkaTokenUtil.TOKEN_SERVICE)
+      getTokenService(clusterConf.identifier))
     val username = new String(token.getIdentifier)
     val password = new String(token.getPassword)
 
@@ -226,7 +229,7 @@ private[spark] object KafkaTokenUtil extends Logging {
       s"""
       |$loginModuleName required
       | tokenauth=true
-      | serviceName="${sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)}"
+      | serviceName="${clusterConf.kerberosServiceName}"
       | username="$username"
       | password="$password";
       """.stripMargin.replace("\n", "")
