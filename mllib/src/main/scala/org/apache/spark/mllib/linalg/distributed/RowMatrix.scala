@@ -118,6 +118,7 @@ class RowMatrix @Since("1.0.0") (
     // Computes n*(n+1)/2, avoiding overflow in the multiplication.
     // This succeeds when n <= 65535, which is checked above
     val nt = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
+    val gramianSizeInBytes = nt * 8L
 
     // Compute the upper triangular part of the gram matrix.
     val GU = rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
@@ -137,7 +138,8 @@ class RowMatrix @Since("1.0.0") (
           U1
         } else {
           U1 += U2
-        }
+        },
+      depth = getTreeAggregateIdealDepth(gramianSizeInBytes)
     )
 
     RowMatrix.triuToFull(n, GU.data)
