@@ -840,8 +840,8 @@ private[spark] class TaskSchedulerImpl(
   }
 
   // By default, rack is unknown
-  def getRackForHost(hosts: String): Option[String] = {
-    getRacksForHosts(Seq(hosts)).head
+  def getRackForHost(host: String): Option[String] = {
+    getRacksForHosts(Seq(host)).head
   }
 
   /**

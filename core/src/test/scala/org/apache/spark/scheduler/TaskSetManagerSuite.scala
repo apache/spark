@@ -22,7 +22,7 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ManualClock, Utils}
+import org.apache.spark.util.{AccumulatorV2, ManualClock}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -70,10 +70,12 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
 object FakeRackUtil {
   private val hostToRack = new mutable.HashMap[String, String]()
   var numBatchInvocation = 0
+  var numSingleHostInvocation = 0
 
   def cleanUp() {
     hostToRack.clear()
     numBatchInvocation = 0
+    numSingleHostInvocation = 0
   }
 
   def assignHostToRack(host: String, rack: String) {
@@ -84,6 +86,8 @@ object FakeRackUtil {
     assert(hosts.toSet.size == hosts.size) // no dups in hosts
     if (hosts.nonEmpty && hosts.length != 1) {
       numBatchInvocation += 1
+    } else if (hosts.length == 1) {
+      numSingleHostInvocation += 1
     }
     hosts.map(hostToRack.get(_))
   }
@@ -1340,7 +1344,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val e = new ExceptionFailure("a", "b", Array(), "c", None)
     taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
 
-    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt(), anyBoolean())
+    verify(taskSetManagerSpy, times(1)).addPendingTask(meq(0), meq(false))
   }
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
@@ -1615,8 +1619,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
   test("SPARK-13704 Rack Resolution is done with a batch of de-duped hosts") {
     val conf = new SparkConf()
-      .set(config.LOCALITY_WAIT.key, "0")
-      .set(config.LOCALITY_WAIT_RACK.key, "1s")
+      .set(config.LOCALITY_WAIT, 0L)
+      .set(config.LOCALITY_WAIT_RACK, 1L)
     sc = new SparkContext("local", "test", conf)
     // Create a cluster with 20 racks, with hosts spread out among them
     val execAndHost = (0 to 199).map { i =>
@@ -1631,7 +1635,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     val taskSet = FakeTask.createTaskSet(100, locations: _*)
     val clock = new ManualClock
+    // make sure we only do one rack resolution call, for the entire batch of hosts, as this
+    // can be expensive.  the FakeTaskScheduler calls rack resolution more than the real one
+    // -- that is outside of the scope of this test, we just want to check the task set manager.
+    FakeRackUtil.numBatchInvocation = 0
+    FakeRackUtil.numSingleHostInvocation = 0
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    assert(FakeRackUtil.numBatchInvocation === 1)
+    assert(FakeRackUtil.numSingleHostInvocation === 0)
     // with rack locality, reject an offer on a host with an unknown rack
     assert(manager.resourceOffer("otherExec", "otherHost", TaskLocality.RACK_LOCAL).isEmpty)
     (0 until 20).foreach { rackIdx =>
@@ -1646,6 +1657,5 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
           .isDefined)
       }
     }
-    assert(FakeRackUtil.numBatchInvocation === 1)
   }
 }
