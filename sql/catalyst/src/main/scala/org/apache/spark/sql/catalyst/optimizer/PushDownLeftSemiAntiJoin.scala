@@ -70,10 +70,10 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         }
 
         // Check if the remaining predicates do not contain columns from the right
-        // hand side of the join. In case of LeftSemi join, since remaining predicates
-        // will be kept as a filter over aggregate, this check is necessary after the left semi join
-        // is moved below aggregate. The reason is, for this kind of join, we only output from the
-        // left leg of the join.
+        // hand side of the join. Since the remaining predicates will be kept
+        // as a filter over aggregate, this check is necessary after the left semi
+        // or left anti join is moved below aggregate. The reason is, for this kind
+        // of join, we only output from the left leg of the join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
@@ -116,10 +116,10 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         }
 
         // Check if the remaining predicates do not contain columns from the right
-        // hand side of the join. In case of LeftSemi join, since remaining predicates
-        // will be kept as a filter over window, this check is necessary after the left semi join
-        // is moved below window. The reason is, for this kind of join, we only output from the
-        // left leg of the join.
+        // hand side of the join. Since the remaining predicates will be kept
+        // as a filter over window, this check is necessary after the left semi
+        // or left anti join is moved below window. The reason is, for this kind
+        // of join, we only output from the left leg of the join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
