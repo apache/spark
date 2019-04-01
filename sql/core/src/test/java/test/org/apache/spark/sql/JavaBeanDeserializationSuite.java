@@ -24,6 +24,9 @@ import java.util.*;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.catalyst.util.TimestampFormatter;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 import org.junit.*;
@@ -514,27 +517,33 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
   @Test
   public void testSpark30() {
-    List<Row> inputRows = new ArrayList<>();
-    List<RecordSpark30> expectedRecords = new ArrayList<>();
+    String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_ENABLED().key());
+    try {
+      spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), "true");
+      List<Row> inputRows = new ArrayList<>();
+      List<RecordSpark30> expectedRecords = new ArrayList<>();
 
-    for (long idx = 0 ; idx < 5 ; idx++) {
-      Row row = createRecordSpark30Row(idx);
-      inputRows.add(row);
-      expectedRecords.add(createRecordSpark30(row));
+      for (long idx = 0 ; idx < 5 ; idx++) {
+        Row row = createRecordSpark30Row(idx);
+        inputRows.add(row);
+        expectedRecords.add(createRecordSpark30(row));
+      }
+
+      Encoder<RecordSpark30> encoder = Encoders.bean(RecordSpark30.class);
+
+      StructType schema = new StructType()
+        .add("localDateField", DataTypes.DateType)
+        .add("instantField", DataTypes.TimestampType);
+
+      Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+      Dataset<RecordSpark30> dataset = dataFrame.as(encoder);
+
+      List<RecordSpark30> records = dataset.collectAsList();
+
+      Assert.assertEquals(expectedRecords, records);
+    } finally {
+        spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
     }
-
-    Encoder<RecordSpark30> encoder = Encoders.bean(RecordSpark30.class);
-
-    StructType schema = new StructType()
-      .add("localDateField", DataTypes.DateType)
-      .add("instantField", DataTypes.TimestampType);
-
-    Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
-    Dataset<RecordSpark30> dataset = dataFrame.as(encoder);
-
-    List<RecordSpark30> records = dataset.collectAsList();
-
-    Assert.assertEquals(expectedRecords, records);
   }
 
   public static final class RecordSpark30 {
@@ -590,7 +599,10 @@ public class JavaBeanDeserializationSuite implements Serializable {
   private static RecordSpark30 createRecordSpark30(Row recordRow) {
     RecordSpark30 record = new RecordSpark30();
     record.setLocalDateField(String.valueOf(recordRow.getLocalDate(0)));
-    record.setInstantField(String.valueOf(recordRow.getInstant(1)));
+    Instant instant = recordRow.getInstant(1);
+    TimestampFormatter formatter = TimestampFormatter.getFractionFormatter(
+      DateTimeUtils.getZoneId(SQLConf.get().sessionLocalTimeZone()));
+    record.setInstantField(formatter.format(DateTimeUtils.instantToMicros(instant)));
     return record;
   }
 }
