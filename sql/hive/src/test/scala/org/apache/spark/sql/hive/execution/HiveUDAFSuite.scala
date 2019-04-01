@@ -135,8 +135,8 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       assert(aggs.length == 2)
 
       checkAnswer(df, Seq(
-        Row(0, Row(2, 1)),
-        Row(1, Row(2, 0))
+        Row(0, Row(3, 1)),
+        Row(1, Row(3, 1))
       ))
     }
   }
