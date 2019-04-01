@@ -105,11 +105,11 @@ private[sql] abstract class SingleColumnTransform(ref: NamedReference) extends T
 
   def reference: NamedReference = ref
 
-  override lazy val references: Array[NamedReference] = Array(ref)
+  override def references: Array[NamedReference] = Array(ref)
 
-  override lazy val arguments: Array[Expression] = Array(ref)
+  override def arguments: Array[Expression] = Array(ref)
 
-  override lazy val describe: String = name + "(" + reference.describe + ")"
+  override def describe: String = name + "(" + reference.describe + ")"
 
   override def toString: String = describe
 }
@@ -118,17 +118,17 @@ private[sql] final case class BucketTransform(
     numBuckets: Literal[Int],
     columns: Seq[NamedReference]) extends Transform {
 
-  override lazy val name: String = "bucket"
+  override val name: String = "bucket"
 
-  override lazy val references: Array[NamedReference] = {
+  override def references: Array[NamedReference] = {
     arguments
         .filter(_.isInstanceOf[NamedReference])
         .map(_.asInstanceOf[NamedReference])
   }
 
-  override lazy val arguments: Array[Expression] = numBuckets +: columns.toArray
+  override def arguments: Array[Expression] = numBuckets +: columns.toArray
 
-  override lazy val describe: String = s"bucket(${arguments.map(_.describe).mkString(", ")})"
+  override def describe: String = s"bucket(${arguments.map(_.describe).mkString(", ")})"
 
   override def toString: String = describe
 }
@@ -137,43 +137,43 @@ private[sql] final case class ApplyTransform(
     name: String,
     args: Seq[Expression]) extends Transform {
 
-  override lazy val arguments: Array[Expression] = args.toArray
+  override def arguments: Array[Expression] = args.toArray
 
-  override lazy val references: Array[NamedReference] = {
+  override def references: Array[NamedReference] = {
     arguments
         .filter(_.isInstanceOf[NamedReference])
         .map(_.asInstanceOf[NamedReference])
   }
 
-  override lazy val describe: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
+  override def describe: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
 
   override def toString: String = describe
 }
 
 private[sql] final case class IdentityTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override lazy val name: String = "identity"
-  override lazy val describe: String = ref.describe
+  override val name: String = "identity"
+  override def describe: String = ref.describe
 }
 
 private[sql] final case class YearTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override lazy val name: String = "year"
+  override val name: String = "year"
 }
 
 private[sql] final case class MonthTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override lazy val name: String = "month"
+  override val name: String = "month"
 }
 
 private[sql] final case class DateTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override lazy val name: String = "date"
+  override val name: String = "date"
 }
 
 private[sql] final case class DateHourTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override lazy val name: String = "date_hour"
+  override val name: String = "date_hour"
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
@@ -188,12 +188,12 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
 }
 
 private[sql] final case class FieldReference(parts: Seq[String]) extends NamedReference {
-  override lazy val fieldNames: Array[String] = parts.toArray
-  override lazy val describe: String = fieldNames.map(quote).mkString(".")
+  override def fieldNames: Array[String] = parts.toArray
+  override def describe: String = parts.map(quote).mkString(".")
   override def toString: String = describe
 
   private def quote(part: String): String = {
-    if (part.contains(".")) {
+    if (part.contains(".") || part.contains("`")) {
       s"`${part.replace("`", "``")}`"
     } else {
       part
