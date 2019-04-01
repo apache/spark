@@ -21,9 +21,9 @@ import org.apache.spark.sql.catalyst.expressions.{Generator, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 
 /**
- * [[PlanHelper]] Contains utility methods that can be used by Analyzer and Optimizer.
+ * [[PlanHelper]] contains utility methods that can be used by Analyzer and Optimizer.
  * It can also be container of methods that are common across multiple rules in Analyzer
- * and optimizer.
+ * and Optimizer.
  */
 object PlanHelper {
   /**
