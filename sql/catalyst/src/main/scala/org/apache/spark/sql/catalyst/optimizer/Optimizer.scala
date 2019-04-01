@@ -43,16 +43,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   // - is still resolved
   // - only host special expressions in supported operators
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (plan.resolved && checkSpecialExpressionIntegrity(plan))
-  }
-
-  /**
-   * Check if all operators in this plan hold structural integrity with regards to hosting special
-   * expressions.
-   * Returns true when all operators are integral.
-   */
-  private def checkSpecialExpressionIntegrity(plan: LogicalPlan): Boolean = {
-    plan.find(PlanHelper.specialExpressionInUnsupportedOperator).isEmpty
+    !Utils.isTesting || (plan.resolved &&
+      plan.find(PlanHelper.specialExpressionInUnsupportedOperator).isEmpty)
   }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)

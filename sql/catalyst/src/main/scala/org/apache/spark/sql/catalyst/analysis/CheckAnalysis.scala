@@ -384,7 +384,7 @@ trait CheckAnalysis extends PredicateHelper {
                """.stripMargin)
 
           case other if PlanHelper.specialExpressionInUnsupportedOperator(other) =>
-            failAnalysis(s"The query operator  `${other.nodeName}` contains " +
+            failAnalysis(s"The query operator `${other.nodeName}` contains " +
               "one or more unsupported expression types Aggregate, Window or Generate.")
 
           case _ => // Analysis successful!
