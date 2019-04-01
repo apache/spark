@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.Locale
 import java.util.regex.Pattern
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{SessionConfigSupport, TableProvider}
 
@@ -56,5 +59,25 @@ private[sql] object DataSourceV2Utils extends Logging {
 
       case _ => Map.empty
     }
+  }
+
+  /**
+   * Use to determine whether this source is a v2 source.
+   * @return the class of v2 source if this is a v2 source, else return None.
+   */
+  def isV2Source(
+      source: String,
+      spark: SparkSession): Option[Class[_]] = {
+    val useV1Sources =
+      spark.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
+    val lookupCls = DataSource.lookupDataSource(source, spark.sessionState.conf)
+    val cls = lookupCls.newInstance() match {
+      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
+        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        f.fallBackFileFormat
+      case _ => lookupCls
+    }
+
+    Some(cls).filter(classOf[TableProvider].isAssignableFrom)
   }
 }

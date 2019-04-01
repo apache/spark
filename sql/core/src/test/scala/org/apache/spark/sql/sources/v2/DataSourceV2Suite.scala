@@ -392,6 +392,26 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("Create external table with v2 data source") {
+    withTable("t") {
+      withTempDir { dir =>
+        val source = classOf[SimpleWritableDataSource]
+        val path = new File(dir, "test")
+        spark.range(1, 10)
+          .toDF("id")
+          .write
+          .format(source.getName)
+          .save(path.getCanonicalPath)
+
+        spark.sql(s"CREATE TABLE t (id Long) USING ${source.getName} " +
+          s"LOCATION '${path.toURI}'")
+        val table = spark.table("t")
+        assert(table.count() === 10)
+        assert(spark.sql("select count(*) from t") === 10)
+      }
+    }
+  }
 }
 
 
