@@ -41,7 +41,7 @@ class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
 
     conf.set(KRYO_USE_UNSAFE, false)
     val safeSer = new KryoSerializer(conf).newInstance()
-    var actual : RoaringBitmap = safeSer.deserialize(safeSer.serialize(expected))
+    var actual: RoaringBitmap = safeSer.deserialize(safeSer.serialize(expected))
     assert(actual === expected)
 
     conf.set(KRYO_USE_UNSAFE, true)
