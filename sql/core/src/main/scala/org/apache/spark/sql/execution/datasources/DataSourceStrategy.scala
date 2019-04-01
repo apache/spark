@@ -249,14 +249,15 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
           DataSourceV2Utils.isV2Source(tableMeta.provider.get, sparkSession).isEmpty =>
       i.copy(table = readDataSourceTable(tableMeta))
 
-    case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
+    case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
+        if !DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) &&
         DataSourceV2Utils.isV2Source(tableMeta.provider.get, sparkSession).isEmpty =>
       readDataSourceTable(tableMeta)
 
-    case UnresolvedCatalogRelation(tableMeta) =>
+    case UnresolvedCatalogRelation(tableMeta) if !DDLUtils.isDatasourceTable(tableMeta) =>
       DDLUtils.readHiveTable(tableMeta)
   }
 }

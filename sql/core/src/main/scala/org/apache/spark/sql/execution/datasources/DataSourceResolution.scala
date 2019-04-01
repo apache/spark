@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.Locale
-
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
@@ -27,13 +25,12 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.StructType
 
 case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport  {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
-        table, schema, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
+        table, schema, partitionCols, bucketSpec, properties, provider, options,
         location, comment, ifNotExists) =>
 
       val tableDesc = buildCatalogTable(table, schema, partitionCols, bucketSpec, properties,
@@ -43,7 +40,7 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
       CreateTable(tableDesc, mode, None)
 
     case CreateTableAsSelectStatement(
-        table, query, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
+        table, query, partitionCols, bucketSpec, properties, provider, options,
         location, comment, ifNotExists) =>
 
       val tableDesc = buildCatalogTable(table, new StructType, partitionCols, bucketSpec,
@@ -51,25 +48,6 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
       val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
       CreateTable(tableDesc, mode, Some(query))
-  }
-
-  object V1WriteProvider {
-    private val v1WriteOverrideSet =
-      conf.userV1SourceWriterList.toLowerCase(Locale.ROOT).split(",").toSet
-
-    def unapply(provider: String): Option[String] = {
-      if (v1WriteOverrideSet.contains(provider.toLowerCase(Locale.ROOT))) {
-        Some(provider)
-      } else {
-        lazy val providerClass = DataSource.lookupDataSource(provider, conf)
-        provider match {
-          case _ if classOf[TableProvider].isAssignableFrom(providerClass) =>
-            None
-          case _ =>
-            Some(provider)
-        }
-      }
-    }
   }
 
   private def buildCatalogTable(
