@@ -539,9 +539,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     withTempDatabase { database =>
       sql(s"CREATE VIEW $database.v AS SELECT 1 c")
       sql(s"CACHE TABLE $database.v")
-      assert(getStatAttrNames(s"$database.v") !== Set("id"))
+      assert(getStatAttrNames(s"$database.v") !== Set("c"))
       sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS FOR COLUMNS c")
-      assert(getStatAttrNames(s"$database.v") !== Set("id"))
+      assert(getStatAttrNames(s"$database.v") === Set("c"))
     }
   }
 }

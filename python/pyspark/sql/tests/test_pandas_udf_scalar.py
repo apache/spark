@@ -270,6 +270,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_struct_type(self):
         import pandas as pd
+        import pyarrow as pa
 
         df = self.spark.range(10)
         return_type = StructType([
@@ -290,6 +291,18 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         g = pandas_udf(func, 'id: long, str: string')
         actual = df.select(g(col('id')).alias('struct')).collect()
         self.assertEqual(expected, actual)
+
+        struct_f = pandas_udf(lambda x: x, return_type)
+        actual = df.select(struct_f(struct(col('id'), col('id').cast('string').alias('str'))))
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            with QuietTest(self.sc):
+                from py4j.protocol import Py4JJavaError
+                with self.assertRaisesRegexp(
+                        Py4JJavaError,
+                        'Unsupported type in conversion from Arrow'):
+                    self.assertEqual(expected, actual.collect())
+        else:
+            self.assertEqual(expected, actual.collect())
 
     def test_vectorized_udf_struct_complex(self):
         import pandas as pd
@@ -362,6 +375,26 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         g = pandas_udf(lambda x: x - 1, LongType())
         res = df.select(g(f(col('id'))))
         self.assertEquals(df.collect(), res.collect())
+
+    def test_vectorized_udf_chained_struct_type(self):
+        import pandas as pd
+
+        df = self.spark.range(10)
+        return_type = StructType([
+            StructField('id', LongType()),
+            StructField('str', StringType())])
+
+        @pandas_udf(return_type)
+        def f(id):
+            return pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+
+        g = pandas_udf(lambda x: x, return_type)
+
+        expected = df.select(struct(col('id'), col('id').cast('string').alias('str'))
+                             .alias('struct')).collect()
+
+        actual = df.select(g(f(col('id'))).alias('struct')).collect()
+        self.assertEqual(expected, actual)
 
     def test_vectorized_udf_wrong_return_type(self):
         with QuietTest(self.sc):

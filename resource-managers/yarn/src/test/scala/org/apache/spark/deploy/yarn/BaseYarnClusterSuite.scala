@@ -149,7 +149,7 @@ abstract class BaseYarnClusterSuite
     launcher.setSparkHome(sys.props("spark.test.home"))
       .setMaster("yarn")
       .setDeployMode(deployMode)
-      .setConf("spark.executor.instances", "1")
+      .setConf(EXECUTOR_INSTANCES.key, "1")
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
 

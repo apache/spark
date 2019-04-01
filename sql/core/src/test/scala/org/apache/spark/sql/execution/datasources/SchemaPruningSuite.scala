@@ -45,7 +45,8 @@ abstract class SchemaPruningSuite
     pets: Int,
     friends: Array[FullName] = Array.empty,
     relatives: Map[String, FullName] = Map.empty,
-    employer: Employer = null)
+    employer: Employer = null,
+    relations: Map[FullName, String] = Map.empty)
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
@@ -56,9 +57,10 @@ abstract class SchemaPruningSuite
 
   val contacts =
     Contact(0, janeDoe, "123 Main Street", 1, friends = Array(susanSmith),
-      relatives = Map("brother" -> johnDoe), employer = employer) ::
+      relatives = Map("brother" -> johnDoe), employer = employer,
+      relations = Map(johnDoe -> "brother")) ::
     Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe),
-      employer = employerWithNullCompany) :: Nil
+      employer = employerWithNullCompany, relations = Map(janeDoe -> "sister")) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -75,13 +77,15 @@ abstract class SchemaPruningSuite
     friends: Array[FullName] = Array(),
     relatives: Map[String, FullName] = Map(),
     employer: Employer = null,
+    relations: Map[FullName, String] = Map(),
     p: Int)
 
   case class BriefContactWithDataPartitionColumn(id: Int, name: Name, address: String, p: Int)
 
   val contactsWithDataPartitionColumn =
-    contacts.map { case Contact(id, name, address, pets, friends, relatives, employer) =>
-      ContactWithDataPartitionColumn(id, name, address, pets, friends, relatives, employer, 1) }
+    contacts.map {case Contact(id, name, address, pets, friends, relatives, employer, relations) =>
+      ContactWithDataPartitionColumn(id, name, address, pets, friends, relatives, employer,
+        relations, 1) }
   val briefContactsWithDataPartitionColumn =
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
@@ -253,6 +257,18 @@ abstract class SchemaPruningSuite
     checkAnswer(query, Row(1) :: Nil)
   }
 
+  testSchemaPruning("select nested field from a complex map key using map_keys") {
+    val query = sql("select map_keys(relations).middle[0], p from contacts")
+    checkScan(query, "struct<relations:map<struct<middle:string>,string>>")
+    checkAnswer(query, Row("Y.", 1) :: Row("X.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
+  }
+
+  testSchemaPruning("select nested field from a complex map value using map_values") {
+    val query = sql("select map_values(relatives).middle[0], p from contacts")
+    checkScan(query, "struct<relatives:map<string,struct<middle:string>>>")
+    checkAnswer(query, Row("Y.", 1) :: Row("X.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
+  }
+
   protected def testSchemaPruning(testName: String)(testThunk: => Unit) {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(vectorizedReaderEnabledKey -> "true") {
@@ -290,7 +306,8 @@ abstract class SchemaPruningSuite
         "`address` STRING,`pets` INT,`friends` ARRAY<STRUCT<`first`: STRING, `middle`: STRING, " +
         "`last`: STRING>>,`relatives` MAP<STRING, STRUCT<`first`: STRING, `middle`: STRING, " +
         "`last`: STRING>>,`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, " +
-        "`address`: STRING>>,`p` INT"
+        "`address`: STRING>>,`relations` MAP<STRUCT<`first`: STRING, `middle`: STRING, " +
+        "`last`: STRING>,STRING>,`p` INT"
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
 
@@ -311,7 +328,8 @@ abstract class SchemaPruningSuite
         "`address` STRING,`pets` INT,`friends` ARRAY<STRUCT<`first`: STRING, `middle`: STRING, " +
         "`last`: STRING>>,`relatives` MAP<STRING, STRUCT<`first`: STRING, `middle`: STRING, " +
         "`last`: STRING>>,`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, " +
-        "`address`: STRING>>,`p` INT"
+        "`address`: STRING>>,`relations` MAP<STRUCT<`first`: STRING, `middle`: STRING, " +
+        "`last`: STRING>,STRING>,`p` INT"
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
 

@@ -296,8 +296,8 @@ private[spark] class ApplicationMaster(
         Option(appAttemptId.getApplicationId.toString), None).setCurrentContext()
 
       val driverRef = clientRpcEnv.setupEndpointRef(
-        RpcAddress(sparkConf.get("spark.driver.host"),
-          sparkConf.get("spark.driver.port").toInt),
+        RpcAddress(sparkConf.get(DRIVER_HOST_ADDRESS),
+          sparkConf.get(DRIVER_PORT)),
         YarnSchedulerBackend.ENDPOINT_NAME)
       // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
       registerAM(Utils.localHostName, -1, sparkConf,
