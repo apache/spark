@@ -480,6 +480,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
     when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer((_: InvocationOnMock) =>
+      // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
+      // is updated before we ask the executor allocation client to kill all the executors
+      // on a particular host.
       if (blacklist.nodeBlacklist.contains("hostA")) {
         true
       } else {
@@ -548,6 +551,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
     when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer((_: InvocationOnMock) =>
+      // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
+      // is updated before we ask the executor allocation client to kill all the executors
+      // on a particular host.
       if (blacklist.nodeBlacklist.contains("hostA")) {
         true
       } else {

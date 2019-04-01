@@ -68,14 +68,14 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
     when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
-    doAnswer((invocationOnMock: InvocationOnMock) => {
+    doAnswer { (invocationOnMock: InvocationOnMock) =>
       val tmp = invocationOnMock.getArguments()(3).asInstanceOf[File]
       if (tmp != null) {
         outputFile.delete
         tmp.renameTo(outputFile)
       }
       null
-    }).when(blockResolver)
+    }.when(blockResolver)
       .writeIndexFileAndCommit(anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File]))
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(blockManager.getDiskWriter(

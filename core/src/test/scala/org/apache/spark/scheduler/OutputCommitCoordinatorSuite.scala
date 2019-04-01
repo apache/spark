@@ -97,14 +97,14 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
     val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
-    doAnswer((invoke: InvocationOnMock) => {
+    doAnswer { (invoke: InvocationOnMock) =>
       // Submit the tasks, then force the task scheduler to dequeue the
       // speculated task
       invoke.callRealMethod()
       mockTaskScheduler.backend.reviveOffers()
-    }).when(mockTaskScheduler).submitTasks(any())
+    }.when(mockTaskScheduler).submitTasks(any())
 
-    doAnswer((invoke: InvocationOnMock) => {
+    doAnswer { (invoke: InvocationOnMock) =>
       val taskSet = invoke.getArguments()(0).asInstanceOf[TaskSet]
       new TaskSetManager(mockTaskScheduler, taskSet, 4) {
         private var hasDequeuedSpeculatedTask = false
@@ -119,7 +119,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
           }
         }
       }
-    }).when(mockTaskScheduler).createTaskSetManager(any(), any())
+    }.when(mockTaskScheduler).createTaskSetManager(any(), any())
 
     sc.taskScheduler = mockTaskScheduler
     val dagSchedulerWithMockTaskScheduler = new DAGScheduler(sc, mockTaskScheduler)
