@@ -75,7 +75,6 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
     assert(dataFile.length() === 0)
     assert(context.taskMetrics().shuffleWriteMetrics.bytesWritten === 0)
     assert(context.taskMetrics().shuffleWriteMetrics.recordsWritten === 0)
-
   }
 
   test("write with some records") {
@@ -94,5 +93,6 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
     assert(dataFile.length() !== 0)
     assert(context.taskMetrics().shuffleWriteMetrics.bytesWritten !== 0)
     assert(context.taskMetrics().shuffleWriteMetrics.recordsWritten !== 0)
+    Utils.deleteRecursively(dataFile)
   }
 }
