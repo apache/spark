@@ -73,9 +73,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         // hand side of the join. In case of LeftSemi join, since remaining predicates
         // will be kept as a filter over aggregate, this check is necessary after the left semi join
         // is moved below aggregate. The reason is, for this kind of join, we only output from the
-        // left leg of the join. In case of left anti join, the join is pushed down when
-        // the entire join condition is eligible to be pushdown to preserve the semantics of
-        // left anti join.
+        // left leg of the join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
@@ -87,6 +85,8 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
           if (stayUp.isEmpty) {
             newAgg
           } else {
+            // In case of left anti join, the join is pushed down when the entire join condition
+            // is eligible to be pushed down to preserve the semantics of left anti join.
             joinType match {
               case LeftSemi => Filter(stayUp.reduce(And), newAgg)
               case _ => join
@@ -117,15 +117,17 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         // hand side of the join. In case of LeftSemi join, since remaining predicates
         // will be kept as a filter over aggregate, this check is necessary after the left semi join
         // is moved below aggregate. The reason is, for this kind of join, we only output from the
-        // left leg of the join. In case of left anti join, the join is pushed down when
-        // the entire join condition is eligible to be pushdown to preserve the semantics of
-        // left anti join.
+        // left leg of the join.
         val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
           val predicate = pushDown.reduce(And)
           val newPlan = w.copy(child = Join(w.child, rightOp, joinType, Option(predicate), hint))
-          if (stayUp.isEmpty) newPlan else {
+          if (stayUp.isEmpty) {
+            newPlan
+          } else {
+            // In case of left anti join, the join is pushed down when the entire join condition
+            // is eligible to be pushed down to preserve the semantics of left anti join.
             joinType match {
               case LeftSemi => Filter(stayUp.reduce(And), newPlan)
               case _ => join
