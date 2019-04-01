@@ -1636,7 +1636,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(100, locations: _*)
     val clock = new ManualClock
     // make sure we only do one rack resolution call, for the entire batch of hosts, as this
-    // can be expensive.  the FakeTaskScheduler calls rack resolution more than the real one
+    // can be expensive.  The FakeTaskScheduler calls rack resolution more than the real one
     // -- that is outside of the scope of this test, we just want to check the task set manager.
     FakeRackUtil.numBatchInvocation = 0
     FakeRackUtil.numSingleHostInvocation = 0
@@ -1657,5 +1657,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
           .isDefined)
       }
     }
+    // check no more expensive calls to the rack resolution.  manager.resourceOffer() will call
+    // the single-host resolution, but the real rack resolution would have cached all hosts
+    // by that point.
+    assert(FakeRackUtil.numBatchInvocation === 1)
   }
 }
