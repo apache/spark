@@ -188,8 +188,6 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
       case s: CreateNamedStruct if prunedStructTypes.hasNext =>
         val prunedType = prunedStructTypes.next()
         pruneNamedStruct(s, prunedType)
-
-      case other => other
     }
 
     val transformedSerializer = serializer.transformDown(transformer)
