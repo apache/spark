@@ -852,6 +852,7 @@ private[spark] class TaskSetManager(
           blacklistTracker.foreach(_.updateBlacklistForFetchFailure(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
         }
+
         None
 
       case ef: ExceptionFailure =>

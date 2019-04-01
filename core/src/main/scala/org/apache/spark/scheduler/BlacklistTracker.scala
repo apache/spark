@@ -73,7 +73,6 @@ private[scheduler] class BlacklistTracker (
   private val executorIdToFailureList = new HashMap[String, ExecutorFailureList]()
   val executorIdToBlacklistStatus = new HashMap[String, BlacklistedExecutor]()
   val nodeIdToBlacklistExpiryTime = new HashMap[String, Long]()
-
   /**
    * An immutable copy of the set of nodes that are currently blacklisted.  Kept in an
    * AtomicReference to make [[nodeBlacklist()]] thread-safe.
@@ -203,7 +202,8 @@ private[scheduler] class BlacklistTracker (
 
       if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
         if (!nodeIdToBlacklistExpiryTime.contains(host)) {
-          logInfo(s"Blacklisting node $host due to fetch failure of external shuffle service")
+          logInfo(s"blacklisting node $host due to fetch failure of external shuffle service")
+
           nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
           listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
           _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
