@@ -406,7 +406,7 @@ public class JavaDatasetSuite implements Serializable {
     Encoder<Tuple2<LocalDate, Instant>> encoder =
       Encoders.tuple(Encoders.LOCALDATE(), Encoders.INSTANT());
     List<Tuple2<LocalDate, Instant>> data =
-            Arrays.asList(new Tuple2<>(LocalDate.ofEpochDay(0), Instant.ofEpochSecond(0)));
+      Arrays.asList(new Tuple2<>(LocalDate.ofEpochDay(0), Instant.ofEpochSecond(0)));
     Dataset<Tuple2<LocalDate, Instant>> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
