@@ -87,7 +87,9 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
               if (fileSystem == null) {
                 fileSystem = path.getFileSystem(dstream.ssc.sparkContext.hadoopConfiguration)
               }
-              fileSystem.delete(path, true)
+              if (!fileSystem.delete(path, true)) {
+                logWarning(s"Error deleting old checkpoint file '$file' for time $time")
+              }
               timeToCheckpointFile -= time
               logInfo("Deleted checkpoint file '" + file + "' for time " + time)
             } catch {
