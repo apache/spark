@@ -27,6 +27,7 @@ import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver}
 import org.apache.spark.util.Utils
 
+
 class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with Matchers {
 
   private val shuffleId = 0
@@ -61,6 +62,7 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
   }
 
   test("write empty iterator") {
+    val expected = 0
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
     val writer = new SortShuffleWriter[Int, Int, Int](
       shuffleBlockResolver,
@@ -72,12 +74,13 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 1)
     assert(!dataFile.exists())
-    assert(dataFile.length() === 0)
-    assert(context.taskMetrics().shuffleWriteMetrics.bytesWritten === 0)
-    assert(context.taskMetrics().shuffleWriteMetrics.recordsWritten === 0)
+    assert(dataFile.length() === expected)
+    assert(context.taskMetrics().shuffleWriteMetrics.bytesWritten === expected)
+    assert(context.taskMetrics().shuffleWriteMetrics.recordsWritten === expected)
   }
 
   test("write with some records") {
+    val expected = 0
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
     val records = Iterator((1, 2), (2, 3), (4, 4), (6, 5))
     val writer = new SortShuffleWriter[Int, Int, Int](
@@ -90,9 +93,8 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 2)
     assert(dataFile.exists())
-    assert(dataFile.length() !== 0)
-    assert(context.taskMetrics().shuffleWriteMetrics.bytesWritten !== 0)
-    assert(context.taskMetrics().shuffleWriteMetrics.recordsWritten !== 0)
-    Utils.deleteRecursively(dataFile)
+    assert(dataFile.length() !== expected)
+    assert(context.taskMetrics().shuffleWriteMetrics.bytesWritten !== expected)
+    assert(context.taskMetrics().shuffleWriteMetrics.recordsWritten !== expected)
   }
 }
