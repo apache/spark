@@ -25,7 +25,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString, eq => meq}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -1204,11 +1203,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock(1))
     when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any())).thenAnswer(
-      new Answer[Unit] {
-        override def answer(invocationOnMock: InvocationOnMock): Unit = {
-          assert(manager.isZombie)
-        }
-      })
+      (invocationOnMock: InvocationOnMock) => assert(manager.isZombie))
     val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
     // this would fail, inside our mock dag scheduler, if it calls dagScheduler.taskEnded() too soon
@@ -1331,12 +1326,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Assert the task has been black listed on the executor it was last executed on.
     when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean())).thenAnswer(
-      new Answer[Unit] {
-        override def answer(invocationOnMock: InvocationOnMock): Unit = {
-          val task: Int = invocationOnMock.getArgument(0)
-          assert(taskSetManager.taskSetBlacklistHelperOpt.get.
-            isExecutorBlacklistedForTask(exec, task))
-        }
+      (invocationOnMock: InvocationOnMock) => {
+        val task: Int = invocationOnMock.getArgument(0)
+        assert(taskSetManager.taskSetBlacklistHelperOpt.get.
+          isExecutorBlacklistedForTask(exec, task))
       }
     )
 

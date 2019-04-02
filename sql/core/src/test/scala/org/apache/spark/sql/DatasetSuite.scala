@@ -1195,11 +1195,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       GroupedRoutes("a", "c", Seq(Route("a", "c", 2)))
     )
 
-    implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] = new Ordering[GroupedRoutes] {
-      override def compare(x: GroupedRoutes, y: GroupedRoutes): Int = {
-        x.toString.compareTo(y.toString)
-      }
-    }
+    implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] =
+      (x: GroupedRoutes, y: GroupedRoutes) => x.toString.compareTo(y.toString)
 
     checkDatasetUnorderly(grped, expected: _*)
   }
@@ -1729,6 +1726,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-26690: checkpoints should be executed with an execution id") {
     def assertExecutionId: UserDefinedFunction = udf(AssertExecutionId.apply _)
     spark.range(10).select(assertExecutionId($"id")).localCheckpoint(true)
+  }
+
+  test("implicit encoder for LocalDate and Instant") {
+    val localDate = java.time.LocalDate.of(2019, 3, 30)
+    assert(spark.range(1).map { _ => localDate }.head === localDate)
+
+    val instant = java.time.Instant.parse("2019-03-30T09:54:00Z")
+    assert(spark.range(1).map { _ => instant }.head === instant)
   }
 }
 

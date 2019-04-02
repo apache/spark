@@ -28,7 +28,6 @@ import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
@@ -233,11 +232,8 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     val conf = new SparkConf().set(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT, value)
 
     val cleanupCalled = new AtomicBoolean(false)
-    when(shuffleService.executorRemoved(any[String], any[String])).thenAnswer(new Answer[Unit] {
-      override def answer(invocations: InvocationOnMock): Unit = {
-        cleanupCalled.set(true)
-      }
-    })
+    when(shuffleService.executorRemoved(any[String], any[String])).thenAnswer(
+      (_: InvocationOnMock) => cleanupCalled.set(true))
     val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
       override def get: ExternalShuffleService = shuffleService
     }
@@ -269,11 +265,8 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     val appId = "app1"
     val execId = "exec1"
     val cleanupCalled = new AtomicBoolean(false)
-    when(shuffleService.applicationRemoved(any[String])).thenAnswer(new Answer[Unit] {
-      override def answer(invocations: InvocationOnMock): Unit = {
-        cleanupCalled.set(true)
-      }
-    })
+    when(shuffleService.applicationRemoved(any[String])).thenAnswer(
+      (_: InvocationOnMock) => cleanupCalled.set(true))
     val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
       override def get: ExternalShuffleService = shuffleService
     }
@@ -289,8 +282,8 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     }
     executorDir.setLastModified(System.currentTimeMillis - (1000 * 120))
     worker.receive(WorkDirCleanup)
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      assert(!executorDir.exists() == true)
+    eventually(timeout(1000.milliseconds), interval(10.milliseconds)) {
+      assert(!executorDir.exists())
       assert(cleanupCalled.get() == dbCleanupEnabled)
     }
   }

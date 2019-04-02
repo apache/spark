@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.{Date, NoSuchElementException}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.function.Function
 
 import scala.collection.JavaConverters._
 
@@ -196,7 +195,7 @@ class SQLAppStatusListener(
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
     // This can happen if the UI is requesting this data, and the onExecutionEnd handler is
-    // running at the same time. The metrics calculated for the UI can be innacurate in that
+    // running at the same time. The metrics calculated for the UI can be inaccurate in that
     // case, since the onExecutionEnd handler will clean up tracked stage metrics.
     if (exec.metricsValues != null) {
       exec.metricsValues
@@ -328,9 +327,7 @@ class SQLAppStatusListener(
 
   private def getOrCreateExecution(executionId: Long): LiveExecutionData = {
     liveExecutions.computeIfAbsent(executionId,
-      new Function[Long, LiveExecutionData]() {
-        override def apply(key: Long): LiveExecutionData = new LiveExecutionData(executionId)
-      })
+      (_: Long) => new LiveExecutionData(executionId))
   }
 
   private def update(exec: LiveExecutionData, force: Boolean = false): Unit = {
