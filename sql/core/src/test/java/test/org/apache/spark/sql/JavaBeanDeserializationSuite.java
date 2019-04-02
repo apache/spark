@@ -516,29 +516,29 @@ public class JavaBeanDeserializationSuite implements Serializable {
   }
 
   @Test
-  public void testSpark30() {
+  public void testBeanWithLocalDateAndInstant() {
     String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_ENABLED().key());
     try {
       spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), "true");
       List<Row> inputRows = new ArrayList<>();
-      List<RecordSpark30> expectedRecords = new ArrayList<>();
+      List<LocalDateInstantRecord> expectedRecords = new ArrayList<>();
 
       for (long idx = 0 ; idx < 5 ; idx++) {
-        Row row = createRecordSpark30Row(idx);
+        Row row = createLocalDateInstantRow(idx);
         inputRows.add(row);
-        expectedRecords.add(createRecordSpark30(row));
+        expectedRecords.add(createLocalDateInstantRecord(row));
       }
 
-      Encoder<RecordSpark30> encoder = Encoders.bean(RecordSpark30.class);
+      Encoder<LocalDateInstantRecord> encoder = Encoders.bean(LocalDateInstantRecord.class);
 
       StructType schema = new StructType()
         .add("localDateField", DataTypes.DateType)
         .add("instantField", DataTypes.TimestampType);
 
       Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
-      Dataset<RecordSpark30> dataset = dataFrame.as(encoder);
+      Dataset<LocalDateInstantRecord> dataset = dataFrame.as(encoder);
 
-      List<RecordSpark30> records = dataset.collectAsList();
+      List<LocalDateInstantRecord> records = dataset.collectAsList();
 
       Assert.assertEquals(expectedRecords, records);
     } finally {
@@ -546,11 +546,11 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
   }
 
-  public static final class RecordSpark30 {
+  public static final class LocalDateInstantRecord {
     private String localDateField;
     private String instantField;
 
-    public RecordSpark30() { }
+    public LocalDateInstantRecord() { }
 
     public String getLocalDateField() {
       return localDateField;
@@ -572,7 +572,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
-      RecordSpark30 that = (RecordSpark30) o;
+      LocalDateInstantRecord that = (LocalDateInstantRecord) o;
       return Objects.equals(localDateField, that.localDateField) &&
         Objects.equals(instantField, that.instantField);
     }
@@ -591,13 +591,13 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
   }
 
-  private static Row createRecordSpark30Row(Long index) {
+  private static Row createLocalDateInstantRow(Long index) {
     Object[] values = new Object[] { LocalDate.ofEpochDay(42), Instant.ofEpochSecond(42) };
     return new GenericRow(values);
   }
 
-  private static RecordSpark30 createRecordSpark30(Row recordRow) {
-    RecordSpark30 record = new RecordSpark30();
+  private static LocalDateInstantRecord createLocalDateInstantRecord(Row recordRow) {
+    LocalDateInstantRecord record = new LocalDateInstantRecord();
     record.setLocalDateField(String.valueOf(recordRow.getLocalDate(0)));
     Instant instant = recordRow.getInstant(1);
     TimestampFormatter formatter = TimestampFormatter.getFractionFormatter(
