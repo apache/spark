@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources.v1.file
 
 import java.util.{LinkedHashMap => JLinkedHashMap}
 import java.util.Map.Entry
@@ -26,7 +26,8 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
+import org.apache.spark.sql.execution.streaming.{CompactibleFileStreamLog, HDFSMetadataLog}
+import org.apache.spark.sql.execution.streaming.sources.v1.file.FileStreamSource.FileEntry
 import org.apache.spark.sql.internal.SQLConf
 
 class FileStreamSourceLog(

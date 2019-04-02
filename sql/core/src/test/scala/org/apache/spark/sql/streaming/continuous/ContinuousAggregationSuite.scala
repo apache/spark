@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming.continuous
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode
 

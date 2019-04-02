@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.sources
+package org.apache.spark.sql.execution.streaming.sources.v2.rate
 
 import java.io._
 import java.nio.charset.StandardCharsets

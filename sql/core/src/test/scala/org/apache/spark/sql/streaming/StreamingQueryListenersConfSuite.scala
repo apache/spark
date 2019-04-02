@@ -23,6 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.MemoryStream
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 
 

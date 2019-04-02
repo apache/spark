@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.sources
+package org.apache.spark.sql.execution.streaming.sources.v2.console
 
 import scala.collection.mutable
 

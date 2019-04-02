@@ -30,7 +30,9 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
-import org.apache.spark.sql.execution.streaming.sources._
+import org.apache.spark.sql.execution.streaming.sources.v1.foreach.ForeachBatchSink
+import org.apache.spark.sql.execution.streaming.sources.v2.foreach.ForeachWriterTable
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.{MemoryPlan, MemoryPlanV2, MemorySink, MemorySinkV2}
 import org.apache.spark.sql.sources.v2.{SupportsStreamingWrite, TableProvider}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 

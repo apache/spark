@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.MemoryStream
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.StreamTest
 

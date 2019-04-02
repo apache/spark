@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Log
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.{RateControlMicroBatchStream, WriteToMicroBatchDataSource}
+import org.apache.spark.sql.execution.streaming.sources.v2.WriteToMicroBatchDataSource
+import org.apache.spark.sql.execution.streaming.sources.v2.rate.RateControlMicroBatchStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}

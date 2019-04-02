@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources.v1.console
 
 import java.util
 import java.util.Collections
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
+import org.apache.spark.sql.execution.streaming.sources.v2.console.ConsoleWrite
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.writer.{SupportsTruncate, WriteBuilder}

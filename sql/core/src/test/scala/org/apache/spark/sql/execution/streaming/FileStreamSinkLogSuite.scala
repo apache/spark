@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.streaming.sources.v1.file.{FileStreamSinkLog, SinkFileStatus}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 

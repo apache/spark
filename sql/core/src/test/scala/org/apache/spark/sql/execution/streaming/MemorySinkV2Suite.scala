@@ -21,8 +21,8 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.streaming.sources._
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.{MemoryDataWriter, MemorySinkV2, MemoryStreamingWrite, MemoryWriterCommitMessage}
+import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.StructType
 
 class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {

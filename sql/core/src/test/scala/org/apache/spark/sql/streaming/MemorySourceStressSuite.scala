@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.MemoryStream
 
 class MemorySourceStressSuite extends StreamTest {
   import testImplicits._

@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.ForeachWriter
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.MemoryStream
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext

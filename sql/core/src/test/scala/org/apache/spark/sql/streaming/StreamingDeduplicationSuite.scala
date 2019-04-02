@@ -21,7 +21,8 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
+import org.apache.spark.sql.execution.streaming.StreamingDeduplicateExec
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf

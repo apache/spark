@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle,
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.{MemorySink, MemoryStream}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.InputPartition

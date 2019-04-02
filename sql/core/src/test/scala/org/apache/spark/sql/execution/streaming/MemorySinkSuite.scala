@@ -22,6 +22,7 @@ import scala.language.implicitConversions
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.{MemoryPlan, MemorySink, MemoryStream}
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils

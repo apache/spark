@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources.v1.file
 
 import scala.util.control.Exception._
 
+import org.apache.spark.sql.execution.streaming._
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 

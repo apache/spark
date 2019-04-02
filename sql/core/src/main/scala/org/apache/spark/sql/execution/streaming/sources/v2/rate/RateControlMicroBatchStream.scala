@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.sources
+package org.apache.spark.sql.execution.streaming.sources.v2.rate
 
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
 

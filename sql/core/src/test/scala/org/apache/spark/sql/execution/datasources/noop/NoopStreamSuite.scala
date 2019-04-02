@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.noop
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.sources.v2.memory.MemoryStream
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 
 class NoopStreamSuite extends StreamTest {
