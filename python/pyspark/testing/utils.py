@@ -103,7 +103,7 @@ class ByteArrayOutput(object):
         pass
 
 
-def search_jar(project_relative_path, jar_name_prefix):
+def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     project_full_path = os.path.join(
         os.environ["SPARK_HOME"], project_relative_path)
 
@@ -113,9 +113,9 @@ def search_jar(project_relative_path, jar_name_prefix):
     # Search jar in the project dir using the jar name_prefix for both sbt build and maven
     # build because the artifact jars are in different directories.
     sbt_build = glob.glob(os.path.join(
-        project_full_path, "target/scala-*/%s-*.jar" % jar_name_prefix))
+        project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix))
     maven_build = glob.glob(os.path.join(
-        project_full_path, "target/%s_*.jar" % jar_name_prefix))
+        project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
     jar_paths = sbt_build + maven_build
     jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
 
