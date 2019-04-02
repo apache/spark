@@ -2,6 +2,21 @@
 layout: global
 title: Monitoring and Instrumentation
 description: Monitoring, metrics, and instrumentation guide for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 There are several ways to monitor Spark applications: web UIs, metrics, and external instrumentation.
@@ -948,7 +963,7 @@ This is the component with the largest amount of instrumented metrics
   - LongAccumulatorSource
 
 - namespace=spark.streaming
-  - **note** applies to Spark Structured Streaming only. Conditional to a configuration
+  - **note:** This applies to Spark Structured Streaming only. Conditional to a configuration
   parameter: `spark.sql.streaming.metricsEnabled=true` (default is false) 
   - eventTime-watermark
   - inputRate-total
@@ -1076,7 +1091,7 @@ Note: applies when running in Spark standalone as worker
 - coresFree
 - memFree_MB
 
-## Component instance = shuffleService
+### Component instance = shuffleService
 Note: applies to the shuffle service
 
 - blockTransferRateBytes (meter)

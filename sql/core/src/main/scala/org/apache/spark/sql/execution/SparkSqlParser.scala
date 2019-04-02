@@ -373,7 +373,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[DescribeQueryCommand]] logical command.
    */
   override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
-    DescribeQueryCommand(visitQueryToDesc(ctx.queryToDesc()))
+    DescribeQueryCommand(visitQuery(ctx.query))
   }
 
   /**
@@ -1257,15 +1257,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (ctx.identifierList != null) {
       operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
     } else {
-      // CREATE VIEW ... AS INSERT INTO is not allowed.
-      ctx.query.queryNoWith match {
-        case s: SingleInsertQueryContext if s.insertInto != null =>
-          operationNotAllowed("CREATE VIEW ... AS INSERT INTO", ctx)
-        case _: MultiInsertQueryContext =>
-          operationNotAllowed("CREATE VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)
-        case _ => // OK
-      }
-
       val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
         icl.identifierComment.asScala.map { ic =>
           ic.identifier.getText -> Option(ic.STRING).map(string)
@@ -1302,14 +1293,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
-    // ALTER VIEW ... AS INSERT INTO is not allowed.
-    ctx.query.queryNoWith match {
-      case s: SingleInsertQueryContext if s.insertInto != null =>
-        operationNotAllowed("ALTER VIEW ... AS INSERT INTO", ctx)
-      case _: MultiInsertQueryContext =>
-        operationNotAllowed("ALTER VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)
-      case _ => // OK
-    }
     AlterViewAsCommand(
       name = visitTableIdentifier(ctx.tableIdentifier),
       originalText = source(ctx.query),

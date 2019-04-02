@@ -17,12 +17,9 @@
 
 package org.apache.spark.executor
 
-import java.lang.management.ManagementFactory
 import java.util.concurrent.ThreadPoolExecutor
-import javax.management.{MBeanServer, ObjectName}
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.hadoop.fs.FileSystem

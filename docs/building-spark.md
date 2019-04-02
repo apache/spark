@@ -2,6 +2,21 @@
 layout: global
 title: Building Spark
 redirect_from: "building-with-maven.html"
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -13,7 +28,7 @@ redirect_from: "building-with-maven.html"
 
 The Maven-based build is the build of reference for Apache Spark.
 Building Spark using Maven requires Maven 3.6.0 and Java 8.
-Note that support for Java 7 was removed as of Spark 2.2.0.
+Spark requires Scala 2.12; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
 
@@ -246,17 +261,18 @@ or
 
 ## Change Scala Version
 
-To build Spark using another supported Scala version, please change the major Scala version using (e.g. 2.11):
+When other versions of Scala like 2.13 are supported, it will be possible to build for that version.
+Change the major Scala version using (e.g. 2.13):
 
-    ./dev/change-scala-version.sh 2.11
+    ./dev/change-scala-version.sh 2.13
 
-For Maven, please enable the profile (e.g. 2.11):
+For Maven, please enable the profile (e.g. 2.13):
 
-    ./build/mvn -Pscala-2.11 compile
+    ./build/mvn -Pscala-2.13 compile
 
-For SBT, specify a complete scala version using (e.g. 2.11.12):
+For SBT, specify a complete scala version using (e.g. 2.13.0):
 
-    ./build/sbt -Dscala.version=2.11.12
+    ./build/sbt -Dscala.version=2.13.0
 
 Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
 

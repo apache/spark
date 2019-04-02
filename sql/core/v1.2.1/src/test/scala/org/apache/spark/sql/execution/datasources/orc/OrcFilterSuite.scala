@@ -89,34 +89,6 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
 
-  protected def checkNoFilterPredicate
-      (predicate: Predicate, noneSupported: Boolean = false)
-      (implicit df: DataFrame): Unit = {
-    val output = predicate.collect { case a: Attribute => a }.distinct
-    val query = df
-      .select(output.map(e => Column(e)): _*)
-      .where(Column(predicate))
-
-    query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters,
-      DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
-        assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        val scanBuilder = orcTable.newScanBuilder(options)
-        scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
-        val pushedFilters = scanBuilder.pushedFilters()
-        if (noneSupported) {
-          assert(pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
-        } else {
-          assert(pushedFilters.nonEmpty, "No filter is pushed down")
-          val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
-          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for $pushedFilters")
-        }
-
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
-    }
-  }
-
   test("filter pushdown - integer") {
     withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
       checkFilterPredicate('_1.isNull, PredicateLeaf.Operator.IS_NULL)

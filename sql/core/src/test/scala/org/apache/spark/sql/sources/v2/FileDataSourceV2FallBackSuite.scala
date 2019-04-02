@@ -31,7 +31,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
-  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
+  override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
 
   override def shortName(): String = "parquet"
 
@@ -55,7 +55,7 @@ class DummyReadOnlyFileTable extends Table with SupportsRead {
 
 class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
-  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
+  override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
 
   override def shortName(): String = "parquet"
 

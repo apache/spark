@@ -112,18 +112,29 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val query = plan(ctx.queryNoWith)
 
     // Apply CTEs
-    query.optional(ctx.ctes) {
-      val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
-        val namedQuery = visitNamedQuery(nCtx)
-        (namedQuery.alias, namedQuery)
-      }
-      // Check for duplicate names.
-      checkDuplicateKeys(ctes, ctx)
-      With(query, ctes)
-    }
+    query.optionalMap(ctx.ctes)(withCTE)
   }
 
-  override def visitQueryToDesc(ctx: QueryToDescContext): LogicalPlan = withOrigin(ctx) {
+  private def withCTE(ctx: CtesContext, plan: LogicalPlan): LogicalPlan = {
+    val ctes = ctx.namedQuery.asScala.map { nCtx =>
+      val namedQuery = visitNamedQuery(nCtx)
+      (namedQuery.alias, namedQuery)
+    }
+    // Check for duplicate names.
+    checkDuplicateKeys(ctes, ctx)
+    With(plan, ctes)
+  }
+
+  override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
+    val from = visitFromClause(ctx.fromClause)
+    validate(ctx.selectStatement.querySpecification.fromClause == null,
+      "Individual select statement can not have FROM cause as its already specified in the" +
+        " outer query block", ctx)
+    withQuerySpecification(ctx.selectStatement.querySpecification, from).
+      optionalMap(ctx.selectStatement.queryOrganization)(withQueryResultClauses)
+  }
+
+  override def visitNoWithQuery(ctx: NoWithQueryContext): LogicalPlan = withOrigin(ctx) {
     plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
   }
 
@@ -156,24 +167,49 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val from = visitFromClause(ctx.fromClause)
 
     // Build the insert clauses.
-    val inserts = ctx.multiInsertQueryBody.asScala.map {
+    val inserts = ctx.multiInsertQueryBody().asScala.map {
+      body =>
+        validate(body.selectStatement.querySpecification.fromClause == null,
+          "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
+          body)
+
+       withInsertInto(body.insertInto,
+         withQuerySpecification(body.selectStatement.querySpecification, from).
+           // Add organization statements.
+           optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses))
+    }
+
+    // If there are multiple INSERTS just UNION them together into one query.
+    val insertPlan = inserts match {
+      case Seq(query) => query
+      case queries => Union(queries)
+    }
+    // Apply CTEs
+    insertPlan.optionalMap(ctx.ctes)(withCTE)
+  }
+
+  override def visitMultiSelect(ctx: MultiSelectContext): LogicalPlan = withOrigin(ctx) {
+    val from = visitFromClause(ctx.fromClause)
+
+    // Build the insert clauses.
+    val selects = ctx.selectStatement.asScala.map {
       body =>
         validate(body.querySpecification.fromClause == null,
-          "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
+          "Multi-select queries cannot have a FROM clause in their individual SELECT statements",
           body)
 
         withQuerySpecification(body.querySpecification, from).
           // Add organization statements.
-          optionalMap(body.queryOrganization)(withQueryResultClauses).
-          // Add insert.
-          optionalMap(body.insertInto())(withInsertInto)
+          optionalMap(body.queryOrganization)(withQueryResultClauses)
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
-    inserts match {
+    val selectUnionPlan = selects match {
       case Seq(query) => query
       case queries => Union(queries)
     }
+    // Apply CTEs
+    selectUnionPlan.optionalMap(ctx.ctes)(withCTE)
   }
 
   /**
@@ -181,11 +217,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryTerm).
-      // Add organization statements.
-      optionalMap(ctx.queryOrganization)(withQueryResultClauses).
-      // Add insert.
-      optionalMap(ctx.insertInto())(withInsertInto)
+    val insertPlan = withInsertInto(ctx.insertInto(),
+        plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses))
+    // Apply CTEs
+    insertPlan.optionalMap(ctx.ctes)(withCTE)
   }
 
   /**

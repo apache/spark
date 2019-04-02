@@ -27,8 +27,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class CSVWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
-  extends FileWriteBuilder(options, paths) {
+class CSVWriteBuilder(
+    options: CaseInsensitiveStringMap,
+    paths: Seq[String],
+    formatName: String,
+    supportsDataType: DataType => Boolean)
+  extends FileWriteBuilder(options, paths, formatName, supportsDataType) {
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
@@ -56,10 +60,4 @@ class CSVWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
       }
     }
   }
-
-  override def supportsDataType(dataType: DataType): Boolean = {
-    CSVDataSourceV2.supportsDataType(dataType)
-  }
-
-  override def formatName: String = "CSV"
 }
