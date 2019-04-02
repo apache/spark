@@ -456,7 +456,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 }
 
 private[kafka010] object KafkaSourceProvider extends Logging {
-  private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
+  private val STRATEGY_OPTION_KEYS = Set(SUBSCRIBE, SUBSCRIBEPATTERN, ASSIGN)
   private val ASSIGN = "assign"
   private val SUBSCRIBEPATTERN = "subscribepattern"
   private val SUBSCRIBE = "subscribe"
