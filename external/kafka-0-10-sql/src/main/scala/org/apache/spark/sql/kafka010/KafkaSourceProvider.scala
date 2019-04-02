@@ -184,11 +184,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
       caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
-    case ("assign", value) =>
+    case (ASSIGN, value) =>
       AssignStrategy(JsonUtils.partitions(value))
-    case ("subscribe", value) =>
+    case (SUBSCRIBE, value) =>
       SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
-    case ("subscribepattern", value) =>
+    case (SUBSCRIBEPATTERN, value) =>
       SubscribePatternStrategy(value.trim())
     case _ =>
       // Should never reach here as we are already matching on
@@ -216,22 +216,22 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     val strategy = caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
-      case ("assign", value) =>
+      case (ASSIGN, value) =>
         if (!value.trim.startsWith("{")) {
           throw new IllegalArgumentException(
             "No topicpartitions to assign as specified value for option " +
               s"'assign' is '$value'")
         }
 
-      case ("subscribe", value) =>
+      case (SUBSCRIBE, value) =>
         val topics = value.split(",").map(_.trim).filter(_.nonEmpty)
         if (topics.isEmpty) {
           throw new IllegalArgumentException(
             "No topics to subscribe to as specified value for option " +
               s"'subscribe' is '$value'")
         }
-      case ("subscribepattern", value) =>
-        val pattern = caseInsensitiveParams("subscribepattern").trim()
+      case (SUBSCRIBEPATTERN, value) =>
+        val pattern = caseInsensitiveParams(SUBSCRIBEPATTERN).trim()
         if (pattern.isEmpty) {
           throw new IllegalArgumentException(
             "Pattern to subscribe is empty as specified value for option " +
@@ -347,7 +347,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     validateGeneralOptions(caseInsensitiveParams)
 
     // Don't want to throw an error, but at least log a warning.
-    if (caseInsensitiveParams.get("maxoffsetspertrigger").isDefined) {
+    if (caseInsensitiveParams.get(MAX_OFFSET_PER_TRIGGER.key).isDefined) {
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
   }
@@ -457,10 +457,14 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
 private[kafka010] object KafkaSourceProvider extends Logging {
   private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
+  private val ASSIGN = "assign"
+  private val SUBSCRIBEPATTERN = "subscribepattern"
+  private val SUBSCRIBE = "subscribe"
+
   private[kafka010] val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
-  private val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
+  private[kafka010] val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
   private val GROUP_ID_PREFIX = "groupidprefix"
 
   val TOPIC_OPTION_KEY = "topic"

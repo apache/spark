@@ -38,7 +38,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private lazy val cacheExpireTimeout: Long =
     Option(SparkEnv.get).map(_.conf.getTimeAsMs(
-      "spark.kafka.producer.cache.timeout",
+      PRODUCER_CACHE_TIMEOUT.key,
       s"${defaultCacheExpireTimeout}ms")).getOrElse(defaultCacheExpireTimeout)
 
   private val cacheLoader = new CacheLoader[Seq[(String, Object)], Producer] {

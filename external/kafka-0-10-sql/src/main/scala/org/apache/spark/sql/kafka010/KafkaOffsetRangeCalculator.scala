@@ -92,7 +92,8 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 private[kafka010] object KafkaOffsetRangeCalculator {
 
   def apply(options: CaseInsensitiveStringMap): KafkaOffsetRangeCalculator = {
-    val optionalValue = Option(options.get("minPartitions")).map(_.toInt)
+    val optionalValue = Option(options.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY))
+      .map(_.toInt)
     new KafkaOffsetRangeCalculator(optionalValue)
   }
 }

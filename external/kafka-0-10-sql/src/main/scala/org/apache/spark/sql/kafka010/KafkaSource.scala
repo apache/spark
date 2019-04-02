@@ -84,12 +84,12 @@ private[kafka010] class KafkaSource(
   private val sc = sqlContext.sparkContext
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
-    "kafkaConsumer.pollTimeoutMs",
-    (sc.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L).toString
+    CONSUMER_POLL_TIMEOUT.key,
+    (sc.conf.getTimeAsSeconds(NETWORK_TIMEOUT.key, "120s") * 1000L).toString
   ).toLong
 
   private val maxOffsetsPerTrigger =
-    sourceOptions.get("maxOffsetsPerTrigger").map(_.toLong)
+    sourceOptions.get(MAX_OFFSET_PER_TRIGGER.key).map(_.toLong)
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only

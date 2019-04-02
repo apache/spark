@@ -523,7 +523,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   //   tasks simultaneously using consumers than the capacity.
   private lazy val cache = {
     val conf = SparkEnv.get.conf
-    val capacity = conf.getInt("spark.sql.kafkaConsumerCache.capacity", 64)
+    val capacity = conf.getInt(CONSUMER_CACHE_CAPACITY.key, 64)
     new ju.LinkedHashMap[CacheKey, InternalKafkaConsumer](capacity, 0.75f, true) {
       override def removeEldestEntry(
         entry: ju.Map.Entry[CacheKey, InternalKafkaConsumer]): Boolean = {
