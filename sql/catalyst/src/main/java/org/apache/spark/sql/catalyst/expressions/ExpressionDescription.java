@@ -45,8 +45,8 @@ import java.lang.annotation.RetentionPolicy;
  * `deprecated()` contains deprecation information for the expression optionally, for example,
  * "Deprecated since 2.2.0. Use something else instead".
  *
- * The format, in particular for `arguments()`, `examples()`,`note()`, `since()`, `deprecated()`,
- * should strictly be as follows.
+ * The format, in particular for `arguments()`, `examples()`,`note()`, `since()` and
+ * `deprecated()`, should strictly be as follows.
  *
  * <pre>
  * <code>@ExpressionDescription(
