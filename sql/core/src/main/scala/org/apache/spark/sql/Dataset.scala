@@ -2151,6 +2151,11 @@ class Dataset[T] private[sql](
    * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
    * error to add a column that refers to some other Dataset.
    *
+   * Please notice that this method introduces a `Project`. This means that using it in loops in
+   * order to add several columns can generate very big plans which can cause huge performance
+   * issues and even `StackOverflowException`s. A much better alternative use `select` with the
+   * list of columns to add.
+   *
    * @group untypedrel
    * @since 2.0.0
    */
