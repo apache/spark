@@ -106,7 +106,7 @@ public class ExpressionInfo {
             this.extended = "\n    No example/argument for _FUNC_.\n";
         }
         if (!note.isEmpty()) {
-            if (!note.substring(1).startsWith("    ") || !note.endsWith("  ")) {
+            if (!note.contains("    ") || !note.endsWith("  ")) {
                 throw new IllegalArgumentException("'note' is malformed in the expression [" +
                     this.name + "]. It should start with a newline and 4 leading spaces; end " +
                     "with a newline and two spaces; however, got [" + note + "].");
@@ -122,7 +122,7 @@ public class ExpressionInfo {
             this.extended += "\n    Since: " + since + "\n";
         }
         if (!deprecated.isEmpty()) {
-            if (!deprecated.substring(1).startsWith("    ") || !deprecated.endsWith("  ")) {
+            if (!deprecated.contains("    ") || !deprecated.endsWith("  ")) {
                 throw new IllegalArgumentException("'deprecated' is malformed in the " +
                     "expression [" + this.name + "]. It should start with a newline and 4 " +
                     "leading spaces; end with a newline and two spaces; however, got [" +
