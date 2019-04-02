@@ -106,15 +106,28 @@ public class ExpressionInfo {
             this.extended = "\n    No example/argument for _FUNC_.\n";
         }
         if (!note.isEmpty()) {
-            assert note.startsWith("    ") && note.endsWith(System.lineSeparator());
+            if (!note.substring(1).startsWith("    ") || !note.endsWith("  ")) {
+                throw new IllegalArgumentException("'note' is malformed in the expression [" +
+                    this.name + "]. It should start with a newline and 4 leading spaces; end " +
+                    "with a newline and two spaces; however, got [" + note + "].");
+            }
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
         }
         if (!since.isEmpty()) {
-            assert Integer.parseInt(since.split("\\.")[0]) >= 0;
+            if (Integer.parseInt(since.split("\\.")[0]) < 0) {
+                throw new IllegalArgumentException("'since' is malformed in the expression [" +
+                    this.name + "]. It should not start with a negative number; however, " +
+                    "got [" + since + "].");
+            }
             this.extended += "\n    Since: " + since + "\n";
         }
         if (!deprecated.isEmpty()) {
-            assert deprecated.startsWith("    ") && deprecated.endsWith(System.lineSeparator());
+            if (!deprecated.substring(1).startsWith("    ") || !deprecated.endsWith("  ")) {
+                throw new IllegalArgumentException("'deprecated' is malformed in the " +
+                    "expression [" + this.name + "]. It should start with a newline and 4 " +
+                    "leading spaces; end with a newline and two spaces; however, got [" +
+                    deprecated + "].");
+            }
             this.extended += "\n    Deprecated:\n      " + deprecated.trim() + "\n";
         }
     }
