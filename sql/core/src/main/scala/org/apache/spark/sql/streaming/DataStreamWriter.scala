@@ -311,10 +311,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
       val sink = if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
         val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          source = provider, conf = df.sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions
-        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        val dsOptions = DataSourceV2Utils.extractSessionConfigs(
+          provider, df.sparkSession.sessionState.conf, extraOptions.toMap)
         provider.getTable(dsOptions) match {
           case s: SupportsStreamingWrite => s
           case _ => createV1Sink()

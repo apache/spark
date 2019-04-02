@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.Locale
 import java.util.regex.Pattern
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.{SessionConfigSupport, TableProvider}
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability.{BATCH_READ, BATCH_WRITE}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] object DataSourceV2Utils extends Logging {
 
@@ -38,10 +42,15 @@ private[sql] object DataSourceV2Utils extends Logging {
    *
    * @param source a [[TableProvider]] object
    * @param conf the session conf
-   * @return an immutable map that contains all the extracted and transformed k/v pairs.
+   * @param extraOptions extra options will append to the extracted config
+   * @return an case insensitive immutable map that contains all the extracted and transformed
+   *         k/v pairs.
    */
-  def extractSessionConfigs(source: TableProvider, conf: SQLConf): Map[String, String] = {
-    source match {
+  def extractSessionConfigs(
+      source: TableProvider,
+      conf: SQLConf,
+      extraOptions: Map[String, String]): CaseInsensitiveStringMap = {
+    val extracted = source match {
       case cs: SessionConfigSupport =>
         val keyPrefix = cs.keyPrefix()
         require(keyPrefix != null, "The data source config key prefix can't be null.")
@@ -59,25 +68,96 @@ private[sql] object DataSourceV2Utils extends Logging {
 
       case _ => Map.empty
     }
+
+    val options = extracted ++ extraOptions
+    new CaseInsensitiveStringMap(options.asJava)
   }
 
   /**
    * Use to determine whether this source is a v2 source.
    * @return the class of v2 source if this is a v2 source, else return None.
    */
-  def isV2Source(
-      source: String,
-      spark: SparkSession): Option[Class[_]] = {
-    val useV1Sources =
-      spark.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
-    val lookupCls = DataSource.lookupDataSource(source, spark.sessionState.conf)
+  def isV2Source(sparkSession: SparkSession, source: String): Option[Class[_]] = {
+    val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     val cls = lookupCls.newInstance() match {
-      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
-        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
-        f.fallBackFileFormat
+      // `providingClass` is used for resolving data source relation for catalog tables.
+      // As now catalog for data source V2 is under development, here we fall back all the
+      // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
+      // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
+      // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
+      // instead of `providingClass`.
+      case f: FileDataSourceV2 => f.fallBackFileFormat
       case _ => lookupCls
     }
 
     Some(cls).filter(classOf[TableProvider].isAssignableFrom)
+  }
+
+  def getBatchWriteTable(
+      sparkSession: SparkSession,
+      schema: Option[StructType],
+      cls: Class[_],
+      options: CaseInsensitiveStringMap): Option[SupportsWrite] = {
+    val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    val table = schema match {
+      case Some(schema) => provider.getTable(options, schema)
+      case _ => provider.getTable(options)
+    }
+
+    table match {
+      case writeTable: SupportsWrite if table.supports(BATCH_WRITE) => Some(writeTable)
+      case _ => None
+    }
+  }
+
+  def shouldWriteWithV2(
+      sparkSession: SparkSession,
+      schema: Option[StructType],
+      source: String,
+      extraOptions: Map[String, String]): Boolean = {
+    val cls = isV2Source(sparkSession, source)
+    if (cls.nonEmpty) {
+      val provider = cls.get.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val options = extractSessionConfigs(provider, sparkSession.sessionState.conf, extraOptions)
+      val table = getBatchWriteTable(sparkSession, schema, cls.get, options)
+      return table.nonEmpty
+    }
+
+    false
+  }
+
+  def shouldReadWithV2(
+      sparkSession: SparkSession,
+      schema: Option[StructType],
+      source: String,
+      extraOptions: Map[String, String]): Boolean = {
+    val cls = isV2Source(sparkSession, source)
+    if (cls.nonEmpty) {
+      val provider = cls.get.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val options = extractSessionConfigs(provider, sparkSession.sessionState.conf, extraOptions)
+      val table = getBatchReadTable(sparkSession, schema, cls.get, options)
+      return table.nonEmpty
+    }
+
+    false
+  }
+
+  def getBatchReadTable(
+      sparkSession: SparkSession,
+      schema: Option[StructType],
+      cls: Class[_],
+      options: CaseInsensitiveStringMap): Option[SupportsRead] = {
+    val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+    val table = schema match {
+      case Some(schema) => provider.getTable(options, schema)
+      case _ => provider.getTable(options)
+    }
+
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    table match {
+      case readTable: SupportsRead if table.supports(BATCH_READ) => Some(readTable)
+      case _ => None
+    }
   }
 }

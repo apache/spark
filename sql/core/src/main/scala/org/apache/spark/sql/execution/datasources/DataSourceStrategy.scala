@@ -245,17 +245,38 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
-        if DDLUtils.isDatasourceTable(tableMeta) &&
-          DataSourceV2Utils.isV2Source(tableMeta.provider.get, sparkSession).isEmpty =>
-      i.copy(table = readDataSourceTable(tableMeta))
+        if DDLUtils.isDatasourceTable(tableMeta) =>
+      val pathOption = tableMeta.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+      val shouldReadInV2 = DataSourceV2Utils.shouldReadWithV2(
+        sparkSession,
+        Option(tableMeta.schema),
+        tableMeta.provider.get,
+        pathOption.toMap)
+
+      if (shouldReadInV2) {
+        i
+      } else {
+        i.copy(table = readDataSourceTable(tableMeta))
+      }
 
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if !DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
-    case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) &&
-        DataSourceV2Utils.isV2Source(tableMeta.provider.get, sparkSession).isEmpty =>
-      readDataSourceTable(tableMeta)
+    case unresolved @ UnresolvedCatalogRelation(tableMeta)
+        if DDLUtils.isDatasourceTable(tableMeta) =>
+      val pathOption = tableMeta.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+      val shouldReadInV2 = DataSourceV2Utils.shouldReadWithV2(
+        sparkSession,
+        Option(tableMeta.schema),
+        tableMeta.provider.get,
+        pathOption.toMap)
+
+      if (shouldReadInV2) {
+        unresolved
+      } else {
+        readDataSourceTable(tableMeta)
+      }
 
     case UnresolvedCatalogRelation(tableMeta) if !DDLUtils.isDatasourceTable(tableMeta) =>
       DDLUtils.readHiveTable(tableMeta)

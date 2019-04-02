@@ -187,6 +187,23 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       }
     }
   }
+
+  test("Create table as select with v2 data source") {
+    withTable("t") {
+      withTempDir { dir =>
+        val path = new File(dir, "test")
+        val source = classOf[SimpleWritableDataSource]
+        spark.range(0, 10).toDF("id").createOrReplaceTempView("tmp_table")
+        spark.sql(s"CREATE TABLE t (id Long) USING ${source.getName} " +
+          s"LOCATION '${path.toURI}'")
+
+        spark.sql("INSERT INTO TABLE t SELECT id FROM tmp_table")
+
+        val table = spark.table("t")
+        assert(table.count() === 10)
+      }
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {

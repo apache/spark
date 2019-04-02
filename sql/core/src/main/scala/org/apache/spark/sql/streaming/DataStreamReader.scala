@@ -173,10 +173,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     }
     ds match {
       case provider: TableProvider =>
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          source = provider, conf = sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions
-        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        val dsOptions = DataSourceV2Utils.extractSessionConfigs(
+          provider, sparkSession.sessionState.conf, extraOptions.toMap)
         val table = userSpecifiedSchema match {
           case Some(schema) => provider.getTable(dsOptions, schema)
           case _ => provider.getTable(dsOptions)

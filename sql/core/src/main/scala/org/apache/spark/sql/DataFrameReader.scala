@@ -194,12 +194,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val clsOpt = DataSourceV2Utils.isV2Source(source, sparkSession)
+    val clsOpt = DataSourceV2Utils.isV2Source(sparkSession, source)
 
     if (clsOpt.nonEmpty) {
       val provider = clsOpt.get.getConstructor().newInstance().asInstanceOf[TableProvider]
-      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        source = provider, conf = sparkSession.sessionState.conf)
       val pathsOption = if (paths.isEmpty) {
         None
       } else {
@@ -207,15 +205,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
 
-      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
-      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-      val table = userSpecifiedSchema match {
-        case Some(schema) => provider.getTable(dsOptions, schema)
-        case _ => provider.getTable(dsOptions)
-      }
+      val dsOptions = DataSourceV2Utils.extractSessionConfigs(
+        provider, sparkSession.sessionState.conf, extraOptions.toMap ++ pathsOption)
+
+      val readTable = DataSourceV2Utils.getBatchReadTable(sparkSession,
+        userSpecifiedSchema, clsOpt.get, dsOptions)
+
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      table match {
-        case _: SupportsRead if table.supports(BATCH_READ) =>
+      readTable match {
+        case Some(table) if table.supports(BATCH_READ) =>
           Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
 
         case _ => loadV1Source(paths: _*)

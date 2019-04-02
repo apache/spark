@@ -61,12 +61,13 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         throw new AnalysisException(s"Table ${table.identifier.unquotedString} already exists.")
       }
     }
-
-    val clsOpt = DataSourceV2Utils.isV2Source(table.provider.get, sparkSession)
-    if (clsOpt.isEmpty) {
-      processV1Source(sparkSession, table)
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    val shouldReadInV2 = DataSourceV2Utils.
+      shouldReadWithV2(sparkSession, Option(table.schema), table.provider.get, pathOption.toMap)
+    if (shouldReadInV2) {
+      processV2Source(sparkSession, pathOption)
     } else {
-      processV2Source(sparkSession, clsOpt.get)
+      processV1Source(sparkSession, pathOption)
     }
 
     Seq.empty[Row]
@@ -74,11 +75,11 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
   def processV1Source(
       sparkSession: SparkSession,
-      table: CatalogTable): Unit = {
+      pathOption: Option[(String, String)]): Unit = {
     val sessionState = sparkSession.sessionState
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
-    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+
     // Fill in some default table options from the session conf
     val tableWithDefaultOptions = table.copy(
       identifier = table.identifier.copy(
@@ -141,19 +142,18 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
   def processV2Source(
       sparkSession: SparkSession,
-      clazz: Class[_]): Unit = {
+      pathOption: Option[(String, String)]): Unit = {
     // treat it as V2 data source
     val newTable = if (table.schema.nonEmpty) {
       table
     } else {
-      val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
-      val provider = clazz.getConstructor().newInstance().asInstanceOf[TableProvider]
-      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        source = provider, conf = sparkSession.sessionState.conf)
-      val finalOptions = sessionOptions ++ pathOption
-      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-      val v2Table = provider.getTable(dsOptions)
-      table.copy(schema = v2Table.schema())
+      val cls = DataSourceV2Utils.isV2Source(sparkSession, table.provider.get)
+      val provider = cls.get.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val dsOptions = DataSourceV2Utils.
+        extractSessionConfigs(provider, sparkSession.sessionState.conf, pathOption.toMap)
+      val readTable = DataSourceV2Utils.
+        getBatchReadTable(sparkSession, None, cls.get, dsOptions)
+      table.copy(schema = readTable.get.schema())
     }
 
     // We will return Nil or throw exception at the beginning if the table already exists, so when

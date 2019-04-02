@@ -36,7 +36,6 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -246,29 +245,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotBucketed("save")
 
     val session = df.sparkSession
-    val useV1Sources =
-      session.sessionState.conf.userV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
-    val lookupCls = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val cls = lookupCls.newInstance() match {
-      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
-        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
-        f.fallBackFileFormat
-      case _ => lookupCls
-    }
+    val cls = DataSourceV2Utils.isV2Source(session, source)
     // In Data Source V2 project, partitioning is still under development.
     // Here we fallback to V1 if partitioning columns are specified.
     // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
-    if (classOf[TableProvider].isAssignableFrom(cls) && partitioningColumns.isEmpty) {
-      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
-      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        provider, session.sessionState.conf)
-      val options = sessionOptions ++ extraOptions
-      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
-
-      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      provider.getTable(dsOptions) match {
-        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+    if (cls.nonEmpty && partitioningColumns.isEmpty) {
+      val provider = cls.get.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val dsOptions = DataSourceV2Utils.extractSessionConfigs(
+        provider, session.sessionState.conf, extraOptions.toMap)
+      val v2Table =
+        DataSourceV2Utils.getBatchWriteTable(session, Some(ds.schema), cls.get, dsOptions)
+      v2Table match {
+        case Some(table) =>
           lazy val relation = DataSourceV2Relation.create(table, dsOptions)
+          import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
           mode match {
             case SaveMode.Append =>
               runCommand(df.sparkSession, "save") {
