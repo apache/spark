@@ -518,6 +518,28 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       assert(ThreadUtils.awaitResult(f, 10.seconds))
     }
   }
+
+  test("test RoaringBitmap ser/dser with Kryo unsafe disabled") {
+    val expected = new RoaringBitmap()
+    expected.add(1787)
+    val safeSer = new KryoSerializer(conf).newInstance()
+    val actual: RoaringBitmap = safeSer.deserialize(safeSer.serialize(expected))
+    assert(actual === expected)
+  }
+}
+
+class UnsafeKryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
+  conf.set(SERIALIZER, classOf[KryoSerializer].getName)
+  conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+  conf.set(KRYO_USE_UNSAFE, true)
+
+  test("test RoaringBitmap ser/dser with Kryo unsafe enabled") {
+    val expected = new RoaringBitmap()
+    expected.add(1787)
+    val unsafeSer = new KryoSerializer(conf).newInstance()
+    val actual: RoaringBitmap = unsafeSer.deserialize(unsafeSer.serialize(expected))
+    assert(actual === expected)
+  }
 }
 
 class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSparkContext {
@@ -564,20 +586,6 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     byteBuffer.flip()
     assert(serInstance.deserialize[Any](serObj) === (obj))
     assert(serInstance.deserialize[Any](byteBuffer) === (obj))
-  }
-
-  test("SPARK-27216: Upgrade RoaringBitmap to 0.7.45 to fix Kryo unsafe ser/dser issue") {
-    val expected = new RoaringBitmap()
-    expected.add(1787)
-
-    conf.set(KRYO_USE_UNSAFE, true)
-    try {
-      val unsafeSer = new KryoSerializer(conf).newInstance()
-      val actual: RoaringBitmap = unsafeSer.deserialize(unsafeSer.serialize(expected))
-      assert(actual === expected)
-    } finally {
-      conf.set(KRYO_USE_UNSAFE, false)
-    }
   }
 }
 
