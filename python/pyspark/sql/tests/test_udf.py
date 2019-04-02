@@ -600,6 +600,13 @@ class UDFTests(ReusedSQLTestCase):
             result = sql("select i from values(0L) as data(i) where i in (select id from v)")
             self.assertEqual(result.collect(), [Row(i=0)])
 
+    def test_udf_globals_not_overwritten(self):
+        @udf('string')
+        def f():
+            assert "itertools" not in str(map)
+
+        self.spark.range(1).select(f()).collect()
+
 
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):

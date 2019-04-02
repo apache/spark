@@ -329,8 +329,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     {
       val schema = ExpressionEncoder[(Int, (String, Int))].schema
       assert(schema(0).nullable === false)
-      assert(schema(1).nullable === true)
-      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
+      assert(schema(1).nullable)
+      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
 
@@ -340,8 +340,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
         ExpressionEncoder[Int],
         ExpressionEncoder[(String, Int)]).schema
       assert(schema(0).nullable === false)
-      assert(schema(1).nullable === true)
-      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
+      assert(schema(1).nullable)
+      assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
   }
@@ -368,6 +368,15 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     val encoder = ExpressionEncoder[Map[Integer, String]]()
     val e = intercept[RuntimeException](encoder.toRow(Map((1, "a"), (null, "b"))))
     assert(e.getMessage.contains("Cannot use null as map key"))
+  }
+
+  test("throw exception for tuples with more than 22 elements") {
+    val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]])
+
+    val e = intercept[UnsupportedOperationException] {
+      ExpressionEncoder.tuple(encoders)
+    }
+    assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
   }
 
   private def encodeDecodeTest[T : ExpressionEncoder](

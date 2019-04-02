@@ -34,7 +34,7 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
@@ -346,13 +346,14 @@ object SparkEnv extends Logging {
       // Don't start metrics system right now for Driver.
       // We need to wait for the task scheduler to give us an app ID.
       // Then we can start the metrics system.
-      MetricsSystem.createMetricsSystem("driver", conf, securityManager)
+      MetricsSystem.createMetricsSystem(MetricsSystemInstances.DRIVER, conf, securityManager)
     } else {
       // We need to set the executor ID before the MetricsSystem is created because sources and
       // sinks specified in the metrics configuration file will want to incorporate this executor's
       // ID into the metrics they report.
       conf.set(EXECUTOR_ID, executorId)
-      val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
+      val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.EXECUTOR, conf,
+        securityManager)
       ms.start()
       ms
     }
@@ -437,7 +438,8 @@ object SparkEnv extends Logging {
 
     // Add Hadoop properties, it will not ignore configs including in Spark. Some spark
     // conf starting with "spark.hadoop" may overwrite it.
-    val hadoopProperties = hadoopConf.asScala.map(entry => (entry.getKey, entry.getValue)).toSeq
+    val hadoopProperties = hadoopConf.asScala
+      .map(entry => (entry.getKey, entry.getValue)).toSeq.sorted
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,
       "Spark Properties" -> sparkProperties,

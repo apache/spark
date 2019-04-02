@@ -17,13 +17,15 @@
 
 package org.apache.spark.storage
 
-import java.io.{InputStream, IOException}
+import java.io.{InputStream, IOException, SequenceInputStream}
 import java.nio.ByteBuffer
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+
+import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -32,7 +34,6 @@ import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
-import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -73,6 +74,7 @@ final class ShuffleBlockFetcherIterator(
     maxBlocksInFlightPerAddress: Int,
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
+    detectCorruptUseExtraMemory: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -406,6 +408,7 @@ final class ShuffleBlockFetcherIterator(
 
     var result: FetchResult = null
     var input: InputStream = null
+    var streamCompressedOrEncrypted: Boolean = false
     // Take the next fetched result and try to decompress it to detect data corruption,
     // then fetch it one more time if it's corrupt, throw FailureFetchResult if the second fetch
     // is also corrupt, so the previous stage could be retried.
@@ -463,25 +466,22 @@ final class ShuffleBlockFetcherIterator(
               buf.release()
               throwFetchFailedException(blockId, address, e)
           }
-          var isStreamCopied: Boolean = false
           try {
             input = streamWrapper(blockId, in)
-            // Only copy the stream if it's wrapped by compression or encryption, also the size of
-            // block is small (the decompressed block is smaller than maxBytesInFlight)
-            if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
-              isStreamCopied = true
-              val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
-              // Decompress the whole block at once to detect any corruption, which could increase
-              // the memory usage tne potential increase the chance of OOM.
+            // If the stream is compressed or wrapped, then we optionally decompress/unwrap the
+            // first maxBytesInFlight/3 bytes into memory, to check for corruption in that portion
+            // of the data. But even if 'detectCorruptUseExtraMemory' configuration is off, or if
+            // the corruption is later, we'll still detect the corruption later in the stream.
+            streamCompressedOrEncrypted = !input.eq(in)
+            if (streamCompressedOrEncrypted && detectCorruptUseExtraMemory) {
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              Utils.copyStream(input, out, closeStreams = true)
-              input = out.toChunkedByteBuffer.toInputStream(dispose = true)
+              input = Utils.copyStreamUpTo(input, maxBytesInFlight / 3)
             }
           } catch {
             case e: IOException =>
               buf.release()
               if (buf.isInstanceOf[FileSegmentManagedBuffer]
-                || corruptedBlocks.contains(blockId)) {
+                  || corruptedBlocks.contains(blockId)) {
                 throwFetchFailedException(blockId, address, e)
               } else {
                 logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
@@ -491,7 +491,9 @@ final class ShuffleBlockFetcherIterator(
               }
           } finally {
             // TODO: release the buf here to free memory earlier
-            if (isStreamCopied) {
+            if (input == null) {
+              // Close the underlying stream if there was an issue in wrapping the stream using
+              // streamWrapper
               in.close()
             }
           }
@@ -508,7 +510,13 @@ final class ShuffleBlockFetcherIterator(
       throw new NoSuchElementException()
     }
     currentResult = result.asInstanceOf[SuccessFetchResult]
-    (currentResult.blockId, new BufferReleasingInputStream(input, this))
+    (currentResult.blockId,
+      new BufferReleasingInputStream(
+        input,
+        this,
+        currentResult.blockId,
+        currentResult.address,
+        detectCorrupt && streamCompressedOrEncrypted))
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
@@ -571,7 +579,10 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
-  private def throwFetchFailedException(blockId: BlockId, address: BlockManagerId, e: Throwable) = {
+  private[storage] def throwFetchFailedException(
+      blockId: BlockId,
+      address: BlockManagerId,
+      e: Throwable) = {
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
         throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, e)
@@ -583,15 +594,28 @@ final class ShuffleBlockFetcherIterator(
 }
 
 /**
- * Helper class that ensures a ManagedBuffer is released upon InputStream.close()
+ * Helper class that ensures a ManagedBuffer is released upon InputStream.close() and
+ * also detects stream corruption if streamCompressedOrEncrypted is true
  */
 private class BufferReleasingInputStream(
-    private val delegate: InputStream,
-    private val iterator: ShuffleBlockFetcherIterator)
+    // This is visible for testing
+    private[storage] val delegate: InputStream,
+    private val iterator: ShuffleBlockFetcherIterator,
+    private val blockId: BlockId,
+    private val address: BlockManagerId,
+    private val detectCorruption: Boolean)
   extends InputStream {
   private[this] var closed = false
 
-  override def read(): Int = delegate.read()
+  override def read(): Int = {
+    try {
+      delegate.read()
+    } catch {
+      case e: IOException if detectCorruption =>
+        IOUtils.closeQuietly(this)
+        iterator.throwFetchFailedException(blockId, address, e)
+    }
+  }
 
   override def close(): Unit = {
     if (!closed) {
@@ -605,13 +629,37 @@ private class BufferReleasingInputStream(
 
   override def mark(readlimit: Int): Unit = delegate.mark(readlimit)
 
-  override def skip(n: Long): Long = delegate.skip(n)
+  override def skip(n: Long): Long = {
+    try {
+      delegate.skip(n)
+    } catch {
+      case e: IOException if detectCorruption =>
+        IOUtils.closeQuietly(this)
+        iterator.throwFetchFailedException(blockId, address, e)
+    }
+  }
 
   override def markSupported(): Boolean = delegate.markSupported()
 
-  override def read(b: Array[Byte]): Int = delegate.read(b)
+  override def read(b: Array[Byte]): Int = {
+    try {
+      delegate.read(b)
+    } catch {
+      case e: IOException if detectCorruption =>
+        IOUtils.closeQuietly(this)
+        iterator.throwFetchFailedException(blockId, address, e)
+    }
+  }
 
-  override def read(b: Array[Byte], off: Int, len: Int): Int = delegate.read(b, off, len)
+  override def read(b: Array[Byte], off: Int, len: Int): Int = {
+    try {
+      delegate.read(b, off, len)
+    } catch {
+      case e: IOException if detectCorruption =>
+        IOUtils.closeQuietly(this)
+        iterator.throwFetchFailedException(blockId, address, e)
+    }
+  }
 
   override def reset(): Unit = delegate.reset()
 }

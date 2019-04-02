@@ -182,5 +182,8 @@ private[spark] class NettyBlockTransferService(
     if (clientFactory != null) {
       clientFactory.close()
     }
+    if (transportContext != null) {
+      transportContext.close()
+    }
   }
 }

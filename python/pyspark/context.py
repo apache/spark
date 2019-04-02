@@ -204,7 +204,7 @@ class SparkContext(object):
         # If encryption is enabled, we need to setup a server in the jvm to read broadcast
         # data via a socket.
         # scala's mangled names w/ $ in them require special treatment.
-        self._encryption_enabled = self._jvm.PythonUtils.getEncryptionEnabled(self._jsc)
+        self._encryption_enabled = self._jvm.PythonUtils.isEncryptionEnabled(self._jsc)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
@@ -584,6 +584,7 @@ class SparkContext(object):
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
+        The text files must be encoded as UTF-8.
 
         If use_unicode is False, the strings will be kept as `str` (encoding
         as `utf-8`), which is faster and smaller than unicode. (Added in
@@ -608,6 +609,7 @@ class SparkContext(object):
         URI. Each file is read as a single record and returned in a
         key-value pair, where the key is the path of each file, the
         value is the content of each file.
+        The text files must be encoded as UTF-8.
 
         If use_unicode is False, the strings will be kept as `str` (encoding
         as `utf-8`), which is faster and smaller than unicode. (Added in

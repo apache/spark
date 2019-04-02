@@ -234,6 +234,9 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
   override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier =
     delegate.parseFunctionIdentifier(sqlText)
 
+  override def parseMultipartIdentifier(sqlText: String): Seq[String] =
+    delegate.parseMultipartIdentifier(sqlText)
+
   override def parseTableSchema(sqlText: String): StructType =
     delegate.parseTableSchema(sqlText)
 

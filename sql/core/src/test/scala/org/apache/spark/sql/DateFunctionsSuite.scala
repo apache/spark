@@ -19,10 +19,13 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.LocalDate
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -30,13 +33,14 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("function current_date") {
-    val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    val d1 = DateTimeUtils.fromJavaDate(df1.select(current_date()).collect().head.getDate(0))
-    val d2 = DateTimeUtils.fromJavaDate(
-      sql("""SELECT CURRENT_DATE()""").collect().head.getDate(0))
-    val d3 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
+      val d0 = System.currentTimeMillis() / MILLIS_PER_DAY
+      val d1 = localDateToDays(df1.select(current_date()).collect().head.getAs[LocalDate](0))
+      val d2 = localDateToDays(sql("""SELECT CURRENT_DATE()""").collect().head.getAs[LocalDate](0))
+      val d3 = System.currentTimeMillis() / MILLIS_PER_DAY
+      assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
+    }
   }
 
   test("function current_timestamp and now") {
@@ -515,6 +519,8 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(sdf3.format(new Timestamp(1000000))), Row(sdf3.format(new Timestamp(-1000000)))))
   }
 
+  private def secs(millis: Long): Long = TimeUnit.MILLISECONDS.toSeconds(millis)
+
   test("unix_timestamp") {
     val date1 = Date.valueOf("2015-07-24")
     val date2 = Date.valueOf("2015-07-25")
@@ -527,21 +533,21 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val fmt = "yyyy/MM/dd HH:mm:ss.S"
     val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
     checkAnswer(df.select(unix_timestamp(col("ts"))), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
     checkAnswer(df.select(unix_timestamp(col("ss"))), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
     checkAnswer(df.select(unix_timestamp(col("d"), fmt)), Seq(
-      Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
+      Row(secs(date1.getTime)), Row(secs(date2.getTime))))
     checkAnswer(df.select(unix_timestamp(col("s"), fmt)), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
     checkAnswer(df.selectExpr("unix_timestamp(ts)"), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
     checkAnswer(df.selectExpr("unix_timestamp(ss)"), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
     checkAnswer(df.selectExpr(s"unix_timestamp(d, '$fmt')"), Seq(
-      Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
+      Row(secs(date1.getTime)), Row(secs(date2.getTime))))
     checkAnswer(df.selectExpr(s"unix_timestamp(s, '$fmt')"), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
 
     val x1 = "2015-07-24 10:00:00"
     val x2 = "2015-25-07 02:02:02"
@@ -552,13 +558,13 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df1 = Seq(x1, x2, x3, x4).toDF("x")
     checkAnswer(df1.select(unix_timestamp(col("x"))), Seq(
-      Row(ts1.getTime / 1000L), Row(null), Row(null), Row(null)))
+      Row(secs(ts1.getTime)), Row(null), Row(null), Row(null)))
     checkAnswer(df1.selectExpr("unix_timestamp(x)"), Seq(
-      Row(ts1.getTime / 1000L), Row(null), Row(null), Row(null)))
+      Row(secs(ts1.getTime)), Row(null), Row(null), Row(null)))
     checkAnswer(df1.select(unix_timestamp(col("x"), "yyyy-dd-MM HH:mm:ss")), Seq(
-      Row(null), Row(ts2.getTime / 1000L), Row(null), Row(null)))
+      Row(null), Row(secs(ts2.getTime)), Row(null), Row(null)))
     checkAnswer(df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
-      Row(ts4.getTime / 1000L), Row(null), Row(ts3.getTime / 1000L), Row(null)))
+      Row(secs(ts4.getTime)), Row(null), Row(secs(ts3.getTime)), Row(null)))
 
     // invalid format
     checkAnswer(df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd aa:HH:ss')"), Seq(
@@ -570,10 +576,12 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
     val df2 = Seq(y1, y2).toDF("y")
     checkAnswer(df2.select(unix_timestamp(col("y"), "yyyy-MM-dd")), Seq(
-      Row(ts5.getTime / 1000L), Row(null)))
+      Row(secs(ts5.getTime)), Row(null)))
 
     val now = sql("select unix_timestamp()").collect().head.getLong(0)
-    checkAnswer(sql(s"select cast ($now as timestamp)"), Row(new java.util.Date(now * 1000)))
+    checkAnswer(
+      sql(s"select cast ($now as timestamp)"),
+      Row(new java.util.Date(TimeUnit.SECONDS.toMillis(now))))
   }
 
   test("to_unix_timestamp") {
@@ -588,13 +596,13 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val fmt = "yyyy/MM/dd HH:mm:ss.S"
     val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
     checkAnswer(df.selectExpr("to_unix_timestamp(ts)"), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
     checkAnswer(df.selectExpr("to_unix_timestamp(ss)"), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
     checkAnswer(df.selectExpr(s"to_unix_timestamp(d, '$fmt')"), Seq(
-      Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
+      Row(secs(date1.getTime)), Row(secs(date2.getTime))))
     checkAnswer(df.selectExpr(s"to_unix_timestamp(s, '$fmt')"), Seq(
-      Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+      Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
 
     val x1 = "2015-07-24 10:00:00"
     val x2 = "2015-25-07 02:02:02"
@@ -605,9 +613,9 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df1 = Seq(x1, x2, x3, x4).toDF("x")
     checkAnswer(df1.selectExpr("to_unix_timestamp(x)"), Seq(
-      Row(ts1.getTime / 1000L), Row(null), Row(null), Row(null)))
+      Row(secs(ts1.getTime)), Row(null), Row(null), Row(null)))
     checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
-      Row(ts4.getTime / 1000L), Row(null), Row(ts3.getTime / 1000L), Row(null)))
+      Row(secs(ts4.getTime)), Row(null), Row(secs(ts3.getTime)), Row(null)))
 
     // february
     val y1 = "2016-02-29"
@@ -615,7 +623,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
     val df2 = Seq(y1, y2).toDF("y")
     checkAnswer(df2.select(unix_timestamp(col("y"), "yyyy-MM-dd")), Seq(
-      Row(ts5.getTime / 1000L), Row(null)))
+      Row(secs(ts5.getTime)), Row(null)))
 
     // invalid format
     checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')"), Seq(
@@ -667,33 +675,41 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(from_utc_timestamp(col("a"), "PST")),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-    checkAnswer(
-      df.select(from_utc_timestamp(col("b"), "PST")),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      checkAnswer(
+        df.select(from_utc_timestamp(col("a"), "PST")),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+      checkAnswer(
+        df.select(from_utc_timestamp(col("b"), "PST")),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    }
+    val msg = intercept[AnalysisException] {
+      df.select(from_utc_timestamp(col("a"), "PST")).collect()
+    }.getMessage
+    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
   }
 
   test("from_utc_timestamp with column zone") {
-    val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "CET"),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "PST")
-    ).toDF("a", "b", "c")
-    checkAnswer(
-      df.select(from_utc_timestamp(col("a"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-    checkAnswer(
-      df.select(from_utc_timestamp(col("b"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val df = Seq(
+        (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "CET"),
+        (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "PST")
+      ).toDF("a", "b", "c")
+      checkAnswer(
+        df.select(from_utc_timestamp(col("a"), col("c"))),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+      checkAnswer(
+        df.select(from_utc_timestamp(col("b"), col("c"))),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    }
   }
 
   test("to_utc_timestamp with literal zone") {
@@ -701,32 +717,40 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(to_utc_timestamp(col("a"), "PST")),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
-    checkAnswer(
-      df.select(to_utc_timestamp(col("b"), "PST")),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      checkAnswer(
+        df.select(to_utc_timestamp(col("a"), "PST")),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+          Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+      checkAnswer(
+        df.select(to_utc_timestamp(col("b"), "PST")),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+          Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+    }
+    val msg = intercept[AnalysisException] {
+      df.select(to_utc_timestamp(col("a"), "PST")).collect()
+    }.getMessage
+    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
   }
 
   test("to_utc_timestamp with column zone") {
-    val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "PST"),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "CET")
-    ).toDF("a", "b", "c")
-    checkAnswer(
-      df.select(to_utc_timestamp(col("a"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
-    checkAnswer(
-      df.select(to_utc_timestamp(col("b"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val df = Seq(
+        (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "PST"),
+        (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "CET")
+      ).toDF("a", "b", "c")
+      checkAnswer(
+        df.select(to_utc_timestamp(col("a"), col("c"))),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+      checkAnswer(
+        df.select(to_utc_timestamp(col("b"), col("c"))),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+    }
   }
 }

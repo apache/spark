@@ -16,55 +16,64 @@
  */
 package org.apache.spark.sql.sources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.execution.datasources.FileFormat
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetTest}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
-  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
+  override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
 
   override def shortName(): String = "parquet"
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new DummyReadOnlyFileTable
   }
 }
 
-class DummyReadOnlyFileTable extends Table with SupportsBatchRead {
+class DummyReadOnlyFileTable extends Table with SupportsRead {
   override def name(): String = "dummy"
 
   override def schema(): StructType = StructType(Nil)
 
-  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     throw new AnalysisException("Dummy file reader")
   }
+
+  override def capabilities(): java.util.Set[TableCapability] =
+    Set(TableCapability.BATCH_READ).asJava
 }
 
 class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
-  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
+  override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
 
   override def shortName(): String = "parquet"
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new DummyWriteOnlyFileTable
   }
 }
 
-class DummyWriteOnlyFileTable extends Table with SupportsBatchWrite {
+class DummyWriteOnlyFileTable extends Table with SupportsWrite {
   override def name(): String = "dummy"
 
   override def schema(): StructType = StructType(Nil)
 
-  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder =
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
     throw new AnalysisException("Dummy file writer")
+
+  override def capabilities(): java.util.Set[TableCapability] =
+    Set(TableCapability.BATCH_WRITE).asJava
 }
 
 class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
