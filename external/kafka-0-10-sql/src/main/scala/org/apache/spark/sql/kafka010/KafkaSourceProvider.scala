@@ -361,9 +361,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     override def capabilities(): ju.Set[TableCapability] = Collections.emptySet()
 
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
-      override def build(): Scan = new KafkaScan(options)
-    }
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      () => new KafkaScan(options)
 
     override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
       new WriteBuilder {
