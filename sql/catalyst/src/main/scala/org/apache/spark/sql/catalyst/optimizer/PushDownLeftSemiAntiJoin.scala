@@ -206,7 +206,14 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
       if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
         val newChild = insertJoin(Option(pushDown.reduceLeft(And)))
         if (stayUp.nonEmpty) {
-          Filter(stayUp.reduceLeft(And), newChild)
+          join.joinType match {
+            // In case of Left semi join, the part of the join condition which does not refer to
+            // to attributes of the grandchild are kept as a Filter over window.
+            case LeftSemi => Filter(stayUp.reduce(And), newChild)
+            // In case of left anti join, the join is pushed down when the entire join condition
+            // is eligible to be pushed down to preserve the semantics of left anti join.
+            case _ => join
+          }
         } else {
           newChild
         }

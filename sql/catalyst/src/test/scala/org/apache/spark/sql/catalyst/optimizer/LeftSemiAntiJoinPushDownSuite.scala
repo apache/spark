@@ -279,7 +279,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary: LeftSemiAnti join pushdown - partial pushdown") {
+  test("Unary: LeftSemi join pushdown - partial pushdown") {
     val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode('c_arr), alias = Some("arr"), outputNames = Seq("out_col"))
@@ -293,6 +293,16 @@ class LeftSemiPushdownSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("Unary: LeftAnti join pushdown - no pushdown") {
+    val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
+    val originalQuery = testRelationWithArrayType
+      .generate(Explode('c_arr), alias = Some("arr"), outputNames = Seq("out_col"))
+      .join(testRelation1, joinType = LeftAnti, condition = Some('b === 'd && 'b === 'out_col))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
   }
 
   test("Unary: LeftSemiAnti join pushdown - no pushdown") {
