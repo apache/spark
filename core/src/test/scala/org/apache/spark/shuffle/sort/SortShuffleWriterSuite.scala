@@ -62,7 +62,6 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
   }
 
   test("write empty iterator") {
-    val expected = 0
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
     val writer = new SortShuffleWriter[Int, Int, Int](
       shuffleBlockResolver,
@@ -73,28 +72,28 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
     writer.write(Iterator.empty)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 1)
+    val writeMetrics = context.taskMetrics().shuffleWriteMetrics
     assert(!dataFile.exists())
-    assert(dataFile.length() === expected)
-    assert(context.taskMetrics().shuffleWriteMetrics.bytesWritten === expected)
-    assert(context.taskMetrics().shuffleWriteMetrics.recordsWritten === expected)
+    assert(dataFile.length() === writeMetrics.bytesWritten)
+    assert(writeMetrics.bytesWritten === 0)
+    assert(writeMetrics.recordsWritten === 0)
   }
 
   test("write with some records") {
-    val expected = 0
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
-    val records = Iterator((1, 2), (2, 3), (4, 4), (6, 5))
+    val records = List[(Int, Int)]((1, 2), (2, 3), (4, 4), (6, 5))
     val writer = new SortShuffleWriter[Int, Int, Int](
       shuffleBlockResolver,
       shuffleHandle,
       mapId = 2,
       context
     )
-    writer.write(records)
+    writer.write(records.toIterator)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 2)
+    val writeMetrics = context.taskMetrics().shuffleWriteMetrics
     assert(dataFile.exists())
-    assert(dataFile.length() !== expected)
-    assert(context.taskMetrics().shuffleWriteMetrics.bytesWritten !== expected)
-    assert(context.taskMetrics().shuffleWriteMetrics.recordsWritten !== expected)
+    assert(dataFile.length() === writeMetrics.bytesWritten)
+    assert(records.size === writeMetrics.recordsWritten)
   }
 }
