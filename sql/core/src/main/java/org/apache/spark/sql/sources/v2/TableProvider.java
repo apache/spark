@@ -24,7 +24,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * The base interface for v2 data sources which don't have a real catalog. Implementations must
- * have a public, 0-arg constructor, and can only deal with existing tables.
+ * have a public, 0-arg constructor.
+ * <p>
+ * Note that, TableProvider can only apply data operations to existing tables, like read, append,
+ * delete, and overwrite. Not operations that require metadata changes, like create/drop tables.
  * <p>
  * The major responsibility of this interface is to return a {@link Table} for read/write.
  * </p>
