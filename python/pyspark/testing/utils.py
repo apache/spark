@@ -104,6 +104,8 @@ class ByteArrayOutput(object):
 
 
 def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
+    # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
+    # vary for SBT or Maven specifically. See also SPARK-26856
     project_full_path = os.path.join(
         os.environ["SPARK_HOME"], project_relative_path)
 
