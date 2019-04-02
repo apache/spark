@@ -2459,6 +2459,7 @@ setMethod("schema_of_csv", signature(x = "characterOrColumn"),
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
+            .Deprecated(msg = "from_utc_timestamp is deprecated. See SPARK-25496.")
             jc <- callJStatic("org.apache.spark.sql.functions", "from_utc_timestamp", y@jc, x)
             column(jc)
           })
@@ -2517,6 +2518,7 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 #' @note to_utc_timestamp since 1.5.0
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
+            .Deprecated(msg = "to_utc_timestamp is deprecated. See SPARK-25496.")
             jc <- callJStatic("org.apache.spark.sql.functions", "to_utc_timestamp", y@jc, x)
             column(jc)
           })
