@@ -751,7 +751,6 @@ private[spark] object SparkConf extends Logging {
    */
   def isExecutorStartupConf(name: String): Boolean = {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
-    name.startsWith("spark.ssl") ||
     name.startsWith("spark.rpc") ||
     name.startsWith("spark.network") ||
     isSparkPortConf(name)
