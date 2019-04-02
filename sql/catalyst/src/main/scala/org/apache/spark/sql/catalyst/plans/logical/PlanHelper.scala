@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Generator, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Generator, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 
 /**
@@ -31,23 +31,23 @@ object PlanHelper {
    * - A WindowExpression but the plan is not Window
    * - An AggregateExpresion but the plan is not Aggregate or Window
    * - A Generator but the plan is not Generate
-   * Returns true when this operator hosts illegal expressions. This can happen when
+   * Returns the list of invalid expressions that this operator hosts. This can happen when
    * 1. The input query from users contain invalid expressions.
    *    Example : SELECT * FROM tab WHERE max(c1) > 0
    * 2. Query rewrites inadvertently produce plans that are invalid.
    */
-  def specialExpressionInUnsupportedOperator(plan: LogicalPlan): Boolean = {
+  def specialExpressionInUnsupportedOperator(plan: LogicalPlan): Seq[Expression] = {
     val exprs = plan.expressions
-    exprs.flatMap { root =>
-      root.find {
+    val invalidExpressions = exprs.flatMap { root =>
+      root.collect {
         case e: WindowExpression
-          if !plan.isInstanceOf[Window] => true
+          if !plan.isInstanceOf[Window] => e
         case e: AggregateExpression
-          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => true
+          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => e
         case e: Generator
-          if !plan.isInstanceOf[Generate] => true
-        case _ => false
+          if !plan.isInstanceOf[Generate] => e
       }
-    }.nonEmpty
+    }
+    invalidExpressions
   }
 }

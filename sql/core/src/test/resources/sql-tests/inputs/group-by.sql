@@ -152,4 +152,5 @@ SELECT * FROM (SELECT COUNT(*) AS cnt FROM test_agg) WHERE cnt > 1L;
 -- Error when aggregate expressions are in where clause directly
 SELECT count(*) FROM test_agg WHERE count(*) > 1L;
 SELECT count(*) FROM test_agg WHERE count(*) + 1L > 1L;
+SELECT count(*) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(k) > 1;
 

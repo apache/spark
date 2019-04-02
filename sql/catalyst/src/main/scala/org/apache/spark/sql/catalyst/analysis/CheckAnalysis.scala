@@ -376,16 +376,27 @@ trait CheckAnalysis extends PredicateHelper {
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
 
-          case f @ Filter(condition, _) if PlanHelper.specialExpressionInUnsupportedOperator(f) =>
+          case f @ Filter(condition, _)
+            if PlanHelper.specialExpressionInUnsupportedOperator(f).nonEmpty =>
+            val invalidExprSqls = PlanHelper.specialExpressionInUnsupportedOperator(f).map(_.sql)
             failAnalysis(
               s"""
                  |Aggregate/Window/Generate expressions are not valid in where clause of the query.
-                 |Expression in where clause: ${condition.sql}
+                 |Expression in where clause: [${condition.sql}]
+                 |Invalid expressions: [${invalidExprSqls.mkString(", ")}]
                """.stripMargin)
 
-          case other if PlanHelper.specialExpressionInUnsupportedOperator(other) =>
-            failAnalysis(s"The query operator `${other.nodeName}` contains " +
-              "one or more unsupported expression types Aggregate, Window or Generate.")
+          case other if PlanHelper.specialExpressionInUnsupportedOperator(other).nonEmpty =>
+            val invalidExprSqls =
+              PlanHelper.specialExpressionInUnsupportedOperator(other).map(_.sql)
+            failAnalysis(
+              s"""
+                 |The query operator `${other.nodeName}` contains one or more unsupported
+                 |expression types Aggregate, Window or Generate.
+                 |Invalid expressions: [${invalidExprSqls.mkString(", ")}]
+                 |
+               """.stripMargin
+            )
 
           case _ => // Analysis successful!
         }
