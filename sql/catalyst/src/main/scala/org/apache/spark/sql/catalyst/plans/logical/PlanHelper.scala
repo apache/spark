@@ -36,7 +36,7 @@ object PlanHelper {
    *    Example : SELECT * FROM tab WHERE max(c1) > 0
    * 2. Query rewrites inadvertently produce plans that are invalid.
    */
-  def specialExpressionInUnsupportedOperator(plan: LogicalPlan): Seq[Expression] = {
+  def specialExpressionsInUnsupportedOperator(plan: LogicalPlan): Seq[Expression] = {
     val exprs = plan.expressions
     val invalidExpressions = exprs.flatMap { root =>
       root.collect {

@@ -44,7 +44,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   // - only host special expressions in supported operators
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
     !Utils.isTesting || (plan.resolved &&
-      plan.find(PlanHelper.specialExpressionInUnsupportedOperator(_).nonEmpty).isEmpty)
+      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty)
   }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)

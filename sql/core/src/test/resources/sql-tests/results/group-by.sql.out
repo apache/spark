@@ -496,8 +496,7 @@ org.apache.spark.sql.AnalysisException
 
 Aggregate/Window/Generate expressions are not valid in where clause of the query.
 Expression in where clause: [(count(1) > 1L)]
-Invalid expressions: [count(1)]
-               ;
+Invalid expressions: [count(1)];
 
 
 -- !query 50
@@ -509,8 +508,7 @@ org.apache.spark.sql.AnalysisException
 
 Aggregate/Window/Generate expressions are not valid in where clause of the query.
 Expression in where clause: [((count(1) + 1L) > 1L)]
-Invalid expressions: [count(1)]
-               ;
+Invalid expressions: [count(1)];
 
 
 -- !query 51
@@ -522,5 +520,4 @@ org.apache.spark.sql.AnalysisException
 
 Aggregate/Window/Generate expressions are not valid in where clause of the query.
 Expression in where clause: [(((test_agg.`k` = 1) OR (test_agg.`k` = 2)) OR (((count(1) + 1L) > 1L) OR (max(test_agg.`k`) > 1)))]
-Invalid expressions: [count(1), max(test_agg.`k`)]
-               ;
+Invalid expressions: [count(1), max(test_agg.`k`)];
