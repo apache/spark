@@ -52,9 +52,7 @@ class SingletonReplSuite extends SparkFunSuite {
     Main.sparkSession = null
 
     // Starts a new thread to run the REPL interpreter, so that we won't block.
-    thread = new Thread(new Runnable {
-      override def run(): Unit = Main.doMain(Array("-classpath", classpath), interp)
-    })
+    thread = new Thread(() => Main.doMain(Array("-classpath", classpath), interp))
     thread.setDaemon(true)
     thread.start()
 
