@@ -18,10 +18,10 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.Assertions
+import org.scalatest.{Assertions, BeforeAndAfterAll}
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.BlockRDD
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.StreamingAggregationStateManager
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StreamingAggregationStateManager}
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -344,10 +344,11 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("prune results by current_date, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
+    val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
-        .select(to_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY)))
+        .select(to_utc_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY), tz))
         .toDF("value")
         .groupBy($"value")
         .agg(count("*"))
