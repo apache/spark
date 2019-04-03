@@ -30,6 +30,12 @@ import org.apache.spark.util.ChildFirstURLClassLoader
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
+  private def testFormatTimeVarsForHiveClient(key: String, value: String, expected: Long): Unit = {
+    val conf = new Configuration
+    conf.set(key, value)
+    assert(HiveUtils.formatTimeVarsForHiveClient(conf)(key) === expected.toString)
+  }
+
   test("newTemporaryConfiguration overwrites listener configurations") {
     Seq(true, false).foreach { useInMemoryDerby =>
       val conf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
@@ -69,16 +75,10 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     assert(HiveUtils.formatTimeVarsForHiveClient(defaultConf)("hive.stats.jdbc.timeout") === "30")
     assert(HiveUtils.formatTimeVarsForHiveClient(defaultConf)("hive.stats.retries.wait") === "3000")
 
-    def testFormatTimeVarsForHiveClient(key: String, value: String, expected: Long): Unit = {
-      val conf = new Configuration
-      conf.set(key, value)
-      assert(HiveUtils.formatTimeVarsForHiveClient(conf)(key) === expected.toString)
-    }
-
     testFormatTimeVarsForHiveClient("hive.stats.jdbc.timeout", "40s", 40)
-    testFormatTimeVarsForHiveClient("hive.stats.jdbc.timeout", "1d", 86400)
+    testFormatTimeVarsForHiveClient("hive.stats.jdbc.timeout", "1d", 1 * 24 * 60 * 60)
 
     testFormatTimeVarsForHiveClient("hive.stats.retries.wait", "4000ms", 4000)
-    testFormatTimeVarsForHiveClient("hive.stats.retries.wait", "1d", 86400000)
+    testFormatTimeVarsForHiveClient("hive.stats.retries.wait", "1d", 1 * 24 * 60 * 60 * 1000)
   }
 }
