@@ -371,8 +371,8 @@ class FileIndexSuite extends SharedSQLContext {
           def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
         }
         val leafFiles = inMemoryFileIndex.leafFilePaths
-        assert(leafFiles.size === 1)
-        assert(leafFiles.head.toUri.getPath === file1.getCanonicalPath)
+        assert(leafFiles.size == 1)
+        assert(leafFiles.head.toUri.getPath == file1.getCanonicalPath)
       }
     }
   }
