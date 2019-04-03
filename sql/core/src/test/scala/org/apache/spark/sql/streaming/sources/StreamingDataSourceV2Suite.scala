@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.streaming.sources
 
+import java.util
+import java.util.Collections
+
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, StreamingQueryWrapper}
@@ -77,18 +80,21 @@ class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
 trait FakeMicroBatchReadTable extends Table with SupportsMicroBatchRead {
   override def name(): String = "fake"
   override def schema(): StructType = StructType(Seq())
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new FakeScanBuilder
 }
 
 trait FakeContinuousReadTable extends Table with SupportsContinuousRead {
   override def name(): String = "fake"
   override def schema(): StructType = StructType(Seq())
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new FakeScanBuilder
 }
 
 trait FakeStreamingWriteTable extends Table with SupportsStreamingWrite {
   override def name(): String = "fake"
   override def schema(): StructType = StructType(Seq())
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new FakeWriteBuilder
   }
@@ -137,6 +143,7 @@ class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
+      override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
     }
   }
 }
@@ -164,6 +171,7 @@ class FakeNoWrite extends DataSourceRegister with TableProvider {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
+      override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
     }
   }
 }

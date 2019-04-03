@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
-import java.util.concurrent.Callable
 
 import org.apache.hadoop.fs.Path
 
@@ -133,12 +132,10 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
-      DDLUtils.checkDataColNames(tableDesc)
       CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
-      DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),
@@ -224,23 +221,20 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
-    catalog.getCachedPlan(qualifiedTableName, new Callable[LogicalPlan]() {
-      override def call(): LogicalPlan = {
-        val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
-        val dataSource =
-          DataSource(
-            sparkSession,
-            // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
-            // inferred at runtime. We should still support it.
-            userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-            partitionColumns = table.partitionColumnNames,
-            bucketSpec = table.bucketSpec,
-            className = table.provider.get,
-            options = table.storage.properties ++ pathOption,
-            catalogTable = Some(table))
-
-        LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
-      }
+    catalog.getCachedPlan(qualifiedTableName, () => {
+      val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+      val dataSource =
+        DataSource(
+          sparkSession,
+          // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+          // inferred at runtime. We should still support it.
+          userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+          partitionColumns = table.partitionColumnNames,
+          bucketSpec = table.bucketSpec,
+          className = table.provider.get,
+          options = table.storage.properties ++ pathOption,
+          catalogTable = Some(table))
+      LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
     })
   }
 
@@ -486,8 +480,8 @@ object DataSourceStrategy {
       // Because we only convert In to InSet in Optimizer when there are more than certain
       // items. So it is possible we still get an In expression here that needs to be pushed
       // down.
-      case expressions.In(a: Attribute, list) if !list.exists(!_.isInstanceOf[Literal]) =>
-        val hSet = list.map(e => e.eval(EmptyRow))
+      case expressions.In(a: Attribute, list) if list.forall(_.isInstanceOf[Literal]) =>
+        val hSet = list.map(_.eval(EmptyRow))
         val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
         Some(sources.In(a.name, hSet.toArray.map(toScala)))
 

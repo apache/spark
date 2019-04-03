@@ -157,9 +157,10 @@ private[spark] class CoalescedRDD[T: ClassTag](
 private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   extends PartitionCoalescer {
 
-  implicit val partitionGroupOrdering: Ordering[PartitionGroup] =
-    (o1: PartitionGroup, o2: PartitionGroup) =>
+  implicit object partitionGroupOrdering extends Ordering[PartitionGroup] {
+    override def compare(o1: PartitionGroup, o2: PartitionGroup): Int =
       java.lang.Integer.compare(o1.numPartitions, o2.numPartitions)
+  }
 
 
   val rnd = new scala.util.Random(7919) // keep this class deterministic

@@ -22,7 +22,6 @@ import java.util.{Locale, Timer, TimerTask}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.Set
 import scala.collection.mutable.{ArrayBuffer, BitSet, HashMap, HashSet}
 import scala.util.Random
 
@@ -54,7 +53,7 @@ import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
  * we are holding a lock on ourselves.  This class is called from many threads, notably:
  *   * The DAGScheduler Event Loop
  *   * The RPCHandler threads, responding to status updates from Executors
- *   * Periodic revival of all offers from the CoarseGrainedSchedulerBackend, to accomodate delay
+ *   * Periodic revival of all offers from the CoarseGrainedSchedulerBackend, to accommodate delay
  *      scheduling
  *   * task-result-getter threads
  */
@@ -195,11 +194,9 @@ private[spark] class TaskSchedulerImpl(
 
     if (!isLocal && conf.get(SPECULATION_ENABLED)) {
       logInfo("Starting speculative execution thread")
-      speculationScheduler.scheduleWithFixedDelay(new Runnable {
-        override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
-          checkSpeculatableTasks()
-        }
-      }, SPECULATION_INTERVAL_MS, SPECULATION_INTERVAL_MS, TimeUnit.MILLISECONDS)
+      speculationScheduler.scheduleWithFixedDelay(
+        () => Utils.tryOrStopSparkContext(sc) { checkSpeculatableTasks() },
+        SPECULATION_INTERVAL_MS, SPECULATION_INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
   }
 
@@ -374,7 +371,7 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-    return launchedTask
+    launchedTask
   }
 
   /**
@@ -528,7 +525,7 @@ private[spark] class TaskSchedulerImpl(
 
     // TODO SPARK-24823 Cancel a job that contains barrier stage(s) if the barrier tasks don't get
     // launched within a configured time.
-    if (tasks.size > 0) {
+    if (tasks.nonEmpty) {
       hasLaunchedTask = true
     }
     return tasks
@@ -829,8 +826,8 @@ private[spark] class TaskSchedulerImpl(
    * Get a snapshot of the currently blacklisted nodes for the entire application.  This is
    * thread-safe -- it can be called without a lock on the TaskScheduler.
    */
-  def nodeBlacklist(): scala.collection.immutable.Set[String] = {
-    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
+  def nodeBlacklist(): Set[String] = {
+    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(Set.empty)
   }
 
   // By default, rack is unknown

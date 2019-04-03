@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import java.text.SimpleDateFormat
-import java.util.Locale
+import java.util
+import java.util.{Collections, Locale}
 
 import scala.util.{Failure, Success, Try}
 
@@ -78,17 +79,17 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
     }
   }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
-    override def build(): Scan = new Scan {
-      override def readSchema(): StructType = schema()
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
 
-      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-        new TextSocketMicroBatchStream(host, port, numPartitions)
-      }
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = schema()
 
-      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-        new TextSocketContinuousStream(host, port, numPartitions, options)
-      }
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      new TextSocketMicroBatchStream(host, port, numPartitions)
+    }
+
+    override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+      new TextSocketContinuousStream(host, port, numPartitions, options)
     }
   }
 }

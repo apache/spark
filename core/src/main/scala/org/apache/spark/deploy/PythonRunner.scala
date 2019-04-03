@@ -60,11 +60,7 @@ object PythonRunner {
       .javaAddress(localhost)
       .callbackClient(py4j.GatewayServer.DEFAULT_PYTHON_PORT, localhost, secret)
       .build()
-    val thread = new Thread(new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions {
-        gatewayServer.start()
-      }
-    })
+    val thread = new Thread(() => Utils.logUncaughtExceptions { gatewayServer.start() })
     thread.setName("py4j-gateway-init")
     thread.setDaemon(true)
     thread.start()

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
@@ -133,10 +133,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Periodically revive offers to allow delay scheduling to work
       val reviveIntervalMs = conf.get(SCHEDULER_REVIVE_INTERVAL).getOrElse(1000L)
 
-      reviveThread.scheduleAtFixedRate(new Runnable {
-        override def run(): Unit = Utils.tryLogNonFatalError {
-          Option(self).foreach(_.send(ReviveOffers))
-        }
+      reviveThread.scheduleAtFixedRate(() => Utils.tryLogNonFatalError {
+        Option(self).foreach(_.send(ReviveOffers))
       }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
     }
 
@@ -258,7 +256,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on all executors
     private def makeOffers() {
       // Make sure no executor is killed while some task is launching on it
-      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
+      val taskDescs = withLock {
         // Filter out executors under killing
         val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
         val workOffers = activeExecutors.map {
@@ -268,7 +266,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
-      if (!taskDescs.isEmpty) {
+      if (taskDescs.nonEmpty) {
         launchTasks(taskDescs)
       }
     }
@@ -284,7 +282,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
       // Make sure no executor is killed while some task is launching on it
-      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
+      val taskDescs = withLock {
         // Filter out executors under killing
         if (executorIsAlive(executorId)) {
           val executorData = executorDataMap(executorId)
@@ -296,7 +294,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           Seq.empty
         }
       }
-      if (!taskDescs.isEmpty) {
+      if (taskDescs.nonEmpty) {
         launchTasks(taskDescs)
       }
     }
@@ -631,7 +629,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       force: Boolean): Seq[String] = {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
 
-    val response = synchronized {
+    val response = withLock {
       val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
       unknownExecutors.foreach { id =>
         logWarning(s"Executor to kill $id does not exist!")
@@ -669,7 +667,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       val killExecutors: Boolean => Future[Boolean] =
-        if (!executorsToKill.isEmpty) {
+        if (executorsToKill.nonEmpty) {
           _ => doKillExecutors(executorsToKill)
         } else {
           _ => Future.successful(false)
@@ -729,6 +727,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   protected def currentDelegationTokens: Array[Byte] = delegationTokens.get()
+
+  // SPARK-27112: We need to ensure that there is ordering of lock acquisition
+  // between TaskSchedulerImpl and CoarseGrainedSchedulerBackend objects in order to fix
+  // the deadlock issue exposed in SPARK-27112
+  private def withLock[T](fn: => T): T = scheduler.synchronized {
+    CoarseGrainedSchedulerBackend.this.synchronized { fn }
+  }
 
 }
 

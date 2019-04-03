@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import java.util
+import java.util.Collections
+
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
@@ -84,19 +87,17 @@ class RateStreamTable(
 
   override def schema(): StructType = RateStreamProvider.SCHEMA
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
-    override def build(): Scan = new Scan {
-      override def readSchema(): StructType = RateStreamProvider.SCHEMA
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
 
-      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-        new RateStreamMicroBatchStream(
-          rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
-      }
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
-      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-        new RateStreamContinuousStream(rowsPerSecond, numPartitions)
-      }
-    }
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+      new RateStreamMicroBatchStream(
+        rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
+
+    override def toContinuousStream(checkpointLocation: String): ContinuousStream =
+      new RateStreamContinuousStream(rowsPerSecond, numPartitions)
   }
 }
 

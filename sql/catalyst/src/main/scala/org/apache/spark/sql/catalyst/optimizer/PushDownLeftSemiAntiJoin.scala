@@ -82,7 +82,18 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newAgg = agg.copy(child = Join(agg.child, rightOp, joinType, Option(replaced), hint))
           // If there is no more filter to stay up, just return the Aggregate over Join.
           // Otherwise, create "Filter(stayUp) <- Aggregate <- Join(pushDownPredicate)".
-          if (stayUp.isEmpty) newAgg else Filter(stayUp.reduce(And), newAgg)
+          if (stayUp.isEmpty) {
+            newAgg
+          } else {
+            joinType match {
+              // In case of Left semi join, the part of the join condition which does not refer to
+              // to child attributes of the aggregate operator are kept as a Filter over window.
+              case LeftSemi => Filter(stayUp.reduce(And), newAgg)
+              // In case of left anti join, the join is pushed down when the entire join condition
+              // is eligible to be pushed down to preserve the semantics of left anti join.
+              case _ => join
+            }
+          }
         } else {
           // The join condition is not a subset of the Aggregate's GROUP BY columns,
           // no push down.
@@ -114,7 +125,18 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
           val predicate = pushDown.reduce(And)
           val newPlan = w.copy(child = Join(w.child, rightOp, joinType, Option(predicate), hint))
-          if (stayUp.isEmpty) newPlan else Filter(stayUp.reduce(And), newPlan)
+          if (stayUp.isEmpty) {
+            newPlan
+          } else {
+            joinType match {
+              // In case of Left semi join, the part of the join condition which does not refer to
+              // to partition attributes of the window operator are kept as a Filter over window.
+              case LeftSemi => Filter(stayUp.reduce(And), newPlan)
+              // In case of left anti join, the join is pushed down when the entire join condition
+              // is eligible to be pushed down to preserve the semantics of left anti join.
+              case _ => join
+            }
+          }
         } else {
           // The join condition is not a subset of the Window's PARTITION BY clause,
           // no push down.
@@ -184,7 +206,14 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
       if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
         val newChild = insertJoin(Option(pushDown.reduceLeft(And)))
         if (stayUp.nonEmpty) {
-          Filter(stayUp.reduceLeft(And), newChild)
+          join.joinType match {
+            // In case of Left semi join, the part of the join condition which does not refer to
+            // to attributes of the grandchild are kept as a Filter over window.
+            case LeftSemi => Filter(stayUp.reduce(And), newChild)
+            // In case of left anti join, the join is pushed down when the entire join condition
+            // is eligible to be pushed down to preserve the semantics of left anti join.
+            case _ => join
+          }
         } else {
           newChild
         }

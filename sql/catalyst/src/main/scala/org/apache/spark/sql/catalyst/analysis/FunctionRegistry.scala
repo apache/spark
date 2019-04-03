@@ -461,6 +461,7 @@ object FunctionRegistry {
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),
     expression[Murmur3Hash]("hash"),
+    expression[XxHash64]("xxhash64"),
     expression[Sha1]("sha"),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),

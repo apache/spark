@@ -82,29 +82,18 @@ val                 	string
 -- !query 9
 DESC WITH s AS (SELECT 'hello' as col1) SELECT * FROM s
 -- !query 9 schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query 9 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-mismatched input 'AS' expecting {<EOF>, '.'}(line 1, pos 12)
-
-== SQL ==
-DESC WITH s AS (SELECT 'hello' as col1) SELECT * FROM s
-------------^^^
+col1                	string
 
 
 -- !query 10
 DESCRIBE QUERY WITH s AS (SELECT * from desc_temp1) SELECT * FROM s
 -- !query 10 schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query 10 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-mismatched input 's' expecting {<EOF>, '.'}(line 1, pos 20)
-
-== SQL ==
-DESCRIBE QUERY WITH s AS (SELECT * from desc_temp1) SELECT * FROM s
---------------------^^^
+key                 	int                 	column_comment      
+val                 	string
 
 
 -- !query 11
@@ -145,7 +134,7 @@ struct<>
 -- !query 13 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'insert' expecting {<EOF>, '(', ',', 'SELECT', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'JOIN', 'CROSS', 'INNER', 'LEFT', 'SEMI', 'RIGHT', 'FULL', 'NATURAL', 'PIVOT', 'LATERAL', 'WINDOW', 'UNION', 'EXCEPT', 'MINUS', 'INTERSECT', 'SORT', 'CLUSTER', 'DISTRIBUTE', 'ANTI'}(line 3, pos 5)
+mismatched input 'insert' expecting {<EOF>, '(', ',', 'ANTI', 'CLUSTER', 'CROSS', 'DISTRIBUTE', 'EXCEPT', 'FULL', 'GROUP', 'HAVING', 'INNER', 'INTERSECT', 'JOIN', 'LATERAL', 'LEFT', 'LIMIT', 'NATURAL', 'ORDER', 'PIVOT', 'RIGHT', 'SELECT', 'SEMI', 'MINUS', 'SORT', 'UNION', 'WHERE', 'WINDOW'}(line 3, pos 5)
 
 == SQL ==
 DESCRIBE
