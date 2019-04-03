@@ -1,6 +1,6 @@
 package org.apache.spark.graph.cypher.adapters
 
-import org.apache.spark.graph.api.{NodeFrame, PropertyGraph, RelationshipFrame}
+import org.apache.spark.graph.api.{NodeFrame, PropertyGraph, PropertyGraphType, RelationshipFrame}
 import org.apache.spark.graph.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.cypher.adapters.MappingAdapter._
 import org.apache.spark.graph.cypher.{SparkCypherSession, SparkEntityTable}
@@ -12,6 +12,8 @@ case class RelationalGraphAdapter(
   cypherSession: SparkCypherSession,
   nodeFrames: Seq[NodeFrame],
   relationshipFrames: Seq[RelationshipFrame]) extends PropertyGraph {
+
+  override def schema: PropertyGraphType = SchemaAdapter(graph.schema)
 
   private [graph] lazy val graph = {
     if (nodeFrames.isEmpty) {
@@ -60,10 +62,6 @@ case class RelationalGraphAdapter(
 
     df.select(selectColumns: _*)
   }
-
-  override def labelSets: Set[Set[String]] = graph.schema.labelCombinations.combos
-
-  override def relationshipTypes: Set[String] = graph.schema.relationshipTypes
 
   override def nodeFrame(labelSet: Set[String]): NodeFrame = _nodeFrame(labelSet)
 
