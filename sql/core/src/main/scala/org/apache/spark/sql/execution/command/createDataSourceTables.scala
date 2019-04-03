@@ -318,6 +318,9 @@ case class CreateDataSourceTableAsSelectCommand(
             throw new AnalysisException(
               s"data source ${writeTable.name} does not support SaveMode $mode")
         }
+      case _ =>
+        throw new AnalysisException(
+          s"${mode} is not supported in CreateDataSourceTableAsSelectCommand")
     }
 
     Option(writeExec).foreach(_.execute().count())
