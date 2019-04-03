@@ -24,6 +24,7 @@ import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
+import org.apache.spark.shuffle.sort.io.DefaultShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -793,6 +794,12 @@ package object config {
         "spark.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val SHUFFLE_IO_PLUGIN_CLASS =
+    ConfigBuilder("spark.shuffle.io.plugin.class")
+      .doc("Name of the class to use for shuffle IO.")
+      .stringConf
+      .createWithDefault(classOf[DefaultShuffleDataIO].getName)
 
   private[spark] val SHUFFLE_FILE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.file.buffer")

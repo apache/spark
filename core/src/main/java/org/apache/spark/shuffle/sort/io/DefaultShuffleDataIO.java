@@ -15,19 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.shuffle;
+package org.apache.spark.shuffle.sort.io;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.shuffle.ShuffleExecutorComponents;
+import org.apache.spark.api.shuffle.ShuffleDataIO;
 
-/**
- * :: Experimental ::
- * An interface for building shuffle support for Executors
- *
- * @since 3.0.0
- */
-@Experimental
-public interface ShuffleExecutorComponents {
-  void initializeExecutor(String appId, String execId);
+public class DefaultShuffleDataIO implements ShuffleDataIO {
 
-  ShuffleWriteSupport writes();
+  private final SparkConf sparkConf;
+
+  public DefaultShuffleDataIO(SparkConf sparkConf) {
+    this.sparkConf = sparkConf;
+  }
+
+  @Override
+  public ShuffleExecutorComponents executor() {
+    return new DefaultShuffleExecutorComponents(sparkConf);
+  }
 }

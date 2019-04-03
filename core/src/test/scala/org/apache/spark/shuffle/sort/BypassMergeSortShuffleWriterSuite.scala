@@ -18,22 +18,26 @@
 package org.apache.spark.shuffle.sort
 
 import java.io.File
-import java.util.UUID
+import java.util.{Properties, UUID}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
-import org.mockito.ArgumentMatchers.{any, anyInt}
+import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
+import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.api.shuffle.ShuffleWriteSupport
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
+import org.apache.spark.shuffle.sort.io.DefaultShuffleWriteSupport
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -48,7 +52,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   private var taskMetrics: TaskMetrics = _
   private var tempDir: File = _
   private var outputFile: File = _
+  private var writeSupport: ShuffleWriteSupport = _
   private val conf: SparkConf = new SparkConf(loadDefaults = false)
+    .set("spark.app.id", "sampleApp")
   private val temporaryFilesCreated: mutable.Buffer[File] = new ArrayBuffer[File]()
   private val blockIdToFileMap: mutable.Map[BlockId, File] = new mutable.HashMap[BlockId, File]
   private var shuffleHandle: BypassMergeSortShuffleHandle[Int, Int] = _
@@ -107,9 +113,27 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(diskBlockManager.getFile(any[BlockId])).thenAnswer { (invocation: InvocationOnMock) =>
       blockIdToFileMap(invocation.getArguments.head.asInstanceOf[BlockId])
     }
+
+    val memoryManager = new TestMemoryManager(conf)
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+    when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
+
+    TaskContext.setTaskContext(new TaskContextImpl(
+      stageId = 0,
+      stageAttemptNumber = 0,
+      partitionId = 0,
+      taskAttemptId = Random.nextInt(10000),
+      attemptNumber = 0,
+      taskMemoryManager = taskMemoryManager,
+      localProperties = new Properties,
+      metricsSystem = null,
+      taskMetrics = taskMetrics))
+
+    writeSupport = new DefaultShuffleWriteSupport(conf, blockResolver)
   }
 
   override def afterEach(): Unit = {
+    TaskContext.unset()
     try {
       Utils.deleteRecursively(tempDir)
       blockIdToFileMap.clear()
@@ -126,7 +150,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       shuffleHandle,
       0, // MapId
       conf,
-      taskContext.taskMetrics().shuffleWriteMetrics
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      writeSupport
     )
     writer.write(Iterator.empty)
     writer.stop( /* success = */ true)
@@ -142,6 +167,33 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   }
 
   test("write with some empty partitions") {
+    val transferConf = conf.clone.set("spark.file.transferTo", "false")
+    def records: Iterator[(Int, Int)] =
+      Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      blockResolver,
+      shuffleHandle,
+      0, // MapId
+      transferConf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      writeSupport
+    )
+    writer.write(records)
+    writer.stop( /* success = */ true)
+    assert(temporaryFilesCreated.nonEmpty)
+    assert(writer.getPartitionLengths.sum === outputFile.length())
+    assert(writer.getPartitionLengths.count(_ == 0L) === 4) // should be 4 zero length files
+    assert(temporaryFilesCreated.count(_.exists()) === 0) // check that temporary files were deleted
+    val shuffleWriteMetrics = taskContext.taskMetrics().shuffleWriteMetrics
+    assert(shuffleWriteMetrics.bytesWritten === outputFile.length())
+    assert(shuffleWriteMetrics.recordsWritten === records.length)
+    assert(taskMetrics.diskBytesSpilled === 0)
+    assert(taskMetrics.memoryBytesSpilled === 0)
+  }
+
+  // TODO(ifilonenko): MAKE THIS PASS
+  test("write with some empty partitions with transferTo") {
     def records: Iterator[(Int, Int)] =
       Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
     val writer = new BypassMergeSortShuffleWriter[Int, Int](
@@ -150,7 +202,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       shuffleHandle,
       0, // MapId
       conf,
-      taskContext.taskMetrics().shuffleWriteMetrics
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      writeSupport
     )
     writer.write(records)
     writer.stop( /* success = */ true)
@@ -185,7 +238,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       shuffleHandle,
       0, // MapId
       conf,
-      taskContext.taskMetrics().shuffleWriteMetrics
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      writeSupport
     )
 
     intercept[SparkException] {
@@ -207,7 +261,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       shuffleHandle,
       0, // MapId
       conf,
-      taskContext.taskMetrics().shuffleWriteMetrics
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      writeSupport
     )
     intercept[SparkException] {
       writer.write((0 until 100000).iterator.map(i => {
@@ -221,5 +276,4 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     writer.stop( /* success = */ false)
     assert(temporaryFilesCreated.count(_.exists()) === 0)
   }
-
 }

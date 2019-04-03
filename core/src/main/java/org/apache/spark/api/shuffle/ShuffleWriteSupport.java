@@ -30,7 +30,6 @@ import org.apache.http.annotation.Experimental;
 @Experimental
 public interface ShuffleWriteSupport {
   ShuffleMapOutputWriter createMapOutputWriter(
-    String appId,
     int shuffleId,
     int mapId,
     int numPartitions) throws IOException;
