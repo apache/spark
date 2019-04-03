@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming
 
+import org.apache.spark.internal.config.ConfigBuilder
+
 /**
  * Spark Integration for Kafka 0.10
  */
