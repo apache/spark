@@ -30,7 +30,7 @@ package object kafka010 {   // scalastyle:ignore
     ConfigBuilder("spark.kafka.producer.cache.timeout")
       .doc("The time to remove the producer when the producer is not used.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("10m")
+      .createWithDefault(TimeUnit.MINUTES.toMillis(10))
 
   private[spark] val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.sql.kafkaConsumerCache.capacity")
@@ -38,14 +38,11 @@ package object kafka010 {   // scalastyle:ignore
       .intConf
       .createWithDefault(64)
 
-
   val MAX_OFFSET_PER_TRIGGER = "maxOffsetsPerTrigger"
   val FETCH_OFFSET_NUM_RETRY = "fetchOffset.numRetries"
   val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchOffset.retryIntervalMs"
   val CONSUMER_POLL_TIMEOUT = "kafkaConsumer.pollTimeoutMs"
   val ASSIGN = "assign"
-  val SUBSCRIBEPATTERN = "subscribepattern"
+  val SUBSCRIBE_PATTERN = "subscribepattern"
   val SUBSCRIBE = "subscribe"
-
-
  }

@@ -188,7 +188,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       AssignStrategy(JsonUtils.partitions(value))
     case (SUBSCRIBE, value) =>
       SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
-    case (SUBSCRIBEPATTERN, value) =>
+    case (SUBSCRIBE_PATTERN, value) =>
       SubscribePatternStrategy(value.trim())
     case _ =>
       // Should never reach here as we are already matching on
@@ -230,8 +230,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
             "No topics to subscribe to as specified value for option " +
               s"'subscribe' is '$value'")
         }
-      case (SUBSCRIBEPATTERN, value) =>
-        val pattern = caseInsensitiveParams(SUBSCRIBEPATTERN).trim()
+      case (SUBSCRIBE_PATTERN, value) =>
+        val pattern = caseInsensitiveParams(SUBSCRIBE_PATTERN).trim()
         if (pattern.isEmpty) {
           throw new IllegalArgumentException(
             "Pattern to subscribe is empty as specified value for option " +
@@ -456,7 +456,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 }
 
 private[kafka010] object KafkaSourceProvider extends Logging {
-  private val STRATEGY_OPTION_KEYS = Set(SUBSCRIBE, SUBSCRIBEPATTERN, ASSIGN)
+  private val STRATEGY_OPTION_KEYS = Set(SUBSCRIBE, SUBSCRIBE_PATTERN, ASSIGN)
   private[kafka010] val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
