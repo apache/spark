@@ -1456,6 +1456,13 @@ object SQLConf {
       .doc("The max number of entries to be stored in queue to wait for late epochs. " +
         "If this parameter is exceeded by the size of the queue, stream will stop with an error.")
       .intConf
+      .createWithDefault(10)
+
+  val CONTINUOUS_STREAMING_EPOCH_MSG_BACKLOG_QUEUE_SIZE =
+    buildConf("spark.sql.streaming.continuous.epochMessageBacklogQueueSize")
+      .doc("The max number of entries to be stored in queue to wait for late epochs. " +
+        "If this parameter is exceeded by the size of the queue, stream will stop with an error.")
+      .intConf
       .createWithDefault(10000)
 
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
@@ -2115,6 +2122,9 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingEpochBacklogQueueSize: Int =
     getConf(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE)
+
+  def continuousStreamingEpochMsgBacklogQueueSize: Int =
+    getConf(CONTINUOUS_STREAMING_EPOCH_MSG_BACKLOG_QUEUE_SIZE)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
