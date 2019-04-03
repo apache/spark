@@ -31,6 +31,9 @@ trait CypherSession {
     * Creates a [[PropertyGraph]] from a sequence of [[NodeFrame]]s and [[RelationshipFrame]]s.
     * At least one [[NodeFrame]] has to be provided.
     *
+    * For each label set and relationship type there can be ar most on [[NodeFrame]] and
+    * [[RelationshipFrame]], respectively.
+    *
     * @param nodes         [[NodeFrame]]s that define the nodes in the graph
     * @param relationships [[RelationshipFrame]]s that define the relationships in the graph
     */

@@ -8,7 +8,7 @@ object MappingAdapter {
   implicit class RichNodeDataFrame(val nodeDf: NodeFrame) extends AnyVal {
     def toNodeMapping: EntityMapping = NodeMappingBuilder
       .on(nodeDf.idColumn)
-      .withImpliedLabels(nodeDf.labels.toSeq: _*)
+      .withImpliedLabels(nodeDf.labelSet.toSeq: _*)
       .withPropertyKeyMappings(nodeDf.properties.toSeq:_*)
       .build
   }

@@ -43,6 +43,10 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
   }
 
   override def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame] = Seq.empty): PropertyGraph = {
+    require(nodes.groupBy(_.labelSet).forall(_._2.size == 1),
+      "There can be at most one NodeFrame per label set")
+    require(relationships.groupBy(_.relationshipType).forall(_._2.size == 1),
+      "There can be at most one RelationshipFrame per relationship type")
     RelationalGraphAdapter(this, nodes, relationships)
   }
 

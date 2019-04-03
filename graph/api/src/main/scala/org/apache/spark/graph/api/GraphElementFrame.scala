@@ -97,15 +97,18 @@ object NodeFrame {
 /**
   * Describes how to map an input [[DataFrame]] to nodes.
   *
+  * Each row in the [[DataFrame]] represents a node which has exactly the labels defined by the
+  * given label set.
+  *
   * @param initialDf  [[DataFrame]] containing a single node in each row
   * @param idColumn   column that contains the node identifier
-  * @param labels     labels that are assigned to all nodes
+  * @param labelSet   labels that are assigned to all nodes
   * @param properties mapping from property keys to corresponding columns
   */
 case class NodeFrame(
   initialDf: DataFrame,
   idColumn: String,
-  labels: Set[String],
+  labelSet: Set[String],
   properties: Map[String, String]
 ) extends GraphElementFrame {
 
@@ -120,28 +123,30 @@ object RelationshipFrame {
     *
     * All columns apart from the given identifier columns are mapped to relationship properties.
     *
-    * @param initialDf        [[DataFrame]] containing a single relationship in each row
+    * @param df               [[DataFrame]] containing a single relationship in each row
     * @param idColumn         column that contains the relationship identifier
     * @param sourceIdColumn   column that contains the source node identifier of the relationship
     * @param targetIdColumn   column that contains the target node identifier of the relationship
     * @param relationshipType relationship type that is assigned to all relationships
     */
   def apply(
-    initialDf: DataFrame,
+    df: DataFrame,
     idColumn: String,
     sourceIdColumn: String,
     targetIdColumn: String,
     relationshipType: String
   ): RelationshipFrame = {
-    val properties = (initialDf.columns.toSet - idColumn - sourceIdColumn - targetIdColumn)
+    val properties = (df.columns.toSet - idColumn - sourceIdColumn - targetIdColumn)
       .map(columnName => columnName -> columnName).toMap
-    RelationshipFrame(initialDf, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
+    RelationshipFrame(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
   }
 
 }
 
 /**
   * Describes how to map an input [[DataFrame]] to relationships.
+  *
+  * Each row in the [[DataFrame]] represents a relationship with the given relationship type.
   *
   * @param initialDf        [[DataFrame]] containing a single relationship in each row
   * @param idColumn         column that contains the relationship identifier
