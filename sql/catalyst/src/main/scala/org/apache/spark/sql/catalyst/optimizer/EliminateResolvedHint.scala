@@ -45,7 +45,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
 
   private def collectHints(plan: LogicalPlan): Seq[HintInfo] = {
     plan match {
-      case h: ResolvedHint => collectHints(h.child) :+ h.hints
+      case h: ResolvedHint => h.hints +: collectHints(h.child)
       case u: UnaryNode => collectHints(u.child)
       // TODO revisit this logic:
       // except and intersect are semi/anti-joins which won't return more data then

@@ -69,6 +69,13 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
+          case ResolvedHint(u: UnresolvedRelation, _)
+              if relations.exists(resolver(_, u.tableIdentifier.table)) =>
+            ResolvedHint(u, createHintInfo(hintName))
+          case ResolvedHint(r: SubqueryAlias, _)
+              if relations.exists(resolver(_, r.alias)) =>
+            ResolvedHint(r, createHintInfo(hintName))
+
           case u: UnresolvedRelation if relations.exists(resolver(_, u.tableIdentifier.table)) =>
             ResolvedHint(plan, createHintInfo(hintName))
           case r: SubqueryAlias if relations.exists(resolver(_, r.alias)) =>
@@ -76,8 +83,7 @@ object ResolveHints {
 
           case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
             // Don't traverse down these nodes.
-            // For an existing strategy hint, there is no point going down (if we do, we either
-            // won't change the structure, or will introduce another strategy hint that is useless.
+            // For an existing strategy hint, there is no chance for a match from this point down.
             // The rest (view, with, subquery) indicates different scopes that we shouldn't traverse
             // down. Note that technically when this rule is executed, we haven't completed view
             // resolution yet and as a result the view part should be deadcode. I'm leaving it here

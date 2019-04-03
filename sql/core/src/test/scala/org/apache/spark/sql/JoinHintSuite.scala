@@ -191,6 +191,67 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         None,
         Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
     )
+    verifyJoinHint(
+      df.hint("merge").filter('id > 2).hint("shuffle_hash").join(df, "id"),
+      JoinHint(
+        Some(HintInfo(strategy = Some(SHUFFLE_HASH))),
+        None) :: Nil
+    )
+    verifyJoinHint(
+      df.join(df.hint("broadcast").limit(2).hint("merge"), "id")
+        .hint("shuffle_hash")
+        .hint("shuffle_replicate_nl")
+        .join(df, "id"),
+      JoinHint(
+        Some(HintInfo(strategy = Some(SHUFFLE_REPLICATE_NL))),
+        None) ::
+        JoinHint(
+          None,
+          Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) :: Nil
+    )
+  }
+
+  test("hint merge - SQL") {
+    withTempView("a", "b", "c") {
+      df1.createOrReplaceTempView("a")
+      df2.createOrReplaceTempView("b")
+      df3.createOrReplaceTempView("c")
+      verifyJoinHint(
+        sql("select /*+ merge(a, c) broadcast(a, b)*/ * from a, b, c " +
+          "where a.a1 = b.b1 and b.b1 = c.c1"),
+        JoinHint(
+          None,
+          Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) ::
+          JoinHint(
+            Some(HintInfo(strategy = Some(SHUFFLE_MERGE))),
+            Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
+      )
+      verifyJoinHint(
+        sql("select /*+ shuffle_hash(a, b) merge(b, d) broadcast(b)*/ * from a, b, c " +
+          "where a.a1 = b.b1 and b.b1 = c.c1"),
+        JoinHint.NONE ::
+          JoinHint(
+            Some(HintInfo(strategy = Some(SHUFFLE_HASH))),
+            Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil
+      )
+      verifyJoinHint(
+        sql(
+          """
+            |select /*+ broadcast(a, c) merge(a, d)*/ * from a
+            |join (
+            |  select /*+ shuffle_hash(c) shuffle_replicate_nl(b, c)*/ * from b
+            |  join c on b.b1 = c.c1
+            |) as d
+            |on a.a2 = d.b2
+          """.stripMargin),
+        JoinHint(
+          Some(HintInfo(strategy = Some(BROADCAST))),
+          Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) ::
+          JoinHint(
+            Some(HintInfo(strategy = Some(SHUFFLE_REPLICATE_NL))),
+            Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil
+      )
+    }
   }
 
   test("nested hint") {
@@ -198,6 +259,12 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
       df.hint("broadcast").hint("broadcast").filter('id > 2).join(df, "id"),
       JoinHint(
         Some(HintInfo(strategy = Some(BROADCAST))),
+        None) :: Nil
+    )
+    verifyJoinHint(
+      df.hint("shuffle_hash").hint("broadcast").hint("merge").filter('id > 2).join(df, "id"),
+      JoinHint(
+        Some(HintInfo(strategy = Some(SHUFFLE_MERGE))),
         None) :: Nil
     )
   }
@@ -298,7 +365,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         assertBroadcastHashJoin(
           sql(equiJoinQueryWithHint("BROADCAST(t2)" :: "SHUFFLE_HASH(t1)" :: Nil)), BuildRight)
         assertBroadcastHashJoin(
-          sql(equiJoinQueryWithHint("BROADCAST(t1)" :: "MERGE(t2)" :: Nil)), BuildLeft)
+          sql(equiJoinQueryWithHint("BROADCAST(t1)" :: "MERGE(t1, t2)" :: Nil)), BuildLeft)
         assertBroadcastHashJoin(
           sql(equiJoinQueryWithHint("BROADCAST(t1)" :: "SHUFFLE_REPLICATE_NL(t2)" :: Nil)),
           BuildLeft)
@@ -337,7 +404,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         assertShuffleMergeJoin(
           sql(equiJoinQueryWithHint("MERGE(t1, t2)" :: Nil)))
 
-        // Shuffle-hash hint prioritized over shuffle-hash hint and shuffle-replicate-nl hint
+        // Shuffle-merge hint prioritized over shuffle-hash hint and shuffle-replicate-nl hint
         assertShuffleMergeJoin(
           sql(equiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t2)" :: "MERGE(t1)" :: Nil, "left")))
         assertShuffleMergeJoin(
