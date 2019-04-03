@@ -80,7 +80,7 @@ class Module(object):
             environ.get("SUPPORTED_HADOOP_PROFILE") == hadoop_version):
             all_modules.append(self)
         else:
-            print "[info] Skip unsupported module: " + name
+            print ("[info] Skip unsupported module: " + name)
 
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
