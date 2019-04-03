@@ -86,7 +86,7 @@ private[sql] object DataSourceV2Utils extends Logging {
       // [[FileDataSourceV2]] will still be used if we call the load()/save() method in
       // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
       // instead of `providingClass`.
-      case f: FileDataSourceV2 => f.fallBackFileFormat
+      case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => lookupCls
     }
 
