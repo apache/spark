@@ -43,38 +43,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   // - is still resolved
   // - only host special expressions in supported operators
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (plan.resolved && checkSpecialExpressionIntegrity(plan))
-  }
-
-  /**
-   * Check if all operators in this plan hold structural integrity with regards to hosting special
-   * expressions.
-   * Returns true when all operators are integral.
-   */
-  private def checkSpecialExpressionIntegrity(plan: LogicalPlan): Boolean = {
-    plan.find(specialExpressionInUnsupportedOperator).isEmpty
-  }
-
-  /**
-   * Check if there's any expression in this query plan operator that is
-   * - A WindowExpression but the plan is not Window
-   * - An AggregateExpresion but the plan is not Aggregate or Window
-   * - A Generator but the plan is not Generate
-   * Returns true when this operator breaks structural integrity with one of the cases above.
-   */
-  private def specialExpressionInUnsupportedOperator(plan: LogicalPlan): Boolean = {
-    val exprs = plan.expressions
-    exprs.flatMap { root =>
-      root.find {
-        case e: WindowExpression
-          if !plan.isInstanceOf[Window] => true
-        case e: AggregateExpression
-          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => true
-        case e: Generator
-          if !plan.isInstanceOf[Generate] => true
-        case _ => false
-      }
-    }.nonEmpty
+    !Utils.isTesting || (plan.resolved &&
+      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty)
   }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)

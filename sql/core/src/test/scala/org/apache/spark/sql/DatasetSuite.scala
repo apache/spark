@@ -1195,11 +1195,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       GroupedRoutes("a", "c", Seq(Route("a", "c", 2)))
     )
 
-    implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] = new Ordering[GroupedRoutes] {
-      override def compare(x: GroupedRoutes, y: GroupedRoutes): Int = {
-        x.toString.compareTo(y.toString)
-      }
-    }
+    implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] =
+      (x: GroupedRoutes, y: GroupedRoutes) => x.toString.compareTo(y.toString)
 
     checkDatasetUnorderly(grped, expected: _*)
   }
