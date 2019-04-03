@@ -22,6 +22,11 @@ import os
 
 all_modules = []
 
+if os.environ.get("AMPLAB_JENKINS"):
+    hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
+else:
+    hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
+
 
 @total_ordering
 class Module(object):
@@ -73,14 +78,12 @@ class Module(object):
         self.dependent_modules = set()
         for dep in dependencies:
             dep.dependent_modules.add(self)
-
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
         if (not environ or
-            environ.get("SUPPORTED_HADOOP_PROFILE") is None or
-            environ.get("SUPPORTED_HADOOP_PROFILE") == hadoop_version):
+                environ.get("SUPPORTED_HADOOP_PROFILE") is None or
+                environ.get("SUPPORTED_HADOOP_PROFILE") == hadoop_version):
             all_modules.append(self)
         else:
-            print ("[info] Skip unsupported module: " + name)
+            print("[info] Skip unsupported module: " + name)
 
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
