@@ -574,7 +574,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * </ul>
    *
    * @since 1.5.0
-   * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
     format("orc").save(path)
