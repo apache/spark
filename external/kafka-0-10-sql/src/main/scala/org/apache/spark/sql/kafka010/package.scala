@@ -32,7 +32,7 @@ package object kafka010 {   // scalastyle:ignore
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10m")
 
-  val CONSUMER_CACHE_CAPACITY =
+  private[spark] val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.sql.kafkaConsumerCache.capacity")
       .doc("The size of LinkedHashMap for caching kafkaConsumers.")
       .intConf
