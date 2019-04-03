@@ -237,7 +237,7 @@ private[spark] object HiveUtils extends Logging {
     }
 
     // The following configurations were removed by HIVE-12164(Hive 2.0)
-    val removedTimeVars = Seq(
+    val hardcodingTimeVars = Seq(
       ("hive.stats.jdbc.timeout", "30s") -> TimeUnit.SECONDS,
       ("hive.stats.retries.wait", "3000ms") -> TimeUnit.MILLISECONDS
     ).map { case ((key, defaultValue), unit) =>
@@ -245,7 +245,7 @@ private[spark] object HiveUtils extends Logging {
       key -> HiveConf.toTime(value, unit, unit).toString
     }
 
-    (commonTimeVars ++ removedTimeVars).toMap
+    (commonTimeVars ++ hardcodingTimeVars).toMap
   }
 
   /**
