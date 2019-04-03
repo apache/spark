@@ -2143,6 +2143,11 @@ setMethod("selectExpr",
 #' Return a new SparkDataFrame by adding a column or replacing the existing column
 #' that has the same name.
 #'
+#' Note: This method introduces a projection internally. Therefore, calling it multiple times,
+#' for instance, via loops in order to add multiple columns can generate big plans which
+#' can cause performance issues and even \code{StackOverflowException}. To avoid this,
+#' use \code{select} with the multiple columns at once.
+#'
 #' @param x a SparkDataFrame.
 #' @param colName a column name.
 #' @param col a Column expression (which must refer only to this SparkDataFrame), or an atomic
