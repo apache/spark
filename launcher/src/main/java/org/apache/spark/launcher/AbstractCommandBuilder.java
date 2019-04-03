@@ -167,6 +167,7 @@ abstract class AbstractCommandBuilder {
         "sql/core",
         "sql/hive",
         "sql/hive-thriftserver",
+        "sql/hive-thriftserverV2",
         "streaming"
       );
       if (prependClasses) {
