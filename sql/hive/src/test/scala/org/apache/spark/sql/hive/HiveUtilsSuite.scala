@@ -64,6 +64,11 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
   }
 
   test("SPARK-27349: Dealing with TimeVars removed in Hive 2.x") {
+    // Test default value
+    val defaultConf = new Configuration
+    assert(HiveUtils.formatTimeVarsForHiveClient(defaultConf)("hive.stats.jdbc.timeout") === "30")
+    assert(HiveUtils.formatTimeVarsForHiveClient(defaultConf)("hive.stats.retries.wait") === "3000")
+
     def testFormatTimeVarsForHiveClient(key: String, value: String, expected: Long): Unit = {
       val conf = new Configuration
       conf.set(key, value)
