@@ -20,7 +20,7 @@ package org.apache.spark.streaming
 /**
  * Spark Integration for Kafka 0.10
  */
-package object kafka010 {
+package object kafka010 { //scalastyle:ignore
   private[spark] val CONSUMER_CACHE_ENABLED =
     ConfigBuilder("spark.streaming.kafka.consumer.cache.enabled")
       .booleanConf
