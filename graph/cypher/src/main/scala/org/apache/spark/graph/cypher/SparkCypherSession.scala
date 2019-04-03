@@ -20,7 +20,7 @@ object SparkCypherSession {
 /**
   * Default [[CypherSession]] implementation.
   *
-  * This class is the main entry point for working with the spark-graph-cypher module.
+  * This class is the main entry point for working with the spark-cypher module.
   * It wraps a [[SparkSession]] and allows to run Cypher queries over graphs represented as [[org.apache.spark.sql.DataFrame]]s.
   */
 private[spark] class SparkCypherSession(override val sparkSession: SparkSession) extends RelationalCypherSession[DataFrameTable] with CypherSession {
