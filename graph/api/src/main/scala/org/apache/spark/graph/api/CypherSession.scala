@@ -1,6 +1,6 @@
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, functions}
 
 /**
   * Allows for creating and loading [[PropertyGraph]] instances and running Cypher-queries on them.
@@ -58,7 +58,37 @@ trait CypherSession {
     * @param nodes node [[DataFrame]]
     * @param relationships relationship [[DataFrame]]
     */
-  def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph
+  def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph = {
+    val idColumn = "$ID"
+    val sourceIdColumn = "$SOURCE_ID"
+    val targetIdColumn = "$TARGET_ID"
+
+    val labelColumns = nodes.columns.filter(_.startsWith(":")).toSet
+    val nodeProperties = (nodes.columns.toSet - idColumn -- labelColumns).map(col => col -> col).toMap
+
+    val trueLit = functions.lit(true)
+    val falseLit = functions.lit(false)
+
+    // TODO: add empty set
+    val nodeFrames = labelColumns.subsets().map { labelSet =>
+      val predicate = labelColumns.map {
+        case labelColumn if labelSet.contains(labelColumn) => nodes.col(labelColumn) === trueLit
+        case labelColumn => nodes.col(labelColumn) === falseLit
+      }.reduce(_ && _)
+
+      NodeFrame(nodes.filter(predicate), idColumn, labelSet.map(_.substring(1)), nodeProperties)
+    }
+
+    val relTypeColumns = relationships.columns.filter(_.startsWith(":")).toSet
+    val relProperties = (relationships.columns.toSet - idColumn - sourceIdColumn - targetIdColumn -- relTypeColumns).map(col => col -> col).toMap
+    val relFrames = relTypeColumns.map { relTypeColumn =>
+      val predicate = relationships.col(relTypeColumn) === trueLit
+
+      RelationshipFrame(relationships.filter(predicate), idColumn, sourceIdColumn, targetIdColumn, relTypeColumn.substring(1), relProperties)
+    }
+
+    createGraph(nodeFrames.toSeq, relFrames.toSeq)
+  }
 
   /**
     * Loads a [[PropertyGraph]] from the given location.
