@@ -2515,41 +2515,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     countForMalformedJSON(0, Seq(""))
   }
 
-  test("SPARK-25040: empty strings should be disallowed") {
-    def failedOnEmptyString(dataType: DataType): Unit = {
-       val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-      val errMessage = intercept[SparkException] {
-        df.collect()
-      }.getMessage
-      assert(errMessage.contains(
-        s"Failed to parse an empty string for data type ${dataType.catalogString}"))
-    }
-
-    def emptyString(dataType: DataType, expected: Any): Unit = {
-      val df = spark.read.schema(s"a ${dataType.catalogString}")
-        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-      checkAnswer(df, Row(expected) :: Nil)
-    }
-
-    failedOnEmptyString(BooleanType)
-    failedOnEmptyString(ByteType)
-    failedOnEmptyString(ShortType)
-    failedOnEmptyString(IntegerType)
-    failedOnEmptyString(LongType)
-    failedOnEmptyString(FloatType)
-    failedOnEmptyString(DoubleType)
-    failedOnEmptyString(DecimalType.SYSTEM_DEFAULT)
-    failedOnEmptyString(TimestampType)
-    failedOnEmptyString(DateType)
-    failedOnEmptyString(ArrayType(IntegerType))
-    failedOnEmptyString(MapType(StringType, IntegerType, true))
-    failedOnEmptyString(StructType(StructField("f1", IntegerType, true) :: Nil))
-
-    emptyString(StringType, "")
-    emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
-  }
-
   test("do not produce empty files for empty partitions") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath

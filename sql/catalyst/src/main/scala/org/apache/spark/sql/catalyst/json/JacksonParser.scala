@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.SafeLogging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
 class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
-    allowArrayAsStructs: Boolean) extends Logging {
+    allowArrayAsStructs: Boolean) extends SafeLogging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -174,7 +174,7 @@ class JacksonParser(
         case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
           parser.getFloatValue
 
-        case VALUE_STRING if parser.getTextLength >= 1 =>
+        case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
             case "NaN" => Float.NaN
@@ -190,7 +190,7 @@ class JacksonParser(
         case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
           parser.getDoubleValue
 
-        case VALUE_STRING if parser.getTextLength >= 1 =>
+        case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
             case "NaN" => Double.NaN
@@ -217,7 +217,7 @@ class JacksonParser(
 
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
-        case VALUE_STRING if parser.getTextLength >= 1 =>
+        case VALUE_STRING =>
           val stringValue = parser.getText
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.
@@ -236,7 +236,7 @@ class JacksonParser(
 
     case DateType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
-        case VALUE_STRING if parser.getTextLength >= 1 =>
+        case VALUE_STRING =>
           val stringValue = parser.getText
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.x
@@ -319,17 +319,18 @@ class JacksonParser(
   }
 
   /**
-   * This function throws an exception for failed conversion. For empty string on data types
-   * except for string and binary types, this also throws an exception.
+   * This function throws an exception for failed conversion, but returns null for empty string,
+   * to guard the non string types.
    */
   private def failedConversion[R >: Null](
       parser: JsonParser,
       dataType: DataType): PartialFunction[JsonToken, R] = {
-
-    // SPARK-25040: Disallow empty strings for data types except for string and binary types.
     case VALUE_STRING if parser.getTextLength < 1 =>
-      throw new RuntimeException(
-        s"Failed to parse an empty string for data type ${dataType.catalogString}")
+      safeLogInfo("Would have dropped empty record. " +
+        "Likely you have empty strings for nested values")
+      // If conversion is failed, this produces `null` rather than throwing exception.
+      // This will protect the mismatch of types.
+      null
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
