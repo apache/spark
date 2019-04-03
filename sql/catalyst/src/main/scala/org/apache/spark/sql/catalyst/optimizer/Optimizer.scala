@@ -172,6 +172,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     // optimizer rules that are triggered when there is a filter
     // (e.g. InferFiltersFromConstraints). If we run this batch earlier, the query becomes just
     // LocalRelation and does not trigger many rules.
+    Batch("OptimizeLimitZero", Once,
+      OptimizeLimitZero) ::
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
@@ -1709,5 +1711,39 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       } else {
         a.copy(groupingExpressions = newGrouping)
       }
+  }
+}
+
+/**
+ * Replaces GlobalLimit 0 and LocalLimit 0 nodes (subtree) with empty Local Relation, as they don't
+  * return any rows.
+ */
+object OptimizeLimitZero extends Rule[LogicalPlan] {
+  // returns empty Local Relation corresponding to given plan
+  private def empty(plan: LogicalPlan) =
+    LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // Nodes below GlobalLimit or LocalLimit can be pruned if the limit value is zero (0).
+    // Any subtree in the logical plan that has GlobalLimit 0 or LocalLimit 0 as its root is
+    // semantically equivalent to an empty relation.
+    //
+    // In such cases, the effects of Limit 0 can be propagated through the Logical Plan by replacing
+    // the (Global/Local) Limit subtree with an empty LocalRelation, thereby pruning the subtree
+    // below and triggering other optimization rules of PropagateEmptyRelation to propagate the
+    // changes up the Logical Plan.
+    //
+    // Replace Global Limit 0 nodes with empty Local Relation
+    case gl @ GlobalLimit(IntegerLiteral(limit), _) if limit == 0 =>
+      empty(gl)
+
+    // Note: For all SQL queries, if a LocalLimit 0 node exists in the Logical Plan, then a
+    // GlobalLimit 0 node would also exist. Thus, the above case would be sufficient to handle
+    // almost all cases. However, if a user explicitly creates a Logical Plan with LocalLimit 0 node
+    // then the following rule will handle that case as well.
+    //
+    // Replace Local Limit 0 nodes with empty Local Relation
+    case ll @ LocalLimit(IntegerLiteral(limit), _) if limit == 0 =>
+      empty(ll)
   }
 }

@@ -108,27 +108,5 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
       case Generate(_: Explode, _, _, _, _, _) => empty(p)
       case _ => p
     }
-
-    // Nodes below GlobalLimit or LocalLimit can be pruned if the limit value is zero (0).
-    // Any subtree in the logical plan that has GlobalLimit 0 or LocalLimit 0 as its root is
-    // semantically equivalent to an empty relation.
-    //
-    // In such cases, the effects of Limit 0 can be propagated through the Logical Plan by replacing
-    // the (Global/Local) Limit subtree with an empty LocalRelation, thereby pruning the subtree
-    // below and triggering other optimization rules of PropagateEmptyRelation to propagate the
-    // changes up the Logical Plan.
-    //
-    // Replace Global Limit 0 nodes with empty Local Relation
-    case p @ GlobalLimit(IntegerLiteral(limit), _) if limit == 0 =>
-      empty(p)
-
-    // Note: For all SQL queries, if a LocalLimit 0 node exists in the Logical Plan, then a
-    // GlobalLimit 0 node would also exist. Thus, the above case would be sufficient to handle
-    // almost all cases. However, if a user explicitly creates a Logical Plan with LocalLimit 0 node
-    // then the following rule will handle that case as well.
-    //
-    // Replace Local Limit 0 nodes with empty Local Relation
-    case p @ LocalLimit(IntegerLiteral(limit), _) if limit == 0 =>
-      empty(p)
   }
 }
