@@ -544,4 +544,36 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(getStatAttrNames(s"$database.v") === Set("c"))
     }
   }
+
+  test("analyzes table statistics in cached catalog view") {
+    def getTableStats(tableName: String): Statistics = {
+      spark.table(tableName).queryExecution.optimizedPlan.stats
+    }
+
+    withTempDatabase { database =>
+      sql(s"CREATE VIEW $database.v AS SELECT 1 c")
+      // Cache data eagerly by default, so this operation collects table stats
+      sql(s"CACHE TABLE $database.v")
+      val stats1 = getTableStats(s"$database.v")
+      assert(stats1.sizeInBytes > 0)
+      assert(stats1.rowCount === Some(1))
+      sql(s"UNCACHE TABLE $database.v")
+
+      // Cache data lazily, then analyze table stats
+      sql(s"CACHE LAZY TABLE $database.v")
+      val stats2 = getTableStats(s"$database.v")
+      assert(stats2.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
+      assert(stats2.rowCount === None)
+
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS NOSCAN")
+      val stats3 = getTableStats(s"$database.v")
+      assert(stats3.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
+      assert(stats3.rowCount === None)
+
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS")
+      val stats4 = getTableStats(s"$database.v")
+      assert(stats4.sizeInBytes === stats1.sizeInBytes)
+      assert(stats4.rowCount === Some(1))
+    }
+  }
 }

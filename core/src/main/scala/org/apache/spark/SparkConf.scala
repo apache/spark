@@ -62,9 +62,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   @transient private lazy val reader: ConfigReader = {
     val _reader = new ConfigReader(new SparkConfigProvider(settings))
-    _reader.bindEnv(new ConfigProvider {
-      override def get(key: String): Option[String] = Option(getenv(key))
-    })
+    _reader.bindEnv((key: String) => Option(getenv(key)))
     _reader
   }
 
@@ -392,7 +390,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Get an optional value, applying variable substitution. */
   private[spark] def getWithSubstitution(key: String): Option[String] = {
-    getOption(key).map(reader.substitute(_))
+    getOption(key).map(reader.substitute)
   }
 
   /** Get all parameters as a list of pairs */
@@ -606,7 +604,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * configuration out for debugging.
    */
   def toDebugString: String = {
-    getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
+    Utils.redact(this, getAll).sorted.map { case (k, v) => k + "=" + v }.mkString("\n")
   }
 
 }
@@ -740,7 +738,6 @@ private[spark] object SparkConf extends Logging {
    */
   def isExecutorStartupConf(name: String): Boolean = {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
-    name.startsWith("spark.ssl") ||
     name.startsWith("spark.rpc") ||
     name.startsWith("spark.network") ||
     isSparkPortConf(name)

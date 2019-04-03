@@ -73,7 +73,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         new FindDataSourceTable(session) +:
         new FindDataSourceV2Table(session) +:
         new ResolveSQLOnFile(session) +:
-        new FallbackOrcDataSourceV2(session) +:
+        new FallBackFileSourceV2(session) +:
         DataSourceResolution(conf) +:
         customResolutionRules
 
