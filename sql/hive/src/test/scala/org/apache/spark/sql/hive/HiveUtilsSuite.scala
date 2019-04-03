@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.SparkConf
@@ -60,5 +61,19 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     } finally {
       Thread.currentThread().setContextClassLoader(contextClassLoader)
     }
+  }
+
+  test("SPARK-27349: Dealing with TimeVars removed in Hive 2.x") {
+    def testFormatTimeVarsForHiveClient(key: String, value: String, expected: Long): Unit = {
+      val conf = new Configuration
+      conf.set(key, value)
+      assert(HiveUtils.formatTimeVarsForHiveClient(conf)(key) === expected.toString)
+    }
+
+    testFormatTimeVarsForHiveClient("hive.stats.jdbc.timeout", "40s", 40)
+    testFormatTimeVarsForHiveClient("hive.stats.jdbc.timeout", "1d", 86400)
+
+    testFormatTimeVarsForHiveClient("hive.stats.retries.wait", "4000ms", 4000)
+    testFormatTimeVarsForHiveClient("hive.stats.retries.wait", "1d", 86400000)
   }
 }
