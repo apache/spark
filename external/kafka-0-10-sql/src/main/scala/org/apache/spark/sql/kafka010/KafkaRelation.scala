@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.util.UUID
 
 import org.apache.kafka.common.TopicPartition
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network
 import org.apache.spark.rdd.RDD
