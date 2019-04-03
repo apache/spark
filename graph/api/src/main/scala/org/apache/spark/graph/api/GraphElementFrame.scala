@@ -24,7 +24,9 @@ object GraphElementFrame {
 }
 
 /**
-  * Describes how to map an input [[DataFrame]] to graph elements (i.e. nodes or relationships).
+  * A [[PropertyGraph]] is created from GraphElementFrames.
+  *
+  * Wraps a [[DataFrame]] and describes how it maps to graph elements (i.e. nodes or relationships).
   */
 trait GraphElementFrame {
 

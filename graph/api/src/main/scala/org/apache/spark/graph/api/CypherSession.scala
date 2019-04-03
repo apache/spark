@@ -3,7 +3,8 @@ package org.apache.spark.graph.api
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 /**
-  * Allows for creating [[PropertyGraph]] instances and running Cypher-queries on them.
+  * Allows for creating and loading [[PropertyGraph]] instances and running Cypher-queries on them.
+  * Wraps a [[SparkSession]].
   */
 trait CypherSession {
 
