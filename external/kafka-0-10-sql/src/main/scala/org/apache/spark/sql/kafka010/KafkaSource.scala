@@ -24,9 +24,9 @@ import java.nio.charset.StandardCharsets
 import org.apache.commons.io.IOUtils
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.TopicPartition
-
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Network
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -84,12 +84,12 @@ private[kafka010] class KafkaSource(
   private val sc = sqlContext.sparkContext
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
-    CONSUMER_POLL_TIMEOUT.key,
-    (sc.conf.getTimeAsSeconds(NETWORK_TIMEOUT.key, "120s") * 1000L).toString
+    CONSUMER_POLL_TIMEOUT,
+    (sc.conf.get(Network.NETWORK_TIMEOUT) * 1000L).toString
   ).toLong
 
   private val maxOffsetsPerTrigger =
-    sourceOptions.get(MAX_OFFSET_PER_TRIGGER.key).map(_.toLong)
+    sourceOptions.get(MAX_OFFSET_PER_TRIGGER).map(_.toLong)
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only

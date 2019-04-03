@@ -347,7 +347,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     validateGeneralOptions(caseInsensitiveParams)
 
     // Don't want to throw an error, but at least log a warning.
-    if (caseInsensitiveParams.get(MAX_OFFSET_PER_TRIGGER.key).isDefined) {
+    if (caseInsensitiveParams.get(MAX_OFFSET_PER_TRIGGER).isDefined) {
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
   }
@@ -457,10 +457,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
 private[kafka010] object KafkaSourceProvider extends Logging {
   private val STRATEGY_OPTION_KEYS = Set(SUBSCRIBE, SUBSCRIBEPATTERN, ASSIGN)
-  private val ASSIGN = "assign"
-  private val SUBSCRIBEPATTERN = "subscribepattern"
-  private val SUBSCRIBE = "subscribe"
-
   private[kafka010] val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"

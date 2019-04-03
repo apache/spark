@@ -20,8 +20,8 @@ package org.apache.spark.sql.kafka010
 import java.util.UUID
 
 import org.apache.kafka.common.TopicPartition
-
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Network
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -46,10 +46,8 @@ private[kafka010] class KafkaRelation(
     "Ending offset not allowed to be set to earliest offsets.")
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
-    CONSUMER_POLL_TIMEOUT.key,
-    (sqlContext.sparkContext.conf.getTimeAsSeconds(
-      NETWORK_TIMEOUT.key,
-      "120s") * 1000L).toString
+    CONSUMER_POLL_TIMEOUT,
+    (sqlContext.sparkContext.conf.get(Network.NETWORK_TIMEOUT) * 1000L).toString
   ).toLong
 
   override def schema: StructType = KafkaOffsetReader.kafkaSchema

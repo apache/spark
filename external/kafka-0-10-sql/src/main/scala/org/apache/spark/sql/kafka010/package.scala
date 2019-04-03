@@ -30,44 +30,22 @@ package object kafka010 {   // scalastyle:ignore
     ConfigBuilder("spark.kafka.producer.cache.timeout")
       .doc("The time to remove the producer when the producer is not used.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("600000")
-
-  val CONSUMER_POLL_TIMEOUT =
-    ConfigBuilder("kafkaConsumer.pollTimeoutMs")
-      .doc("The timeout in milliseconds to poll data from Kafka in executors.")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("512")
+      .createWithDefaultString("10m")
 
   val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.sql.kafkaConsumerCache.capacity")
       .doc("The size of LinkedHashMap for caching kafkaConsumers.")
       .intConf
-      .createWithDefaultString("64")
+      .createWithDefault(64)
 
-  val NETWORK_TIMEOUT =
-    ConfigBuilder("spark.network.timeout")
-      .doc("The timeout of network.")
-      .timeConf(TimeUnit.SECONDS)
-      .createWithDefaultString("120s")
 
-  val MAX_OFFSET_PER_TRIGGER =
-    ConfigBuilder("maxOffsetsPerTrigger")
-      .doc("Rate limit on maximum number of offsets processed per trigger interval. " +
-        "The specified total number of offsets will be " +
-        "proportionally split across topicPartitions of different volume.")
-      .longConf
-      .createOptional
+  val MAX_OFFSET_PER_TRIGGER = "maxOffsetsPerTrigger"
+  val FETCH_OFFSET_NUM_RETRY = "fetchOffset.numRetries"
+  val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchOffset.retryIntervalMs"
+  val CONSUMER_POLL_TIMEOUT = "kafkaConsumer.pollTimeoutMs"
+  val ASSIGN = "assign"
+  val SUBSCRIBEPATTERN = "subscribepattern"
+  val SUBSCRIBE = "subscribe"
 
-  val FETCH_OFFSET_NUM_RETRY =
-    ConfigBuilder("fetchOffset.numRetries")
-      .doc("Retry at most `maxOffsetFetchAttempts` times when offsets are incorrect.")
-      .intConf
-      .createWithDefaultString("3")
-
-  val FETCH_OFFSET_RETRY_INTERVAL_MS =
-    ConfigBuilder("fetchOffset.retryIntervalMs")
-      .doc("The interval time for retrying to fetch offsets.")
-      .longConf
-      .createWithDefaultString("1000")
 
  }

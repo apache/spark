@@ -23,9 +23,9 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.IOUtils
 import org.apache.kafka.clients.consumer.ConsumerConfig
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Network
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -63,10 +63,10 @@ private[kafka010] class KafkaMicroBatchStream(
     failOnDataLoss: Boolean) extends RateControlMicroBatchStream with Logging {
 
   private val pollTimeoutMs = options.getLong(
-    CONSUMER_POLL_TIMEOUT.key,
-    SparkEnv.get.conf.getTimeAsSeconds(NETWORK_TIMEOUT.key, "120s") * 1000L)
+    CONSUMER_POLL_TIMEOUT,
+    SparkEnv.get.conf.get(Network.NETWORK_TIMEOUT) * 1000L)
 
-  private val maxOffsetsPerTrigger = Option(options.get(MAX_OFFSET_PER_TRIGGER.key)).map(_.toLong)
+  private val maxOffsetsPerTrigger = Option(options.get(MAX_OFFSET_PER_TRIGGER)).map(_.toLong)
 
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
 
