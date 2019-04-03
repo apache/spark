@@ -175,31 +175,89 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
         val source = classOf[SimpleWritableDataSource]
         val path = new File(dir, "test")
         spark.range(0, 10)
-          .toDF("id")
+          .map(id => (id, -id))
+          .toDF("i", "j")
           .write
           .format(source.getName)
           .save(path.getCanonicalPath)
 
-        spark.sql(s"CREATE TABLE t (id Long) USING ${source.getName} " +
+        sql(s"CREATE TABLE t (p Long, n Long) USING ${source.getName} " +
           s"LOCATION '${path.toURI}'")
-        val table = spark.table("t")
-        assert(table.count() === 10)
+        assert(spark.sessionState.catalog.tableExists(TableIdentifier("t")))
+        val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedSchema = StructType(
+            StructField("p", LongType, true) ::
+            StructField("n", LongType, true) :: Nil)
+        assert(tableMeta.schema == expectedSchema)
+        assert(spark.table("t").count() == 10)
       }
     }
   }
 
-  test("Create table as select with v2 data source") {
+  test("create table as select with v2 data source") {
+    withTable("t") {
+      withTempDir{ dir =>
+        val path = new File(dir, "test")
+        val source = classOf[SimpleWritableDataSource]
+        spark.range(0, 10).map(id => (id, -id))
+          .toDF("i", "j").createOrReplaceTempView("tmp_table")
+
+        sql(s"CREATE TABLE t USING ${source.getName} " +
+          s"LOCATION '${path.toURI}' SELECT i, j FROM tmp_table")
+
+        assert(spark.sessionState.catalog.tableExists(TableIdentifier("t")))
+        val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedSchema = StructType(
+            StructField("i", LongType, true) ::
+            StructField("j", LongType, true) :: Nil)
+        assert(tableMeta.schema == expectedSchema)
+        assert(spark.table("t").count() == 10)
+      }
+    }
+  }
+
+  test("insert into table select with v2 data source") {
     withTable("t") {
       withTempDir { dir =>
         val path = new File(dir, "test")
         val source = classOf[SimpleWritableDataSource]
-        spark.range(0, 10).toDF("id").createOrReplaceTempView("tmp_table")
-        spark.sql(s"CREATE TABLE t (id Long) USING ${source.getName} " +
+        spark.range(0, 10).map(id => (id, -id))
+          .toDF("i", "j").createOrReplaceTempView("tmp_table")
+
+        sql(s"CREATE TABLE t (p Long, n Long) USING ${source.getName} " +
           s"LOCATION '${path.toURI}'")
 
-        spark.sql("INSERT INTO TABLE t SELECT id FROM tmp_table")
+        sql("INSERT INTO TABLE t SELECT i, j FROM tmp_table")
 
-        val table = spark.table("t")
+        assert(spark.sessionState.catalog.tableExists(TableIdentifier("t")))
+
+        val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedSchema = StructType(
+          StructField("p", LongType, true) ::
+            StructField("n", LongType, true) :: Nil)
+        assert(tableMeta.schema == expectedSchema)
+
+        assert(spark.table("t").count() == 10)
+      }
+    }
+  }
+
+  test("insert into data source v2 dir") {
+    withTable("t") {
+      withTempDir { dir =>
+        val path = new File(dir, "test")
+        val source = classOf[SimpleWritableDataSource]
+        spark.range(0, 10).map(id => (id, -id))
+          .toDF("i", "j").createOrReplaceTempView("tmp_table")
+
+        sql(s"INSERT OVERWRITE DIRECTORY '${path.toURI}' USING ${source.getName} " +
+          s"SELECT i, j FROM tmp_table")
+
+        val table = spark.read.format(source.getName).load(path.toURI.toString)
+        val expectedSchema = StructType(
+            StructField("i", LongType, true) ::
+            StructField("j", LongType, true) :: Nil)
+        assert(table.schema == expectedSchema)
         assert(table.count() === 10)
       }
     }

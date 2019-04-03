@@ -194,26 +194,35 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val clsOpt = DataSourceV2Utils.isV2Source(sparkSession, source)
+    val useV1Sources =
+      sparkSession.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
+    val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
+    val cls = lookupCls.newInstance() match {
+      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
+        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        f.fallBackFileFormat
+      case _ => lookupCls
+    }
 
-    if (clsOpt.nonEmpty) {
-      val provider = clsOpt.get.getConstructor().newInstance().asInstanceOf[TableProvider]
+    if (classOf[TableProvider].isAssignableFrom(cls)) {
+      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val pathsOption = if (paths.isEmpty) {
         None
       } else {
         val objectMapper = new ObjectMapper()
         Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
-
       val dsOptions = DataSourceV2Utils.extractSessionConfigs(
-        provider, sparkSession.sessionState.conf, extraOptions.toMap ++ pathsOption)
+        provider, sparkSession.sessionState.conf, (extraOptions ++ pathsOption).toMap)
 
-      val readTable = DataSourceV2Utils.getBatchReadTable(sparkSession,
-        userSpecifiedSchema, clsOpt.get, dsOptions)
+      val table = userSpecifiedSchema match {
+        case Some(schema) => provider.getTable(dsOptions, schema)
+        case _ => provider.getTable(dsOptions)
+      }
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      readTable match {
-        case Some(table) if table.supports(BATCH_READ) =>
+      table match {
+        case _: SupportsRead if table.supports(BATCH_READ) =>
           Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
 
         case _ => loadV1Source(paths: _*)

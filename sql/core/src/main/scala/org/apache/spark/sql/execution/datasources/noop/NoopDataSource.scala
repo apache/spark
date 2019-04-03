@@ -37,6 +37,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class NoopDataSource extends TableProvider with DataSourceRegister {
   override def shortName(): String = "noop"
   override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
+  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = NoopTable
 }
 
 private[noop] object NoopTable extends Table with SupportsWrite with SupportsStreamingWrite {

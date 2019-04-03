@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.sources.v2
 
+import java.util.Locale
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.SQLConf
@@ -34,12 +38,12 @@ class DataSourceV2UtilsSuite extends SparkFunSuite {
     conf.setConfString("spark.datasource.another.config.name", "123")
     conf.setConfString(s"spark.datasource.$keyPrefix.", "123")
     val source = new DataSourceV2WithSessionConfig
-    val confs = DataSourceV2Utils.extractSessionConfigs(source, conf)
+    val confs = DataSourceV2Utils.extractSessionConfigs(source, conf, Map.empty)
     assert(confs.size == 2)
-    assert(confs.keySet.filter(_.startsWith("spark.datasource")).size == 0)
-    assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
+    assert(confs.keySet.asScala.filter(_.startsWith("spark.datasource")).size == 0)
+    assert(confs.keySet.asScala.filter(_.startsWith("not.exist.prefix")).size == 0)
     assert(confs.keySet.contains("foo.bar"))
-    assert(confs.keySet.contains("whateverConfigName"))
+    assert(confs.keySet.contains("whateverConfigName".toLowerCase(Locale.ROOT)))
   }
 }
 

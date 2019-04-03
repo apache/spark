@@ -17,23 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Locale, UUID}
-
 import scala.collection.mutable
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.InsertIntoDataSourceV2RelationCommand
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
-import org.apache.spark.sql.sources.v2.TableProvider
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 
 object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
@@ -183,42 +180,13 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
-    case InsertIntoDir(_, storage, provider, query, overwrite) if provider.isDefined &&
-        provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
-      val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
-      val session = SparkSession.getActiveSession.get
-      DataSourceV2Utils.shouldWriteWithV2(
-          session, Some(query.schema), provider.get, pathOption.toMap) match {
-        case true =>
-          val session = SparkSession.getActiveSession.get
-          val cls = DataSourceV2Utils.isV2Source(session, provider.get)
-          val tableProvider = cls.get.getConstructor().newInstance().asInstanceOf[TableProvider]
-          val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
-          val dsOptions = DataSourceV2Utils.
-            extractSessionConfigs(tableProvider, session.sessionState.conf, pathOption.toMap)
-          val writeTable = DataSourceV2Utils.
-            getBatchWriteTable(session, Option(query.schema), cls.get, dsOptions)
-          if (overwrite) {
-            val relation = DataSourceV2Relation.create(writeTable.get, dsOptions)
-            OverwriteByExpressionExec(
-              relation.table.asWritable, Array.empty, dsOptions, planLater(query)) :: Nil
-          } else {
-            writeTable.get.newWriteBuilder(dsOptions) match {
-              case writeBuilder: SupportsSaveMode =>
-                val write = writeBuilder.mode(SaveMode.ErrorIfExists)
-                  .withQueryId(UUID.randomUUID().toString)
-                  .withInputDataSchema(query.schema)
-                  .buildForBatch()
-                WriteToDataSourceV2Exec(write, planLater(query)) :: Nil
-              case _ => Nil
-            }
-
-          }
-        case false => Nil
-      }
-
-//    case i @ InsertIntoTable(t: DataSourceV2Relation, parts, query, overwrite, _) =>
-
     case _ => Nil
+  }
+}
+
+case class DataSourceV2Analysis(conf: SQLConf) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case InsertIntoTable(r: DataSourceV2Relation, parts, query, overwrite, _) =>
+      InsertIntoDataSourceV2RelationCommand(r, query, parts, overwrite)
   }
 }

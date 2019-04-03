@@ -18,20 +18,18 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
-import java.util.Locale
-
-import scala.collection.JavaConverters._
+import java.util.UUID
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.{AppendDataExec, DataSourceV2Utils, OverwriteByExpressionExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2.TableProvider
+import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A command used to create a data source table.
@@ -104,7 +102,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     } else {
       // This is guaranteed in `PreprocessDDL`.
       assert(table.partitionColumnNames.isEmpty)
-      dataSource match {
+      baseRelation match {
         case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
         case _ => Nil
       }
@@ -213,24 +211,9 @@ case class CreateDataSourceTableAsSelectCommand(
       } else {
         table.storage.locationUri
       }
-      val result = saveDataIntoTable(
+      saveDataIntoTable(
         sparkSession, table, tableLocation, child, SaveMode.Overwrite, tableExists = false)
-      val newTable = table.copy(
-        storage = table.storage.copy(locationUri = tableLocation),
-        // We will use the schema of resolved.relation as the schema of the table (instead of
-        // the schema of df). It is important since the nullability may be changed by the relation
-        // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
-        schema = result.schema)
-      // Table location is already validated. No need to check it again during table creation.
-      sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
 
-      result match {
-        case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
-            sparkSession.sqlContext.conf.manageFilesourcePartitions =>
-          // Need to recover partitions into the metastore so our saved data is visible.
-          sessionState.executePlan(AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
-        case _ =>
-      }
     }
 
     Seq.empty[Row]
@@ -242,9 +225,27 @@ case class CreateDataSourceTableAsSelectCommand(
       tableLocation: Option[URI],
       physicalPlan: SparkPlan,
       mode: SaveMode,
-      tableExists: Boolean): BaseRelation = {
+      tableExists: Boolean): Unit = {
+    val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
+    val shouldReadInV2 = DataSourceV2Utils.
+      shouldWriteWithV2(session, Option(table.schema), table.provider.get, pathOption.toMap)
+    if (shouldReadInV2) {
+      saveToV2Source(session, table, tableLocation, physicalPlan, mode, tableExists)
+    } else {
+      saveToV1Source(session, table, tableLocation, physicalPlan, mode, tableExists)
+    }
+  }
+
+  private def saveToV1Source(
+      session: SparkSession,
+      table: CatalogTable,
+      tableLocation: Option[URI],
+      physicalPlan: SparkPlan,
+      mode: SaveMode,
+      tableExists: Boolean): Unit = {
     // Create the relation based on the input logical plan: `query`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
+    val sessionState = session.sessionState
     val dataSource = DataSource(
       session,
       className = table.provider.get,
@@ -254,11 +255,79 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query, outputColumnNames, physicalPlan)
+      val result = dataSource.writeAndRead(mode, query, outputColumnNames, physicalPlan)
+      if (!tableExists) {
+        val newTable = table.copy(
+          storage = table.storage.copy(locationUri = tableLocation),
+          // We will use the schema of resolved.relation as the schema of the table (instead of
+          // the schema of df). It is important since the nullability may be changed by the relation
+          // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
+          schema = result.schema)
+        // Table location is already validated. No need to check it again during table creation.
+        sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
+
+        result match {
+          case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
+            session.sqlContext.conf.manageFilesourcePartitions =>
+            // Need to recover partitions into the metastore so our saved data is visible.
+            sessionState.executePlan(AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+          case _ =>
+        }
+      }
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
         throw ex
+    }
+  }
+
+  private def saveToV2Source(
+      session: SparkSession,
+      table: CatalogTable,
+      tableLocation: Option[URI],
+      physicalPlan: SparkPlan,
+      mode: SaveMode,
+      tableExists: Boolean): Unit = {
+    val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
+    val cls = DataSourceV2Utils.isV2Source(session, table.provider.get)
+    val tableProvider = cls.get.getConstructor().newInstance().asInstanceOf[TableProvider]
+    val dsOptions = DataSourceV2Utils.
+      extractSessionConfigs(tableProvider, session.sessionState.conf, pathOption.toMap)
+    val writeTable = DataSourceV2Utils.
+      getBatchWriteTable(session, Option(physicalPlan.schema), cls.get, dsOptions).get
+    val writeExec = mode match {
+      case SaveMode.Append => AppendDataExec(writeTable, dsOptions, physicalPlan)
+      case SaveMode.Overwrite =>
+        OverwriteByExpressionExec(writeTable, Array.empty, dsOptions, physicalPlan)
+      case SaveMode.ErrorIfExists =>
+        writeTable.newWriteBuilder(dsOptions) match {
+          case writeBuilder: SupportsSaveMode =>
+            val write = writeBuilder.mode(mode)
+              .withQueryId(UUID.randomUUID().toString)
+              .withInputDataSchema(physicalPlan.schema)
+              .buildForBatch()
+            // It can only return null with `SupportsSaveMode`. We can clean it up after
+            // removing `SupportsSaveMode`.
+            if (write != null) {
+              WriteToDataSourceV2Exec(write, physicalPlan)
+            } else {
+              null
+            }
+
+          case _ =>
+            throw new AnalysisException(
+              s"data source ${writeTable.name} does not support SaveMode $mode")
+        }
+    }
+
+    Option(writeExec).foreach(_.execute().count())
+    if (!tableExists) {
+      val newTable = table.copy(
+        storage = table.storage.copy(locationUri = tableLocation),
+        schema = writeTable.schema())
+      // Table location is already validated. No need to check it again during table creation.
+      session.sessionState.catalog.createTable(
+        newTable, ignoreIfExists = false, validateLocation = false)
     }
   }
 }

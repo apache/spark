@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.UUID
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, OverwriteByExpressionExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.sources.v2.TableProvider
+import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 
 /**
  * A command used to write the result of a query to a directory.
@@ -52,7 +57,20 @@ case class InsertIntoDataSourceDirCommand(
 
     // Create the relation based on the input logical plan: `query`.
     val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+    val shouldWriteV2 = DataSourceV2Utils.shouldWriteWithV2(
+        sparkSession, Some(query.schema), provider, pathOption.toMap)
+    if (shouldWriteV2) {
+      writeToV2Source(sparkSession, pathOption)
+    } else {
+      writeToV1Source(sparkSession, pathOption)
+    }
 
+    Seq.empty[Row]
+  }
+
+  def writeToV1Source(
+      sparkSession: SparkSession,
+      pathOption: Option[(String, String)]): Unit = {
     val dataSource = DataSource(
       sparkSession,
       className = provider,
@@ -73,7 +91,35 @@ case class InsertIntoDataSourceDirCommand(
         logError(s"Failed to write to directory " + storage.locationUri.toString, ex)
         throw ex
     }
+  }
 
-    Seq.empty[Row]
+  def writeToV2Source(
+      sparkSession: SparkSession,
+      pathOption: Option[(String, String)]): Unit = {
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+
+    val cls = DataSourceV2Utils.isV2Source(sparkSession, provider)
+    val tableProvider = cls.get.getConstructor().newInstance().asInstanceOf[TableProvider]
+    val dsOptions = DataSourceV2Utils.
+      extractSessionConfigs(tableProvider, sparkSession.sessionState.conf, pathOption.toMap)
+    val data = sparkSession.sessionState.executePlan(query).executedPlan
+    val writeTable = DataSourceV2Utils.
+      getBatchWriteTable(sparkSession, Option(data.schema), cls.get, dsOptions)
+    val writeExec = if (overwrite) {
+      val relation = DataSourceV2Relation.create(writeTable.get, dsOptions)
+      OverwriteByExpressionExec(relation.table.asWritable, Array.empty, dsOptions, data)
+    } else {
+      writeTable.get.newWriteBuilder(dsOptions) match {
+        case writeBuilder: SupportsSaveMode =>
+          val write = writeBuilder.mode(SaveMode.ErrorIfExists)
+            .withQueryId(UUID.randomUUID().toString)
+            .withInputDataSchema(data.schema)
+            .buildForBatch()
+          WriteToDataSourceV2Exec(write, data)
+        case _ => throw new SparkException(
+          "Insert into data source dir should support save mode or overwrite")
+      }
+    }
+    writeExec.execute().count()
   }
 }

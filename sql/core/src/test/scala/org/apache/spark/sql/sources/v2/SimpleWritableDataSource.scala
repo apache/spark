@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.writer._
@@ -70,7 +71,8 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     override def readSchema(): StructType = tableSchema
   }
 
-  class MyWriteBuilder(path: String) extends WriteBuilder with SupportsSaveMode {
+  class MyWriteBuilder(path: String)
+      extends WriteBuilder with SupportsSaveMode with SupportsOverwrite{
     private var queryId: String = _
     private var mode: SaveMode = _
 
@@ -107,6 +109,10 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
       val pathStr = hadoopPath.toUri.toString
       new MyBatchWrite(queryId, pathStr, hadoopConf)
+    }
+
+    override def overwrite(filters: Array[Filter]): WriteBuilder = {
+      this.mode(SaveMode.Overwrite)
     }
   }
 
@@ -165,6 +171,10 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new MyTable(options)
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
+    getTable(options)
   }
 }
 
