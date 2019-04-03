@@ -30,6 +30,7 @@ case class RelationalGraphAdapter(
   private lazy val _relationshipFrame: Map[String, RelationshipFrame] = relationshipFrames.map(rf => rf.relationshipType -> rf).toMap
 
   override def nodes: DataFrame = {
+    // TODO: move to API as default implementation
     val nodeVar = Var("n")(CTNode)
     val nodes = graph.nodes(nodeVar.name)
 
@@ -46,6 +47,7 @@ case class RelationalGraphAdapter(
   }
 
   override def relationships: DataFrame = {
+    // TODO: move to API as default implementation
     val relVar = Var("r")(CTRelationship)
     val rels = graph.relationships(relVar.name)
 
