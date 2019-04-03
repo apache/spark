@@ -58,7 +58,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     // Write some sort data.
     dataContext.insertSortShuffleData(0, 0,
       Array[Array[Byte]](sortBlock0.getBytes(StandardCharsets.UTF_8),
-        sortBlock1.getBytes(StandardCharsets.UTF_8)))
+        sortBlock1.getBytes(StandardCharsets.UTF_8)), false)
     registerExecutor()
   }
 
@@ -100,7 +100,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
       blockHandler = externalShuffleService.getBlockHandler
       blockResolver = blockHandler.getBlockResolver
 
-      val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0, 0).createInputStream
+      val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
       val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
       block0Stream.close()
       assert(sortBlock0 == block0)
@@ -127,7 +127,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
       blockResolver = blockHandler.getBlockResolver
 
       val error = intercept[RuntimeException] {
-        blockResolver.getBlockData("app0", "exec0", 0, 0, 0, 0).createInputStream
+        blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
       }.getMessage
 
       assert(error.contains("not registered"))

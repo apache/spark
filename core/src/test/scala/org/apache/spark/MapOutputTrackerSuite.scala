@@ -262,7 +262,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       masterTracker.registerShuffle(20, 100)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 0))
+          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
       }
       val senderAddress = RpcAddress("localhost", 12345)
       val rpcCallContext = mock(classOf[RpcCallContext])

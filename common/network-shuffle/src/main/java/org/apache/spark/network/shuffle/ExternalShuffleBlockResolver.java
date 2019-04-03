@@ -162,6 +162,18 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
+   * Overload getBlockData with setting stageAttemptId to an invalid value of -1.
+   */
+  public ManagedBuffer getBlockData(
+      String appId,
+      String execId,
+      int shuffleId,
+      int mapId,
+      int reduceId) {
+    return getBlockData(appId, execId, shuffleId, mapId, reduceId, -1);
+  }
+
+  /**
    * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId). We make assumptions
    * about how the hash and sort based shuffles store their data.
    */
@@ -277,15 +289,19 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Sort-based shuffle data uses an index called "shuffle_ShuffleId_MapId_0_StageAttemptId.index"
-   * into a data file called "shuffle_ShuffleId_MapId_0_StageAttemptId.data". This logic is from
-   * IndexShuffleBlockResolver, and the block id format is from ShuffleDataBlockId and
-   * ShuffleIndexBlockId.
+   * Sort-based shuffle data uses an index called "shuffle_ShuffleId_MapId_0.index" into a data file
+   * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockResolver,
+   * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
+   * While the shuffle data and index file generated from the indeterminate stage,
+   * the ShuffleDataBlockId and ShuffleIndexBlockId will be extended by the stage attempt id.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleInfo executor, int shuffleId,
-    int mapId, int reduceId, int stageAttemptId) {
-    String baseFileName = "shuffle_" + shuffleId + "_" + mapId + "_0" + "_" + stageAttemptId;
+      ExecutorShuffleInfo executor, int shuffleId,
+      int mapId, int reduceId, int stageAttemptId) {
+    String baseFileName = "shuffle_" + shuffleId + "_" + mapId + "_0";
+    if (stageAttemptId != -1) {
+      baseFileName = baseFileName + "_" + stageAttemptId;
+    }
     File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
       baseFileName + ".index");
 

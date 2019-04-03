@@ -352,7 +352,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val sparseBlockSizes = Array[Long](0L, 1L, 0L, 2L)
     Seq(denseBlockSizes, sparseBlockSizes).foreach { blockSizes =>
       ser.serialize(HighlyCompressedMapStatus(
-        BlockManagerId("exec-1", "host", 1234), blockSizes, 0))
+        BlockManagerId("exec-1", "host", 1234), blockSizes))
     }
   }
 

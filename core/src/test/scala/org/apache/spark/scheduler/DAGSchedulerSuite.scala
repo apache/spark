@@ -2711,7 +2711,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleId2 = shuffleDep2.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
 
-    submit(finalRdd, Array(0, 1))
+    submit(finalRdd, Array(0, 1), properties = new Properties())
 
     // Finish the first shuffle map stage.
     complete(taskSets(0), Seq(
@@ -2765,11 +2765,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       (Success, makeMapStatus("hostA", 2)),
       (Success, makeMapStatus("hostB", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+    assert(taskSets(4).tasks.head.localProperties.getProperty(
+      SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + shuffleId1.toString) == "1")
 
     complete(taskSets(5), Seq(
       (Success, makeMapStatus("hostC", 2)),
       (Success, makeMapStatus("hostD", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+    assert(taskSets(5).tasks.head.localProperties.getProperty(
+      SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + shuffleId2.toString) == "2")
 
     complete(taskSets(6), Seq((Success, 11), (Success, 12)))
 
@@ -2796,7 +2800,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleId3 = shuffleDep3.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep3), tracker = mapOutputTracker)
 
-    submit(finalRdd, Array(0, 1))
+    submit(finalRdd, Array(0, 1), properties = new Properties())
 
     // Finish the first 3 shuffle map stages.
     complete(taskSets(0), Seq(
@@ -2819,7 +2823,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(scheduler.failedStages.toSeq.map(_.id) == Seq(1, 2))
     scheduler.resubmitFailedStages()
 
-    def checkAndCompleteRetryStage(taskSetIndex: Int, stageId: Int, shuffleId: Int): Unit = {
+    def checkAndCompleteRetryStage(
+        taskSetIndex: Int,
+        stageId: Int,
+        shuffleId: Int): Unit = {
       assert(taskSets(taskSetIndex).stageId == stageId)
       assert(taskSets(taskSetIndex).stageAttemptId == 1)
       assert(taskSets(taskSetIndex).tasks.length == 2)
@@ -2827,6 +2834,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
         (Success, makeMapStatus("hostA", 2)),
         (Success, makeMapStatus("hostB", 2))))
       assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+      assert(taskSets(taskSetIndex).tasks.head.localProperties.getProperty(
+        SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + shuffleId.toString) == "1")
     }
 
     // Check all indeterminate stage roll back.

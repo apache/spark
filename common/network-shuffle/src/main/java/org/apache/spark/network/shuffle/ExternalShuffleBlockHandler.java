@@ -218,7 +218,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private final int shuffleId;
     // An array containing mapId and reduceId pairs.
     private final int[] mapIdAndReduceIds;
-    private final int stageAttemptId;
+    private final int indeterminateAttemptId;
 
     ManagedBufferIterator(String appId, String execId, String[] blockIds) {
       this.appId = appId;
@@ -227,6 +227,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       checkBlockId(blockId0Parts, blockIds, 0);
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
       mapIdAndReduceIds = new int[2 * blockIds.length];
+      this.indeterminateAttemptId =
+        (blockId0Parts.length == 5) ? Integer.parseInt(blockId0Parts[4]) : -1;
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
         checkBlockId(blockIdParts, blockIds, i);
@@ -237,11 +239,11 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         mapIdAndReduceIds[2 * i] = Integer.parseInt(blockIdParts[2]);
         mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
       }
-      this.stageAttemptId = Integer.parseInt(blockId0Parts[4]);
     }
 
     private void checkBlockId(String[] blockIdParts, String[] wholeBlockId, int index) {
-      if (blockIdParts.length != 5 || !blockIdParts[0].equals("shuffle")) {
+      if ((blockIdParts.length != 4 && blockIdParts.length != 5)
+          || !blockIdParts[0].equals("shuffle")) {
         throw new IllegalArgumentException(
           "Unexpected shuffle block id format: " + wholeBlockId[index]);
       }
@@ -255,7 +257,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     @Override
     public ManagedBuffer next() {
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, shuffleId,
-        mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1], stageAttemptId);
+        mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1], indeterminateAttemptId);
       index += 2;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;

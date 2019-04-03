@@ -39,7 +39,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -149,6 +149,11 @@ private[spark] class DAGScheduler(
    */
   private[scheduler] val shuffleIdToMapStage = new HashMap[Int, ShuffleMapStage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
+  /**
+   * Mapping from shuffle id to the indeterminate stage attempt id. Only includes the retried
+   * stages whose output deterministic level is indeterminate.
+   */
+  private[scheduler] val shuffleIdToIndeterminateStageAttemptId = new HashMap[Int, Int]
 
   // Stages we need to run whose parents aren't done
   private[scheduler] val waitingStages = new HashSet[Stage]
@@ -1140,12 +1145,29 @@ private[spark] class DAGScheduler(
     }
 
     stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
-
-    // If there are tasks to execute, record the submission time of the stage. Otherwise,
-    // post the even without the submission time, which indicates that this stage was
-    // skipped.
     if (partitionsToCompute.nonEmpty) {
+      // If there are tasks to execute, record the submission time of the stage. Otherwise,
+      // post the even without the submission time, which indicates that this stage was
+      // skipped.
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
+
+      // While an indeterminate stage retried, the stage attempt id will be used to extend the
+      // shuffle file in shuffle write task, and then the mapping of shuffle id to indeterminate
+      // stage id will be used for shuffle reader task.
+      if (stage.latestInfo.attemptNumber() > 0 && stage.isIndeterminate) {
+        properties.setProperty(SparkContext.IS_INDETERMINATE_STAGE, "true")
+        // deal with shuffle writer side property.
+        stage match {
+          case sms: ShuffleMapStage =>
+            val stageAttemptId = stage.latestInfo.attemptNumber()
+            properties.setProperty(
+              SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + sms.shuffleDep.shuffleId,
+              stageAttemptId.toString)
+            logInfo(s"Set INDETERMINATE_STAGE_ATTEMPT_ID for $stage(shuffleId:" +
+              s" ${sms.shuffleDep.shuffleId}) to $stageAttemptId")
+          case _ =>
+        }
+      }
     }
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
@@ -1233,8 +1255,7 @@ private[spark] class DAGScheduler(
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
-        stage.latestInfo.attemptNumber > 0 && stage.isIndeterminate))
+        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run

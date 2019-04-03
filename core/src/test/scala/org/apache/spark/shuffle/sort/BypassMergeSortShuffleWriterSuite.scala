@@ -67,31 +67,18 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(dependency.partitioner).thenReturn(new HashPartitioner(7))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
-<<<<<<< HEAD
-    when(taskContext.getIndeterminateAttemptId).thenReturn(None)
+    when(taskContext.indeterminateStageAttemptId(any[Int])).thenReturn(None)
     when(blockResolver.getDataFile(0, 0, None)).thenReturn(outputFile)
     doAnswer { (invocationOnMock: InvocationOnMock) =>
       val tmp = invocationOnMock.getArguments()(3).asInstanceOf[File]
       if (tmp != null) {
         outputFile.delete
         tmp.renameTo(outputFile)
-=======
-    when(taskContext.stageAttemptNumber()).thenReturn(0)
-    when(blockResolver.getDataFile(0, 0, 0)).thenReturn(outputFile)
-    doAnswer(new Answer[Void] {
-      def answer(invocationOnMock: InvocationOnMock): Void = {
-        val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
-        if (tmp != null) {
-          outputFile.delete
-          tmp.renameTo(outputFile)
-        }
-        null
->>>>>>> extend all shuffle block id, not only the indeterminate ones.
       }
       null
     }.when(blockResolver)
       .writeIndexFileAndCommit(
-        anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File]), any(classOf[Int]))
+        anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File]), any(classOf[Option[Int]]))
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(blockManager.getDiskWriter(
       any[BlockId],

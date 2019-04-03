@@ -176,6 +176,17 @@ abstract class TaskContext extends Serializable {
    */
   def getLocalProperty(key: String): String
 
+  /**
+   * The indeterminate attempt ID of the stage that this task belongs to, it returns the stage
+   * attempt number while the stage is not determinate and returns none on the contrary.
+   */
+  def indeterminateStageAttemptId(shuffleId: Int): Option[Int] = {
+    val id = getLocalProperty(SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + shuffleId)
+    if (id != null) {
+      Some(id.toInt)
+    } else None
+  }
+
   @DeveloperApi
   def taskMetrics(): TaskMetrics
 

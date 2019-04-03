@@ -132,7 +132,7 @@ public class UnsafeShuffleWriterSuite {
       });
 
     when(shuffleBlockResolver.getDataFile(
-      anyInt(), anyInt(), anyInt())).thenReturn(mergedOutputFile);
+      anyInt(), anyInt(), any())).thenReturn(mergedOutputFile);
     doAnswer(invocationOnMock -> {
       partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
       File tmp = (File) invocationOnMock.getArguments()[3];
@@ -141,7 +141,7 @@ public class UnsafeShuffleWriterSuite {
       return null;
     }).when(shuffleBlockResolver)
       .writeIndexFileAndCommit(
-        anyInt(), anyInt(), any(long[].class), any(File.class), any(int.class));
+        anyInt(), anyInt(), any(long[].class), any(File.class), any(Option.class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
