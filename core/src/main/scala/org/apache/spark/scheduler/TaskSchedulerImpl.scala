@@ -158,10 +158,6 @@ private[spark] class TaskSchedulerImpl(
 
   private[scheduler] var barrierCoordinator: RpcEndpoint = null
 
-  /**
-   * It can be override in different TaskScheduler, like Yarn.
-   * None by default. This should be initialized before any invocation.
-   */
   protected val defaultRackValue: Option[String] = None
 
   private def maybeInitBarrierCoordinator(): Unit = {
@@ -837,17 +833,21 @@ private[spark] class TaskSchedulerImpl(
     blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(Set.empty)
   }
 
-  // By default, rack is unknown
+  /**
+   * Get the rack for one host.
+   *
+   * Note that [[getRacksForHosts]] should be preferred when possible as that can be much
+   * more efficient.
+   */
   def getRackForHost(host: String): Option[String] = {
     getRacksForHosts(Seq(host)).head
   }
 
   /**
-   * Get racks info for hosts.
+   * Get racks for multiple hosts.
    *
-   * The returned Sequence must have to be the same length as the hosts
-   * passed in.
-   * Return [[defaultRackValue]] sequence by default.
+   * The returned Sequence will be the same length as the hosts argument and can be zipped
+   * together with the hosts argument.
    */
   def getRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
     hosts.map(_ => defaultRackValue)

@@ -22,7 +22,7 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString, eq => meq}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 
@@ -1337,7 +1337,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val e = new ExceptionFailure("a", "b", Array(), "c", None)
     taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
 
-    verify(taskSetManagerSpy, times(1)).addPendingTask(meq(0), meq(false))
+    verify(taskSetManagerSpy, times(1)).addPendingTask(0, false)
   }
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {

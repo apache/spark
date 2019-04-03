@@ -195,8 +195,9 @@ private[spark] class TaskSetManager(
       }
       // Resolve the rack for each host. This can be slow, so de-dupe the list of hosts,
       // and assign the rack to all relevant task indices.
-      val racks = sched.getRacksForHosts(pendingTasksForHost.keySet.toSeq)
-      racks.zip(pendingTasksForHost.values).foreach {
+      val (hosts, indicesForHosts) = pendingTasksForHost.toSeq.unzip
+      val racks = sched.getRacksForHosts(hosts)
+      racks.zip(indicesForHosts).foreach {
         case (Some(rack), indices) =>
           pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) ++= indices
         case (None, _) => // no rack, nothing to do

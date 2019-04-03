@@ -31,9 +31,9 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.internal.Logging
 
 /**
- * Re-implement YARN's [[RackResolver]]. This allows Spark tests to easily override the
- * default behavior, since YARN's class self-initializes the first time it's called, and
- * future calls all use the initial configuration.
+ * Re-implement YARN's [[RackResolver]] for hadoop releases without YARN-9332.
+ * This also allows Spark tests to easily override the default behavior, since YARN's class
+ * self-initializes the first time it's called, and future calls all use the initial configuration.
  */
 private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
 
@@ -93,11 +93,6 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
  * Utility to resolve the rack for hosts in an efficient manner.
  * It will cache the rack for individual hosts to avoid
  * repeatedly performing the same expensive lookup.
- *
- * Its logic refers [[org.apache.hadoop.yarn.util.RackResolver]] and enhanced.
- * This will be unnecessary in hadoop releases with YARN-9332.
- * With that, we could just directly use [[org.apache.hadoop.yarn.util.RackResolver]].
- * In the meantime, this is a re-implementation for spark's use.
  */
 object SparkRackResolver extends Logging {
   @volatile private var instance: SparkRackResolver = _
