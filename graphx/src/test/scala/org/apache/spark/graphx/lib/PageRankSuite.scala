@@ -115,7 +115,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
 
       val parallelStaticRanks = starGraph
-        .staticParallelPersonalizedPageRank(Array(0), numIter, resetProb).mapVertices {
+        .staticParallelPersonalizedPageRank(Array((0, 1.0)), numIter, resetProb).mapVertices {
           case (vertexId, vector) => vector(0)
         }.vertices.cache()
       assert(compareRanks(staticRanks, parallelStaticRanks) < errorTol)
@@ -139,7 +139,8 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
         .vertices.cache()
       val otherDynamicRanks = starGraph.personalizedPageRank(1, tol, resetProb).vertices.cache()
       val otherParallelStaticRanks = starGraph
-        .staticParallelPersonalizedPageRank(Array(0, 1), numIter, resetProb).mapVertices {
+        .staticParallelPersonalizedPageRank(Array((0, 1.0), (1, 1.0)), numIter, resetProb)
+        .mapVertices {
           case (vertexId, vector) => vector(1)
         }.vertices.cache()
       assert(compareRanks(otherDynamicRanks, otherStaticRanks) < errorTol)
@@ -206,7 +207,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       // Check that implementation can handle large vertexIds, SPARK-25149
       val vertexIdOffset = Int.MaxValue.toLong + 1
       val sourceOffest = 4
-      val source = vertexIdOffset + sourceOffest
+      val source = (vertexIdOffset + sourceOffest).map((_, 1.0))
       val numIter = 10
       val vertices = vertexIdOffset until vertexIdOffset + numIter
       val chain1 = vertices.zip(vertices.tail)
@@ -294,8 +295,9 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
 
       val p1staticRanks = g.staticPersonalizedPageRank(1, numIter, resetProb).vertices.cache()
       val p1dynamicRanks = g.personalizedPageRank(1, tol, resetProb).vertices.cache()
+      val source = Array((1, 1.0), (2, 1.0), (3, 1.0), (4, 1.0))
       val p1parallelDynamicRanks =
-        g.staticParallelPersonalizedPageRank(Array(1, 2, 3, 4), numIter, resetProb)
+        g.staticParallelPersonalizedPageRank(source, numIter, resetProb)
         .vertices.mapValues(v => v(0)).cache()
 
       // Computed in igraph 1.0 w/ R bindings:
