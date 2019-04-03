@@ -26,11 +26,13 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -1021,6 +1023,11 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 case class FromUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
+  if (!SQLConf.get.utcTimestampFuncEnabled) {
+    throw new AnalysisException(s"The $prettyName function has been disabled since Spark 3.0." +
+      s"Set ${SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key} to true to enable this function.")
+  }
+
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
   override def prettyName: String = "from_utc_timestamp"
@@ -1226,6 +1233,11 @@ case class MonthsBetween(
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
+
+  if (!SQLConf.get.utcTimestampFuncEnabled) {
+    throw new AnalysisException(s"The $prettyName function has been disabled since Spark 3.0. " +
+      s"Set ${SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key} to true to enable this function.")
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
   override def dataType: DataType = TimestampType
