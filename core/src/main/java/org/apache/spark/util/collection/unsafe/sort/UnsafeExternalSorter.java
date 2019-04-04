@@ -586,7 +586,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
               // method locks the `TaskMemoryManager`, and it's a bad idea to lock 2 objects in
               // sequence. We may hit dead lock if another thread locks `TaskMemoryManager` and
               // `SpillableIterator` in sequence, which may happen in
-              // `TaskMemoryManager.acquireExecutionMemory`. 
+              // `TaskMemoryManager.acquireExecutionMemory`.
               pageToFree = lastPage;
               lastPage = null;
             }
