@@ -2138,13 +2138,15 @@ class DataFrame(object):
             # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.types import _arrow_table_to_pandas, \
-                        _check_dataframe_localize_timestamps
+                    from pyspark.sql.types import _check_dataframe_localize_timestamps
                     import pyarrow
                     batches = self._collectAsArrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
-                        pdf = _arrow_table_to_pandas(table, self.schema)
+                        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+                        # values, but we should use datetime.date to match the behavior with when
+                        # Arrow optimization is disabled.
+                        pdf = table.to_pandas(date_as_object=True)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
