@@ -70,7 +70,7 @@ private[orc] object OrcFilters extends Logging {
   }
 
   def createFilter(schema: StructType, filters: Array[Filter]): Option[SearchArgument] = {
-    if (HiveUtils.isSupportedHive2) {
+    if (HiveUtils.isHive23) {
       DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
     } else {
       val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap

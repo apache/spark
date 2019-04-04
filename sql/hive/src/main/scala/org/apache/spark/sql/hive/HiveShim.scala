@@ -158,7 +158,7 @@ private[hive] object HiveShim {
     }
 
     def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-      if (HiveUtils.isSupportedHive2) {
+      if (HiveUtils.isHive23) {
         val borrowKryo = serUtilClass.getMethod("borrowKryo")
         val kryo = borrowKryo.invoke(serUtilClass)
         val deserializeObjectByKryo = findMethod(serUtilClass, deserializeMethodName,
@@ -180,7 +180,7 @@ private[hive] object HiveShim {
     }
 
     def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-      if (HiveUtils.isSupportedHive2) {
+      if (HiveUtils.isHive23) {
         val borrowKryo = serUtilClass.getMethod("borrowKryo")
         val kryo = borrowKryo.invoke(serUtilClass)
         val serializeObjectByKryo = findMethod(serUtilClass, serializeMethodName,

@@ -338,7 +338,7 @@ private[hive] case class HiveUDAFFunction(
     }
 
     val clazz = Utils.classForName(classOf[SimpleGenericUDAFParameterInfo].getName)
-    if (HiveUtils.isSupportedHive2) {
+    if (HiveUtils.isHive23) {
       val ctor = clazz.getDeclaredConstructor(
         classOf[Array[ObjectInspector]], JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE)
       val args = Array[AnyRef](inputInspectors, JBoolean.FALSE, JBoolean.FALSE, JBoolean.FALSE)
