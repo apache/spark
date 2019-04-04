@@ -2,11 +2,11 @@ package org.apache.spark.cypher
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graph.api.{CypherResult, NodeFrame, PropertyGraph, RelationshipFrame}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SaveMode}
 
 class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
 
-  test("create graph with nodes") {
+  test("create PropertyGraph from single NodeFrame") {
     val nodeData: DataFrame = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
     val nodeFrame: NodeFrame = NodeFrame(initialDf = nodeData, idColumn = "id", labelSet = Set("Person"))
     val graph: PropertyGraph = cypherSession.createGraph(Seq(nodeFrame))
@@ -14,7 +14,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     result.df.show()
   }
 
-  test("create graph with nodes and relationships") {
+  test("create PropertyGraph from Node- and RelationshipFrames") {
     val nodeData: DataFrame = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
     val relationshipData: DataFrame = spark.createDataFrame(Seq((0, 0, 1))).toDF("id", "source", "target")
     val nodeFrame: NodeFrame = NodeFrame(initialDf = nodeData, idColumn = "id", labelSet = Set("Person"))
@@ -27,7 +27,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     result.df.show()
   }
 
-  test("create graph with multiple node and relationship types") {
+  test("create PropertyGraph with multiple node and relationship types") {
     val studentDF: DataFrame = spark.createDataFrame(Seq((0, "Alice", 42), (1, "Bob", 23))).toDF("id", "name", "age")
     val teacherDF: DataFrame = spark.createDataFrame(Seq((2, "Eve", "CS"))).toDF("id", "name", "subject")
 
@@ -45,7 +45,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     result.df.show()
   }
 
-  test("create graph with multiple node and relationship types and explicit property-to-column mappings") {
+  test("create PropertyGraph with multiple node and relationship types and explicit property-to-column mappings") {
     val studentDF: DataFrame = spark.createDataFrame(Seq((0, "Alice", 42), (1, "Bob", 23))).toDF("id", "col_name", "col_age")
     val teacherDF: DataFrame = spark.createDataFrame(Seq((2, "Eve", "CS"))).toDF("id", "col_name", "col_subject")
 
@@ -63,7 +63,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     result.df.show()
   }
 
-  test("create graph with multiple node and relationship types from wide tables") {
+  test("create PropertyGraph with multiple node and relationship types stored in wide tables") {
     val nodeDF: DataFrame = spark.createDataFrame(Seq(
       (0L, true, true, false, Some("Alice"), Some(42), None),
       (1L, true, true, false, Some("Bob"), Some(23), None),
@@ -80,10 +80,10 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     result.df.show()
   }
 
-  test("save and load Property Graph") {
+  test("save and load PropertyGraph") {
     val graph1: PropertyGraph = cypherSession.createGraph(nodes, relationships)
     graph1.nodes.show()
-    graph1.save("/tmp/my-storage")
+    graph1.save("/tmp/my-storage", SaveMode.Overwrite)
     val graph2: PropertyGraph = cypherSession.load("/tmp/my-storage")
     graph2.nodes.show()
   }
