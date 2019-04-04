@@ -223,15 +223,13 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     ManagedBufferIterator(String appId, String execId, String[] blockIds) {
       this.appId = appId;
       this.execId = execId;
-      String[] blockId0Parts = blockIds[0].split("_");
-      checkBlockId(blockId0Parts, blockIds, 0);
+      String[] blockId0Parts = splitBlockId(blockIds[0]);
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
       mapIdAndReduceIds = new int[2 * blockIds.length];
       this.indeterminateAttemptId =
         (blockId0Parts.length == 5) ? Integer.parseInt(blockId0Parts[4]) : -1;
       for (int i = 0; i < blockIds.length; i++) {
-        String[] blockIdParts = blockIds[i].split("_");
-        checkBlockId(blockIdParts, blockIds, i);
+        String[] blockIdParts = splitBlockId(blockIds[i]);
         if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
           throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
             ", got:" + blockIds[i]);
@@ -241,12 +239,14 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       }
     }
 
-    private void checkBlockId(String[] blockIdParts, String[] wholeBlockId, int index) {
+    private String[] splitBlockId(String blockId) {
+      String[] blockIdParts = blockId.split("_");
       if ((blockIdParts.length != 4 && blockIdParts.length != 5)
           || !blockIdParts[0].equals("shuffle")) {
         throw new IllegalArgumentException(
-          "Unexpected shuffle block id format: " + wholeBlockId[index]);
+            "Unexpected shuffle block id format: " + blockId);
       }
+      return blockIdParts;
     }
 
     @Override
