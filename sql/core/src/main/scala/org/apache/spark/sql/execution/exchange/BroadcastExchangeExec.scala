@@ -83,7 +83,7 @@ case class BroadcastExchangeExec(
           }
 
           val beforeBuild = System.nanoTime()
-          longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
+          longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
 
           // Construct the relation.
           val relation = mode.transform(input, Some(numRows))
@@ -105,11 +105,11 @@ case class BroadcastExchangeExec(
           }
 
           val beforeBroadcast = System.nanoTime()
-          longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
+          longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
 
           // Broadcast the relation
           val broadcasted = sparkContext.broadcast(relation)
-          longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+          longMetric("broadcastTime") += NANOSECONDS.toMillis(System.nanoTime() - beforeBroadcast)
 
           SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
           broadcasted

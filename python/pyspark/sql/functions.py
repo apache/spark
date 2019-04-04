@@ -30,18 +30,39 @@ if sys.version >= '3':
 
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
+from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal, \
+    _create_column_from_name
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
+# Note to developers: all of PySpark functions here take string as column names whenever possible.
+# Namely, if columns are referred as arguments, they can be always both Column or string,
+# even though there might be few exceptions for legacy or inevitable reasons.
+# If you are fixing other language APIs together, also please note that Scala side is not the case
+# since it requires to make every single overridden definition.
+
 
 def _create_function(name, doc=""):
-    """ Create a function for aggregator by name"""
+    """Create a PySpark function by its name"""
     def _(col):
         sc = SparkContext._active_spark_context
         jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
+        return Column(jc)
+    _.__name__ = name
+    _.__doc__ = doc
+    return _
+
+
+def _create_function_over_column(name, doc=""):
+    """Similar with `_create_function` but creates a PySpark function that takes a column
+    (as string as well). This is mainly for PySpark functions to take strings as
+    column names.
+    """
+    def _(col):
+        sc = SparkContext._active_spark_context
+        jc = getattr(sc._jvm.functions, name)(_to_java_column(col))
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -60,9 +81,23 @@ def _create_binary_mathfunction(name, doc=""):
     """ Create a binary mathfunction by name"""
     def _(col1, col2):
         sc = SparkContext._active_spark_context
-        # users might write ints for simplicity. This would throw an error on the JVM side.
-        jc = getattr(sc._jvm.functions, name)(col1._jc if isinstance(col1, Column) else float(col1),
-                                              col2._jc if isinstance(col2, Column) else float(col2))
+        # For legacy reasons, the arguments here can be implicitly converted into floats,
+        # if they are not columns or strings.
+        if isinstance(col1, Column):
+            arg1 = col1._jc
+        elif isinstance(col1, basestring):
+            arg1 = _create_column_from_name(col1)
+        else:
+            arg1 = float(col1)
+
+        if isinstance(col2, Column):
+            arg2 = col2._jc
+        elif isinstance(col2, basestring):
+            arg2 = _create_column_from_name(col2)
+        else:
+            arg2 = float(col2)
+
+        jc = getattr(sc._jvm.functions, name)(arg1, arg2)
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -91,9 +126,9 @@ _functions = {
     'column': 'Returns a :class:`Column` based on the given column name.',
     'asc': 'Returns a sort expression based on the ascending order of the given column name.',
     'desc': 'Returns a sort expression based on the descending order of the given column name.',
+}
 
-    'upper': 'Converts a string expression to upper case.',
-    'lower': 'Converts a string expression to upper case.',
+_functions_over_column = {
     'sqrt': 'Computes the square root of the specified float value.',
     'abs': 'Computes the absolute value.',
 
@@ -106,7 +141,7 @@ _functions = {
     'sumDistinct': 'Aggregate function: returns the sum of distinct values in the expression.',
 }
 
-_functions_1_4 = {
+_functions_1_4_over_column = {
     # unary math functions
     'acos': ':return: inverse cosine of `col`, as if computed by `java.lang.Math.acos()`',
     'asin': ':return: inverse sine of `col`, as if computed by `java.lang.Math.asin()`',
@@ -172,7 +207,7 @@ _collect_set_doc = """
     >>> df2.agg(collect_set('age')).collect()
     [Row(collect_set(age)=[5, 2])]
     """
-_functions_1_6 = {
+_functions_1_6_over_column = {
     # unary math functions
     'stddev': 'Aggregate function: returns the unbiased sample standard deviation of' +
               ' the expression in a group.',
@@ -189,7 +224,7 @@ _functions_1_6 = {
     'collect_set': _collect_set_doc
 }
 
-_functions_2_1 = {
+_functions_2_1_over_column = {
     # unary math functions
     'degrees': """
                Converts an angle measured in radians to an approximately equivalent angle
@@ -256,16 +291,18 @@ _functions_deprecated = {
 
 for _name, _doc in _functions.items():
     globals()[_name] = since(1.3)(_create_function(_name, _doc))
-for _name, _doc in _functions_1_4.items():
-    globals()[_name] = since(1.4)(_create_function(_name, _doc))
+for _name, _doc in _functions_over_column.items():
+    globals()[_name] = since(1.3)(_create_function_over_column(_name, _doc))
+for _name, _doc in _functions_1_4_over_column.items():
+    globals()[_name] = since(1.4)(_create_function_over_column(_name, _doc))
 for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
-for _name, _doc in _functions_1_6.items():
-    globals()[_name] = since(1.6)(_create_function(_name, _doc))
-for _name, _doc in _functions_2_1.items():
-    globals()[_name] = since(2.1)(_create_function(_name, _doc))
+for _name, _doc in _functions_1_6_over_column.items():
+    globals()[_name] = since(1.6)(_create_function_over_column(_name, _doc))
+for _name, _doc in _functions_2_1_over_column.items():
+    globals()[_name] = since(2.1)(_create_function_over_column(_name, _doc))
 for _name, _message in _functions_deprecated.items():
     globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
 for _name, _doc in _functions_2_4.items():
@@ -547,8 +584,8 @@ def rand(seed=None):
     .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('rand', rand(seed=42) * 3).collect()
-    [Row(age=2, name=u'Alice', rand=1.1568609015300986),
-     Row(age=5, name=u'Bob', rand=1.403379671529166)]
+    [Row(age=2, name=u'Alice', rand=2.4052597283576684),
+     Row(age=5, name=u'Bob', rand=2.3913904055683974)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -567,8 +604,8 @@ def randn(seed=None):
     .. note:: The function is non-deterministic in general case.
 
     >>> df.withColumn('randn', randn(seed=42)).collect()
-    [Row(age=2, name=u'Alice', randn=-0.7556247885860078),
-    Row(age=5, name=u'Bob', randn=-0.0861619008451133)]
+    [Row(age=2, name=u'Alice', randn=1.1027054481455365),
+    Row(age=5, name=u'Bob', randn=0.7400395449950132)]
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -1269,7 +1306,10 @@ def from_utc_timestamp(timestamp, tz):
     [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
     >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
+
+    .. note:: Deprecated in 3.0. See SPARK-25496
     """
+    warnings.warn("Deprecated in 3.0. See SPARK-25496", DeprecationWarning)
     sc = SparkContext._active_spark_context
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
@@ -1303,7 +1343,10 @@ def to_utc_timestamp(timestamp, tz):
     [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
     >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
+
+    .. note:: Deprecated in 3.0. See SPARK-25496
     """
+    warnings.warn("Deprecated in 3.0. See SPARK-25496", DeprecationWarning)
     sc = SparkContext._active_spark_context
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
@@ -1431,16 +1474,27 @@ def hash(*cols):
     return Column(jc)
 
 
+@since(3.0)
+def xxhash64(*cols):
+    """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
+    and returns the result as a long column.
+
+    >>> spark.createDataFrame([('ABC',)], ['a']).select(xxhash64('a').alias('hash')).collect()
+    [Row(hash=4105715581806190027)]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.xxhash64(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 _string_functions = {
+    'upper': 'Converts a string expression to upper case.',
+    'lower': 'Converts a string expression to lower case.',
     'ascii': 'Computes the numeric value of the first character of the string column.',
     'base64': 'Computes the BASE64 encoding of a binary column and returns it as a string column.',
     'unbase64': 'Decodes a BASE64 encoded string column and returns it as a binary column.',
-    'initcap': 'Returns a new string column by converting the first letter of each word to ' +
-               'uppercase. Words are delimited by whitespace.',
-    'lower': 'Converts a string column to lower case.',
-    'upper': 'Converts a string column to upper case.',
     'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
@@ -1448,7 +1502,7 @@ _string_functions = {
 
 
 for _name, _doc in _string_functions.items():
-    globals()[_name] = since(1.5)(_create_function(_name, _doc))
+    globals()[_name] = since(1.5)(_create_function_over_column(_name, _doc))
 del _name, _doc
 
 
@@ -2842,8 +2896,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+       If the return type is :class:`StructType`, the returned value should be a `pandas.DataFrame`.
 
-       :class:`MapType`, :class:`StructType` are currently not supported as output types.
+       :class:`MapType`, nested :class:`StructType` are currently not supported as output types.
 
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
@@ -2868,6 +2923,15 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +----------+--------------+------------+
        |         8|      JOHN DOE|          22|
        +----------+--------------+------------+
+       >>> @pandas_udf("first string, last string")  # doctest: +SKIP
+       ... def split_expand(n):
+       ...     return n.str.split(expand=True)
+       >>> df.select(split_expand("name")).show()  # doctest: +SKIP
+       +------------------+
+       |split_expand(name)|
+       +------------------+
+       |       [John, Doe]|
+       +------------------+
 
        .. note:: The length of `pandas.Series` within a scalar UDF is not that of the whole input
            column, but is the length of an internal batch used for each call to the function.
@@ -3133,9 +3197,13 @@ def _test():
     globs['sc'] = sc
     globs['spark'] = spark
     globs['df'] = spark.createDataFrame([Row(name='Alice', age=2), Row(name='Bob', age=5)])
+
+    spark.conf.set("spark.sql.legacy.utcTimestampFunc.enabled", "true")
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.functions, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+    spark.conf.unset("spark.sql.legacy.utcTimestampFunc.enabled")
+
     spark.stop()
     if failure_count:
         sys.exit(-1)

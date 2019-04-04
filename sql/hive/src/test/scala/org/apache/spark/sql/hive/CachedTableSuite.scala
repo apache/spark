@@ -49,6 +49,17 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     maybeBlock.nonEmpty
   }
 
+  // Blocking uncache table for tests
+  private def uncacheTable(tableName: String): Unit = {
+    val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
+    spark.sharedState.cacheManager.uncacheQuery(
+      spark,
+      spark.table(tableName).logicalPlan,
+      cascade = cascade,
+      blocking = true)
+  }
+
   test("cache table") {
     val preCacheResults = sql("SELECT * FROM src").collect().toSeq
 
@@ -106,7 +117,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     var e = intercept[AnalysisException](spark.table("nonexistentTable")).getMessage
     assert(e.contains(expectedErrorMsg))
     e = intercept[AnalysisException] {
-      spark.catalog.uncacheTable("nonexistentTable")
+      uncacheTable("nonexistentTable")
     }.getMessage
     assert(e.contains(expectedErrorMsg))
     e = intercept[AnalysisException] {
@@ -121,7 +132,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(a INT)")
       // no error will be reported in the following three ways to uncache a table.
-      spark.catalog.uncacheTable(tableName)
+      uncacheTable(tableName)
       sql("UNCACHE TABLE newTable")
       sparkSession.table(tableName).unpersist(blocking = true)
     }

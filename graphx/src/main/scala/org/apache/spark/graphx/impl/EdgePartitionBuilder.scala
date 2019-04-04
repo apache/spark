@@ -130,16 +130,14 @@ private[impl] case class EdgeWithLocalIds[@specialized ED](
 
 private[impl] object EdgeWithLocalIds {
   implicit def lexicographicOrdering[ED]: Ordering[EdgeWithLocalIds[ED]] =
-    new Ordering[EdgeWithLocalIds[ED]] {
-      override def compare(a: EdgeWithLocalIds[ED], b: EdgeWithLocalIds[ED]): Int = {
-        if (a.srcId == b.srcId) {
-          if (a.dstId == b.dstId) 0
-          else if (a.dstId < b.dstId) -1
-          else 1
-        } else if (a.srcId < b.srcId) -1
+    (a: EdgeWithLocalIds[ED], b: EdgeWithLocalIds[ED]) =>
+      if (a.srcId == b.srcId) {
+        if (a.dstId == b.dstId) 0
+        else if (a.dstId < b.dstId) -1
         else 1
       }
-    }
+      else if (a.srcId < b.srcId) -1
+      else 1
 
   private[graphx] def edgeArraySortDataFormat[ED] = {
     new SortDataFormat[EdgeWithLocalIds[ED], Array[EdgeWithLocalIds[ED]]] {

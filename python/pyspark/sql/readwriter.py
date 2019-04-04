@@ -327,6 +327,7 @@ class DataFrameReader(OptionUtils):
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
+        The text files must be encoded as UTF-8.
 
         By default, each line in the text file is a new row in the resulting DataFrame.
 
@@ -507,8 +508,6 @@ class DataFrameReader(OptionUtils):
     @since(1.5)
     def orc(self, path):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
-
-        .. note:: Currently ORC support is only available together with Hive support.
 
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
@@ -856,6 +855,7 @@ class DataFrameWriter(OptionUtils):
     @since(1.6)
     def text(self, path, compression=None, lineSep=None):
         """Saves the content of the DataFrame in a text file at the specified path.
+        The text files will be encoded as UTF-8.
 
         :param path: the path in any Hadoop supported file system
         :param compression: compression codec to use when saving to file. This can be one of the
@@ -947,8 +947,6 @@ class DataFrameWriter(OptionUtils):
     @since(1.5)
     def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
-
-        .. note:: Currently ORC support is only available together with Hive support.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.

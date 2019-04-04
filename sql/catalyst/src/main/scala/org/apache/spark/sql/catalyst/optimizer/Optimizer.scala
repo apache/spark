@@ -43,38 +43,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   // - is still resolved
   // - only host special expressions in supported operators
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (plan.resolved && checkSpecialExpressionIntegrity(plan))
-  }
-
-  /**
-   * Check if all operators in this plan hold structural integrity with regards to hosting special
-   * expressions.
-   * Returns true when all operators are integral.
-   */
-  private def checkSpecialExpressionIntegrity(plan: LogicalPlan): Boolean = {
-    plan.find(specialExpressionInUnsupportedOperator).isEmpty
-  }
-
-  /**
-   * Check if there's any expression in this query plan operator that is
-   * - A WindowExpression but the plan is not Window
-   * - An AggregateExpresion but the plan is not Aggregate or Window
-   * - A Generator but the plan is not Generate
-   * Returns true when this operator breaks structural integrity with one of the cases above.
-   */
-  private def specialExpressionInUnsupportedOperator(plan: LogicalPlan): Boolean = {
-    val exprs = plan.expressions
-    exprs.flatMap { root =>
-      root.find {
-        case e: WindowExpression
-          if !plan.isInstanceOf[Window] => true
-        case e: AggregateExpression
-          if !(plan.isInstanceOf[Aggregate] || plan.isInstanceOf[Window]) => true
-        case e: Generator
-          if !plan.isInstanceOf[Generate] => true
-        case _ => false
-      }
-    }.nonEmpty
+    !Utils.isTesting || (plan.resolved &&
+      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty)
   }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
@@ -95,6 +65,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         EliminateOuterJoin,
         PushPredicateThroughJoin,
         PushDownPredicate,
+        PushDownLeftSemiAntiJoin,
         LimitPushDown,
         ColumnPruning,
         InferFiltersFromConstraints,
@@ -197,7 +168,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
-      CombineTypedFilters) :+
+      CombineTypedFilters,
+      ObjectSerializerPruning) :+
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) :+
@@ -212,7 +184,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :+
-    Batch("UpdateNullability", Once, UpdateAttributeNullability) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
   }
@@ -594,11 +565,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
 
-    case p @ Project(_, s: SerializeFromObject) if p.references != s.outputSet =>
-      val usedRefs = p.references
-      val prunedSerializer = s.serializer.filter(usedRefs.contains)
-      p.copy(child = SerializeFromObject(prunedSerializer, s.child))
-
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
     case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
       a.copy(child = prunedChild(child, a.references))
@@ -651,6 +617,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
+    case p @ NestedColumnAliasing(nestedFieldToAlias, attrToAliases) =>
+      NestedColumnAliasing.replaceToAliases(p, nestedFieldToAlias, attrToAliases)
+
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
     case p @ Project(_, child) if !child.isInstanceOf[Project] =>
@@ -684,8 +653,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two adjacent [[Project]] operators into one and perform alias substitution,
- * merging the expressions into one single expression.
+ * Combines two [[Project]] operators into one and perform alias substitution,
+ * merging the expressions into one single expression for the following cases.
+ * 1. When two [[Project]] operators are adjacent.
+ * 2. When two [[Project]] operators have LocalLimit/Sample/Repartition operator between them
+ *    and the upper project consists of the same number of columns which is equal or aliasing.
+ *    `GlobalLimit(LocalLimit)` pattern is also considered.
  */
 object CollapseProject extends Rule[LogicalPlan] {
 
@@ -703,6 +676,17 @@ object CollapseProject extends Rule[LogicalPlan] {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       }
+    case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
+        if isRenaming(l1, l2) =>
+      val newProjectList = buildCleanedProjectList(l1, l2)
+      g.copy(child = limit.copy(child = p2.copy(projectList = newProjectList)))
+    case Project(l1, limit @ LocalLimit(_, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+      val newProjectList = buildCleanedProjectList(l1, l2)
+      limit.copy(child = p2.copy(projectList = newProjectList))
+    case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
+      r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
+    case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+      s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
   private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
@@ -741,6 +725,14 @@ object CollapseProject extends Rule[LogicalPlan] {
     // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
     rewrittenUpper.map { p =>
       CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
+    }
+  }
+
+  private def isRenaming(list1: Seq[NamedExpression], list2: Seq[NamedExpression]): Boolean = {
+    list1.length == list2.length && list1.zip(list2).forall {
+      case (e1, e2) if e1.semanticEquals(e2) => true
+      case (Alias(a: Attribute, _), b) if a.metadata == Metadata.empty && a.name == b.name => true
+      case _ => false
     }
   }
 }
@@ -1016,24 +1008,13 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // This also applies to Aggregate.
     case Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
-
-      // Create a map of Aliases to their values from the child projection.
-      // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
-      val aliasMap = AttributeMap(fields.collect {
-        case a: Alias => (a.toAttribute, a.child)
-      })
-
+      val aliasMap = getAliasMap(project)
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
-      // Find all the aliased expressions in the aggregate list that don't include any actual
-      // AggregateExpression, and create a map from the alias to the expression
-      val aliasMap = AttributeMap(aggregate.aggregateExpressions.collect {
-        case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
-          (a.toAttribute, a.child)
-      })
+      val aliasMap = getAliasMap(aggregate)
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
@@ -1131,7 +1112,23 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  private def canPushThrough(p: UnaryNode): Boolean = p match {
+  def getAliasMap(plan: Project): AttributeMap[Expression] = {
+    // Create a map of Aliases to their values from the child projection.
+    // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
+    AttributeMap(plan.projectList.collect { case a: Alias => (a.toAttribute, a.child) })
+  }
+
+  def getAliasMap(plan: Aggregate): AttributeMap[Expression] = {
+    // Find all the aliased expressions in the aggregate list that don't include any actual
+    // AggregateExpression, and create a map from the alias to the expression
+    val aliasMap = plan.aggregateExpressions.collect {
+      case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
+        (a.toAttribute, a.child)
+    }
+    AttributeMap(aliasMap)
+  }
+
+  def canPushThrough(p: UnaryNode): Boolean = p match {
     // Note that some operators (e.g. project, aggregate, union) are being handled separately
     // (earlier in this rule).
     case _: AppendColumns => true

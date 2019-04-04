@@ -144,8 +144,9 @@ class HiveSparkSubmitSuite
     // Before the fix in SPARK-8470, this results in a MissingRequirementError because
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
+    // TODO: revisit for Scala 2.13 support
     val version = Properties.versionNumberString match {
-      case v if v.startsWith("2.12") || v.startsWith("2.11") => v.substring(0, 4)
+      case v if v.startsWith("2.12") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
     val jarDir = getTestResourcePath("regression-test-SPARK-8489")

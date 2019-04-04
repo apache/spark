@@ -43,7 +43,11 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
   },
   "attributes" : { }
 }, {
@@ -193,7 +197,11 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
   },
   "attributes" : { }
 }, {
@@ -244,7 +252,11 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
   },
   "attributes" : { }
 }, {
@@ -295,7 +307,11 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
   },
   "attributes" : { }
 }, {
@@ -346,7 +362,11 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
   },
   "attributes" : { }
 } ]

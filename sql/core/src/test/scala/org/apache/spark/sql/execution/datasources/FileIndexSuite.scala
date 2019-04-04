@@ -65,6 +65,21 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
+  test("SPARK-26990: use user specified field names if possible") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val schema = StructType(Seq(StructField("A", StringType, false)))
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+        assert(fileIndex.partitionSchema.length == 1 && fileIndex.partitionSchema.head.name == "A")
+      }
+    }
+  }
+
   test("SPARK-26230: if case sensitive, validate partitions with original column names") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=1")
