@@ -149,11 +149,6 @@ private[spark] class DAGScheduler(
    */
   private[scheduler] val shuffleIdToMapStage = new HashMap[Int, ShuffleMapStage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
-  /**
-   * Mapping from shuffle id to the indeterminate stage attempt id. Only includes the retried
-   * stages whose output deterministic level is indeterminate.
-   */
-  private[scheduler] val shuffleIdToIndeterminateStageAttemptId = new HashMap[Int, Int]
 
   // Stages we need to run whose parents aren't done
   private[scheduler] val waitingStages = new HashSet[Stage]

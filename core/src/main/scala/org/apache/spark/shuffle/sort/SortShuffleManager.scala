@@ -163,9 +163,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     Option(infoMapsForShuffle.remove(shuffleId)).foreach {
-      case (numMaps, indeterminateAttemptId) =>
+      case (numMaps, stageAttemptId) =>
         (0 until numMaps).foreach { mapId =>
-          shuffleBlockResolver.removeDataByMap(shuffleId, mapId, indeterminateAttemptId)
+          shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId)
         }
     }
     true

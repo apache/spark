@@ -58,11 +58,11 @@ case class ShuffleBlockId(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    indeterminateAttemptId: Option[Int] = None)
+    stageAttemptId: Option[Int] = None)
   extends BlockId {
   override def name: String = {
     val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
-    if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
+    if (stageAttemptId.isEmpty) nameStr else nameStr + "_" + stageAttemptId.get
   }
 }
 
@@ -71,12 +71,12 @@ case class ShuffleDataBlockId(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    indeterminateAttemptId: Option[Int] = None)
+    stageAttemptId: Option[Int] = None)
   extends BlockId {
   override def name: String = {
     val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
     val nameStrWithIndeterminateAttempt =
-      if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
+      if (stageAttemptId.isEmpty) nameStr else nameStr + "_" + stageAttemptId.get
     nameStrWithIndeterminateAttempt + ".data"
   }
 }
@@ -86,12 +86,12 @@ case class ShuffleIndexBlockId(
     shuffleId: Int,
     mapId: Int,
     reduceId: Int,
-    indeterminateAttemptId: Option[Int] = None)
+    stageAttemptId: Option[Int] = None)
   extends BlockId {
   override def name: String = {
     val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
     val nameStrWithIndeterminateAttempt =
-      if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
+      if (stageAttemptId.isEmpty) nameStr else nameStr + "_" + stageAttemptId.get
     nameStrWithIndeterminateAttempt + ".index"
   }
 }
