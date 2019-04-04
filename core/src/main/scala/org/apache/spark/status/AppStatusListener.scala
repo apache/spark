@@ -89,7 +89,7 @@ private[spark] class AppStatusListener(
 
   kvstore.onFlush {
     if (!live) {
-      flush()
+      flush(update(_, _))
     }
   }
 
@@ -831,6 +831,10 @@ private[spark] class AppStatusListener(
         }
       }
     }
+    // Flush updates if necessary. Executor heartbeat is an event that happens periodically. Flush
+    // here to ensure the staleness of Spark UI doesn't last more that the executor heartbeat
+    // interval.
+    flush(maybeUpdate(_, _))
   }
 
   override def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit = {
@@ -856,18 +860,18 @@ private[spark] class AppStatusListener(
     }
   }
 
-  /** Flush all live entities' data to the underlying store. */
-  private def flush(): Unit = {
+  /** Go through all `LiveEntity`s and use `entityFlushFunc(entity, now)` to flush them. */
+  private def flush(entityFlushFunc: (LiveEntity, Long) => Unit): Unit = {
     val now = System.nanoTime()
     liveStages.values.asScala.foreach { stage =>
-      update(stage, now)
-      stage.executorSummaries.values.foreach(update(_, now))
+      entityFlushFunc(stage, now)
+      stage.executorSummaries.values.foreach(entityFlushFunc(_, now))
     }
-    liveJobs.values.foreach(update(_, now))
-    liveExecutors.values.foreach(update(_, now))
-    liveTasks.values.foreach(update(_, now))
-    liveRDDs.values.foreach(update(_, now))
-    pools.values.foreach(update(_, now))
+    liveJobs.values.foreach(entityFlushFunc(_, now))
+    liveExecutors.values.foreach(entityFlushFunc(_, now))
+    liveTasks.values.foreach(entityFlushFunc(_, now))
+    liveRDDs.values.foreach(entityFlushFunc(_, now))
+    pools.values.foreach(entityFlushFunc(_, now))
   }
 
   /**
