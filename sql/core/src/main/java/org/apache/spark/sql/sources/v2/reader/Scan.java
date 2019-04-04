@@ -62,7 +62,7 @@ public interface Scan {
   /**
    * Returns the physical representation of this scan for batch query. By default this method throws
    * exception, data sources must overwrite this method to provide an implementation, if the
-   * {@link Table} that creates this scan returns {@link TableCapability#BATCH_READ} in its
+   * {@link Table} that creates this scan returns {@link TableCapability#BATCH_READ} support in its
    * {@link Table#capabilities()}.
    *
    * @throws UnsupportedOperationException
