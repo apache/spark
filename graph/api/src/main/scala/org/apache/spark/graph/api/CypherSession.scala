@@ -69,8 +69,8 @@ trait CypherSession {
     val trueLit = functions.lit(true)
     val falseLit = functions.lit(false)
 
-    // TODO: add empty set
-    val nodeFrames = labelColumns.subsets().map { labelSet =>
+    val labelSets = labelColumns.subsets().toSet + Set.empty
+    val nodeFrames = labelSets.map { labelSet =>
       val predicate = labelColumns.map {
         case labelColumn if labelSet.contains(labelColumn) => nodes.col(labelColumn) === trueLit
         case labelColumn => nodes.col(labelColumn) === falseLit
