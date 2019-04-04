@@ -1428,6 +1428,15 @@ class DataFrame private[sql](
   }
 
   /**
+    * Returns a new RDD by applying a function to each partition of this DataFrame, while tracking the index
+    * of the original partition.
+    * @group rdd
+    */
+  def mapPartitionsWithIndex[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R] = {
+    rdd.mapPartitionsWithIndex(f)
+  }
+
+  /**
    * Applies a function `f` to all rows.
    * @group rdd
    * @since 1.3.0
