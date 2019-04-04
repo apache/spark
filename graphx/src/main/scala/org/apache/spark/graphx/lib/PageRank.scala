@@ -210,9 +210,8 @@ object PageRank extends Logging {
    *         containing the pagerank relative to all starting nodes (as a sparse vector
    *         indexed by the position of nodes in the sources list) and
    *         edge attributes the normalized edge weight
-   *
-   * @since 3.0.0
    */
+  @Since("3.0.0")
   def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED],
       numIter: Int,
