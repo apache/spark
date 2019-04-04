@@ -493,6 +493,20 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       }
     }
   }
+
+  test("Return correct results when data columns overlap with partition columns") {
+    Seq("parquet", "orc", "json").foreach { format =>
+      withTempPath { path =>
+        val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
+        Seq((1, 2, 3, 4, 5)).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+          .write.format(format).save(tablePath.getCanonicalPath)
+
+        val df = spark.read.format(format).load(path.getCanonicalPath)
+          .select("CoL1", "Col2", "CoL5", "CoL3")
+        checkAnswer(df, Row("a", 2, "e", "c"))
+      }
+    }
+  }
 }
 
 object TestingUDT {
