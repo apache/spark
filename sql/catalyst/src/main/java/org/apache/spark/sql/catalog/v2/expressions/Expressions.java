@@ -18,6 +18,10 @@
 package org.apache.spark.sql.catalog.v2.expressions;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.types.DataType;
+import scala.collection.JavaConverters;
+
+import java.util.Arrays;
 
 /**
  * Helper methods to create logical transforms to pass into Spark.
@@ -37,7 +41,8 @@ public class Expressions {
    * @return a logical transform
    */
   public Transform apply(String name, Expression... args) {
-    return LogicalExpressions.apply(name, args);
+    return LogicalExpressions.apply(name,
+        JavaConverters.asScalaBuffer(Arrays.asList(args)).toSeq());
   }
 
   /**
@@ -52,6 +57,9 @@ public class Expressions {
 
   /**
    * Create a literal from a value.
+   * <p>
+   * The JVM type of the value held by a literal must be the type used by Spark's InternalRow API
+   * for the literal's {@link DataType SQL data type}.
    *
    * @param value a value
    * @param <T> the JVM type of the value
@@ -72,7 +80,8 @@ public class Expressions {
    * @return a logical bucket transform
    */
   public Transform bucket(int numBuckets, String... columns) {
-    return LogicalExpressions.bucket(numBuckets, columns);
+    return LogicalExpressions.bucket(numBuckets,
+        JavaConverters.asScalaBuffer(Arrays.asList(columns)).toSeq());
   }
 
   /**

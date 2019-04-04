@@ -22,8 +22,11 @@ import org.apache.spark.sql.types.DataType;
 
 /**
  * Represents a constant literal value in the public expression API.
+ * <p>
+ * The JVM type of the value held by a literal must be the type used by Spark's InternalRow API for
+ * the literal's {@link DataType SQL data type}.
  *
- * @param <T> the Java type of a value held by the literal
+ * @param <T> the JVM type of a value held by the literal
  */
 @Experimental
 public interface Literal<T> extends Expression {

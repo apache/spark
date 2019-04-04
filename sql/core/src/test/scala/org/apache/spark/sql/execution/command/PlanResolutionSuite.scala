@@ -67,13 +67,13 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("create table - partitioned by transforms") {
     val transforms = Seq(
-        "bucket(16, b)", "year(ts)", "month(ts)", "date(ts)", "date_hour(ts)", "foo(a, 'bar', 34)",
-        "bucket(32, b), date(ts)")
+        "bucket(16, b)", "years(ts)", "months(ts)", "days(ts)", "hours(ts)", "foo(a, 'bar', 34)",
+        "bucket(32, b), days(ts)")
     transforms.foreach { transform =>
-        val query =
-          s"""
-             |CREATE TABLE my_tab(a INT, b STRING) USING parquet
-             |PARTITIONED BY ($transform)
+      val query =
+        s"""
+           |CREATE TABLE my_tab(a INT, b STRING) USING parquet
+           |PARTITIONED BY ($transform)
            """.stripMargin
 
       val ae = intercept[AnalysisException] {

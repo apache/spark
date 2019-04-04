@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DateHourTransform, DateTransform, FieldReference, IdentityTransform, LiteralValue, MonthTransform, YearTransform}
+import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -116,10 +116,10 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITIONED BY (
         |    a,
         |    bucket(16, b),
-        |    year(ts),
-        |    month(ts),
-        |    date(ts),
-        |    date_hour(ts),
+        |    years(ts),
+        |    months(ts),
+        |    days(ts),
+        |    hours(ts),
         |    foo(a, "bar", 34))
       """.stripMargin
 
@@ -133,10 +133,10 @@ class DDLParserSuite extends AnalysisTest {
         assert(create.partitioning == Seq(
             IdentityTransform(FieldReference("a")),
             BucketTransform(LiteralValue(16, IntegerType), Seq(FieldReference("b"))),
-            YearTransform(FieldReference("ts")),
-            MonthTransform(FieldReference("ts")),
-            DateTransform(FieldReference("ts")),
-            DateHourTransform(FieldReference("ts")),
+            YearsTransform(FieldReference("ts")),
+            MonthsTransform(FieldReference("ts")),
+            DaysTransform(FieldReference("ts")),
+            HoursTransform(FieldReference("ts")),
             ApplyTransform("foo", Seq(
                 FieldReference("a"),
                 LiteralValue(UTF8String.fromString("bar"), StringType),

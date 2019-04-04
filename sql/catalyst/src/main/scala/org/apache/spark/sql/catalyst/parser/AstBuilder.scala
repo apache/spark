@@ -29,7 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2
-import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DateHourTransform, DateTransform, FieldReference, IdentityTransform, LiteralValue, MonthTransform, Transform, YearTransform}
+import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
@@ -2099,17 +2099,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
             BucketTransform(LiteralValue(numBuckets, IntegerType), fields)
 
-          case "year" =>
-            YearTransform(getSingleFieldReference(applyCtx, arguments))
+          case "years" =>
+            YearsTransform(getSingleFieldReference(applyCtx, arguments))
 
-          case "month" =>
-            MonthTransform(getSingleFieldReference(applyCtx, arguments))
+          case "months" =>
+            MonthsTransform(getSingleFieldReference(applyCtx, arguments))
 
-          case "date" =>
-            DateTransform(getSingleFieldReference(applyCtx, arguments))
+          case "days" =>
+            DaysTransform(getSingleFieldReference(applyCtx, arguments))
 
-          case "date_hour" =>
-            DateHourTransform(getSingleFieldReference(applyCtx, arguments))
+          case "hours" =>
+            HoursTransform(getSingleFieldReference(applyCtx, arguments))
 
           case name =>
             ApplyTransform(name, arguments)

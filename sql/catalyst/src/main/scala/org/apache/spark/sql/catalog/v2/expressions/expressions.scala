@@ -77,25 +77,20 @@ private[sql] object LogicalExpressions {
   def reference(name: String): NamedReference =
     FieldReference(parser.parseMultipartIdentifier(name))
 
-  def apply(name: String, arguments: Array[Expression]): Transform = ApplyTransform(name, arguments)
-
   def apply(name: String, arguments: Expression*): Transform = ApplyTransform(name, arguments)
-
-  def bucket(numBuckets: Int, columns: Array[String]): BucketTransform =
-    BucketTransform(literal(numBuckets, IntegerType), columns.map(reference))
 
   def bucket(numBuckets: Int, columns: String*): BucketTransform =
     BucketTransform(literal(numBuckets, IntegerType), columns.map(reference))
 
   def identity(column: String): IdentityTransform = IdentityTransform(reference(column))
 
-  def year(column: String): YearTransform = YearTransform(reference(column))
+  def year(column: String): YearsTransform = YearsTransform(reference(column))
 
-  def month(column: String): MonthTransform = MonthTransform(reference(column))
+  def month(column: String): MonthsTransform = MonthsTransform(reference(column))
 
-  def date(column: String): DateTransform = DateTransform(reference(column))
+  def date(column: String): DaysTransform = DaysTransform(reference(column))
 
-  def dateHour(column: String): DateHourTransform = DateHourTransform(reference(column))
+  def dateHour(column: String): HoursTransform = HoursTransform(reference(column))
 }
 
 /**
@@ -156,24 +151,24 @@ private[sql] final case class IdentityTransform(
   override def describe: String = ref.describe
 }
 
-private[sql] final case class YearTransform(
+private[sql] final case class YearsTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override val name: String = "year"
+  override val name: String = "years"
 }
 
-private[sql] final case class MonthTransform(
+private[sql] final case class MonthsTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override val name: String = "month"
+  override val name: String = "months"
 }
 
-private[sql] final case class DateTransform(
+private[sql] final case class DaysTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override val name: String = "date"
+  override val name: String = "days"
 }
 
-private[sql] final case class DateHourTransform(
+private[sql] final case class HoursTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
-  override val name: String = "date_hour"
+  override val name: String = "hours"
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
