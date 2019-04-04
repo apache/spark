@@ -452,15 +452,4 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }
-
-  test("SPARK-27278: simplify map access with non-foldable key and foldable map") {
-    val query = relation.select(GetMapValue(CreateMap(Seq(
-      1L, "a",
-      2L, "b")), 'id) as "a")
-    val expected = relation.select(
-        CaseWhen(Seq(
-          (EqualTo('id, 1L), "a"),
-          (EqualTo('id, 2L), "b"))) as "a")
-    checkRule(query, expected)
-  }
 }
