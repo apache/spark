@@ -24,6 +24,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
@@ -64,8 +65,7 @@ private[spark] class KafkaRDD[K, V](
       " must be set to false for executor kafka params, else offsets may commit before processing")
 
   // TODO is it necessary to have separate configs for initial poll time vs ongoing poll time?
-  private val pollTimeout = conf.get(CONSUMER_POLL_MS).getOrElse(
-    conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L)
+  private val pollTimeout = conf.get(CONSUMER_POLL_MS).getOrElse(conf.get(NETWORK_TIMEOUT) * 1000L)
   private val cacheInitialCapacity = conf.get(CONSUMER_CACHE_INITIAL_CAPACITY)
   private val cacheMaxCapacity = conf.get(CONSUMER_CACHE_MAX_CAPACITY)
   private val cacheLoadFactor = conf.get(CONSUMER_CACHE_LOAD_FACTOR).toFloat
