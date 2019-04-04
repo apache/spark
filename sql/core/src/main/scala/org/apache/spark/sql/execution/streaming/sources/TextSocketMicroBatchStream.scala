@@ -130,27 +130,24 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
     slices.map(TextSocketInputPartition)
   }
 
-  override def createReaderFactory(): PartitionReaderFactory = {
-    new PartitionReaderFactory {
-      override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-        val slice = partition.asInstanceOf[TextSocketInputPartition].slice
-        new PartitionReader[InternalRow] {
-          private var currentIdx = -1
+  override def createReaderFactory(): PartitionReaderFactory =
+    (partition: InputPartition) => {
+      val slice = partition.asInstanceOf[TextSocketInputPartition].slice
+      new PartitionReader[InternalRow] {
+        private var currentIdx = -1
 
-          override def next(): Boolean = {
-            currentIdx += 1
-            currentIdx < slice.size
-          }
-
-          override def get(): InternalRow = {
-            InternalRow(slice(currentIdx)._1, slice(currentIdx)._2)
-          }
-
-          override def close(): Unit = {}
+        override def next(): Boolean = {
+          currentIdx += 1
+          currentIdx < slice.size
         }
+
+        override def get(): InternalRow = {
+          InternalRow(slice(currentIdx)._1, slice(currentIdx)._2)
+        }
+
+        override def close(): Unit = {}
       }
     }
-  }
 
   override def commit(end: Offset): Unit = synchronized {
     val newOffset = LongOffset.convert(end).getOrElse(

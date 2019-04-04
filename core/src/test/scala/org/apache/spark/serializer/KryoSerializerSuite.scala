@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
@@ -370,30 +370,6 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     assert(thrown.getCause.isInstanceOf[KryoException])
   }
 
-  test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {
-    withTempDir { dir =>
-      val tmpfile = dir.toString + "/RoaringBitmap"
-      val outStream = new FileOutputStream(tmpfile)
-      val output = new KryoOutput(outStream)
-      val bitmap = new RoaringBitmap
-      bitmap.add(1)
-      bitmap.add(3)
-      bitmap.add(5)
-      // Ignore Kryo because it doesn't use writeObject
-      bitmap.serialize(new KryoOutputObjectOutputBridge(null, output))
-      output.flush()
-      output.close()
-
-      val inStream = new FileInputStream(tmpfile)
-      val input = new KryoInput(inStream)
-      val ret = new RoaringBitmap
-      // Ignore Kryo because it doesn't use readObject
-      ret.deserialize(new KryoInputObjectInputBridge(null, input))
-      input.close()
-      assert(ret == bitmap)
-    }
-  }
-
   test("KryoOutputObjectOutputBridge.writeObject and KryoInputObjectInputBridge.readObject") {
     val kryo = new KryoSerializer(conf).newKryo()
 
@@ -517,6 +493,14 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     tests.foreach { f =>
       assert(ThreadUtils.awaitResult(f, 10.seconds))
     }
+  }
+
+  test("SPARK-27216: test RoaringBitmap ser/dser with Kryo") {
+    val expected = new RoaringBitmap()
+    expected.add(1787)
+    val ser = new KryoSerializer(conf).newInstance()
+    val actual: RoaringBitmap = ser.deserialize(ser.serialize(expected))
+    assert(actual === expected)
   }
 }
 

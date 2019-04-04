@@ -60,8 +60,9 @@ class ObjectSerializerPruningSuite extends PlanTest {
       Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
         StructType.fromDDL("a int, b int")),
       Seq(StructType.fromDDL("a int, b int, c string")),
-      Seq.empty[StructType],
-      Seq(StructType.fromDDL("c long, d string"))
+      Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
+        StructType.fromDDL("a int, b int")),
+      Seq(StructType.fromDDL("a int, b int"), StructType.fromDDL("c long, d string"))
     )
 
     dataTypes.zipWithIndex.foreach { case (dt, idx) =>
