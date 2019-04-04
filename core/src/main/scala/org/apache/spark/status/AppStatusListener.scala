@@ -76,6 +76,9 @@ private[spark] class AppStatusListener(
   // around liveExecutors.
   @volatile private var activeExecutorCount = 0
 
+  /** The last time when flushing `LiveEntity`s. This is to avoid flushing too frequently. */
+  private var lastFlushTimeNs = System.nanoTime()
+
   kvstore.addTrigger(classOf[ExecutorSummaryWrapper], conf.get(MAX_RETAINED_DEAD_EXECUTORS))
     { count => cleanupExecutors(count) }
 
@@ -89,7 +92,8 @@ private[spark] class AppStatusListener(
 
   kvstore.onFlush {
     if (!live) {
-      flush(update(_, _))
+      val now = System.nanoTime()
+      flush(update(_, now))
     }
   }
 
@@ -834,7 +838,11 @@ private[spark] class AppStatusListener(
     // Flush updates if necessary. Executor heartbeat is an event that happens periodically. Flush
     // here to ensure the staleness of Spark UI doesn't last more that the executor heartbeat
     // interval.
-    flush(maybeUpdate(_, _))
+    if (now - lastFlushTimeNs > liveUpdatePeriodNs) {
+      flush(maybeUpdate(_, now))
+      // Re-get the current system time because `flush` may be slow and `now` is stale.
+      lastFlushTimeNs = System.nanoTime()
+    }
   }
 
   override def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit = {
@@ -860,18 +868,17 @@ private[spark] class AppStatusListener(
     }
   }
 
-  /** Go through all `LiveEntity`s and use `entityFlushFunc(entity, now)` to flush them. */
-  private def flush(entityFlushFunc: (LiveEntity, Long) => Unit): Unit = {
-    val now = System.nanoTime()
+  /** Go through all `LiveEntity`s and use `entityFlushFunc(entity)` to flush them. */
+  private def flush(entityFlushFunc: LiveEntity => Unit): Unit = {
     liveStages.values.asScala.foreach { stage =>
-      entityFlushFunc(stage, now)
-      stage.executorSummaries.values.foreach(entityFlushFunc(_, now))
+      entityFlushFunc(stage)
+      stage.executorSummaries.values.foreach(entityFlushFunc)
     }
-    liveJobs.values.foreach(entityFlushFunc(_, now))
-    liveExecutors.values.foreach(entityFlushFunc(_, now))
-    liveTasks.values.foreach(entityFlushFunc(_, now))
-    liveRDDs.values.foreach(entityFlushFunc(_, now))
-    pools.values.foreach(entityFlushFunc(_, now))
+    liveJobs.values.foreach(entityFlushFunc)
+    liveExecutors.values.foreach(entityFlushFunc)
+    liveTasks.values.foreach(entityFlushFunc)
+    liveRDDs.values.foreach(entityFlushFunc)
+    pools.values.foreach(entityFlushFunc)
   }
 
   /**
