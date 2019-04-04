@@ -1716,7 +1716,7 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
 
 /**
  * Replaces GlobalLimit 0 and LocalLimit 0 nodes (subtree) with empty Local Relation, as they don't
-  * return any rows.
+ * return any rows.
  */
 object OptimizeLimitZero extends Rule[LogicalPlan] {
   // returns empty Local Relation corresponding to given plan
@@ -1734,7 +1734,7 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // changes up the Logical Plan.
     //
     // Replace Global Limit 0 nodes with empty Local Relation
-    case gl @ GlobalLimit(IntegerLiteral(limit), _) if limit == 0 =>
+    case gl @ GlobalLimit(IntegerLiteral(0), _) =>
       empty(gl)
 
     // Note: For all SQL queries, if a LocalLimit 0 node exists in the Logical Plan, then a
@@ -1743,7 +1743,7 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // then the following rule will handle that case as well.
     //
     // Replace Local Limit 0 nodes with empty Local Relation
-    case ll @ LocalLimit(IntegerLiteral(limit), _) if limit == 0 =>
+    case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
   }
 }

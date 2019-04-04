@@ -71,13 +71,12 @@ class OptimizeLimitZeroSuite extends PlanTest {
     (LeftOuter, Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze),
     (RightOuter, LocalRelation('a.int, 'b.int)),
     (FullOuter, Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)
-  ).foreach { case (jt, answer) =>
+  ).foreach { case (jt, correctAnswer) =>
       test(s"Limit 0: for join type $jt") {
         val query = testRelation1
           .join(testRelation2.limit(0), joinType = jt, condition = Some('a.attr == 'b.attr))
 
         val optimized = Optimize.execute(query.analyze)
-        val correctAnswer = answer
 
         comparePlans(optimized, correctAnswer)
       }
