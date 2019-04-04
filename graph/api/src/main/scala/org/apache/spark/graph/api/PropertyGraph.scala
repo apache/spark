@@ -25,9 +25,16 @@ trait PropertyGraph {
     * Executes a Cypher query in the session that manages this graph, using this graph as the input graph.
     *
     * @param query      Cypher query to execute
+    */
+  def cypher(query: String): CypherResult = cypher(query, Map.empty)
+
+  /**
+    * Executes a Cypher query in the session that manages this graph, using this graph as the input graph.
+    *
+    * @param query      Cypher query to execute
     * @param parameters parameters used by the Cypher query
     */
-  def cypher(query: String, parameters: Map[String, Any] = Map.empty): CypherResult = cypherSession.cypher(this, query, parameters)
+  def cypher(query: String, parameters: Map[String, Any]): CypherResult = cypherSession.cypher(this, query, parameters)
 
   /**
     * Returns the [[NodeFrame]] for a given node label set.
