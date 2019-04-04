@@ -165,6 +165,7 @@ abstract class BaseSessionStateBuilder(
       PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:
+        UpdateEmptyValueOfPartitionToNull(conf) +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =

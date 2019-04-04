@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.sources.v2.writer.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -37,7 +38,7 @@ import org.apache.spark.util.SerializableConfiguration
 abstract class FileFormatDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol) {
+    committer: FileCommitProtocol) extends DataWriter[InternalRow] {
   /**
    * Max number of files a single task writes out due to file size. In most cases the number of
    * files written should be very small. This is just a safe guard to protect some really bad
@@ -70,7 +71,7 @@ abstract class FileFormatDataWriter(
    * to the driver and used to update the catalog. Other information will be sent back to the
    * driver too and used to e.g. update the metrics in UI.
    */
-  def commit(): WriteTaskResult = {
+  override def commit(): WriteTaskResult = {
     releaseResources()
     val summary = ExecutedWriteSummary(
       updatedPartitions = updatedPartitions.toSet,
@@ -169,8 +170,7 @@ class DynamicPartitionDataWriter(
 
   /** Extracts the partition values out of an input row. */
   private lazy val getPartitionValues: InternalRow => UnsafeRow = {
-    val proj = UnsafeProjection.create(description.normalizedPartitionExpressions,
-      description.allColumns)
+    val proj = UnsafeProjection.create(description.partitionColumns, description.allColumns)
     row => proj(row)
   }
 
@@ -181,7 +181,7 @@ class DynamicPartitionDataWriter(
         ExternalCatalogUtils.getPartitionPathString _,
         StringType,
         Seq(Literal(c.name), Cast(c, StringType, Option(description.timeZoneId))),
-        Seq(true, true))
+        Seq(false, false))
       if (i == 0) Seq(partitionName) else Seq(Literal(Path.SEPARATOR), partitionName)
     })
 
@@ -284,7 +284,6 @@ class WriteJobDescription(
     val allColumns: Seq[Attribute],
     val dataColumns: Seq[Attribute],
     val partitionColumns: Seq[Attribute],
-    val normalizedPartitionExpressions: Seq[Expression],
     val bucketIdExpression: Option[Expression],
     val path: String,
     val customPartitionLocations: Map[TablePartitionSpec, String],
@@ -303,6 +302,7 @@ class WriteJobDescription(
 
 /** The result of a successful write task. */
 case class WriteTaskResult(commitMsg: TaskCommitMessage, summary: ExecutedWriteSummary)
+  extends WriterCommitMessage
 
 /**
  * Wrapper class for the metrics of writing data out.

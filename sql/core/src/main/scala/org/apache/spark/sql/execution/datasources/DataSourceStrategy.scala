@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -244,19 +245,84 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     })
   }
 
+  private def readHiveTable(table: CatalogTable): LogicalPlan = {
+    HiveTableRelation(
+      table,
+      // Hive table columns are always nullable.
+      table.dataSchema.asNullable.toAttributes,
+      table.partitionSchema.asNullable.toAttributes)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta))
 
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
-      i.copy(table = DDLUtils.readHiveTable(tableMeta))
+      i.copy(table = readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta)
 
     case UnresolvedCatalogRelation(tableMeta) =>
-      DDLUtils.readHiveTable(tableMeta)
+      readHiveTable(tableMeta)
+  }
+}
+
+/** A function that converts the empty string to null for partition values. */
+case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
+  override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""if ($c.numBytes() == 0) {
+         |  ${ev.isNull} = true;
+         |  ${ev.value} = null;
+         |} else {
+         |  ${ev.value} = $c;
+         |}""".stripMargin)
+  }
+}
+
+/** A strategy that converts the empty string to null for partition values. */
+case class UpdateEmptyValueOfPartitionToNull(conf: SQLConf) extends Rule[LogicalPlan] {
+  private def updateQueryPlan(query: LogicalPlan,
+    partitionColumnNames: Seq[String]): LogicalPlan = {
+    val partitionColumns = partitionColumnNames.map { name =>
+      query.output.find(a => conf.resolver(a.name, name)).getOrElse {
+        throw new AnalysisException(
+          s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
+      }
+    }
+    val partitionSet = AttributeSet(partitionColumns)
+    val projectList: Seq[NamedExpression] = query.output.map {
+      case p if partitionSet.contains(p) && p.dataType == StringType && p.nullable =>
+        Alias(Empty2Null(p), p.name)()
+      case attr => attr
+    }
+    Project(projectList, query)
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+    case i: InsertIntoHadoopFsRelationCommand =>
+      val actualQuery = updateQueryPlan(i.query, i.partitionColumns.map(_.name))
+      val partitionColumns = i.partitionColumns.map { col =>
+        actualQuery.output.find(a => conf.resolver(a.name, col.name)).getOrElse{
+          throw new AnalysisException(
+            s"Unable to resolve ${col.name} given [${i.output.map(_.name).mkString(", ")}]")
+        }
+      }
+      i.copy(partitionColumns = partitionColumns, query = actualQuery)
+
+    case c: CreateDataSourceTableAsSelectCommand =>
+      val actualQuery = updateQueryPlan(c.query, c.table.partitionColumnNames)
+      c.copy(query = actualQuery)
+
+    case i @ InsertIntoTable(_, partSpec, query, _, _) =>
+      val dynamicPartitions = partSpec.flatMap{ case(partName, partValues) =>
+        if (partValues.isEmpty) Some(partName) else None
+      }.toSeq
+      val actualQuery = updateQueryPlan(query, dynamicPartitions)
+      i.copy(query = actualQuery)
   }
 }
 

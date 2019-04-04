@@ -79,6 +79,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:
+        UpdateEmptyValueOfPartitionToNull(conf) +:
         HiveAnalysis +:
         customPostHocResolutionRules
 
