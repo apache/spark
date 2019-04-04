@@ -41,16 +41,13 @@ case class CSVPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     dataSchema: StructType,
+    readDataSchema: StructType,
     partitionSchema: StructType,
-    readSchema: StructType,
     parsedOptions: CSVOptions) extends FilePartitionReaderFactory {
   private val columnPruning = sqlConf.csvColumnPruning
-  private val readDataSchema =
-    getReadDataSchema(readSchema, partitionSchema, sqlConf.caseSensitiveAnalysis)
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-
     val parser = new UnivocityParser(
       StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
       StructType(readDataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
