@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -365,30 +365,6 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     assert(thrown.getCause.isInstanceOf[KryoException])
   }
 
-  test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {
-    val dir = Utils.createTempDir()
-    val tmpfile = dir.toString + "/RoaringBitmap"
-    val outStream = new FileOutputStream(tmpfile)
-    val output = new KryoOutput(outStream)
-    val bitmap = new RoaringBitmap
-    bitmap.add(1)
-    bitmap.add(3)
-    bitmap.add(5)
-    // Ignore Kryo because it doesn't use writeObject
-    bitmap.serialize(new KryoOutputObjectOutputBridge(null, output))
-    output.flush()
-    output.close()
-
-    val inStream = new FileInputStream(tmpfile)
-    val input = new KryoInput(inStream)
-    val ret = new RoaringBitmap
-    // Ignore Kryo because it doesn't use readObject
-    ret.deserialize(new KryoInputObjectInputBridge(null, input))
-    input.close()
-    assert(ret == bitmap)
-    Utils.deleteRecursively(dir)
-  }
-
   test("KryoOutputObjectOutputBridge.writeObject and KryoInputObjectInputBridge.readObject") {
     val kryo = new KryoSerializer(conf).newKryo()
 
@@ -461,6 +437,14 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     test(s"instance reuse with autoReset = $autoReset, referenceTracking = $referenceTracking") {
       testSerializerInstanceReuse(autoReset = autoReset, referenceTracking = referenceTracking)
     }
+  }
+
+  test("SPARK-27216: test RoaringBitmap ser/dser with Kryo") {
+    val expected = new RoaringBitmap()
+    expected.add(1787)
+    val ser = new KryoSerializer(conf).newInstance()
+    val actual: RoaringBitmap = ser.deserialize(ser.serialize(expected))
+    assert(actual === expected)
   }
 }
 
