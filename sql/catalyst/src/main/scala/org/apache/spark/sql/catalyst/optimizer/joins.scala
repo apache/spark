@@ -20,12 +20,50 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
+
+
+/**
+ * Replace an expensive array_overlap join with an equivalent equijoin.
+ */
+object ArraysOverlapJoin extends Rule[LogicalPlan] {
+  private def makePrime(p: LogicalPlan, arr: Expression, alias: String, outerAlias: String) = {
+    p.generate(
+      Explode(arr),
+      alias = Some(alias)
+    ).select(
+      (p.output ++ Seq(UnresolvedAttribute(alias))): _*
+    ) as outerAlias
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Join(left, right, joinType, Some(ArraysOverlap(leftArray, rightArray))) =>
+      val (leftExplodeAlias, rightExplodeAlias) = ("explode_larr", "explode_rarr")
+      val (leftAlias, rightAlias) = ("__lp", "__rp")
+      val leftPrime = makePrime(left, leftArray, leftExplodeAlias, leftAlias)
+      val rightPrime = makePrime(right, rightArray, rightExplodeAlias, rightAlias)
+      val joined = leftPrime
+        .join(rightPrime, joinType, Some(leftExplodeAlias.attr === rightExplodeAlias.attr))
+      val dropped = joined
+        .select(
+          joined
+            .output
+            .filter(x => !Seq(leftExplodeAlias, rightExplodeAlias).contains(x.name))
+            .map(_.expr): _*
+          )
+      val res = Deduplicate(Nil, dropped)
+      println(res) // until I have this working, it is helpful to see the tree
+      res
+  }
+}
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
