@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFilters.buildTree
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
@@ -178,38 +177,32 @@ private[orc] object OrcFilters extends Logging {
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startAnd()
         val method = findMethod(bd.getClass, "equals", classOf[String], classOf[Object])
-        Some(method.invoke(bd, attribute, value.asInstanceOf[Object])
-          .asInstanceOf[SearchArgument.Builder].end())
+        Some(method.invoke(bd, attribute, value.asInstanceOf[Object]).asInstanceOf[Builder].end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startAnd()
         val method = findMethod(bd.getClass, "nullSafeEquals", classOf[String], classOf[Object])
-        Some(method.invoke(bd, attribute, value.asInstanceOf[Object])
-          .asInstanceOf[SearchArgument.Builder].end())
+        Some(method.invoke(bd, attribute, value.asInstanceOf[Object]).asInstanceOf[Builder].end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startAnd()
         val method = findMethod(bd.getClass, "lessThan", classOf[String], classOf[Object])
-        Some(method.invoke(bd, attribute, value.asInstanceOf[Object])
-          .asInstanceOf[SearchArgument.Builder].end())
+        Some(method.invoke(bd, attribute, value.asInstanceOf[Object]).asInstanceOf[Builder].end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startAnd()
         val method = findMethod(bd.getClass, "lessThanEquals", classOf[String], classOf[Object])
-        Some(method.invoke(bd, attribute, value.asInstanceOf[Object])
-          .asInstanceOf[SearchArgument.Builder].end())
+        Some(method.invoke(bd, attribute, value.asInstanceOf[Object]).asInstanceOf[Builder].end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startNot()
         val method = findMethod(bd.getClass, "lessThanEquals", classOf[String], classOf[Object])
-        Some(method.invoke(bd, attribute, value.asInstanceOf[Object])
-          .asInstanceOf[SearchArgument.Builder].end())
+        Some(method.invoke(bd, attribute, value.asInstanceOf[Object]).asInstanceOf[Builder].end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startNot()
         val method = findMethod(bd.getClass, "lessThan", classOf[String], classOf[Object])
-        Some(method.invoke(bd, attribute, value.asInstanceOf[Object])
-          .asInstanceOf[SearchArgument.Builder].end())
+        Some(method.invoke(bd, attribute, value.asInstanceOf[Object]).asInstanceOf[Builder].end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startAnd()
@@ -219,14 +212,12 @@ private[orc] object OrcFilters extends Logging {
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startNot()
         val method = findMethod(bd.getClass, "isNull", classOf[String])
-        Some(method.invoke(bd, attribute).asInstanceOf[SearchArgument.Builder].end())
+        Some(method.invoke(bd, attribute).asInstanceOf[Builder].end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
         val bd = builder.startAnd()
-        val method = findMethod(bd.getClass, "in", classOf[String],
-          Utils.classForName("[Ljava.lang.Object;"))
-        Some(method.invoke(bd, attribute, values.map(_.asInstanceOf[AnyRef]))
-          .asInstanceOf[SearchArgument.Builder].end())
+        val method = findMethod(bd.getClass, "in", classOf[String], classOf[Array[Object]])
+        Some(method.invoke(bd, attribute, values).asInstanceOf[Builder].end())
 
       case _ => None
     }

@@ -1548,7 +1548,7 @@
           <!-- Do not need Tez -->
           <exclusion>
             <groupId>${hive.group}</groupId>
-          <artifactId>hive-llap-tez</artifactId>
+            <artifactId>hive-llap-tez</artifactId>
           </exclusion>
           <!-- Do not need Calcite, see SPARK-27054 -->
           <exclusion>
