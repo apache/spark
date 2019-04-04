@@ -44,7 +44,7 @@ private[spark] abstract class LauncherBackend {
       .map(_.toInt)
     val secret = conf.getOption(LauncherProtocol.CONF_LAUNCHER_SECRET)
       .orElse(sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET))
-    if (port != None && secret != None) {
+    if (port.isDefined && secret.isDefined) {
       val s = new Socket(InetAddress.getLoopbackAddress(), port.get)
       connection = new BackendConnection(s)
       connection.send(new Hello(secret.get, SPARK_VERSION))
@@ -94,11 +94,8 @@ private[spark] abstract class LauncherBackend {
   protected def onDisconnected() : Unit = { }
 
   private def fireStopRequest(): Unit = {
-    val thread = LauncherBackend.threadFactory.newThread(new Runnable() {
-      override def run(): Unit = Utils.tryLogNonFatalError {
-        onStopRequest()
-      }
-    })
+    val thread = LauncherBackend.threadFactory.newThread(
+      () => Utils.tryLogNonFatalError { onStopRequest() })
     thread.start()
   }
 

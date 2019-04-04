@@ -44,6 +44,7 @@ object Cast {
     case (_, StringType) => true
 
     case (StringType, BinaryType) => true
+    case (_: IntegralType, BinaryType) => true
 
     case (StringType, BooleanType) => true
     case (DateType, BooleanType) => true
@@ -326,6 +327,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
     case StringType => buildCast[UTF8String](_, _.getBytes)
+    case ByteType => buildCast[Byte](_, NumberConverter.toBinary)
+    case ShortType => buildCast[Short](_, NumberConverter.toBinary)
+    case IntegerType => buildCast[Int](_, NumberConverter.toBinary)
+    case LongType => buildCast[Long](_, NumberConverter.toBinary)
   }
 
   // UDFToBoolean
@@ -364,7 +369,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, timeZone).orNull)
+      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
@@ -908,7 +913,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToBinaryCode(from: DataType): CastFunction = from match {
     case StringType =>
-      (c, evPrim, evNull) => code"$evPrim = $c.getBytes();"
+      (c, evPrim, evNull) =>
+        code"$evPrim = $c.getBytes();"
+    case _: IntegralType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = ${NumberConverter.getClass.getName.stripSuffix("$")}.toBinary($c);"
   }
 
   private[this] def castToDateCode(
@@ -1017,12 +1026,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
+      val zid = ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId")
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         code"""
           scala.Option<Long> $longOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $tz);
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $zid);
           if ($longOpt.isDefined()) {
             $evPrim = ((Long) $longOpt.get()).longValue();
           } else {

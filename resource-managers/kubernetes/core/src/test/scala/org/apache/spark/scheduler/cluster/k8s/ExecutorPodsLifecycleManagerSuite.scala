@@ -26,7 +26,6 @@ import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -125,13 +124,10 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
       """.stripMargin
   }
 
-  private def namedPodsAnswer(): Answer[PodResource[Pod, DoneablePod]] = {
-    new Answer[PodResource[Pod, DoneablePod]] {
-      override def answer(invocation: InvocationOnMock): PodResource[Pod, DoneablePod] = {
-        val podName: String = invocation.getArgument(0)
-        namedExecutorPods.getOrElseUpdate(
-          podName, mock(classOf[PodResource[Pod, DoneablePod]]))
-      }
+  private def namedPodsAnswer(): Answer[PodResource[Pod, DoneablePod]] =
+    (invocation: InvocationOnMock) => {
+      val podName: String = invocation.getArgument(0)
+      namedExecutorPods.getOrElseUpdate(
+        podName, mock(classOf[PodResource[Pod, DoneablePod]]))
     }
-  }
 }

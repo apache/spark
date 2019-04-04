@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.util.TimeZone
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -208,9 +208,9 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def checkHiveHashForTimestampType(
         timestamp: String,
         expected: Long,
-        timeZone: TimeZone = TimeZone.getTimeZone("UTC")): Unit = {
+        zoneId: ZoneId = ZoneOffset.UTC): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), timeZone).get,
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), zoneId).get,
         TimestampType,
         expected)
     }
@@ -223,7 +223,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // with different timezone
     checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445732471,
-      TimeZone.getTimeZone("US/Pacific"))
+      DateTimeUtils.getZoneId("US/Pacific"))
 
     // boundary cases
     checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645969984)

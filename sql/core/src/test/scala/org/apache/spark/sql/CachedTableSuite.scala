@@ -93,13 +93,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }.sum
   }
 
+  // Blocking uncache table for tests
+  private def uncacheTable(tableName: String): Unit = {
+    val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
+    spark.sharedState.cacheManager.uncacheQuery(
+      spark,
+      spark.table(tableName).logicalPlan,
+      cascade = cascade,
+      blocking = true)
+  }
+
   test("cache temp table") {
     withTempView("tempTable") {
       testData.select('key).createOrReplaceTempView("tempTable")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
       spark.catalog.cacheTable("tempTable")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"))
-      spark.catalog.uncacheTable("tempTable")
+      uncacheTable("tempTable")
     }
   }
 
@@ -121,7 +132,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     withTempView("tempTable") {
       sql("CACHE TABLE tempTable AS SELECT key FROM testData")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"))
-      spark.catalog.uncacheTable("tempTable")
+      uncacheTable("tempTable")
     }
   }
 
@@ -134,7 +145,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(sql("SELECT COUNT(*) FROM tempTable2"))
 
     // Is this valid?
-    spark.catalog.uncacheTable("tempTable2")
+    uncacheTable("tempTable2")
 
     // Should this be cached?
     assertCached(sql("SELECT COUNT(*) FROM tempTable1"), 0)
@@ -171,7 +182,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       case _ => false
     })
 
-    spark.catalog.uncacheTable("testData")
+    uncacheTable("testData")
     assert(!spark.catalog.isCached("testData"))
     assert(spark.table("testData").queryExecution.withCachedData match {
       case _: InMemoryRelation => false
@@ -196,7 +207,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       }.size
     }
 
-    spark.catalog.uncacheTable("testData")
+    uncacheTable("testData")
   }
 
   test("read from cached table and uncache") {
@@ -204,7 +215,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     checkAnswer(spark.table("testData"), testData.collect().toSeq)
     assertCached(spark.table("testData"))
 
-    spark.catalog.uncacheTable("testData")
+    uncacheTable("testData")
     checkAnswer(spark.table("testData"), testData.collect().toSeq)
     assertCached(spark.table("testData"), 0)
   }
@@ -215,7 +226,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     checkAnswer(
       sql("SELECT * FROM selectStar WHERE key = 1"),
       Seq(Row(1, "1")))
-    spark.catalog.uncacheTable("selectStar")
+    uncacheTable("selectStar")
   }
 
   test("Self-join cached") {
@@ -225,7 +236,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     checkAnswer(
       sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key"),
       unCachedAnswer.toSeq)
-    spark.catalog.uncacheTable("testData")
+    uncacheTable("testData")
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
@@ -255,7 +266,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         isMaterialized(rddId),
         "Eagerly cached in-memory table should have already been materialized")
 
-      spark.catalog.uncacheTable("testCacheTable")
+      uncacheTable("testCacheTable")
       eventually(timeout(10 seconds)) {
         assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
@@ -272,7 +283,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         isMaterialized(rddId),
         "Eagerly cached in-memory table should have already been materialized")
 
-      spark.catalog.uncacheTable("testCacheTable")
+      uncacheTable("testCacheTable")
       eventually(timeout(10 seconds)) {
         assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
@@ -293,7 +304,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       isMaterialized(rddId),
       "Lazily cached in-memory table should have been materialized")
 
-    spark.catalog.uncacheTable("testData")
+    uncacheTable("testData")
     eventually(timeout(10 seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
@@ -430,8 +441,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
     spark.sparkContext.cleaner.get.attachListener(cleanerListener)
 
-    spark.catalog.uncacheTable("t1")
-    spark.catalog.uncacheTable("t2")
+    uncacheTable("t1")
+    uncacheTable("t2")
 
     System.gc()
 
@@ -478,7 +489,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     checkAnswer(
       sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
       sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
-    spark.catalog.uncacheTable("orderedTable")
+    uncacheTable("orderedTable")
     spark.catalog.dropTempView("orderedTable")
 
     // Set up two tables distributed in the same way. Try this with the data distributed into
@@ -500,8 +511,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
           sql("SELECT count(*) FROM testData GROUP BY key"))
 
-        spark.catalog.uncacheTable("t1")
-        spark.catalog.uncacheTable("t2")
+        uncacheTable("t1")
+        uncacheTable("t2")
       }
     }
 
@@ -518,8 +529,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      spark.catalog.uncacheTable("t1")
-      spark.catalog.uncacheTable("t2")
+      uncacheTable("t1")
+      uncacheTable("t2")
     }
 
     // One side of join is not partitioned in the desired way. Need to shuffle one side.
@@ -535,8 +546,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      spark.catalog.uncacheTable("t1")
-      spark.catalog.uncacheTable("t2")
+      uncacheTable("t1")
+      uncacheTable("t2")
     }
 
     withTempView("t1", "t2") {
@@ -551,8 +562,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      spark.catalog.uncacheTable("t1")
-      spark.catalog.uncacheTable("t2")
+      uncacheTable("t1")
+      uncacheTable("t2")
     }
 
     // One side of join is not partitioned in the desired way. Since the number of partitions of
@@ -569,8 +580,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      spark.catalog.uncacheTable("t1")
-      spark.catalog.uncacheTable("t2")
+      uncacheTable("t1")
+      uncacheTable("t2")
     }
 
     // repartition's column ordering is different from group by column ordering.
@@ -584,7 +595,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       checkAnswer(
         query,
         testData.distinct().select($"value", $"key"))
-      spark.catalog.uncacheTable("t1")
+      uncacheTable("t1")
     }
 
     // repartition's column ordering is different from join condition's column ordering.
@@ -606,8 +617,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       checkAnswer(
         query,
         df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
-      spark.catalog.uncacheTable("t1")
-      spark.catalog.uncacheTable("t2")
+      uncacheTable("t1")
+      uncacheTable("t2")
     }
   }
 
@@ -620,7 +631,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       selectStar,
       Seq(Row(1, "1")))
 
-    spark.catalog.uncacheTable("selectStar")
+    uncacheTable("selectStar")
     checkAnswer(
       selectStar,
       Seq(Row(1, "1")))
@@ -698,7 +709,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
         Utils.deleteRecursively(path)
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
-        spark.catalog.uncacheTable("t")
+        uncacheTable("t")
         assert(spark.table("t").select($"i").count() == 0)
         assert(getNumInMemoryRelations(spark.table("t").select($"i")) == 0)
       }
@@ -945,5 +956,34 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
     // Clean-up
     df.unpersist()
+  }
+
+  test("analyzes column statistics in cached query") {
+    def query(): DataFrame = {
+      spark.range(100)
+        .selectExpr("id % 3 AS c0", "id % 5 AS c1", "2 AS c2")
+        .groupBy("c0")
+        .agg(avg("c1").as("v1"), sum("c2").as("v2"))
+    }
+    // First, checks if there is no column statistic in cached query
+    val queryStats1 = query().cache.queryExecution.optimizedPlan.stats.attributeStats
+    assert(queryStats1.map(_._1.name).isEmpty)
+
+    val cacheManager = spark.sharedState.cacheManager
+    val cachedData = cacheManager.lookupCachedData(query().logicalPlan)
+    assert(cachedData.isDefined)
+    val queryAttrs = cachedData.get.plan.output
+    assert(queryAttrs.size === 3)
+    val (c0, v1, v2) = (queryAttrs(0), queryAttrs(1), queryAttrs(2))
+
+    // Analyzes one column in the query output
+    cacheManager.analyzeColumnCacheQuery(spark, cachedData.get, v1 :: Nil)
+    val queryStats2 = query().queryExecution.optimizedPlan.stats.attributeStats
+    assert(queryStats2.map(_._1.name).toSet === Set("v1"))
+
+    // Analyzes two more columns
+    cacheManager.analyzeColumnCacheQuery(spark, cachedData.get, c0 :: v2 :: Nil)
+    val queryStats3 = query().queryExecution.optimizedPlan.stats.attributeStats
+    assert(queryStats3.map(_._1.name).toSet === Set("c0", "v1", "v2"))
   }
 }

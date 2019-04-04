@@ -289,10 +289,24 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
                 default_fix_versions = filter(lambda x: x != v, default_fix_versions)
     default_fix_versions = ",".join(default_fix_versions)
 
-    fix_versions = input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
-    if fix_versions == "":
-        fix_versions = default_fix_versions
-    fix_versions = fix_versions.replace(" ", "").split(",")
+    available_versions = set(map(lambda v: v.name, versions))
+    while True:
+        try:
+            fix_versions = input(
+                "Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
+            if fix_versions == "":
+                fix_versions = default_fix_versions
+            fix_versions = fix_versions.replace(" ", "").split(",")
+            if set(fix_versions).issubset(available_versions):
+                break
+            else:
+                print("Specified version(s) [%s] not found in the available versions, try "
+                      "again (or leave blank and fix manually)." % (", ".join(fix_versions)))
+        except KeyboardInterrupt:
+            raise
+        except:
+            traceback.print_exc()
+            print("Error setting fix version(s), try again (or leave blank and fix manually)")
 
     def get_version_json(version_str):
         return filter(lambda v: v.name == version_str, versions)[0].raw

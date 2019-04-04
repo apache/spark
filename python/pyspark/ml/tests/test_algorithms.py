@@ -83,7 +83,7 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         result = model.transform(test).head()
         expected_prediction = 2.0
         expected_probability = [0.0, 0.0, 1.0]
-        expected_rawPrediction = [57.3955, -124.5462, 67.9943]
+        expected_rawPrediction = [-11.6081922998, -8.15827998691, 22.17757045]
         self.assertTrue(result.prediction, expected_prediction)
         self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
         self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
