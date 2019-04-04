@@ -740,15 +740,9 @@ case class ReusedSubqueryExec(child: BaseSubqueryExec)
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  protected override def doPrepare(): Unit = {
-    child.prepare()
-  }
+  protected override def doPrepare(): Unit = child.prepare()
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    child.execute()
-  }
+  protected override def doExecute(): RDD[InternalRow] = child.execute()
 
-  override def executeCollect(): Array[InternalRow] = {
-    child.executeCollect()
-  }
+  override def executeCollect(): Array[InternalRow] = child.executeCollect()
 }

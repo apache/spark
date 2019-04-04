@@ -65,7 +65,7 @@ abstract class SubqueryExpression(
     // Normalize the outer references in the subquery plan.
     val normalizedPlan = plan.transformAllExpressions {
       case OuterReference(r) => OuterReference(QueryPlan.normalizeExprId(r, attrs))
-    }.canonicalized
+    }
     withNewPlan(normalizedPlan).canonicalized.asInstanceOf[SubqueryExpression]
   }
 }
