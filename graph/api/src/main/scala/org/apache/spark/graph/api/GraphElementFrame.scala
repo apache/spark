@@ -78,18 +78,18 @@ object NodeFrame {
     *
     * All columns apart from the given `idColumn` are mapped to node properties.
     *
-    * @param df       [[DataFrame]] containing a single node in each row
-    * @param idColumn column that contains the node identifier
-    * @param labels   labels that are assigned to all nodes
+    * @param initialDf [[DataFrame]] containing a single node in each row
+    * @param idColumn  column that contains the node identifier
+    * @param labelSet  labels that are assigned to all nodes
     */
   def apply(
-    df: DataFrame,
+    initialDf: DataFrame,
     idColumn: String,
-    labels: Set[String] = Set.empty
+    labelSet: Set[String] = Set.empty
   ): NodeFrame = {
-    val properties = (df.columns.toSet - idColumn)
+    val properties = (initialDf.columns.toSet - idColumn)
       .map(columnName => columnName -> columnName).toMap
-    NodeFrame(df, idColumn, labels, properties)
+    NodeFrame(initialDf, idColumn, labelSet, properties)
   }
 
 }
@@ -123,22 +123,22 @@ object RelationshipFrame {
     *
     * All columns apart from the given identifier columns are mapped to relationship properties.
     *
-    * @param df               [[DataFrame]] containing a single relationship in each row
+    * @param initialDf        [[DataFrame]] containing a single relationship in each row
     * @param idColumn         column that contains the relationship identifier
     * @param sourceIdColumn   column that contains the source node identifier of the relationship
     * @param targetIdColumn   column that contains the target node identifier of the relationship
     * @param relationshipType relationship type that is assigned to all relationships
     */
   def apply(
-    df: DataFrame,
+    initialDf: DataFrame,
     idColumn: String,
     sourceIdColumn: String,
     targetIdColumn: String,
     relationshipType: String
   ): RelationshipFrame = {
-    val properties = (df.columns.toSet - idColumn - sourceIdColumn - targetIdColumn)
+    val properties = (initialDf.columns.toSet - idColumn - sourceIdColumn - targetIdColumn)
       .map(columnName => columnName -> columnName).toMap
-    RelationshipFrame(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
+    RelationshipFrame(initialDf, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
   }
 
 }

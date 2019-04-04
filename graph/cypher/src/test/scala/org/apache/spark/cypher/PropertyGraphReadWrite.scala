@@ -35,7 +35,7 @@ class PropertyGraphReadWrite extends SparkFunSuite with SharedCypherContext with
   )).toDF("id", "source", "target")
 
   private lazy val nodeDataFrame: NodeFrame = NodeFrame(
-    df = nodeData, idColumn = "id", labels = Set("Person")
+    initialDf = nodeData, idColumn = "id", labelSet = Set("Person")
   )
 
   private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame(
