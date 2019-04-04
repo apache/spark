@@ -167,13 +167,13 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    Batch("OptimizeLimitZero", Once,
+      OptimizeLimitZero) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
     // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
     // (e.g. InferFiltersFromConstraints). If we run this batch earlier, the query becomes just
     // LocalRelation and does not trigger many rules.
-    Batch("OptimizeLimitZero", Once,
-      OptimizeLimitZero) ::
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::

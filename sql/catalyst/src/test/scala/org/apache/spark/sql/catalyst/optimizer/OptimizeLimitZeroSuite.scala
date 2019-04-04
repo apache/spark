@@ -39,7 +39,6 @@ class OptimizeLimitZeroSuite extends PlanTest {
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
 
-
   test("Limit 0: return empty local relation") {
     val query = testRelation1.limit(0)
 
@@ -67,23 +66,21 @@ class OptimizeLimitZeroSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Limit 0: Joins") {
-    val testcases = Seq(
-      (Inner, LocalRelation('a.int, 'b.int)),
-      (LeftOuter, Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze),
-      (RightOuter, LocalRelation('a.int, 'b.int)),
-      (FullOuter, Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)
-    )
+  Seq(
+    (Inner, LocalRelation('a.int, 'b.int)),
+    (LeftOuter, Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze),
+    (RightOuter, LocalRelation('a.int, 'b.int)),
+    (FullOuter, Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)
+  ).foreach { case (jt, answer) =>
+      test(s"Limit 0: for join type $jt") {
+        val query = testRelation1
+          .join(testRelation2.limit(0), joinType = jt, condition = Some('a.attr == 'b.attr))
 
-    testcases.foreach { case (jt, answer) =>
-      val query = testRelation1
-        .join(testRelation2.limit(0), joinType = jt, condition = Some('a.attr == 'b.attr))
+        val optimized = Optimize.execute(query.analyze)
+        val correctAnswer = answer
 
-      val optimized = Optimize.execute(query.analyze)
-      val correctAnswer = answer
-
-      comparePlans(optimized, correctAnswer)
-    }
+        comparePlans(optimized, correctAnswer)
+      }
   }
 
   test("Limit 0: 3-way join") {
