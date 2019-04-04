@@ -98,7 +98,7 @@ object FileFormatWriter extends Logging {
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
     val dataSchema = dataColumns.toStructType
-    DataSourceUtils.verifySchema(fileFormat, dataSchema)
+    DataSourceUtils.verifyWriteSchema(fileFormat, dataSchema)
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
@@ -162,7 +162,6 @@ object FileFormatWriter extends Logging {
         rdd
       }
 
-      val jobIdInstant = new Date().getTime
       val ret = new Array[WriteTaskResult](rddWithNonEmptyPartitions.partitions.length)
       sparkSession.sparkContext.runJob(
         rddWithNonEmptyPartitions,
@@ -170,9 +169,8 @@ object FileFormatWriter extends Logging {
           executeTask(
             description = description,
             jobIdInstant = jobIdInstant,
-            sparkStageId = taskContext.stageId(),
             sparkPartitionId = taskContext.partitionId(),
-            sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
+            sparkAttemptNumber = taskContext.attemptNumber(),
             committer,
             iterator = iter)
         },
@@ -202,14 +200,13 @@ object FileFormatWriter extends Logging {
   /** Writes data out in a single Spark task. */
   private def executeTask(
       description: WriteJobDescription,
-      jobIdInstant: Long,
       sparkStageId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
       iterator: Iterator[InternalRow]): WriteTaskResult = {
 
-    val jobId = SparkHadoopWriterUtils.createJobID(new Date(jobIdInstant), sparkStageId)
+    val jobId = SparkHadoopWriterUtils.createJobID(new Date, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
     val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
 
@@ -262,7 +259,7 @@ object FileFormatWriter extends Logging {
    * For every registered [[WriteJobStatsTracker]], call `processStats()` on it, passing it
    * the corresponding [[WriteTaskStats]] from all executors.
    */
-  private[datasources] def processStats(
+  private def processStats(
       statsTrackers: Seq[WriteJobStatsTracker],
       statsPerTask: Seq[Seq[WriteTaskStats]])
   : Unit = {
