@@ -73,15 +73,15 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
       StructType.fromString(schemaString)
     }
 
-    val schemaPruningEnabled = conf.getBoolean(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.defaultValue.get)
     val caseSensitive = conf.getBoolean(SQLConf.CASE_SENSITIVE.key,
       SQLConf.CASE_SENSITIVE.defaultValue.get)
+    val schemaPruningEnabled = conf.getBoolean(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
+      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.defaultValue.get)
     val parquetFileSchema = context.getFileSchema
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
       catalystRequestedSchema, caseSensitive)
 
-    // As part of schema clipping, we add fields in catalystRequestedSchema which are missing
+    // As a part of schema clipping, we add fields in catalystRequestedSchema which are missing
     // from parquetFileSchema to parquetClippedSchema. However, nested schema pruning requires
     // we ignore unrequested field data when reading from a Parquet file. Therefore we pass two
     // schema to ParquetRecordMaterializer: the schema of the file data we want to read
@@ -104,15 +104,13 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
     // the underlying parquetFileSchema. Therefore, in the case where we use the parquet-mr reader
     // we intersect the parquetClippedSchema with the parquetFileSchema to construct the
     // parquetRequestedSchema set in the ReadContext.
-    val parquetRequestedSchema =
-      if (schemaPruningEnabled && !usingVectorizedReader) {
-        ParquetReadSupport.intersectParquetGroups(parquetClippedSchema, parquetFileSchema)
-          .map(intersectionGroup =>
-            new MessageType(intersectionGroup.getName, intersectionGroup.getFields))
-          .getOrElse(ParquetSchemaConverter.EMPTY_MESSAGE)
-      } else {
-        parquetClippedSchema
-      }
+    val parquetRequestedSchema = if (schemaPruningEnabled && !usingVectorizedReader) {
+      ParquetReadSupport.intersectParquetGroups(parquetClippedSchema, parquetFileSchema)
+        .map(groupType => new MessageType(groupType.getName, groupType.getFields))
+        .getOrElse(ParquetSchemaConverter.EMPTY_MESSAGE)
+    } else {
+      parquetClippedSchema
+    }
     log.debug {
       s"""Going to read the following fields from the Parquet file with the following schema:
          |Parquet file schema:

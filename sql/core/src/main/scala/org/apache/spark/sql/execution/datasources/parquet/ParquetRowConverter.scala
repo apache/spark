@@ -203,13 +203,13 @@ private[parquet] class ParquetRowConverter(
 
   override def start(): Unit = {
     var i = 0
-    while (i < fieldConverters.length) {
-      fieldConverters(i).updater.start()
+    while (i < currentRow.numFields) {
+      currentRow.setNullAt(i)
       i += 1
     }
     i = 0
-    while (i < currentRow.numFields) {
-      currentRow.setNullAt(i)
+    while (i < fieldConverters.length) {
+      fieldConverters(i).updater.start()
       i += 1
     }
   }
