@@ -187,7 +187,7 @@ class ObjectAggregationIterator(
           mergeAggregationBuffers,
           createNewAggregationBuffer(aggregateFunctions),
           createNewAggregationBuffer(sortBasedMergeAggFunctions),
-          aggregateFunctions)
+          sortBasedMergeAggFunctions)
 
         while (inputRows.hasNext) {
           // NOTE: The input row is always UnsafeRow
@@ -219,7 +219,7 @@ class ObjectAggregationIterator(
  *                                                                 buffer for update operation
  * @param makeEmptyAggregationBufferForSortBasedMergeAggFunctions Creates an empty aggregation
  *                                                                buffer for merge operation
- * @param sortBasedUpdateAggFunctions aggregate functions needed to serialize the
+ * @param sortBasedMergeAggFunctions aggregate functions needed to serialize the
  *                                    aggregation buffer
  *
  * @todo Try to eliminate this class by refactor and reuse code paths in [[SortAggregateExec]].
@@ -232,7 +232,7 @@ class SortBasedAggregator(
     mergeAggregationBuffers: (InternalRow, InternalRow) => Unit,
     makeEmptyAggregationBufferForSortBasedUpdateAggFunctions: => InternalRow,
     makeEmptyAggregationBufferForSortBasedMergeAggFunctions: => InternalRow,
-    sortBasedUpdateAggFunctions: Array[AggregateFunction]) {
+    sortBasedMergeAggFunctions: Array[AggregateFunction]) {
 
   // external sorter to sort the input (grouping key + input row) with grouping key.
   private val inputSorter = createExternalSorterForInput()
@@ -242,7 +242,7 @@ class SortBasedAggregator(
     inputSorter.insertKV(groupingKey, inputRow)
   }
   private def serializeBuffer(buffer: InternalRow): Unit = {
-    sortBasedUpdateAggFunctions.collect { case f: TypedImperativeAggregate[_] => f }.foreach(
+    sortBasedMergeAggFunctions.collect { case f: TypedImperativeAggregate[_] => f }.foreach(
       _.serializeAggregateBufferInPlace(buffer))
   }
 
@@ -289,10 +289,8 @@ class SortBasedAggregator(
 
           // This step ensures that the contents of the updateResult aggregation buffer are
           // merged with the finalResult aggregation buffer to maintain consistency
-          if (hasNextAggBuffer) {
-            serializeBuffer(updateResult.aggregationBuffer)
-            mergeAggregationBuffers(finalResult.aggregationBuffer, updateResult.aggregationBuffer)
-          }
+          serializeBuffer(updateResult.aggregationBuffer)
+          mergeAggregationBuffers(finalResult.aggregationBuffer, updateResult.aggregationBuffer)
           // Secondly, merge the aggregation buffer with existing aggregation buffers.
           // NOTE: the ordering of these two while-block matter, mergeAggregationBuffer() should
           // be called after calling processRow.
