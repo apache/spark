@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.{aggregate, ScalarSubquery, SubqueryExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -109,33 +108,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
-      }
-    }
-  }
-
-  test("Reuse Subquery") {
-    Seq(true, false).foreach { reuse =>
-      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
-        val df = sql(
-          """
-            |SELECT (SELECT avg(key) FROM testData) + (SELECT avg(key) FROM testData)
-            |FROM testData
-            |LIMIT 1
-          """.stripMargin)
-
-        import scala.collection.mutable.ArrayBuffer
-        val subqueries = ArrayBuffer[SubqueryExec]()
-        df.queryExecution.executedPlan.transformAllExpressions {
-          case s @ ScalarSubquery(plan: SubqueryExec, _) =>
-            subqueries += plan
-            s
-        }
-
-        if (reuse) {
-          assert(subqueries.distinct.size == 1, "Subquery reusing not working correctly")
-        } else {
-          assert(subqueries.distinct.size == 2, "There should be 2 subqueries when not reusing")
-        }
       }
     }
   }
@@ -288,7 +260,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.sparkPlan
-      .collect { case _: aggregate.HashAggregateExec => true }
+      .collect { case _: HashAggregateExec => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
