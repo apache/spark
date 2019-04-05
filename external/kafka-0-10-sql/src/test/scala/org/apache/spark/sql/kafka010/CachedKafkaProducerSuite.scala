@@ -18,11 +18,12 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.{ConcurrentLinkedQueue, Executors, TimeUnit}
+import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.ByteArraySerializer
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -141,13 +142,12 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
     (1 to numConcurrentProducers).map {
       i => kafkaParamsUniqueMap.put(i, kafkaParams.updated("retries", s"$i").asJava)
     }
-    val toBeReleasedQueue = new ConcurrentLinkedQueue[CachedKafkaProducer]()
 
-    def acquire(i: Int): Unit = {
+    def acquire(i: Int): CachedKafkaProducer = {
       val producer = CachedKafkaProducer.acquire(kafkaParamsUniqueMap(i))
       producer.kafkaProducer // materialize producer for the first time.
       assert(!producer.isClosed, "Acquired producer cannot be closed.")
-      toBeReleasedQueue.add(producer)
+      producer
     }
 
     def release(producer: CachedKafkaProducer): Unit = {
@@ -158,28 +158,23 @@ class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest 
         }
       }
     }
+    val data = (1 to 100).map(_.toString)
+
     val threadPool = Executors.newFixedThreadPool(numThreads)
     try {
       val futuresAcquire = (1 to 10 * numConcurrentProducers).map { i =>
         threadPool.submit(new Runnable {
           override def run(): Unit = {
-            acquire(i % numConcurrentProducers + 1)
+            val producer = acquire(i % numConcurrentProducers + 1)
+            data.foreach { d =>
+              val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, 0, null, d.getBytes)
+              producer.kafkaProducer.send(record)
+            }
+            release(producer)
           }
         })
       }
-      val futuresRelease = (1 to 10 * numConcurrentProducers).map { i =>
-        val cachedKafkaProducer = toBeReleasedQueue.poll()
-        // 2x release should not corrupt the state of cache.
-        (1 to 2).map { j =>
-          threadPool.submit(new Runnable {
-            override def run(): Unit = {
-              release(cachedKafkaProducer)
-            }
-          })
-        }
-      }
       futuresAcquire.foreach(_.get(1, TimeUnit.MINUTES))
-      futuresRelease.flatten.foreach(_.get(1, TimeUnit.MINUTES))
     } finally {
       threadPool.shutdown()
       CachedKafkaProducer.clear()

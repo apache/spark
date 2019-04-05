@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.concurrent.{ConcurrentLinkedQueue, ConcurrentMap, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -52,6 +53,7 @@ private[kafka010] case class CachedKafkaProducer(
   }
   @volatile
   private var isCached: Boolean = true
+  @GuardedBy("this")
   private var closed: Boolean = true
   private def close(): Unit = {
     try {
@@ -184,7 +186,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     }
   }
 
-  // Intended for testing purpose only.
+  // For testing only.
   private[kafka010] def clear(): Unit = {
     logInfo("Cleaning up guava cache and force closing all kafka producers.")
     guavaCache.invalidateAll()
@@ -194,10 +196,12 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     closeQueue.clear()
   }
 
+  // For testing only.
   private[kafka010] def evict(params: Seq[(String, Object)]): Unit = {
     guavaCache.invalidate(params)
   }
 
+  // For testing only.
   private[kafka010] def getAsMap: ConcurrentMap[Seq[(String, Object)], CachedKafkaProducer] =
     guavaCache.asMap()
 }
