@@ -733,7 +733,9 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     withSpark(newSparkContext(
       master = "local[2]",
       // Set a small heart beat interval to make the test fast
-      additionalConfs = Map(EXECUTOR_HEARTBEAT_INTERVAL.key -> "10ms"))) { sc =>
+      additionalConfs = Map(
+        EXECUTOR_HEARTBEAT_INTERVAL.key -> "10ms",
+        LIVE_ENTITY_UPDATE_STALENESS_LIMIT.key -> "10ms"))) { sc =>
       val f = sc.parallelize(1 to 1000, 1000).foreachAsync { _ =>
         // Make the task never finish so there won't be any task start/end events after the first 2
         // tasks start.
