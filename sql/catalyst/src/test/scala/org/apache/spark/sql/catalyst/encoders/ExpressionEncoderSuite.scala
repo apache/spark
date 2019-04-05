@@ -21,6 +21,7 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
@@ -307,6 +308,19 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Option.empty[Int], "empty option of int")
   encodeDecodeTest(Option("abc"), "option of string")
   encodeDecodeTest(Option.empty[String], "empty option of string")
+
+  encodeDecodeTest(
+    AvroExample1.newBuilder()
+      .setIps(List("127.0.0.1", "127.0.0.0").asJava)
+      .setAdditional(Map(
+        "foo" -> new java.lang.Integer(1),
+        "bar" -> new java.lang.Integer(2)).asJava)
+      .setTimestamp("12345678")
+      .setMessage("test map")
+      .setAvroExampleMagic1(new AvroExampleMagic1("magic".getBytes))
+    .build(),
+    "Avro encoder with map, array and fixed types")(
+    ExpressionEncoder[AvroExample1])
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
