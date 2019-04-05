@@ -1786,9 +1786,9 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
   expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, rand(1)))[1, 1], 0.134, tolerance = 0.01)
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.636, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, randn(1)))[1, 1], -1.03, tolerance = 0.01)
+  expect_equal(collect(select(df, randn(1)))[1, 1], 1.68, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -1905,10 +1905,20 @@ test_that("date functions on a DataFrame", {
   df2 <- createDataFrame(l2)
   expect_equal(collect(select(df2, minute(df2$b)))[, 1], c(34, 24))
   expect_equal(collect(select(df2, second(df2$b)))[, 1], c(0, 34))
-  expect_equal(collect(select(df2, from_utc_timestamp(df2$b, "JST")))[, 1],
-               c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
-  expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
-               c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
+  conf <- callJMethod(sparkSession, "conf")
+  isUtcTimestampFuncEnabled <- callJMethod(conf, "get", "spark.sql.legacy.utcTimestampFunc.enabled")
+  callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", "true")
+  tryCatch({
+    # Both from_utc_timestamp and to_utc_timestamp are deprecated as of SPARK-25496
+    expect_equal(suppressWarnings(collect(select(df2, from_utc_timestamp(df2$b, "JST"))))[, 1],
+                 c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
+    expect_equal(suppressWarnings(collect(select(df2, to_utc_timestamp(df2$b, "JST"))))[, 1],
+                 c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
+  },
+  finally = {
+    # Reverting the conf back
+    callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", isUtcTimestampFuncEnabled)
+  })
   expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
@@ -2360,7 +2370,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(names(joined3), c("age", "name", "name", "test"))
   expect_equal(count(joined3), 4)
   expect_true(is.na(collect(orderBy(joined3, joined3$age))$age[2]))
-  
+
   joined4 <- join(df, df2, df$name == df2$name, "right_outer")
   expect_equal(names(joined4), c("age", "name", "name", "test"))
   expect_equal(count(joined4), 4)
@@ -2377,19 +2387,19 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(names(joined6), c("newAge", "name", "test"))
   expect_equal(count(joined6), 4)
   expect_equal(collect(orderBy(joined6, joined6$name))$newAge[3], 24)
-  
+
   joined7 <- select(join(df, df2, df$name == df2$name, "full"),
                     alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(joined7), c("newAge", "name", "test"))
   expect_equal(count(joined7), 4)
   expect_equal(collect(orderBy(joined7, joined7$name))$newAge[3], 24)
-  
+
   joined8 <- select(join(df, df2, df$name == df2$name, "fullouter"),
                     alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(joined8), c("newAge", "name", "test"))
   expect_equal(count(joined8), 4)
   expect_equal(collect(orderBy(joined8, joined8$name))$newAge[3], 24)
-  
+
   joined9 <- select(join(df, df2, df$name == df2$name, "full_outer"),
                     alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(joined9), c("newAge", "name", "test"))
@@ -2400,12 +2410,12 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(names(joined10), c("age", "name", "name", "test"))
   expect_equal(count(joined10), 3)
   expect_true(is.na(collect(orderBy(joined10, joined10$age))$age[1]))
-  
+
   joined11 <- join(df, df2, df$name == df2$name, "leftouter")
   expect_equal(names(joined11), c("age", "name", "name", "test"))
   expect_equal(count(joined11), 3)
   expect_true(is.na(collect(orderBy(joined11, joined11$age))$age[1]))
-  
+
   joined12 <- join(df, df2, df$name == df2$name, "left_outer")
   expect_equal(names(joined12), c("age", "name", "name", "test"))
   expect_equal(count(joined12), 3)
@@ -2418,23 +2428,23 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   joined14 <- join(df, df2, df$name == df2$name, "semi")
   expect_equal(names(joined14), c("age", "name"))
   expect_equal(count(joined14), 3)
-  
+
   joined14 <- join(df, df2, df$name == df2$name, "leftsemi")
   expect_equal(names(joined14), c("age", "name"))
   expect_equal(count(joined14), 3)
-  
+
   joined15 <- join(df, df2, df$name == df2$name, "left_semi")
   expect_equal(names(joined15), c("age", "name"))
   expect_equal(count(joined15), 3)
-  
+
   joined16 <- join(df2, df, df2$name == df$name, "anti")
   expect_equal(names(joined16), c("name", "test"))
   expect_equal(count(joined16), 1)
-  
+
   joined17 <- join(df2, df, df2$name == df$name, "leftanti")
   expect_equal(names(joined17), c("name", "test"))
   expect_equal(count(joined17), 1)
-  
+
   joined18 <- join(df2, df, df2$name == df$name, "left_anti")
   expect_equal(names(joined18), c("name", "test"))
   expect_equal(count(joined18), 1)
@@ -2444,7 +2454,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
                  "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
                  "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti' or 'left_anti'.")
   expect_error(join(df2, df, df2$name == df$name, "invalid"), error_msg)
-  
+
   merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
   expect_equal(count(merged), 4)
   expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
@@ -3026,7 +3036,7 @@ test_that("sampleBy() on a DataFrame", {
   sample <- sampleBy(df, "key", fractions, 0)
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
   expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
-  expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 8))
 })
 
 test_that("approxQuantile() on a DataFrame", {

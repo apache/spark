@@ -77,7 +77,25 @@ trait ThreadAudit extends Logging {
      * asynchronously. In each case proper stopping is checked manually.
      */
     "shuffle-client.*",
-    "shuffle-server.*"
+    "shuffle-server.*",
+
+    /**
+     * Global cleaner thread that manage statistics data references of Hadoop filesystems.
+     * This is excluded because their lifecycle is handled by Hadoop and spark has no explicit
+     * effect on it.
+     */
+    "org.apache.hadoop.fs.FileSystem\\$Statistics\\$StatisticsDataReferenceCleaner",
+
+    /**
+     * A global thread pool for broadcast exchange executions.
+     */
+    "broadcast-exchange.*",
+
+    /**
+     * A thread started by JRE to support safe parallel execution of waitFor() and exitStatus()
+     * methods to forked subprocesses.
+     */
+    "process reaper"
   )
   private var threadNamesSnapshot: Set[String] = Set.empty
 

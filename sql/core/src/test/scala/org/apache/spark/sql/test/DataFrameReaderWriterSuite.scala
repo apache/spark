@@ -428,7 +428,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val message = intercept[AnalysisException] {
       testRead(spark.read.csv(), Seq.empty, schema)
     }.getMessage
-    assert(message.contains("Unable to infer schema for CSV. It must be specified manually."))
+    assert(message.toLowerCase(Locale.ROOT).contains("unable to infer schema for csv"))
 
     testRead(spark.read.csv(dir), data, schema)
     testRead(spark.read.csv(dir, dir), data ++ data, schema)

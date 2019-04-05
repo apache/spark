@@ -681,7 +681,7 @@ class SparkSubmitSuite
       appArgs.jars should be(Utils.resolveURIs(jars))
       appArgs.files should be(Utils.resolveURIs(files))
       conf.get(JARS) should be(Utils.resolveURIs(jars + ",thejar.jar").split(",").toSeq)
-      conf.get("spark.files") should be(Utils.resolveURIs(files))
+      conf.get(FILES) should be(Utils.resolveURIs(files).split(",").toSeq)
 
       // Test files and archives (Yarn)
       val clArgs2 = Seq(
@@ -1238,6 +1238,23 @@ class SparkSubmitSuite
     }
 
     conf.get(nonDelimSpaceFromFile._1) should be ("blah")
+  }
+
+  test("get a Spark configuration from arguments") {
+    val testConf = "spark.test.hello" -> "world"
+    val masterConf = "spark.master" -> "yarn"
+    val clArgs = Seq(
+      "--conf", s"${testConf._1}=${testConf._2}",
+      "--conf", s"${masterConf._1}=${masterConf._2}",
+      "--class", "Foo",
+      "app.jar")
+    val conf = new SparkSubmitArguments(clArgs).toSparkConf()
+     Seq(
+       testConf,
+       masterConf
+     ).foreach { case (k, v) =>
+       conf.get(k) should be (v)
+     }
   }
 }
 

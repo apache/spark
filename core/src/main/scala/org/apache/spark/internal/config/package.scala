@@ -606,7 +606,7 @@ package object config {
 
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
-    .longConf
+    .bytesConf(ByteUnit.BYTE)
     .createWithDefault(128 * 1024 * 1024)
 
   private[spark] val FILES_OPEN_COST_IN_BYTES = ConfigBuilder("spark.files.openCostInBytes")
@@ -614,7 +614,7 @@ package object config {
       " the same time. This is used when putting multiple files into a partition. It's better to" +
       " over estimate, then the partitions with small files will be faster than partitions with" +
       " bigger files.")
-    .longConf
+    .bytesConf(ByteUnit.BYTE)
     .createWithDefault(4 * 1024 * 1024)
 
   private[spark] val HADOOP_RDD_IGNORE_EMPTY_SPLITS =
@@ -868,8 +868,9 @@ package object config {
   private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.sort.initialBufferSize")
       .internal()
-      .intConf
-      .checkValue(v => v > 0, "The value should be a positive integer.")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0 && v <= Int.MaxValue,
+        s"The buffer size must be greater than 0 and less than or equal to ${Int.MaxValue}.")
       .createWithDefault(4096)
 
   private[spark] val SHUFFLE_COMPRESS =
@@ -891,7 +892,7 @@ package object config {
       .internal()
       .doc("Initial threshold for the size of a collection before we start tracking its " +
         "memory usage.")
-      .longConf
+      .bytesConf(ByteUnit.BYTE)
       .createWithDefault(5 * 1024 * 1024)
 
   private[spark] val SHUFFLE_SPILL_BATCH_SIZE =

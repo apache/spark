@@ -253,7 +253,11 @@ def read_udfs(pickleSer, infile, eval_type):
             "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")\
             .lower() == "true"
 
-        ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name)
+        # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
+        # pandas Series. See SPARK-27240.
+        df_for_struct = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name,
+                                             df_for_struct)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 

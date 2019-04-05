@@ -19,6 +19,8 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.io.Closeable
 import java.net.URI
 
+import org.apache.commons.io.output.ByteArrayOutputStream
+
 import org.apache.spark.internal.Logging
 
 object Utils extends Logging {
@@ -26,5 +28,25 @@ object Utils extends Logging {
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
     val resource = createResource
     try f.apply(resource) finally resource.close()
+  }
+
+  def executeCommand(cmd: String*)(
+      implicit podName: String,
+      kubernetesTestComponents: KubernetesTestComponents): String = {
+    val out = new ByteArrayOutputStream()
+    val watch = kubernetesTestComponents
+      .kubernetesClient
+      .pods()
+      .withName(podName)
+      .readingInput(System.in)
+      .writingOutput(out)
+      .writingError(System.err)
+      .withTTY()
+      .exec(cmd.toArray: _*)
+    // wait to get some result back
+    Thread.sleep(1000)
+    watch.close()
+    out.flush()
+    out.toString()
   }
 }

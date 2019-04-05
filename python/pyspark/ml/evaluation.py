@@ -190,13 +190,13 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
 
 
 @inherit_doc
-class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
+class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
                           JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Evaluator for Regression, which expects two input
-    columns: prediction and label.
+    Evaluator for Regression, which expects input columns prediction, label
+    and an optional weight column.
 
     >>> scoreAndLabels = [(-28.98343821, -27.0), (20.21491975, 21.5),
     ...   (-25.98418959, -22.0), (30.69731842, 33.0), (74.69283752, 71.0)]
@@ -214,6 +214,13 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     >>> evaluator2 = RegressionEvaluator.load(re_path)
     >>> str(evaluator2.getPredictionCol())
     'raw'
+    >>> scoreAndLabelsAndWeight = [(-28.98343821, -27.0, 1.0), (20.21491975, 21.5, 0.8),
+    ...   (-25.98418959, -22.0, 1.0), (30.69731842, 33.0, 0.6), (74.69283752, 71.0, 0.2)]
+    >>> dataset = spark.createDataFrame(scoreAndLabelsAndWeight, ["raw", "label", "weight"])
+    ...
+    >>> evaluator = RegressionEvaluator(predictionCol="raw", weightCol="weight")
+    >>> evaluator.evaluate(dataset)
+    2.740...
 
     .. versionadded:: 1.4.0
     """
@@ -227,10 +234,10 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="rmse"):
+                 metricName="rmse", weightCol=None):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="rmse")
+                 metricName="rmse", weightCol=None)
         """
         super(RegressionEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -256,10 +263,10 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     @keyword_only
     @since("1.4.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="rmse"):
+                  metricName="rmse", weightCol=None):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="rmse")
+                  metricName="rmse", weightCol=None)
         Sets params for regression evaluator.
         """
         kwargs = self._input_kwargs

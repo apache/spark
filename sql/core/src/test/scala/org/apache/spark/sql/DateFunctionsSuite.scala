@@ -19,11 +19,13 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.LocalDate
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -31,13 +33,14 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("function current_date") {
-    val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
-    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    val d1 = DateTimeUtils.fromJavaDate(df1.select(current_date()).collect().head.getDate(0))
-    val d2 = DateTimeUtils.fromJavaDate(
-      sql("""SELECT CURRENT_DATE()""").collect().head.getDate(0))
-    val d3 = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
+      val d0 = System.currentTimeMillis() / MILLIS_PER_DAY
+      val d1 = localDateToDays(df1.select(current_date()).collect().head.getAs[LocalDate](0))
+      val d2 = localDateToDays(sql("""SELECT CURRENT_DATE()""").collect().head.getAs[LocalDate](0))
+      val d3 = System.currentTimeMillis() / MILLIS_PER_DAY
+      assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
+    }
   }
 
   test("function current_timestamp and now") {
@@ -672,33 +675,41 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(from_utc_timestamp(col("a"), "PST")),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-    checkAnswer(
-      df.select(from_utc_timestamp(col("b"), "PST")),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-23 17:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      checkAnswer(
+        df.select(from_utc_timestamp(col("a"), "PST")),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+      checkAnswer(
+        df.select(from_utc_timestamp(col("b"), "PST")),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-23 17:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    }
+    val msg = intercept[AnalysisException] {
+      df.select(from_utc_timestamp(col("a"), "PST")).collect()
+    }.getMessage
+    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
   }
 
   test("from_utc_timestamp with column zone") {
-    val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "CET"),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "PST")
-    ).toDF("a", "b", "c")
-    checkAnswer(
-      df.select(from_utc_timestamp(col("a"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
-    checkAnswer(
-      df.select(from_utc_timestamp(col("b"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val df = Seq(
+        (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "CET"),
+        (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "PST")
+      ).toDF("a", "b", "c")
+      checkAnswer(
+        df.select(from_utc_timestamp(col("a"), col("c"))),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+      checkAnswer(
+        df.select(from_utc_timestamp(col("b"), col("c"))),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    }
   }
 
   test("to_utc_timestamp with literal zone") {
@@ -706,32 +717,40 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
     ).toDF("a", "b")
-    checkAnswer(
-      df.select(to_utc_timestamp(col("a"), "PST")),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
-    checkAnswer(
-      df.select(to_utc_timestamp(col("b"), "PST")),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      checkAnswer(
+        df.select(to_utc_timestamp(col("a"), "PST")),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+          Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+      checkAnswer(
+        df.select(to_utc_timestamp(col("b"), "PST")),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+          Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
+    }
+    val msg = intercept[AnalysisException] {
+      df.select(to_utc_timestamp(col("a"), "PST")).collect()
+    }.getMessage
+    assert(msg.contains(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key))
   }
 
   test("to_utc_timestamp with column zone") {
-    val df = Seq(
-      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "PST"),
-      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "CET")
-    ).toDF("a", "b", "c")
-    checkAnswer(
-      df.select(to_utc_timestamp(col("a"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
-    checkAnswer(
-      df.select(to_utc_timestamp(col("b"), col("c"))),
-      Seq(
-        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
-        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val df = Seq(
+        (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "PST"),
+        (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "CET")
+      ).toDF("a", "b", "c")
+      checkAnswer(
+        df.select(to_utc_timestamp(col("a"), col("c"))),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+      checkAnswer(
+        df.select(to_utc_timestamp(col("b"), col("c"))),
+        Seq(
+          Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+          Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+    }
   }
 }

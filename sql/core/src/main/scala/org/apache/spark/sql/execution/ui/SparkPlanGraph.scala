@@ -103,6 +103,11 @@ object SparkPlanGraph {
         // Point to the re-used subquery
         val node = exchanges(planInfo)
         edges += SparkPlanGraphEdge(node.id, parent.id)
+      case "ReusedSubquery" =>
+        // Re-used subquery might appear before the original subquery, so skip this node and let
+        // the previous `case` make sure the re-used and the original point to the same node.
+        buildSparkPlanGraphNode(
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, subgraph, exchanges)
       case "ReusedExchange" if exchanges.contains(planInfo.children.head) =>
         // Point to the re-used exchange
         val node = exchanges(planInfo.children.head)

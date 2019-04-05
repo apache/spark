@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.locks.ReentrantReadWriteLock
-
 import scala.collection.immutable.IndexedSeq
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -100,13 +98,11 @@ class CacheManager extends Logging {
    * @param query     The [[Dataset]] to be un-cached.
    * @param cascade   If true, un-cache all the cache entries that refer to the given
    *                  [[Dataset]]; otherwise un-cache the given [[Dataset]] only.
-   * @param blocking  Whether to block until all blocks are deleted.
    */
   def uncacheQuery(
       query: Dataset[_],
-      cascade: Boolean,
-      blocking: Boolean = true): Unit = {
-    uncacheQuery(query.sparkSession, query.logicalPlan, cascade, blocking)
+      cascade: Boolean): Unit = {
+    uncacheQuery(query.sparkSession, query.logicalPlan, cascade)
   }
 
   /**
@@ -121,7 +117,7 @@ class CacheManager extends Logging {
       spark: SparkSession,
       plan: LogicalPlan,
       cascade: Boolean,
-      blocking: Boolean): Unit = {
+      blocking: Boolean = false): Unit = {
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
         _.find(_.sameResult(plan)).isDefined
@@ -163,12 +159,7 @@ class CacheManager extends Logging {
     val relation = cachedData.cachedRepresentation
     val (rowCount, newColStats) =
       CommandUtils.computeColumnStats(sparkSession, relation, column)
-    val oldStats = relation.statsOfPlanToCache
-    val newStats = oldStats.copy(
-      rowCount = Some(rowCount),
-      attributeStats = AttributeMap((oldStats.attributeStats ++ newColStats).toSeq)
-    )
-    relation.statsOfPlanToCache = newStats
+    relation.updateStats(rowCount, newColStats)
   }
 
   /**
