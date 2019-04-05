@@ -20,7 +20,8 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.temporal.ChronoUnit
 import java.util.{Locale, Set}
 
 import com.google.common.io.Files
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Functio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
@@ -1134,25 +1136,29 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-6785: HiveQuerySuite - Date cast") {
-    // new Date(0) == 1970-01-01 00:00:00.0 GMT == 1969-12-31 16:00:00.0 PST
-    checkAnswer(
-      sql(
-        """
-          | SELECT
-          | CAST(CAST(0 AS timestamp) AS date),
-          | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
-          | CAST(0 AS timestamp),
-          | CAST(CAST(0 AS timestamp) AS string),
-          | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
-          | FROM src LIMIT 1
-        """.stripMargin),
-      Row(
-        Date.valueOf("1969-12-31"),
-        String.valueOf("1969-12-31"),
-        Timestamp.valueOf("1969-12-31 16:00:00"),
-        String.valueOf("1969-12-31 16:00:00"),
-        Timestamp.valueOf("1970-01-01 00:00:00")))
-
+    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+            | SELECT
+            | CAST(CAST(0 AS timestamp) AS date),
+            | CAST(CAST(CAST(0 AS timestamp) AS date) AS string),
+            | CAST(0 AS timestamp),
+            | CAST(CAST(0 AS timestamp) AS string),
+            | CAST(CAST(CAST('1970-01-01 23:00:00' AS timestamp) AS date) AS timestamp)
+            | FROM src LIMIT 1
+          """.stripMargin),
+        Row(
+          LocalDate.parse("1970-01-01"),
+          String.valueOf("1970-01-01"),
+          Instant.ofEpochSecond(0),
+          String.valueOf("1969-12-31 16:00:00"),
+          LocalDateTime.of(1970, 1, 1, 23, 0)
+            .atZone(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+            .toInstant.truncatedTo(ChronoUnit.DAYS)
+        )
+      )
+    }
   }
 
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
