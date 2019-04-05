@@ -401,42 +401,32 @@ object ScalaReflection extends ScalaReflection {
           newInstance
         )
       case t =>
-        deserializeObjectProperties(getObectProperties(t), tpe, path, walkedTypePath)
+        val props = getObjectProperties(t)
+        val cls = getClassFromType(tpe)
+
+        val newInstance = NewInstance(cls, Nil, ObjectType(cls), propagateNull = false)
+
+        val setters = props.map { case (fieldName, getter, setter, fieldType) =>
+          val Schema(dataType, nullable) = schemaFor(fieldType)
+          val clsName = getClassNameFromType(fieldType)
+          val newTypePath = walkedTypePath.recordField(clsName, fieldName)
+
+          val newPath = expressionWithNullSafety(
+            deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath),
+              newTypePath),
+            nullable = nullable,
+            newTypePath)
+
+          (setter, newPath)
+
+        }.toMap
+
+        val result = InitializeJavaBean(newInstance, setters)
+
+        expressions.If(IsNull(path),
+          expressions.Literal.create(null, ObjectType(cls)),
+          result)
     }
-  }
-
-  /**
-   * generate expression to create an instance using the constructor without
-   * arguments and call setters of object.
-   */
-  private def deserializeObjectProperties(params: Seq[(String, Type)],
-                           tpe: Type,
-                           path: Expression,
-                           walkedTypePath: WalkedTypePath): Expression = {
-
-    val cls = getClassFromType(tpe)
-
-    val newInstance = NewInstance(cls, Nil, ObjectType(cls), propagateNull = false)
-
-    val setters = params.map { case (fieldName, fieldType) =>
-      val Schema(dataType, nullable) = schemaFor(fieldType)
-      val clsName = getClassNameFromType(fieldType)
-      val newTypePath = walkedTypePath.recordField(clsName, fieldName)
-
-      val newPath = expressionWithNullSafety(
-        deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath), newTypePath),
-        nullable = nullable,
-        newTypePath)
-
-      (s"set${fieldName.capitalize}", newPath)
-
-    }.toMap
-
-    val result = InitializeJavaBean(newInstance, setters)
-
-    expressions.If(IsNull(path),
-        expressions.Literal.create(null, ObjectType(cls)),
-        result)
   }
 
   /**
@@ -609,11 +599,23 @@ object ScalaReflection extends ScalaReflection {
         }
 
         val params = getConstructorParameters(t)
-        serializeForParams(params, inputObject, walkedTypePath, seenTypeSet + t, getter = false)
+        val fields = params.map { case (fieldName, fieldType) =>
+          if (javaKeywords.contains(fieldName)) {
+            throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
+              "cannot be used as field name\n" + walkedTypePath)
+          }
+
+          val fieldValue = Invoke(KnownNotNull(inputObject), fieldName, dataTypeFor(fieldType),
+            returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
+          val clsName = getClassNameFromType(fieldType)
+          val newPath = walkedTypePath.recordField(clsName, fieldName)
+          (fieldName, serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t))
+        }
+        createSerializerForObject(inputObject, fields)
 
       case t =>
-        val params = getObectProperties(t)
-        if (params.isEmpty) {
+        val props = getObjectProperties(t)
+        if (props.isEmpty) {
           throw new
               UnsupportedOperationException(s"No Encoder found for $tpe\n" + walkedTypePath)
         } else {
@@ -621,31 +623,22 @@ object ScalaReflection extends ScalaReflection {
             throw new UnsupportedOperationException(
             s"cannot have circular references in class, but got the circular reference of class $t")
           }
-          serializeForParams(params, inputObject, walkedTypePath, seenTypeSet + t, getter = true)
+          val fields = props.map { case (fieldName, getter, setter, fieldType) =>
+            if (javaKeywords.contains(fieldName)) {
+              throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
+                "cannot be used as field name\n" + walkedTypePath)
+            }
+
+            val fieldValue = Invoke(KnownNotNull(inputObject), getter, dataTypeFor(fieldType),
+              returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
+            val clsName = getClassNameFromType(fieldType)
+            val newPath = walkedTypePath.recordField(clsName, fieldName)
+            (fieldName, serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t))
+          }
+          createSerializerForObject(inputObject, fields)
 
         }
     }
-  }
-
-  private def serializeForParams(params: Seq[(String, Type)],
-                                 inputObject: Expression,
-                                 walkedTypePath: WalkedTypePath,
-                                 seenTypeSet: Set[`Type`],
-                                 getter: Boolean) = {
-    val fields = params.map { case (fieldName, fieldType) =>
-      if (javaKeywords.contains(fieldName)) {
-        throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
-          "cannot be used as field name\n" + walkedTypePath)
-      }
-
-      val funcname = if (getter) s"get${fieldName.capitalize}" else fieldName
-      val fieldValue = Invoke(KnownNotNull(inputObject), funcname, dataTypeFor(fieldType),
-        returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
-      val clsName = getClassNameFromType(fieldType)
-      val newPath = walkedTypePath.recordField(clsName, fieldName)
-      (fieldName, serializerFor(fieldValue, fieldType, newPath, seenTypeSet))
-    }
-    createSerializerForObject(inputObject, fields)
   }
 
   /**
@@ -792,12 +785,12 @@ object ScalaReflection extends ScalaReflection {
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case t =>
-        val params = getObectProperties(t)
-        if (params.isEmpty) {
+        val props = getObjectProperties(t)
+        if (props.isEmpty) {
           throw new UnsupportedOperationException(s"Schema for type $t is not supported")
         } else {
           Schema(StructType(
-            params.map { case (fieldName, fieldType) =>
+            props.map { case (fieldName, getter, setter, fieldType) =>
               val Schema(dataType, nullable) = schemaFor(fieldType)
               StructField(fieldName, dataType, nullable)
             }), nullable = true)
@@ -982,22 +975,37 @@ trait ScalaReflection extends Logging {
    * Each property, propertyName, of an object is defined by a getter 'getPropertyName():type'
    * and a setter 'setPropertyName(value: type)' functions.
    */
-  def getObectProperties(tpe: Type): Seq[(String, Type)] = {
-    def methods(getters: Boolean) = {
-      tpe.decls.filter(method => {
-        val name = method.name.decodedName.toString
-        method.isMethod && name.indexOf(if (getters) "get" else "set") == 0
-      }).map(method => (
-        method.name.decodedName.toString.substring(3),
-        if (getters) method.asMethod.returnType
-        else method.asMethod.paramLists.head.head.typeSignature))
+  def getObjectProperties(tpe: `Type`): Seq[(String, String, String, Type)] = {
+    def fieldName(name: String): String = {
+      if (name.indexOf("get") == 0 || name.indexOf("set") == 0) {
+        name.substring(3)
+      } else {
+        name
+      }
     }
 
+    val getters = tpe.members.filter(method => method.isMethod &&
+      method.asMethod.paramLists.size == 1 &&
+      method.asMethod.paramLists.head.size == 0)
+      .map(method => {
+        (method.name.decodedName.toString,
+          method.asMethod.returnType)
+      })
+
+    val setters = tpe.members.filter(method => method.isMethod &&
+      method.asMethod.returnType =:= typeOf[Unit] &&
+      method.asMethod.paramLists.size == 1 &&
+      method.asMethod.paramLists.head.size == 1
+    ).map(method => {
+      (method.name.decodedName.toString,
+        method.asMethod.paramLists.head.head.typeSignature)
+    })
+
     (for {
-      a <- methods(true)
-      b <- methods(false)
-      if a._1 == b._1 && a._2 =:= b._2
-    } yield a)
+      a <- getters
+      b <- setters
+      if fieldName(a._1) == fieldName(b._1) && a._2 =:= b._2
+    } yield (fieldName(a._1), a._1, b._1, a._2))
       .toSeq
   }
 
