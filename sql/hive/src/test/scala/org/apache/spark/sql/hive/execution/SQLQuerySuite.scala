@@ -1136,7 +1136,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-6785: HiveQuerySuite - Date cast") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       checkAnswer(
         sql(
           """
