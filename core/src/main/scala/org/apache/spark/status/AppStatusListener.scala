@@ -700,6 +700,10 @@ private[spark] class AppStatusListener(
       val now = System.nanoTime()
       stage.info = event.stageInfo
 
+      // We have to update the stage status AFTER we create all the executorSummaries
+      // because stage deletion deletes whatever summaries it finds when the status is completed.
+      stage.executorSummaries.values.foreach(update(_, now))
+
       // Because of SPARK-20205, old event logs may contain valid stages without a submission time
       // in their start event. In those cases, we can only detect whether a stage was skipped by
       // waiting until the completion event, at which point the field would have been set.
@@ -727,8 +731,6 @@ private[spark] class AppStatusListener(
         pool.stageIds = pool.stageIds - event.stageInfo.stageId
         update(pool, now)
       }
-
-      stage.executorSummaries.values.foreach(update(_, now))
 
       val executorIdsForStage = stage.blackListedExecutors
       executorIdsForStage.foreach { executorId =>

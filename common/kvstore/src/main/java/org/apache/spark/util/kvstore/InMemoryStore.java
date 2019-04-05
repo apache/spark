@@ -132,13 +132,10 @@ public class InMemoryStore implements KVStore {
     private final KVTypeInfo.Accessor naturalKey;
     private final ConcurrentMap<Comparable<Object>, Object> data;
 
-    private int size;
-
     private InstanceList(Class<?> type) throws Exception {
       this.ti = new KVTypeInfo(type);
       this.naturalKey = ti.getAccessor(KVIndex.NATURAL_INDEX_NAME);
       this.data = new ConcurrentHashMap<>();
-      this.size = 0;
     }
 
     KVTypeInfo.Accessor getIndexAccessor(String indexName) {
@@ -158,13 +155,11 @@ public class InMemoryStore implements KVStore {
     }
 
     public void delete(Object key) {
-      if (data.remove(asKey(key)) != null) {
-        size--;
-      }
+      data.remove(asKey(key));
     }
 
     public int size() {
-      return size;
+      return data.size();
     }
 
     @SuppressWarnings("unchecked")
