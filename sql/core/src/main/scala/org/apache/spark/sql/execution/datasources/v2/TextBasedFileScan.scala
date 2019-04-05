@@ -32,7 +32,7 @@ abstract class TextBasedFileScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
+  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
   private var codecFactory: CompressionCodecFactory = _
 
   override def isSplitable(path: Path): Boolean = {

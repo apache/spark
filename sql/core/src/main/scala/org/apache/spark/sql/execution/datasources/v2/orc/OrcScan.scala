@@ -35,7 +35,7 @@ case class OrcScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
+  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
   override def isSplitable(path: Path): Boolean = true
 
   override def createReaderFactory(): PartitionReaderFactory = {
@@ -43,7 +43,7 @@ case class OrcScan(
       new SerializableConfiguration(hadoopConf))
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf, readSchema(),
+    OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema)
   }
 }

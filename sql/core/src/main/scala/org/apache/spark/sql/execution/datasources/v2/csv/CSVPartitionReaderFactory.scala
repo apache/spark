@@ -33,8 +33,8 @@ import org.apache.spark.util.SerializableConfiguration
  * @param sqlConf SQL configuration.
  * @param broadcastedConf Broadcasted serializable Hadoop Configuration.
  * @param dataSchema Schema of CSV files.
+ * @param readDataSchema Required data schema in the batch scan.
  * @param partitionSchema Schema of partitions.
- * @param readSchema Required schema in the batch scan.
  * @param parsedOptions Options for parsing CSV files.
  */
 case class CSVPartitionReaderFactory(

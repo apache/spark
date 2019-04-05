@@ -33,8 +33,7 @@ abstract class FileScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     readDataSchema: StructType,
-    readPartitionSchema: StructType,
-    options: CaseInsensitiveStringMap) extends Scan with Batch {
+    readPartitionSchema: StructType) extends Scan with Batch {
   /**
    * Returns whether a file with `path` could be split or not.
    */
@@ -46,10 +45,10 @@ abstract class FileScan(
     val selectedPartitions = fileIndex.listFiles(Seq.empty, Seq.empty)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = fileIndex.partitionSchema.toAttributes
-    val attributeMap = partitionAttributes.map(a => getAttributeName(a) -> a).toMap
-    val readPartitionAttributes = readPartitionSchema.toAttributes.map { readAttr =>
-      attributeMap.get(getAttributeName(readAttr)).getOrElse {
-        throw new AnalysisException(s"Can't find required partition column ${readAttr.name} " +
+    val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap
+    val readPartitionAttributes = readPartitionSchema.map { readField =>
+      attributeMap.get(normalizeName(readField.name)).getOrElse {
+        throw new AnalysisException(s"Can't find required partition column ${readField.name} " +
           s"in partition schema ${fileIndex.partitionSchema}")
       }
     }
@@ -88,11 +87,11 @@ abstract class FileScan(
 
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
-  private def getAttributeName(a: AttributeReference): String = {
+  private def normalizeName(name: String): String = {
     if (isCaseSensitive) {
-      a.name
+      name
     } else {
-      a.name.toLowerCase(Locale.ROOT)
+      name.toLowerCase(Locale.ROOT)
     }
   }
 }
