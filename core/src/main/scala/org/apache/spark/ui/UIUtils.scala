@@ -166,7 +166,7 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
-    <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery-1.12.4.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
@@ -188,11 +188,11 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes: Seq[Node] = {
     <link rel="stylesheet"
-          href={prependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+          href={prependBaseUri("/static/jquery.dataTables.1.10.18.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/jsonFormatter.min.css")} type="text/css"/>
-    <script src={prependBaseUri("/static/jquery.dataTables.1.10.4.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.dataTables.1.10.18.min.js")}></script>
     <script src={prependBaseUri("/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri("/static/jquery.blockUI.min.js")}></script>
     <script src={prependBaseUri("/static/dataTables.bootstrap.min.js")}></script>
