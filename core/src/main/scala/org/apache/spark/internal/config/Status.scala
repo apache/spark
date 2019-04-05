@@ -32,7 +32,7 @@ private[spark] object Status {
   val LIVE_ENTITY_UPDATE_STALENESS_LIMIT = ConfigBuilder("spark.ui.liveUpdate.stalenessLimit")
     .internal()
     .doc(
-      """A time limit before we force to flush all live entities. When the last flush does't past
+      """A time limit before we force to flush all live entities. When the last flush doesn't past
         |this limit, UI will not trigger a heavy flush to sync the states since it may slow down
         |Spark events processing significantly. Otherwise, UI will try to flush as soon as possible.
       """.stripMargin)
