@@ -377,7 +377,12 @@ private[parquet] object ParquetReadSupport {
         .filter(field => groupType2.containsField(field.getName))
         .flatMap {
           case field1: GroupType =>
-            intersectParquetGroups(field1, groupType2.getType(field1.getName).asGroupType)
+            val field2 = groupType2.getType(field1.getName)
+            if (field2.isPrimitive) {
+              None
+            } else {
+              intersectParquetGroups(field1, field2.asGroupType)
+            }
           case field1 => Some(field1)
         }
 
