@@ -59,7 +59,7 @@ private[spark] class AppStatusListener(
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
 
   /**
-   * A time limit before we force to flush all live entities. When the last flush does't past
+   * A time limit before we force to flush all live entities. When the last flush doesn't past
    * this limit, UI will not trigger a heavy flush to sync the states since it may slow down Spark
    * events processing significantly. Otherwise, UI will try to flush when receiving the next
    * executor heartbeat.
