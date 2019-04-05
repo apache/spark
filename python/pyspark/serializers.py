@@ -295,11 +295,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 s = _check_series_convert_timestamps_internal(s.fillna(0), self._timezone)
                 # TODO: need cast after Arrow conversion, ns values cause error with pandas 0.19.2
                 return pa.Array.from_pandas(s, mask=mask).cast(t, safe=False)
-            elif t is not None and pa.types.is_string(t) and sys.version < '3':
-                # TODO: need decode before converting to Arrow in Python 2
-                # TODO: don't need as of Arrow 0.9.1
-                return pa.Array.from_pandas(s.apply(
-                    lambda v: v.decode("utf-8") if isinstance(v, str) else v), mask=mask, type=t)
 
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
