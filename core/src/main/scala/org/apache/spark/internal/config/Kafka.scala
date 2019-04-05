@@ -19,12 +19,6 @@ package org.apache.spark.internal.config
 
 private[spark] object Kafka {
 
-  private[spark] val DEBUG_DYNAMIC_JAAS_AUTHENTICATION =
-    ConfigBuilder("spark.kafka.jaas.authentication.debug")
-      .doc("Whether to enable dynamic JAAS authentication debug messages.")
-      .booleanConf
-      .createWithDefault(false)
-
   val BOOTSTRAP_SERVERS =
     ConfigBuilder("spark.kafka.bootstrap.servers")
       .doc("A list of coma separated host/port pairs to use for establishing the initial " +

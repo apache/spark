@@ -159,7 +159,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
-      | debug=${sparkConf.get(Kafka.DEBUG_DYNAMIC_JAAS_AUTHENTICATION)}
+      | debug=${isGlobalKrbDebugEnabled()}
       | useKeyTab=true
       | serviceName="${sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)}"
       | keyTab="${sparkConf.get(KEYTAB).get}"
@@ -176,7 +176,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
-      | debug=${sparkConf.get(Kafka.DEBUG_DYNAMIC_JAAS_AUTHENTICATION)}
+      | debug=${isGlobalKrbDebugEnabled()}
       | useTicketCache=true
       | serviceName="${sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)}";
       """.stripMargin.replace("\n", "")
@@ -193,6 +193,16 @@ private[spark] object KafkaTokenUtil extends Logging {
       "com.ibm.security.auth.module.Krb5LoginModule"
     } else {
       "com.sun.security.auth.module.Krb5LoginModule"
+    }
+  }
+
+  private def isGlobalKrbDebugEnabled(): Boolean = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      val debug = System.getenv("com.ibm.security.krb5.Krb5Debug")
+      debug != null && debug.equalsIgnoreCase("all")
+    } else {
+      val debug = System.getenv("sun.security.krb5.debug")
+      debug != null && debug.equalsIgnoreCase("true")
     }
   }
 

@@ -155,47 +155,41 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties with keytab should set keytab dynamic jaas config") {
-    Seq(false, true).foreach { debug =>
-      sparkConf.set(Kafka.DEBUG_DYNAMIC_JAAS_AUTHENTICATION, debug)
-      sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-      sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
-      sparkConf.set(KEYTAB, keytab)
-      sparkConf.set(PRINCIPAL, principal)
+    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
+    sparkConf.set(KEYTAB, keytab)
+    sparkConf.set(PRINCIPAL, principal)
 
-      val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
-      assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
-        === bootStrapServers)
-      assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
-        === SASL_SSL.name)
-      assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
-      val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
-      assert(saslJaasConfig.contains("Krb5LoginModule required"))
-      assert(saslJaasConfig.contains(s"debug=$debug"))
-      assert(saslJaasConfig.contains("useKeyTab=true"))
-      assert(saslJaasConfig.contains(s"""keyTab="$keytab""""))
-      assert(saslJaasConfig.contains(s"""principal="$principal""""))
-    }
+    assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
+      === bootStrapServers)
+    assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
+      === SASL_SSL.name)
+    assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
+    val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
+    assert(saslJaasConfig.contains("Krb5LoginModule required"))
+    assert(saslJaasConfig.contains(s"debug="))
+    assert(saslJaasConfig.contains("useKeyTab=true"))
+    assert(saslJaasConfig.contains(s"""keyTab="$keytab""""))
+    assert(saslJaasConfig.contains(s"""principal="$principal""""))
   }
 
   test("createAdminClientProperties without keytab should set ticket cache dynamic jaas config") {
-    Seq(false, true).foreach { debug =>
-      sparkConf.set(Kafka.DEBUG_DYNAMIC_JAAS_AUTHENTICATION, debug)
-      sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
-      sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
+    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
 
-      val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
-      assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
-        === bootStrapServers)
-      assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
-        === SASL_SSL.name)
-      assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
-      val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
-      assert(saslJaasConfig.contains("Krb5LoginModule required"))
-      assert(saslJaasConfig.contains(s"debug=$debug"))
-      assert(saslJaasConfig.contains("useTicketCache=true"))
-    }
+    assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
+      === bootStrapServers)
+    assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
+      === SASL_SSL.name)
+    assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
+    val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
+    assert(saslJaasConfig.contains("Krb5LoginModule required"))
+    assert(saslJaasConfig.contains(s"debug="))
+    assert(saslJaasConfig.contains("useTicketCache=true"))
   }
 
   test("isGlobalJaasConfigurationProvided without global config should return false") {
