@@ -1415,10 +1415,6 @@
             <artifactId>zookeeper</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.json</groupId>
-            <artifactId>json</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
           </exclusion>
@@ -1873,6 +1869,34 @@
           <exclusion>
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!-- Hive 2.3 requires hive-llap-common when registry functions, see SPARK-27176 for more details. -->
+      <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-llap-common</artifactId>
+        <version>2.3.4</version>
+        <scope>${hive.deps.scope}</scope>
+      </dependency>
+      <!-- Hive 2.3 requires hive-llap-client to test Hive, see SPARK-27176 for more details. -->
+      <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-llap-client</artifactId>
+        <version>2.3.4</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-llap-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-framework</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>apache-curator</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2774,58 +2798,11 @@
         <hive.version.short>${hive.version}</hive.version.short>
         <hive.parquet.version>${parquet.version}</hive.parquet.version>
         <orc.classifier></orc.classifier>
-        <calcite-avatica.artifactId>calcite-druid</calcite-avatica.artifactId>
-        <calcite.version>1.10.0</calcite.version>
         <hive.parquet.group>org.apache.parquet</hive.parquet.group>
         <datanucleus-core.version>4.1.17</datanucleus-core.version>
         <jetty.version>9.3.24.v20180605</jetty.version>
       </properties>
       <dependencies>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-common</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-serde</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-shims</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>${hive.group}</groupId>
-          <artifactId>hive-llap-client</artifactId>
-          <version>${hive.version}</version>
-          <scope>${hive.deps.scope}</scope>
-          <exclusions>
-            <exclusion>
-              <groupId>${hive.group}</groupId>
-              <artifactId>hive-common</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>${hive.group}</groupId>
-              <artifactId>hive-serde</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.zookeeper</groupId>
-              <artifactId>zookeeper</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.curator</groupId>
-              <artifactId>curator-framework</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.apache.curator</groupId>
-              <artifactId>apache-curator</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.slf4j</groupId>
-              <artifactId>slf4j-api</artifactId>
-            </exclusion>
-          </exclusions>
-        </dependency>
-
         <dependency>
           <groupId>org.apache.hive</groupId>
           <artifactId>hive-storage-api</artifactId>
