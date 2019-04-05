@@ -45,7 +45,7 @@ case class OrcScanBuilder(
 
   override def build(): Scan = {
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
-      readDataSchema, readPartitionSchema, options)
+      readDataSchema(), readPartitionSchema(), options)
   }
 
   private var _pushedFilters: Array[Filter] = Array.empty

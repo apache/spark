@@ -33,8 +33,8 @@ abstract class FileScanBuilder(
     this.requiredSchema = requiredSchema
   }
 
-  protected def readDataSchema: StructType = {
-    val requiredNameSet = createRequiredNameSet
+  protected def readDataSchema(): StructType = {
+    val requiredNameSet = createRequiredNameSet()
     val fields = dataSchema.fields.filter { field =>
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
       requiredNameSet.contains(colName) && !partitionNameSet.contains(colName)
@@ -42,8 +42,8 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  protected def readPartitionSchema: StructType = {
-    val requiredNameSet = createRequiredNameSet
+  protected def readPartitionSchema(): StructType = {
+    val requiredNameSet = createRequiredNameSet()
     val fields = partitionSchema.fields.filter { field =>
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
       requiredNameSet.contains(colName)
@@ -51,8 +51,7 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  // Define as method instead of value, since `requiredSchema` is mutable.
-  private def createRequiredNameSet: Set[String] =
+  private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
 
   private val partitionNameSet: Set[String] =
