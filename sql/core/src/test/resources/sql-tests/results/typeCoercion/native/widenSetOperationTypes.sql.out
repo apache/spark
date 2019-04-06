@@ -1193,7 +1193,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast('2017
 -- !query 132 schema
 struct<CAST(2017-12-12 09:30:00.0 AS TIMESTAMP):timestamp>
 -- !query 132 output
-2017-12-11 00:00:00
+2017-12-10 16:00:00
 2017-12-12 09:30:00
 
 
@@ -1293,7 +1293,7 @@ SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast('2017-12-11 
 struct<CAST(2017-12-12 09:30:00 AS DATE):timestamp>
 -- !query 143 output
 2017-12-11 09:30:00
-2017-12-12 00:00:00
+2017-12-11 16:00:00
 
 
 -- !query 144

@@ -1221,7 +1221,7 @@ SELECT IF(true, cast('2017-12-12 09:30:00' as date), cast('2017-12-11 09:30:00.0
 -- !query 143 schema
 struct<(IF(true, CAST(CAST(2017-12-12 09:30:00 AS DATE) AS TIMESTAMP), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))):timestamp>
 -- !query 143 output
-2017-12-12 00:00:00
+2017-12-11 16:00:00
 
 
 -- !query 144

@@ -87,7 +87,7 @@ SELECT date("2014-04-04"), timestamp(date("2014-04-04"))
 -- !query 10 schema
 struct<CAST(2014-04-04 AS DATE):date,CAST(CAST(2014-04-04 AS DATE) AS TIMESTAMP):timestamp>
 -- !query 10 output
-2014-04-04	2014-04-04 00:00:00
+2014-04-04	2014-04-03 17:00:00
 
 
 -- !query 11
