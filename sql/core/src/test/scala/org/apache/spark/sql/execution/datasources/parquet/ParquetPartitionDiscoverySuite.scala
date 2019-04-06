@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.io.File
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
-import java.time.{ZoneId, ZoneOffset}
+import java.time.{LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 
 import scala.collection.mutable.ArrayBuffer
@@ -1139,14 +1139,20 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   }
 
   test("Resolve type conflicts - decimals, dates and timestamps in partition column") {
-    withTempPath { path =>
-      val df = Seq((1, "2014-01-01"), (2, "2016-01-01"), (3, "2015-01-01 00:01:00")).toDF("i", "ts")
-      df.write.format("parquet").partitionBy("ts").save(path.getAbsolutePath)
-      checkAnswer(
-        spark.read.load(path.getAbsolutePath),
-        Row(1, Timestamp.valueOf("2014-01-01 00:00:00")) ::
-          Row(2, Timestamp.valueOf("2016-01-01 00:00:00")) ::
-          Row(3, Timestamp.valueOf("2015-01-01 00:01:00")) :: Nil)
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      withTempPath { path =>
+        val df = Seq(
+          (1, "2014-01-01"),
+          (2, "2016-01-01"),
+          (3, "2015-01-01 00:01:00")).toDF("i", "ts")
+        df.write.format("parquet").partitionBy("ts").save(path.getAbsolutePath)
+        checkAnswer(
+          spark.read.load(path.getAbsolutePath),
+          Row(1, LocalDate.parse("2014-01-01").atStartOfDay(ZoneOffset.UTC).toInstant) ::
+            Row(2, LocalDate.parse("2016-01-01").atStartOfDay(ZoneOffset.UTC).toInstant) ::
+            Row(3, LocalDateTime.parse("2015-01-01T00:01:00").atZone(
+              DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)).toInstant) :: Nil)
+      }
     }
 
     withTempPath { path =>
