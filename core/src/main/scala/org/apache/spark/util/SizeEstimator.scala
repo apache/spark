@@ -132,8 +132,8 @@ object SizeEstimator extends Logging {
     }
 
     // java.vm.info provides compressed ref info for IBM and OpenJ9 JDKs
-    if (System.getProperty("java.vendor").contains("IBM") ||
-        System.getProperty("java.vendor").contains("OpenJ9")) {
+    val javaVendor = System.getProperty("java.vendor")
+    if (javaVendor.contains("IBM") || javaVendor.contains("OpenJ9")) {
       return System.getProperty("java.vm.info").contains("Compressed Ref")
     }
 
