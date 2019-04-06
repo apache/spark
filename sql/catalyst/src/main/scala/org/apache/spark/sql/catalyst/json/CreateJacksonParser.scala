@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.{ByteArrayInputStream, InputStream, InputStreamReader}
-import java.nio.channels.Channels
-import java.nio.charset.Charset
+import java.io.{ByteArrayInputStream, InputStream, InputStreamReader, Reader}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.io.Text
-import sun.nio.cs.StreamDecoder
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
@@ -55,19 +52,13 @@ private[sql] object CreateJacksonParser extends Serializable {
   //    automatically by analyzing first bytes of the input stream.
   // 3. Reader based parser. This is the slowest parser used here but it allows to create
   //    a reader with specific encoding.
-  // The method creates a reader for an array with given encoding and sets size of internal
-  // decoding buffer according to size of input array.
-  private def getStreamDecoder(enc: String, in: Array[Byte], length: Int): StreamDecoder = {
+  private def getReader(enc: String, in: Array[Byte], length: Int): Reader = {
     val bais = new ByteArrayInputStream(in, 0, length)
-    val byteChannel = Channels.newChannel(bais)
-    val decodingBufferSize = Math.min(length, 8192)
-    val decoder = Charset.forName(enc).newDecoder()
-
-    StreamDecoder.forDecoder(byteChannel, decoder, decodingBufferSize)
+    new InputStreamReader(bais, enc)
   }
 
   def text(enc: String, jsonFactory: JsonFactory, record: Text): JsonParser = {
-    val sd = getStreamDecoder(enc, record.getBytes, record.getLength)
+    val sd = getReader(enc, record.getBytes, record.getLength)
     jsonFactory.createParser(sd)
   }
 
@@ -87,7 +78,7 @@ private[sql] object CreateJacksonParser extends Serializable {
 
   def internalRow(enc: String, jsonFactory: JsonFactory, row: InternalRow): JsonParser = {
     val binary = row.getBinary(0)
-    val sd = getStreamDecoder(enc, binary, binary.length)
+    val sd = getReader(enc, binary, binary.length)
 
     jsonFactory.createParser(sd)
   }
