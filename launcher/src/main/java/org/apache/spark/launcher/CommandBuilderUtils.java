@@ -33,7 +33,7 @@ class CommandBuilderUtils {
 
   /** The set of known JVM vendors. */
   enum JavaVendor {
-    Oracle, IBM, OpenJDK, Unknown
+    Oracle, IBM, OpenJDK, OpenJ9, Unknown
   }
 
   /** Returns whether the given string is null or empty. */
@@ -123,6 +123,9 @@ class CommandBuilderUtils {
     }
     if (vendorString.contains("OpenJDK")) {
       return JavaVendor.OpenJDK;
+    }
+    if (vendorString.contains("OpenJ9")) {
+      return JavaVendor.OpenJ9;
     }
     return JavaVendor.Unknown;
   }
