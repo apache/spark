@@ -33,6 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.defaultTimeZone
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
@@ -123,7 +124,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssXXX")))
 
     val ISO8601Date = "1970-01-01"
-    checkTypePromotion(DateTimeUtils.millisToDays(32400000),
+    checkTypePromotion(DateTimeUtils.millisToDays(32400000, defaultTimeZone()),
       enforceCorrectType(ISO8601Date, DateType))
   }
 

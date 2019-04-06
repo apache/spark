@@ -35,6 +35,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.defaultTimeZone
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
@@ -1108,7 +1109,7 @@ class StreamSuite extends StreamTest {
     }
 
     var lastTimestamp = System.currentTimeMillis()
-    val currentDate = DateTimeUtils.millisToDays(lastTimestamp)
+    val currentDate = DateTimeUtils.millisToDays(lastTimestamp, defaultTimeZone())
     testStream(df, useV2Sink = useV2Sink) (
       AddData(input, 1),
       CheckLastBatch { rows: Seq[Row] =>
