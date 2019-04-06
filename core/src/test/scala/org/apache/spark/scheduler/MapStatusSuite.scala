@@ -22,7 +22,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 import scala.util.Random
 
 import org.mockito.Mockito.mock
-import org.roaringbitmap.RoaringBitmap
+import org.roaringbitmap.{RoaringBitmap, RoaringBitmapWriter}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
@@ -155,6 +155,69 @@ class MapStatusSuite extends SparkFunSuite {
     val size2 = r.getSizeInBytes
     assert(size1 === size2)
     assert(!success)
+  }
+
+  test("RoaringBitmapWriter: build space efficient bitmap from run compressible data") {
+    val bitmap1 = new RoaringBitmap
+    val writer = RoaringBitmapWriter.writer.optimiseForArrays
+      .expectedRange(0, 200000).get()
+    (1 to 200000).foreach(i =>
+      if (i % 200 != 0) {
+        bitmap1.add(i)
+        writer.add(i)
+      }
+    )
+    val bitmap1Size = bitmap1.getSizeInBytes
+    bitmap1.runOptimize()
+    val bitmap1SizeRLE = bitmap1.getSizeInBytes
+    val bitmap2 = writer.get()
+    val bitmap2Size = bitmap2.getSizeInBytes
+    bitmap2.runOptimize()
+    val bitmap2SizeRLE = bitmap2.getSizeInBytes
+
+    assert(bitmap1SizeRLE == bitmap2Size)
+    assert(bitmap2Size < bitmap1Size)
+    assert(bitmap2Size == bitmap2SizeRLE)
+  }
+
+  test("RoaringBitmapWriter: build space efficient bitmap from run incompressible data") {
+    val bitmap1 = new RoaringBitmap
+    val writer = RoaringBitmapWriter.writer.optimiseForArrays
+      .expectedRange(0, 200000).get()
+    (1 to 200000).foreach(i =>
+      if (i % 200 == 0) {
+        bitmap1.add(i)
+        writer.add(i)
+      }
+    )
+    val bitmap1Size = bitmap1.getSizeInBytes
+    bitmap1.runOptimize()
+    val bitmap1SizeRLE = bitmap1.getSizeInBytes
+    val bitmap2 = writer.get()
+    val bitmap2Size = bitmap2.getSizeInBytes
+    bitmap2.runOptimize()
+    val bitmap2SizeRLE = bitmap2.getSizeInBytes
+
+    assert(bitmap2Size == bitmap1Size)
+    assert(bitmap1SizeRLE == bitmap2SizeRLE)
+    assert(bitmap1Size == bitmap2SizeRLE)
+  }
+
+  test("RoaringBitmap: inversion always saves space for run compressible data") {
+    val writer = RoaringBitmapWriter.writer.optimiseForArrays
+      .expectedRange(0, 200000).get()
+    val invertedWriter = RoaringBitmapWriter.writer.optimiseForArrays
+      .expectedRange(0, 200000).get()
+    (1 to 200000).foreach(i =>
+      if (i % 200 != 0) {
+        writer.add(i)
+      } else {
+        invertedWriter.add(i)
+      }
+    )
+    val bitmap = writer.get()
+    val invertedBitmap = invertedWriter.get()
+    assert(bitmap.getSizeInBytes > invertedBitmap.getSizeInBytes)
   }
 
   test("Blocks which are bigger than SHUFFLE_ACCURATE_BLOCK_THRESHOLD should not be " +

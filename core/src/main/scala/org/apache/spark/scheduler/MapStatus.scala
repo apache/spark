@@ -21,7 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import scala.collection.mutable
 
-import org.roaringbitmap.RoaringBitmap
+import org.roaringbitmap.{RoaringBitmap, RoaringBitmapWriter}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
@@ -206,11 +206,12 @@ private[spark] object HighlyCompressedMapStatus {
     var numNonEmptyBlocks: Int = 0
     var numSmallBlocks: Int = 0
     var totalSmallBlockSize: Long = 0
-    // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
-    // blocks. From a performance standpoint, we benefit from tracking empty blocks because
-    // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
-    val emptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
+    // Since RoaringBitmap uses four bytes per run and 2 bytes per sparse value,
+    // the inverse of a sparse bitmap is always twice the size. Most blocks are
+    // expected to be non-empty: tracking empty blocks halves the size of the bitmap.
+    val emptyBlocks = RoaringBitmapWriter.writer.expectedRange(0, totalNumBlocks)
+      .optimiseForArrays.get()
     val threshold = Option(SparkEnv.get)
       .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
       .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
@@ -237,9 +238,7 @@ private[spark] object HighlyCompressedMapStatus {
     } else {
       0
     }
-    emptyBlocks.trim()
-    emptyBlocks.runOptimize()
-    new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize,
+    new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks.get(), avgSize,
       hugeBlockSizes)
   }
 }
