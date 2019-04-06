@@ -76,6 +76,10 @@ object DateTimeUtils {
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
+  def millisToDays(millisUtc: Long): SQLDate = {
+    millisToDays(millisUtc, defaultTimeZone())
+  }
+
   def millisToDays(millisUtc: Long, timeZone: TimeZone): SQLDate = {
     // SPARK-6785: use Math.floorDiv so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
@@ -84,6 +88,10 @@ object DateTimeUtils {
   }
 
   // reverse of millisToDays
+  def daysToMillis(days: SQLDate): Long = {
+    daysToMillis(days, defaultTimeZone())
+  }
+
   def daysToMillis(days: SQLDate, timeZone: TimeZone): Long = {
     val millisLocal = days.toLong * MILLIS_PER_DAY
     millisLocal - getOffsetFromLocalMillis(millisLocal, timeZone)
@@ -98,14 +106,14 @@ object DateTimeUtils {
    * Returns the number of days since epoch from java.sql.Date.
    */
   def fromJavaDate(date: Date): SQLDate = {
-    localDateToDays(date.toLocalDate)
+    millisToDays(date.getTime)
   }
 
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */
   def toJavaDate(daysSinceEpoch: SQLDate): Date = {
-    Date.valueOf(daysToLocalDate(daysSinceEpoch))
+    new Date(daysToMillis(daysSinceEpoch))
   }
 
   /**
