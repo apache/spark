@@ -116,6 +116,9 @@ class TestHiveContext(
     @transient override val sparkSession: TestHiveSparkSession)
   extends SQLContext(sparkSession) {
 
+  val HIVE_CONTRIB_JAR: String = "hive-contrib-0.13.1.jar"
+  val HIVE_HCATALOG_CORE_JAR: String = "hive-hcatalog-core-0.13.1.jar"
+
   /**
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
    * when running in the JVM, i.e. it needs to be false when calling from Python.
@@ -140,6 +143,14 @@ class TestHiveContext(
 
   def getHiveFile(path: String): File = {
     sparkSession.getHiveFile(path)
+  }
+
+  def getHiveContribJar(): File = {
+    sparkSession.getHiveFile(HIVE_CONTRIB_JAR)
+  }
+
+  def getHiveHcatalogCoreJar(): File = {
+    sparkSession.getHiveFile(HIVE_HCATALOG_CORE_JAR)
   }
 
   def loadTestTable(name: String): Unit = {
