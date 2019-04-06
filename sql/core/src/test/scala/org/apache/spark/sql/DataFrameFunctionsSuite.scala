@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.Instant
 import java.util.TimeZone
 
 import scala.util.Random
@@ -929,15 +930,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq((1.toByte, 3L, 1)).toDF().select(sequence('_1, '_2, '_3)),
       Seq(Row(Array(1L, 2L, 3L))))
 
-    checkAnswer(
-      spark.sql("select sequence(" +
-        "   cast('2018-01-01' as date)" +
-        ",  cast('2018-01-02 00:00:00' as timestamp)" +
-        ",  interval 12 hours)"),
-      Seq(Row(Array(
-        Timestamp.valueOf("2018-01-01 00:00:00"),
-        Timestamp.valueOf("2018-01-01 12:00:00"),
-        Timestamp.valueOf("2018-01-02 00:00:00")))))
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.sql("select sequence(" +
+          "   cast('2018-01-01' as date)" +
+          ",  cast('2018-01-02 00:00:00Z' as timestamp)" +
+          ",  interval 12 hours)"),
+        Seq(Row(Array(
+          Instant.parse("2018-01-01T00:00:00Z"),
+          Instant.parse("2018-01-01T12:00:00Z"),
+          Instant.parse("2018-01-02T00:00:00Z")))))
+    }
 
     // test invalid data types
     intercept[AnalysisException] {
