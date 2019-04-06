@@ -133,7 +133,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     infoMapsForShuffle.putIfAbsent(
       handle.shuffleId,
       (handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps,
-        context.indeterminateStageAttemptId(handle.shuffleId)))
+        context.getShuffleGenerationId(handle.shuffleId)))
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
@@ -163,9 +163,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     Option(infoMapsForShuffle.remove(shuffleId)).foreach {
-      case (numMaps, stageAttemptId) =>
+      case (numMaps, shuffleGenerationId) =>
         (0 until numMaps).foreach { mapId =>
-          shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId)
+          shuffleBlockResolver.removeDataByMap(shuffleId, mapId, shuffleGenerationId)
         }
     }
     true

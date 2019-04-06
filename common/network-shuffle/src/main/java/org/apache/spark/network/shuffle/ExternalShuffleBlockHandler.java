@@ -218,7 +218,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private final int shuffleId;
     // An array containing mapId and reduceId pairs.
     private final int[] mapIdAndReduceIds;
-    private final int stageAttemptId;
+    private final int shuffleGenerationId;
 
     ManagedBufferIterator(String appId, String execId, String[] blockIds) {
       this.appId = appId;
@@ -226,7 +226,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       String[] blockId0Parts = splitBlockId(blockIds[0]);
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
       mapIdAndReduceIds = new int[2 * blockIds.length];
-      this.stageAttemptId =
+      this.shuffleGenerationId =
         (blockId0Parts.length == 5) ? Integer.parseInt(blockId0Parts[4]) : -1;
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = splitBlockId(blockIds[i]);
@@ -257,7 +257,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     @Override
     public ManagedBuffer next() {
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, shuffleId,
-        mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1], stageAttemptId);
+        mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1], shuffleGenerationId);
       index += 2;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;

@@ -151,7 +151,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.outputBufferSizeInBytes =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     open();
-    this.stageAttemptId = taskContext.indeterminateStageAttemptId(dep.shuffleId());
+    this.stageAttemptId = taskContext.getShuffleGenerationId(dep.shuffleId());
   }
 
   private void updatePeakMemoryUsed() {

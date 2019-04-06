@@ -119,10 +119,4 @@ private[scheduler] abstract class Stage(
 
   def isIndeterminate: Boolean =
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
-
-  /**
-   * Clear the intermediate status (e.g. map status, success task, etc) for the stage, currently
-   * we call the function before indeterminate stage rerunning.
-   */
-  def clearIntermediateState(): Unit = {}
 }

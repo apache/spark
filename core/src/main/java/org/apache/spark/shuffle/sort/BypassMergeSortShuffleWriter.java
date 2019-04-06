@@ -119,7 +119,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleBlockResolver = shuffleBlockResolver;
-    this.stageAttemptId = taskContext.indeterminateStageAttemptId(dep.shuffleId());
+    this.stageAttemptId = taskContext.getShuffleGenerationId(dep.shuffleId());
   }
 
   @Override

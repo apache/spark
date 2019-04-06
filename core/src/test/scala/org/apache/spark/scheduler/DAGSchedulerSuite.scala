@@ -2766,14 +2766,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       (Success, makeMapStatus("hostB", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
     assert(taskSets(4).tasks.head.localProperties.getProperty(
-      SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + shuffleId1.toString) == "1")
+      SparkContext.SHUFFLE_GENERATION_ID_PREFIX + shuffleId1.toString) == "1")
 
     complete(taskSets(5), Seq(
       (Success, makeMapStatus("hostC", 2)),
       (Success, makeMapStatus("hostD", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
     assert(taskSets(5).tasks.head.localProperties.getProperty(
-      SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + shuffleId2.toString) == "2")
+      SparkContext.SHUFFLE_GENERATION_ID_PREFIX + shuffleId2.toString) == "2")
 
     complete(taskSets(6), Seq((Success, 11), (Success, 12)))
 
@@ -2835,7 +2835,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
         (Success, makeMapStatus("hostB", 2))))
       assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
       assert(taskSets(taskSetIndex).tasks.head.localProperties.getProperty(
-        SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + shuffleId.toString) == "1")
+        SparkContext.SHUFFLE_GENERATION_ID_PREFIX + shuffleId.toString) == "1")
     }
 
     // Check all indeterminate stage roll back.

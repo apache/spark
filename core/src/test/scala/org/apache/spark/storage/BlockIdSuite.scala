@@ -99,7 +99,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.shuffleId === 1)
     assert(id.mapId === 2)
     assert(id.reduceId === 3)
-    assert(id.stageAttemptId.get === 4)
+    assert(id.shuffleGenerationId.get === 4)
     assert(id.isShuffle)
     assertSame(id, BlockId(id.toString))
   }
@@ -113,7 +113,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.shuffleId === 4)
     assert(id.mapId === 5)
     assert(id.reduceId === 6)
-    assert(id.stageAttemptId.get === 7)
+    assert(id.shuffleGenerationId.get === 7)
     assert(!id.isShuffle)
     assertSame(id, BlockId(id.toString))
   }
@@ -127,7 +127,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.shuffleId === 7)
     assert(id.mapId === 8)
     assert(id.reduceId === 9)
-    assert(id.stageAttemptId.get === 10)
+    assert(id.shuffleGenerationId.get === 10)
     assert(!id.isShuffle)
     assertSame(id, BlockId(id.toString))
   }

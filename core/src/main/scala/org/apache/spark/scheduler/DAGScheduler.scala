@@ -1099,7 +1099,11 @@ private[spark] class DAGScheduler(
     logDebug("submitMissingTasks(" + stage + ")")
 
     // Before find missing partition, do the intermediate state clean work first.
-    stage.clearIntermediateState()
+    stage match {
+      case sms: ShuffleMapStage if stage.isIndeterminate =>
+        mapOutputTracker.unregisterAllMapOutput(sms.shuffleDep.shuffleId)
+      case _ =>
+    }
 
     // Figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
@@ -1150,13 +1154,12 @@ private[spark] class DAGScheduler(
       // shuffle file in shuffle write task, and then the mapping of shuffle id to indeterminate
       // stage id will be used for shuffle reader task.
       if (stage.latestInfo.attemptNumber() > 0 && stage.isIndeterminate) {
-        properties.setProperty(SparkContext.IS_INDETERMINATE_STAGE, "true")
         // deal with shuffle writer side property.
         stage match {
           case sms: ShuffleMapStage =>
             val stageAttemptId = stage.latestInfo.attemptNumber()
             properties.setProperty(
-              SparkContext.INDETERMINATE_STAGE_ATTEMPT_ID_PREFIX + sms.shuffleDep.shuffleId,
+              SparkContext.SHUFFLE_GENERATION_ID_PREFIX + sms.shuffleDep.shuffleId,
               stageAttemptId.toString)
             logInfo(s"Set INDETERMINATE_STAGE_ATTEMPT_ID for $stage(shuffleId:" +
               s" ${sms.shuffleDep.shuffleId}) to $stageAttemptId")
@@ -1250,7 +1253,8 @@ private[spark] class DAGScheduler(
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties))
+        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
+        stage.latestInfo.attemptNumber > 0 && stage.isIndeterminate))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run
