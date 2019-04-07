@@ -43,7 +43,7 @@ import org.apache.spark.storage._
 abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[SortShuffleManager])
   extends SparkFunSuite with BeforeAndAfter with LocalSparkContext
 {
-  implicit val defaultTimeout = timeout(10000 millis)
+  implicit val defaultTimeout = timeout(10.seconds)
   val conf = new SparkConf()
     .setMaster("local[2]")
     .setAppName("ContextCleanerSuite")
@@ -159,7 +159,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC causes RDD cleanup after dereferencing the RDD
@@ -178,7 +178,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, shuffleIds = Seq(0))
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
     rdd.count()  // Defeat early collection by the JVM
 
@@ -196,7 +196,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC causes broadcast cleanup after dereferencing the broadcast variable
@@ -272,7 +272,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that RDD going out of scope does cause the checkpoint blocks to be cleaned up
@@ -294,7 +294,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC triggers the cleanup of all variables after the dereferencing them
@@ -334,7 +334,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC triggers the cleanup of all variables after the dereferencing them
@@ -408,7 +408,7 @@ class CleanerTester(
   /** Assert that all the stuff has been cleaned up */
   def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout) {
     try {
-      eventually(waitTimeout, interval(100 millis)) {
+      eventually(waitTimeout, interval(100.milliseconds)) {
         assert(isAllCleanedUp,
           "The following resources were not cleaned up:\n" + uncleanedResourcesToString)
       }

@@ -27,7 +27,6 @@ import scala.collection.Map
 import scala.collection.mutable.{ArrayStack, HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.language.existentials
-import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.SerializationUtils
@@ -270,7 +269,7 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
       Some(executorUpdates)))
     blockManagerMaster.driverEndpoint.askSync[Boolean](
-      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
+      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
   }
 
   /**
