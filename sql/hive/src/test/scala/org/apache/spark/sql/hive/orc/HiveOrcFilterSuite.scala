@@ -90,7 +90,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
 
-  private def assertResultWithDiffHiveVersion(expected : String)(c : scala.Any): Unit = {
+  private def assertResultWithDiffHiveVersion(expected : String)(c : scala.Any) = {
     if (HiveUtils.isHive2) {
       assertResult(expected.replace("\n", ", "))(c)
     } else {

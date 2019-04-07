@@ -230,7 +230,6 @@
         <dependency>
           <groupId>org.apache.hive</groupId>
           <artifactId>hive-llap-client</artifactId>
-          <scope>test</scope>
         </dependency>
       </dependencies>
     </profile>
