@@ -102,14 +102,8 @@ object LiteralGenerator {
   lazy val dateLiteralGen: Gen[Literal] =
     for { d <- Arbitrary.arbInt.arbitrary } yield Literal.create(new Date(d), DateType)
 
-  private def yearToMillis(year: Long): Long = {
-    year * 365 * 24 * 3600 * 1000L
-  }
-
-  lazy val timestampLiteralGen: Gen[Literal] = {
-    for { millis <- Gen.choose(yearToMillis(-9999), yearToMillis(10000)) }
-      yield Literal.create(new Timestamp(millis), TimestampType)
-  }
+  lazy val timestampLiteralGen: Gen[Literal] =
+    for { t <- Arbitrary.arbLong.arbitrary } yield Literal.create(new Timestamp(t), TimestampType)
 
   lazy val calendarIntervalLiterGen: Gen[Literal] =
     for { m <- Arbitrary.arbInt.arbitrary; s <- Arbitrary.arbLong.arbitrary}
