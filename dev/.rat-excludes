@@ -118,3 +118,4 @@ announce.tmpl
 vote.tmpl
 SessionManager.java
 SessionHandler.java
+.*blacklist
