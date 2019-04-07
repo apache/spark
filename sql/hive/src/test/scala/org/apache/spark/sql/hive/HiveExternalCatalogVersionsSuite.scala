@@ -179,8 +179,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--name", "prepare testing tables",
         "--master", "local[2]",
         "--conf", "spark.ui.enabled=false",
-        "--conf", "spark.sql.hive.metastore.version=1.2.1",
-        "--conf", "spark.sql.hive.metastore.jars=maven",
         "--conf", "spark.master.rest.enabled=false",
         "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
