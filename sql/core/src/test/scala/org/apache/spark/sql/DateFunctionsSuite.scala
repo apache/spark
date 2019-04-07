@@ -19,10 +19,11 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.LocalDate
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -277,36 +278,46 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
   }
 
-  ignore("time_add") {
-    val t1 = Timestamp.valueOf("2015-07-31 23:59:59")
-    val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
-    val d1 = Date.valueOf("2015-07-31")
-    val d2 = Date.valueOf("2015-12-31")
-    val i = new CalendarInterval(2, 2000000L)
-    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
-    checkAnswer(
-      df.selectExpr(s"d + $i"),
-      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2016-02-29"))))
-    checkAnswer(
-      df.selectExpr(s"t + $i"),
-      Seq(Row(Timestamp.valueOf("2015-10-01 00:00:01")),
-        Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
+  private def instantOf(s: String): Instant = {
+    LocalDateTime.parse(s)
+      .atZone(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      .toInstant
   }
 
-  ignore("time_sub") {
-    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
-    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
-    val d1 = Date.valueOf("2015-09-30")
-    val d2 = Date.valueOf("2016-02-29")
-    val i = new CalendarInterval(2, 2000000L)
-    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
-    checkAnswer(
-      df.selectExpr(s"d - $i"),
-      Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-12-30"))))
-    checkAnswer(
-      df.selectExpr(s"t - $i"),
-      Seq(Row(Timestamp.valueOf("2015-07-31 23:59:59")),
-        Row(Timestamp.valueOf("2015-12-31 00:00:00"))))
+  test("time_add") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val t1 = instantOf("2015-07-31T23:59:59")
+      val t2 = instantOf("2015-12-31T00:00:00")
+      val d1 = LocalDate.parse("2015-07-31")
+      val d2 = LocalDate.parse("2015-12-31")
+      val i = new CalendarInterval(2, 2000000L)
+      val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+      checkAnswer(
+        df.selectExpr(s"d + $i"),
+        Seq(Row(LocalDate.parse("2015-09-30")), Row(LocalDate.parse("2016-02-29"))))
+      checkAnswer(
+        df.selectExpr(s"t + $i"),
+        Seq(Row(instantOf("2015-10-01T00:00:01")),
+          Row(instantOf("2016-02-29T00:00:02"))))
+    }
+  }
+
+  test("time_sub") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val t1 = instantOf("2015-10-01T00:00:01")
+      val t2 = instantOf("2016-02-29T00:00:02")
+      val d1 = LocalDate.parse("2015-09-30")
+      val d2 = LocalDate.parse("2016-02-29")
+      val i = new CalendarInterval(2, 2000000L)
+      val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+      checkAnswer(
+        df.selectExpr(s"d - $i"),
+        Seq(Row(LocalDate.parse("2015-07-29")), Row(LocalDate.parse("2015-12-28"))))
+      checkAnswer(
+        df.selectExpr(s"t - $i"),
+        Seq(Row(instantOf("2015-07-31T23:59:59")),
+          Row(instantOf("2015-12-29T00:00:00"))))
+    }
   }
 
   test("function add_months") {

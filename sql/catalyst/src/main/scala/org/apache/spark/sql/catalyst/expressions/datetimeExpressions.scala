@@ -965,7 +965,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
  * Adds an interval to timestamp.
  */
 case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   def this(start: Expression, interval: Expression) = this(start, interval, None)
 
@@ -978,20 +978,16 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 
   override def dataType: DataType = TimestampType
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
   override def nullSafeEval(start: Any, interval: Any): Any = {
     val itvl = interval.asInstanceOf[CalendarInterval]
     DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], itvl.months, itvl.microseconds, timeZone)
+      start.asInstanceOf[Long], itvl.months, itvl.microseconds)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds, $tz)"""
+      s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds)"""
     })
   }
 }
@@ -1077,7 +1073,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
  * Subtracts an interval from timestamp.
  */
 case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[String] = None)
-  extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes {
 
   def this(start: Expression, interval: Expression) = this(start, interval, None)
 
@@ -1090,20 +1086,16 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
 
   override def dataType: DataType = TimestampType
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
   override def nullSafeEval(start: Any, interval: Any): Any = {
     val itvl = interval.asInstanceOf[CalendarInterval]
     DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds, timeZone)
+      start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds, $tz)"""
+      s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds)"""
     })
   }
 }
