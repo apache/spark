@@ -1104,13 +1104,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val thread = new Thread {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
-        if (HiveUtils.isHive2) {
-          sql(
-            s"ADD JAR ${hiveContext.getHiveFile("hive-contrib-2.3.4.jar").getCanonicalPath()}")
-        } else {
-          sql(
-            s"ADD JAR ${hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
-        }
+        sql(
+          s"ADD JAR ${hiveContext.getHiveContribJar().getCanonicalPath}")
         try {
           sql(
             """

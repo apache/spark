@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Fractional, Numeric, Ordering}
+import scala.math.{Fractional, Numeric}
 import scala.math.Numeric.FloatAsIfIntegral
 import scala.reflect.runtime.universe.typeTag
 
@@ -38,9 +38,8 @@ class FloatType private() extends FractionalType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
-  private[sql] val ordering = new Ordering[Float] {
-    override def compare(x: Float, y: Float): Int = Utils.nanSafeCompareFloats(x, y)
-  }
+  private[sql] val ordering =
+    (x: Float, y: Float) => Utils.nanSafeCompareFloats(x, y)
   private[sql] val asIntegral = FloatAsIfIntegral
 
   /**

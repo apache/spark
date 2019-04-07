@@ -70,8 +70,16 @@ abstract class FileTable(
     val partitionSchema = fileIndex.partitionSchema
     SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
       "in the partition schema", caseSensitive)
-    PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
-      partitionSchema, caseSensitive)._1
+    val partitionNameSet: Set[String] =
+      partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
+
+    // When data and partition schemas have overlapping columns,
+    // tableSchema = dataSchema - overlapSchema + partitionSchema
+    val fields = dataSchema.fields.filterNot { field =>
+      val colName = PartitioningUtils.getColName(field, caseSensitive)
+      partitionNameSet.contains(colName)
+    } ++ partitionSchema.fields
+    StructType(fields)
   }
 
   override def capabilities(): java.util.Set[TableCapability] = FileTable.CAPABILITIES
@@ -98,6 +106,15 @@ abstract class FileTable(
    * }}}
    */
   def formatName: String
+
+  /**
+   * Returns a V1 [[FileFormat]] class of the same file data source.
+   * This is a solution for the following cases:
+   * 1. File datasource V2 implementations cause regression. Users can disable the problematic data
+   *    source via SQL configuration and fall back to FileFormat.
+   * 2. Catalog support is required, which is still under development for data source V2.
+   */
+  def fallbackFileFormat: Class[_ <: FileFormat]
 }
 
 object FileTable {

@@ -27,12 +27,11 @@ import java.util.Random;
 /**
  * Copied from
  * hadoop-common-project/hadoop-common/src/test/java/org/apache/hadoop/net/ServerSocketUtil.java
- * for Hadoop-3.1 testing
+ * for Hadoop-3.x testing
  */
 public class ServerSocketUtil {
 
-  private static final Logger LOG =
-          LoggerFactory.getLogger(ServerSocketUtil.class);
+  private static final Logger LOG = LoggerFactory.getLogger(ServerSocketUtil.class);
   private static Random rand = new Random();
 
   /**
