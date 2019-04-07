@@ -337,6 +337,22 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("auto gather stats after insert command") {
+    val table = "change_stats_insert_datasource_table"
+    val autoUpdate = true
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (i int, j string) STORED AS PARQUET")
+          // analyze to get initial stats
+          // insert into command
+          sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
+            val stats = getCatalogTable(table).stats
+            assert(stats.isDefined)
+            assert(stats.get.sizeInBytes >= 0)
+        }
+    }
+  }
+
   test("invalidation of tableRelationCache after inserts") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
