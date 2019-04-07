@@ -120,7 +120,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     Supports both equi-joins and non-equi-joins.
    *     Supports only inner like joins.
    *
-   * First, look at applicable join strategies hints:
+   * First, look at applicable join strategies hints based on the following precedence:
    *
    * 1. Use broadcast hash join if:
    *    a) it is an equi-join; and
@@ -322,7 +322,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
       // broadcast hints specified with no equi-join keys, use broadcast-nested-loop
-      case j @ logical.Join(left, right, joinType, condition, hint)
+      case logical.Join(left, right, joinType, condition, hint)
           if canBroadcastByHints(joinType, left, right, hint) =>
         val buildSide = broadcastSideByHints(joinType, left, right, hint)
         Seq(joins.BroadcastNestedLoopJoinExec(
@@ -383,7 +383,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- Without joining keys ------------------------------------------------------------
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcast
-      case j @ logical.Join(left, right, joinType, condition, _)
+      case logical.Join(left, right, joinType, condition, _)
           if canBroadcastBySizes(joinType, left, right) =>
         val buildSide = broadcastSideBySizes(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
