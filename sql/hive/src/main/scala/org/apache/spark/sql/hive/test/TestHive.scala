@@ -67,9 +67,6 @@ object TestHive
         // from false to true. We can remove it once upgrade built-in hive to 2.4.0.
         // For details, see the JIRA HIVE-12320 and HIVE-17764.
         .set("spark.hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false")
-        // 1. We should exclusion avatica-1.8.0.jar which conflict with jackson-databind-2.9.6.
-        // 2. set hive.cbo.enable to false to workaround class not found error.
-        .set("spark.hadoop.hive.cbo.enable", "false")
         // Disable ConvertToLocalRelation for better test coverage. Test cases built on
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as
@@ -123,8 +120,10 @@ class TestHiveContext(
     @transient override val sparkSession: TestHiveSparkSession)
   extends SQLContext(sparkSession) {
 
-  val HIVE_CONTRIB_JAR: String = "hive-contrib-0.13.1.jar"
-  val HIVE_HCATALOG_CORE_JAR: String = "hive-hcatalog-core-0.13.1.jar"
+  val HIVE_CONTRIB_JAR: String =
+    if (HiveUtils.isHive2) "hive-contrib-2.3.4.jar" else "hive-contrib-0.13.1.jar"
+  val HIVE_HCATALOG_CORE_JAR: String =
+    if (HiveUtils.isHive2) "hive-hcatalog-core-2.3.4.jar" else "hive-hcatalog-core-0.13.1.jar"
 
   /**
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
