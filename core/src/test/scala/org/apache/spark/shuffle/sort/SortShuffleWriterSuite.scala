@@ -67,14 +67,12 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
       shuffleBlockResolver,
       shuffleHandle,
       mapId = 1,
-      context
-    )
+      context)
     writer.write(Iterator.empty)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 1)
     val writeMetrics = context.taskMetrics().shuffleWriteMetrics
     assert(!dataFile.exists())
-    assert(dataFile.length() === writeMetrics.bytesWritten)
     assert(writeMetrics.bytesWritten === 0)
     assert(writeMetrics.recordsWritten === 0)
   }
@@ -86,8 +84,7 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
       shuffleBlockResolver,
       shuffleHandle,
       mapId = 2,
-      context
-    )
+      context)
     writer.write(records.toIterator)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 2)
