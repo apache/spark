@@ -413,7 +413,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
       topic: String,
       numPartitions: Int,
       servers: Seq[KafkaServer]) {
-    eventually(timeout(1.minute), interval(200.millis)) {
+    eventually(timeout(1.minute), interval(200.milliseconds)) {
       try {
         verifyTopicDeletion(topic, numPartitions, servers)
       } catch {

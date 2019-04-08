@@ -179,7 +179,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-timeout")
     try {
       val e = intercept[RpcTimeoutException] {
-        rpcEndpointRef.askSync[String]("hello", new RpcTimeout(1.millis, shortProp))
+        rpcEndpointRef.askSync[String]("hello", new RpcTimeout(1.millisecond, shortProp))
       }
       // The SparkException cause should be a RpcTimeoutException with message indicating the
       // controlling timeout property
@@ -657,7 +657,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       })
       val rpcEndpointRef = remoteEnv.setupEndpointRef(localEnv.address, "send-authentication")
       rpcEndpointRef.send("hello")
-      eventually(timeout(5.seconds), interval(10.millis)) {
+      eventually(timeout(5.seconds), interval(10.milliseconds)) {
         assert("hello" === message)
       }
     } finally {

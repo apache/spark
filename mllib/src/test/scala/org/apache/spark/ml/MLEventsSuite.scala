@@ -247,10 +247,10 @@ class MLEventsSuite
       eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
           case e: LoadInstanceStart[_]
-              if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+              if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.path.endsWith("writableStage"))
           case e: LoadInstanceEnd[_]
-              if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+              if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.instance.isInstanceOf[PipelineStage])
           case e: LoadInstanceStart[_] =>
             assert(e.reader === pipelineReader)
@@ -306,15 +306,15 @@ class MLEventsSuite
       eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
           case e: LoadInstanceStart[_]
-            if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+            if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.path.endsWith("writableStage"))
           case e: LoadInstanceEnd[_]
-            if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+            if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.instance.isInstanceOf[PipelineStage])
           case e: LoadInstanceStart[_] =>
             assert(e.reader === pipelineModelReader)
           case e: LoadInstanceEnd[_] =>
-            assert(e.instance.asInstanceOf[Pipeline].uid === pipelineModel.uid)
+            assert(e.instance.asInstanceOf[PipelineModel].uid === pipelineModel.uid)
           case e => fail(s"Unexpected event thrown: $e")
         }
       }
