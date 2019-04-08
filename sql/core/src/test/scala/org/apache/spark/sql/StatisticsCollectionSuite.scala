@@ -342,7 +342,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     val autoUpdate = true
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
-          sql(s"CREATE TABLE $table (i int, j string) STORED AS PARQUET")
+          sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
           // analyze to get initial stats
           // insert into command
           sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
