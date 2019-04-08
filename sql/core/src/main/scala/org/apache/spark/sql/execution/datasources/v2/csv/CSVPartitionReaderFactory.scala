@@ -33,24 +33,21 @@ import org.apache.spark.util.SerializableConfiguration
  * @param sqlConf SQL configuration.
  * @param broadcastedConf Broadcasted serializable Hadoop Configuration.
  * @param dataSchema Schema of CSV files.
+ * @param readDataSchema Required data schema in the batch scan.
  * @param partitionSchema Schema of partitions.
- * @param readSchema Required schema in the batch scan.
  * @param parsedOptions Options for parsing CSV files.
  */
 case class CSVPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     dataSchema: StructType,
+    readDataSchema: StructType,
     partitionSchema: StructType,
-    readSchema: StructType,
     parsedOptions: CSVOptions) extends FilePartitionReaderFactory {
   private val columnPruning = sqlConf.csvColumnPruning
-  private val readDataSchema =
-    getReadDataSchema(readSchema, partitionSchema, sqlConf.caseSensitiveAnalysis)
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-
     val parser = new UnivocityParser(
       StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
       StructType(readDataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
