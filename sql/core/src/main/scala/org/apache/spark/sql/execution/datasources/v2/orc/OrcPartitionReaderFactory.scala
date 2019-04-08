@@ -46,30 +46,30 @@ import org.apache.spark.util.SerializableConfiguration
  * @param sqlConf SQL configuration.
  * @param broadcastedConf Broadcast serializable Hadoop Configuration.
  * @param dataSchema Schema of orc files.
+ * @param readDataSchema Required data schema in the batch scan.
  * @param partitionSchema Schema of partitions.
- * @param readSchema Required schema in the batch scan.
  */
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     dataSchema: StructType,
-    partitionSchema: StructType,
-    readSchema: StructType) extends FilePartitionReaderFactory {
+    readDataSchema: StructType,
+    partitionSchema: StructType) extends FilePartitionReaderFactory {
+  private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
-      readSchema.length <= sqlConf.wholeStageMaxNumFields &&
-      readSchema.forall(_.dataType.isInstanceOf[AtomicType])
+      resultSchema.length <= sqlConf.wholeStageMaxNumFields &&
+      resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
 
-    val readDataSchema = getReadDataSchema(readSchema, partitionSchema, isCaseSensitive)
-    val readDataSchemaString = OrcUtils.orcTypeDescriptionString(readDataSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, readDataSchemaString)
+    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
     val filePath = new Path(new URI(file.filePath))
@@ -113,8 +113,8 @@ case class OrcPartitionReaderFactory(
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
     val conf = broadcastedConf.value.value
 
-    val readSchemaString = OrcUtils.orcTypeDescriptionString(readSchema)
-    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, readSchemaString)
+    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
 
     val filePath = new Path(new URI(file.filePath))
@@ -124,13 +124,13 @@ case class OrcPartitionReaderFactory(
     val reader = OrcFile.createReader(filePath, readerOptions)
 
     val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readSchema, reader, conf)
+      isCaseSensitive, dataSchema, readDataSchema, reader, conf)
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader
     } else {
-      val requestedColIds = requestedColIdsOrEmptyFile.get
-      assert(requestedColIds.length == readSchema.length,
+      val requestedColIds = requestedColIdsOrEmptyFile.get ++ Array.fill(partitionSchema.length)(-1)
+      assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")
       val taskConf = new Configuration(conf)
 
@@ -140,15 +140,12 @@ case class OrcPartitionReaderFactory(
 
       val batchReader = new OrcColumnarBatchReader(capacity)
       batchReader.initialize(fileSplit, taskAttemptContext)
-      val columnNameMap = partitionSchema.fields.map(
-        PartitioningUtils.getColName(_, isCaseSensitive)).zipWithIndex.toMap
-      val requestedPartitionColIds = readSchema.fields.map { field =>
-        columnNameMap.getOrElse(PartitioningUtils.getColName(field, isCaseSensitive), -1)
-      }
+      val requestedPartitionColIds =
+        Array.fill(readDataSchema.length)(-1) ++ Range(0, partitionSchema.length)
 
       batchReader.initBatch(
-        TypeDescription.fromString(readSchemaString),
-        readSchema.fields,
+        TypeDescription.fromString(resultSchemaString),
+        resultSchema.fields,
         requestedColIds,
         requestedPartitionColIds,
         file.partitionValues)

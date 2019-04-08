@@ -46,19 +46,6 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
   def buildColumnarReader(partitionedFile: PartitionedFile): PartitionReader[ColumnarBatch] = {
     throw new UnsupportedOperationException("Cannot create columnar reader.")
   }
-
-  protected def getReadDataSchema(
-      readSchema: StructType,
-      partitionSchema: StructType,
-      isCaseSensitive: Boolean): StructType = {
-    val partitionNameSet =
-      partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
-    val fields = readSchema.fields.filterNot { field =>
-      partitionNameSet.contains(PartitioningUtils.getColName(field, isCaseSensitive))
-    }
-
-    StructType(fields)
-  }
 }
 
 // A compound class for combining file and its corresponding reader.
