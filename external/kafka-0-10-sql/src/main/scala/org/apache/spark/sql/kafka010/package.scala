@@ -28,17 +28,18 @@ package object kafka010 {   // scalastyle:ignore
 
   private[spark] val PRODUCER_CACHE_TIMEOUT =
     ConfigBuilder("spark.kafka.producer.cache.timeout")
-      .doc("The time to remove the producer when the producer is not used.")
+      .doc("expire time to remove the unused producers.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(10))
 
   private[spark] val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.sql.kafkaConsumerCache.capacity")
-      .doc("The size of LinkedHashMap for caching kafkaConsumers.")
+      .doc("the cache size of consumers.")
       .intConf
       .createWithDefault(64)
 
   val MAX_OFFSET_PER_TRIGGER = "maxOffsetsPerTrigger"
+  val MIN_PARTITIONS = "minPartitions"
   val FETCH_OFFSET_NUM_RETRY = "fetchOffset.numRetries"
   val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchOffset.retryIntervalMs"
   val CONSUMER_POLL_TIMEOUT = "kafkaConsumer.pollTimeoutMs"
