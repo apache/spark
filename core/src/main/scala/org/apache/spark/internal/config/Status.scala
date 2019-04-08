@@ -29,13 +29,9 @@ private[spark] object Status {
     .timeConf(TimeUnit.NANOSECONDS)
     .createWithDefaultString("100ms")
 
-  val LIVE_ENTITY_UPDATE_STALENESS_LIMIT = ConfigBuilder("spark.ui.liveUpdate.stalenessLimit")
-    .internal()
-    .doc(
-      """A time limit before we force to flush all live entities. When the last flush doesn't past
-        |this limit, UI will not trigger a heavy flush to sync the states since it may slow down
-        |Spark events processing significantly. Otherwise, UI will try to flush as soon as possible.
-      """.stripMargin)
+  val LIVE_ENTITY_UPDATE_MIN_FLUSH_PERIOD = ConfigBuilder("spark.ui.liveUpdate.minFlushPeriod")
+    .doc("Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when " +
+      "incoming task events are not fired frequently.")
     .timeConf(TimeUnit.NANOSECONDS)
     .createWithDefaultString("1s")
 

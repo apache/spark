@@ -59,12 +59,10 @@ private[spark] class AppStatusListener(
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
 
   /**
-   * A time limit before we force to flush all live entities. When the last flush doesn't past
-   * this limit, UI will not trigger a heavy flush to sync the states since it may slow down Spark
-   * events processing significantly. Otherwise, UI will try to flush when receiving the next
-   * executor heartbeat.
+   * Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
+   * task events are not fired frequently.
    */
-  private val liveUpdateStalenessLimit = conf.get(LIVE_ENTITY_UPDATE_STALENESS_LIMIT)
+  private val liveUpdateMinFlushPeriod = conf.get(LIVE_ENTITY_UPDATE_MIN_FLUSH_PERIOD)
 
   private val maxTasksPerStage = conf.get(MAX_RETAINED_TASKS_PER_STAGE)
   private val maxGraphRootNodes = conf.get(MAX_RETAINED_ROOT_NODES)
@@ -845,8 +843,8 @@ private[spark] class AppStatusListener(
     }
     // Flush updates if necessary. Executor heartbeat is an event that happens periodically. Flush
     // here to ensure the staleness of Spark UI doesn't last more than
-    // `max(heartbeat interval, liveUpdateStalenessLimit)`.
-    if (now - lastFlushTimeNs > liveUpdateStalenessLimit) {
+    // `max(heartbeat interval, liveUpdateMinFlushPeriod)`.
+    if (now - lastFlushTimeNs > liveUpdateMinFlushPeriod) {
       flush(maybeUpdate(_, now))
       // Re-get the current system time because `flush` may be slow and `now` is stale.
       lastFlushTimeNs = System.nanoTime()
