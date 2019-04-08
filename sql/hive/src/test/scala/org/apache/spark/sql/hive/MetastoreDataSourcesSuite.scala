@@ -930,7 +930,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }
       assert(e.getMessage.contains(
         "The format of the existing table default.appendTextToJson is `JsonFileFormat`. " +
-        "It doesn't match the specified format `TextFileFormat`"))
+        "It doesn't match the specified format"))
     }
   }
 
