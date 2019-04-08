@@ -70,5 +70,4 @@ case class TextPartitionReaderFactory(
     new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
       partitionSchema, file.partitionValues)
   }
-
 }

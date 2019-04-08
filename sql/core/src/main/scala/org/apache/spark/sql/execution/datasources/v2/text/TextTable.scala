@@ -22,7 +22,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
-import org.apache.spark.sql.types.{DataType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class TextTable(
@@ -37,7 +37,7 @@ case class TextTable(
     TextScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    Some(new StructType().add("value", StringType))
+    Some(StructType(Seq(StructField("value", StringType))))
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
     new TextWriteBuilder(options, paths, formatName, supportsDataType)
