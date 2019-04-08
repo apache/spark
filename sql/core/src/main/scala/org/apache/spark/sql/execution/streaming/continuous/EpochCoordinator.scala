@@ -117,7 +117,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
 private[continuous] class EpochCoordinator(
     writeSupport: StreamingWrite,
     stream: ContinuousStream,
-    queryExecution: ContinuousExecution,
+    query: ContinuousExecution,
     startEpoch: Long,
     session: SparkSession,
     override val rpcEnv: RpcEnv)
@@ -126,8 +126,8 @@ private[continuous] class EpochCoordinator(
   private val epochBacklogQueueSize =
     session.sqlContext.conf.continuousStreamingEpochBacklogQueueSize
 
-  private val epochMsgBacklogQueueSize =
-    session.sqlContext.conf.continuousStreamingEpochMsgBacklogQueueSize
+  private val lateEpochsThreshold =
+    session.sqlContext.conf.continuousStreamingLateEpochThreshold
 
   private var queryWritesStopped: Boolean = false
 
@@ -205,7 +205,7 @@ private[continuous] class EpochCoordinator(
     // Sequencing is important here. We must commit to the writer before recording the commit
     // in the query, or we will end up dropping the commit if we restart in the middle.
     writeSupport.commit(epoch, messages.toArray)
-    queryExecution.commit(epoch)
+    query.commit(epoch)
   }
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -227,23 +227,23 @@ private[continuous] class EpochCoordinator(
         partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
       if (thisEpochOffsets.size == numReaderPartitions) {
         logDebug(s"Epoch $epoch has offsets reported from all partitions: $thisEpochOffsets")
-        queryExecution.addOffset(epoch, stream, thisEpochOffsets.toSeq)
+        query.addOffset(epoch, stream, thisEpochOffsets.toSeq)
         resolveCommitsAtEpoch(epoch)
       }
       checkProcessingQueueBoundaries()
   }
 
   private def checkProcessingQueueBoundaries() = {
-    if (partitionOffsets.size > epochMsgBacklogQueueSize) {
-      queryExecution.stopInNewThread(new IllegalStateException("Size of the partition offset " +
-        "queue has exceeded its maximum"))
+    if (partitionOffsets.size > epochBacklogQueueSize) {
+      query.stopInNewThread(new IllegalStateException("Size of the partition offset queue has " +
+        "exceeded its maximum"))
     }
-    if (partitionCommits.size > epochMsgBacklogQueueSize) {
-      queryExecution.stopInNewThread(new IllegalStateException("Size of the partition commit " +
-        "queue has exceeded its maximum"))
+    if (partitionCommits.size > epochBacklogQueueSize) {
+      query.stopInNewThread(new IllegalStateException("Size of the partition commit queue has " +
+        "exceeded its maximum"))
     }
-    if (epochsWaitingToBeCommitted.size > epochBacklogQueueSize) {
-      queryExecution.stopInNewThread(new IllegalStateException(s"Epoch ${lastCommittedEpoch + 1} " +
+    if (epochsWaitingToBeCommitted.size > lateEpochsThreshold) {
+      query.stopInNewThread(new IllegalStateException(s"Epoch ${lastCommittedEpoch + 1} " +
         s"is late for more than ${epochsWaitingToBeCommitted.max - lastCommittedEpoch} epochs."))
     }
   }
