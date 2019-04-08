@@ -49,8 +49,7 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
-  usingVectorizedReader: Boolean)
+private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone], isMR: Boolean)
     extends ReadSupport[UnsafeRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
@@ -58,7 +57,7 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
     // used in the vectorized reader, where we get the convertTz value directly, and the value here
     // is ignored.
-    this(None, usingVectorizedReader = true)
+    this(None, isMR = false)
   }
 
   /**
@@ -81,34 +80,20 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
       catalystRequestedSchema, caseSensitive)
 
-    // As a part of schema clipping, we add fields in catalystRequestedSchema which are missing
-    // from parquetFileSchema to parquetClippedSchema. However, nested schema pruning requires
-    // we ignore unrequested field data when reading from a Parquet file. Therefore we pass two
-    // schema to ParquetRecordMaterializer: the schema of the file data we want to read
-    // (parquetRequestedSchema), and the schema of the rows we want to return
-    // (catalystRequestedSchema). The reader is responsible for reconciling the differences between
-    // the two.
-    //
-    // Aside from checking whether schema pruning is enabled (schemaPruningEnabled), there
-    // is an additional complication to constructing parquetRequestedSchema. The manner in which
-    // Spark's two Parquet readers reconcile the differences between parquetRequestedSchema and
-    // catalystRequestedSchema differ. Spark's vectorized reader does not (currently) support
-    // reading Parquet files with complex types in their schema. Further, it assumes that
-    // parquetRequestedSchema includes all fields requested in catalystRequestedSchema. It includes
-    // logic in its read path to skip fields in parquetRequestedSchema which are not present in the
-    // file.
-    //
-    // Spark's parquet-mr based reader supports reading Parquet files of any kind of complex
-    // schema, and it supports nested schema pruning as well. Unlike the vectorized reader, the
-    // parquet-mr reader requires that parquetRequestedSchema include only those fields present in
-    // the underlying parquetFileSchema. Therefore, in the case where we use the parquet-mr reader
-    // we intersect the parquetClippedSchema with the parquetFileSchema to construct the
-    // parquetRequestedSchema set in the ReadContext.
-    val parquetRequestedSchema = if (schemaPruningEnabled && !usingVectorizedReader) {
+    // We pass two schema to ParquetRecordMaterializer:
+    // - parquetRequestedSchema: the schema of the file data we want to read
+    // - catalystRequestedSchema: the schema of the rows we want to return
+    // The reader is responsible for reconciling the differences between the two.
+    val parquetRequestedSchema = if (isMR && schemaPruningEnabled) {
+      // Parquet-MR reader requires that parquetRequestedSchema
+      // include only those fields present in the underlying parquetFileSchema. Therefore,
+      // we intersect the parquetClippedSchema with the parquetFileSchema
       ParquetReadSupport.intersectParquetGroups(parquetClippedSchema, parquetFileSchema)
         .map(groupType => new MessageType(groupType.getName, groupType.getFields))
         .getOrElse(ParquetSchemaConverter.EMPTY_MESSAGE)
     } else {
+      // Spark's vectorized reader only support atomic types currently. It also skip fields
+      // in parquetRequestedSchema which are not present in the file.
       parquetClippedSchema
     }
     log.debug {
