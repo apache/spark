@@ -344,7 +344,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("prune results by current_date, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
-    val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
