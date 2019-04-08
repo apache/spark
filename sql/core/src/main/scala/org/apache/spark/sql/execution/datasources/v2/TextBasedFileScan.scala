@@ -29,9 +29,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 abstract class TextBasedFileScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
-    readSchema: StructType,
+    readDataSchema: StructType,
+    readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScan(sparkSession, fileIndex, readSchema, options) {
+  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
   private var codecFactory: CompressionCodecFactory = _
 
   override def isSplitable(path: Path): Boolean = {
