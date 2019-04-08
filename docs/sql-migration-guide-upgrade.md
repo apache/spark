@@ -124,7 +124,7 @@ license: |
 
   - Since Spark 3.0, `TIMESTAMP` literals are converted to strings using the SQL config `spark.sql.session.timeZone`, and `DATE` literals are formatted using the UTC time zone. In Spark version 2.4 and earlier, both conversions use the default time zone of the Java virtual machine.
 
-  - In Spark version 2.4 and earlier, the configurations of `SparkContext` are prioritized over its parent `SparkSession` when cloning it via `cloneSession()` if the same configurations are found in both `SparkContext` and the parent `SparkSession`. Since Spark 3.0, the configurations of a parent `SparkSession` have a higher priority.
+  - In Spark version 2.4, when a spark session is created via `cloneSession()`, the newly created spark session inherits its configuration from its parent `SparkContext` even though the same configuration may exist with a different value in its parent spark session. Since Spark 3.0, the configurations of a parent `SparkSession` have a higher precedence over the parent `SparkContext`.
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
