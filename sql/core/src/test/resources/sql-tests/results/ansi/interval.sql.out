@@ -120,7 +120,7 @@ from interval_arithmetic
 -- !query 9 schema
 struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - interval 2 years 2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - interval -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 2 years 2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + (- interval 2 years 2 months) AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 2 years 2 months AS DATE):date>
 -- !query 9 output
-2012-01-01	2009-11-01	2014-03-01	2014-03-01	2009-11-01	2009-11-01	2014-03-01
+2012-01-01	2009-10-31	2014-03-01	2014-03-01	2009-10-31	2009-10-31	2014-03-01
 
 
 -- !query 10
@@ -136,7 +136,7 @@ from interval_arithmetic
 -- !query 10 schema
 struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - interval 2 years 2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - interval -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 2 years 2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + (- interval 2 years 2 months) AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 2 years 2 months AS DATE):date>
 -- !query 10 output
-2012-01-01	2009-11-01	2014-03-01	2014-03-01	2009-11-01	2009-11-01	2014-03-01
+2012-01-01	2009-10-31	2014-03-01	2014-03-01	2009-10-31	2009-10-31	2014-03-01
 
 
 -- !query 11
@@ -152,7 +152,7 @@ from interval_arithmetic
 -- !query 11 schema
 struct<tsval:timestamp,CAST(tsval - interval 2 years 2 months AS TIMESTAMP):timestamp,CAST(tsval - interval -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + interval 2 years 2 months AS TIMESTAMP):timestamp,CAST(tsval + interval -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + (- interval 2 years 2 months) AS TIMESTAMP):timestamp,CAST(tsval + interval 2 years 2 months AS TIMESTAMP):timestamp>
 -- !query 11 output
-2012-01-01 00:00:00	2009-11-01 01:00:00	2014-03-01 00:00:00	2014-03-01 00:00:00	2009-11-01 01:00:00	2009-11-01 01:00:00	2014-03-01 00:00:00
+2012-01-01 00:00:00	2009-11-01 00:00:00	2014-03-01 00:00:00	2014-03-01 00:00:00	2009-11-01 00:00:00	2009-11-01 00:00:00	2014-03-01 00:00:00
 
 
 -- !query 12
@@ -168,7 +168,7 @@ from interval_arithmetic
 -- !query 12 schema
 struct<tsval:timestamp,CAST(tsval - interval 2 years 2 months AS TIMESTAMP):timestamp,CAST(tsval - interval -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + interval 2 years 2 months AS TIMESTAMP):timestamp,CAST(tsval + interval -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + (- interval 2 years 2 months) AS TIMESTAMP):timestamp,CAST(tsval + interval 2 years 2 months AS TIMESTAMP):timestamp>
 -- !query 12 output
-2012-01-01 00:00:00	2009-11-01 01:00:00	2014-03-01 00:00:00	2014-03-01 00:00:00	2009-11-01 01:00:00	2009-11-01 01:00:00	2014-03-01 00:00:00
+2012-01-01 00:00:00	2009-11-01 00:00:00	2014-03-01 00:00:00	2014-03-01 00:00:00	2009-11-01 00:00:00	2009-11-01 00:00:00	2014-03-01 00:00:00
 
 
 -- !query 13

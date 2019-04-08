@@ -259,11 +259,11 @@ true
 
 
 -- !query 32
-select to_date('2017-03-01') = to_timestamp('2017-03-01 00:00:00')
+select to_date('2017-03-01') = to_timestamp('2017-03-01T00:00:00Z')
 -- !query 32 schema
-struct<(CAST(to_date('2017-03-01') AS TIMESTAMP) = to_timestamp('2017-03-01 00:00:00')):boolean>
+struct<(CAST(to_date('2017-03-01') AS TIMESTAMP) = to_timestamp('2017-03-01T00:00:00Z')):boolean>
 -- !query 32 output
-false
+true
 
 
 -- !query 33
