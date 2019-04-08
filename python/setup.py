@@ -103,7 +103,8 @@ if (in_spark):
         sys.exit(-1)
 
 # If you are changing the versions here, please also change ./python/pyspark/sql/utils.py
-# For Arrow, you should also check ./pom.xml and ensure the Java version is binary compatible.
+# For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
+# binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 _minimum_pandas_version = "0.19.2"
 _minimum_pyarrow_version = "0.12.1"
 
