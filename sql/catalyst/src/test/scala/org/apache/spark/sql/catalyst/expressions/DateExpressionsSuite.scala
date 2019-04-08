@@ -358,7 +358,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, IntegerType)
   }
 
-  ignore("time_add") {
+  test("time_add") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
       val timeZoneId = Option(tz.getID)
@@ -396,7 +396,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  ignore("time_sub") {
+  test("time_sub") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
       val timeZoneId = Option(tz.getID)

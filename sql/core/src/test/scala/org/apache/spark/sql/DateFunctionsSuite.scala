@@ -19,11 +19,10 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.{Instant, LocalDate}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -278,46 +277,46 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
   }
 
-  private def instantOf(s: String): Instant = {
-    LocalDateTime.parse(s)
-      .atZone(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      .toInstant
-  }
-
   test("time_add") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      val t1 = instantOf("2015-07-31T23:59:59")
-      val t2 = instantOf("2015-12-31T00:00:00")
-      val d1 = LocalDate.parse("2015-07-31")
-      val d2 = LocalDate.parse("2015-12-31")
-      val i = new CalendarInterval(2, 2000000L)
-      val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+    val t1 = Timestamp.valueOf("2015-07-31 23:59:59")
+    val t2 = Timestamp.valueOf("2015-12-31 00:00:00")
+    val d1 = Date.valueOf("2015-07-31")
+    val d2 = Date.valueOf("2015-12-31")
+    val i = new CalendarInterval(2, 2000000L)
+    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+    // `time_add` only applies to timestamp type, so we need to cast date to timestamp first.
+    // Date type in Spark is at UTC, while timestamp is at session local timezone. To make the test
+    // result deterministic, here we set session local timezone to UTC.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       checkAnswer(
         df.selectExpr(s"d + $i"),
-        Seq(Row(LocalDate.parse("2015-09-30")), Row(LocalDate.parse("2016-02-29"))))
-      checkAnswer(
-        df.selectExpr(s"t + $i"),
-        Seq(Row(instantOf("2015-10-01T00:00:01")),
-          Row(instantOf("2016-02-29T00:00:02"))))
+        Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2016-02-29"))))
     }
+    checkAnswer(
+      df.selectExpr(s"t + $i"),
+      Seq(Row(Timestamp.valueOf("2015-10-01 00:00:01")),
+        Row(Timestamp.valueOf("2016-02-29 00:00:02"))))
   }
 
   test("time_sub") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      val t1 = instantOf("2015-10-01T00:00:01")
-      val t2 = instantOf("2016-02-29T00:00:02")
-      val d1 = LocalDate.parse("2015-09-30")
-      val d2 = LocalDate.parse("2016-02-29")
-      val i = new CalendarInterval(2, 2000000L)
-      val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
+    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
+    val d1 = Date.valueOf("2015-09-30")
+    val d2 = Date.valueOf("2016-02-29")
+    val i = new CalendarInterval(2, 2000000L)
+    val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
+    // `time_sub` only applies to timestamp type, so we need to cast date to timestamp first.
+    // Date type in Spark is at UTC, while timestamp is at session local timezone. To make the test
+    // result deterministic, here we set session local timezone to UTC.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       checkAnswer(
         df.selectExpr(s"d - $i"),
-        Seq(Row(LocalDate.parse("2015-07-29")), Row(LocalDate.parse("2015-12-28"))))
-      checkAnswer(
-        df.selectExpr(s"t - $i"),
-        Seq(Row(instantOf("2015-07-31T23:59:59")),
-          Row(instantOf("2015-12-29T00:00:00"))))
+        Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-12-30"))))
     }
+    checkAnswer(
+      df.selectExpr(s"t - $i"),
+      Seq(Row(Timestamp.valueOf("2015-07-31 23:59:59")),
+        Row(Timestamp.valueOf("2015-12-31 00:00:00"))))
   }
 
   test("function add_months") {
@@ -332,22 +331,31 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-01-31"))))
   }
 
-  ignore("function months_between") {
-    val d1 = Date.valueOf("2015-07-31")
-    val d2 = Date.valueOf("2015-02-16")
-    val t1 = Timestamp.valueOf("2014-09-30 23:30:00")
-    val t2 = Timestamp.valueOf("2015-09-16 12:00:00")
-    val s1 = "2014-09-15 11:30:00"
-    val s2 = "2015-10-01 00:00:00"
-    val df = Seq((t1, d1, s1), (t2, d2, s2)).toDF("t", "d", "s")
-    checkAnswer(df.select(months_between(col("t"), col("d"))), Seq(Row(-10.0), Row(7.0)))
-    checkAnswer(df.selectExpr("months_between(t, s)"), Seq(Row(0.5), Row(-0.5)))
-    checkAnswer(df.selectExpr("months_between(t, s, true)"), Seq(Row(0.5), Row(-0.5)))
-    Seq(true, false).foreach { roundOff =>
-      checkAnswer(df.select(months_between(col("t"), col("d"), roundOff)),
+  test("function months_between") {
+    val d1 = LocalDate.parse("2015-07-31")
+    val d2 = LocalDate.parse("2015-02-16")
+    val t1 = Instant.parse("2014-09-30T23:30:00Z")
+    val t2 = Instant.parse("2015-09-16T12:00:00Z")
+    val s1 = "2014-09-15T11:30:00Z"
+    val s2 = "2015-10-01T00:00:00Z"
+    // Spark stores timestamp as seconds from UTC epoch internally, and `month_between` replies on
+    // the session local timezone. To make the test result deterministic, here we pick UTC as
+    // session local timezone.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val df = Seq((t1, d1, s1), (t2, d2, s2)).toDF("t", "d", "s")
+      checkAnswer(
+        df.select(months_between(col("t"), col("d"))),
         Seq(Row(-10.0), Row(7.0)))
-      checkAnswer(df.withColumn("r", lit(false)).selectExpr("months_between(t, s, r)"),
-        Seq(Row(0.5), Row(-0.5)))
+      checkAnswer(df.selectExpr("months_between(t, s)"), Seq(Row(0.5), Row(-0.5)))
+      checkAnswer(df.selectExpr("months_between(t, s, true)"), Seq(Row(0.5), Row(-0.5)))
+      Seq(true, false).foreach { roundOff =>
+        checkAnswer(
+          df.select(months_between(col("t"), col("d"), roundOff)),
+          Seq(Row(-10.0), Row(7.0)))
+        checkAnswer(
+          df.withColumn("r", lit(false)).selectExpr("months_between(t, s, r)"),
+          Seq(Row(0.5), Row(-0.5)))
+      }
     }
   }
 
@@ -373,74 +381,95 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
   }
 
-  ignore("function to_date") {
-    val d1 = Date.valueOf("2015-07-22")
-    val d2 = Date.valueOf("2015-07-01")
-    val d3 = Date.valueOf("2014-12-31")
-    val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
-    val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
-    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
-    val s1 = "2015-07-22 10:00:00"
+  test("function to_date") {
+    val d1 = LocalDate.parse("2015-07-22")
+    val d2 = LocalDate.parse("2015-07-01")
+    val d3 = LocalDate.parse("2014-12-31")
+    val t1 = Instant.parse("2015-07-22T10:00:00Z")
+    val t2 = Instant.parse("2014-12-31T23:59:59Z")
+    val t3 = Instant.parse("2014-12-31T23:59:59Z")
+    val s1 = "2015-07-22T10:00:00Z"
     val s2 = "2014-12-31"
     val s3 = "2014-31-12"
     val df = Seq((d1, t1, s1), (d2, t2, s2), (d3, t3, s3)).toDF("d", "t", "s")
 
-    checkAnswer(
-      df.select(to_date(col("t"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
-        Row(Date.valueOf("2014-12-31"))))
-    checkAnswer(
-      df.select(to_date(col("d"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
-        Row(Date.valueOf("2014-12-31"))))
-    checkAnswer(
-      df.select(to_date(col("s"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      checkAnswer(
+        df.select(to_date(col("t"))),
+        Seq(
+          Row(LocalDate.parse("2015-07-22")),
+          Row(LocalDate.parse("2014-12-31")),
+          Row(LocalDate.parse("2014-12-31"))))
+      checkAnswer(
+        df.select(to_date(col("d"))),
+        Seq(
+          Row(LocalDate.parse("2015-07-22")),
+          Row(LocalDate.parse("2015-07-01")),
+          Row(LocalDate.parse("2014-12-31"))))
+      checkAnswer(
+        df.select(to_date(col("s"))),
+        Seq(
+          Row(LocalDate.parse("2015-07-22")),
+          Row(LocalDate.parse("2014-12-31")),
+          Row(null)))
 
-    checkAnswer(
-      df.selectExpr("to_date(t)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
-        Row(Date.valueOf("2014-12-31"))))
-    checkAnswer(
-      df.selectExpr("to_date(d)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
-        Row(Date.valueOf("2014-12-31"))))
-    checkAnswer(
-      df.selectExpr("to_date(s)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
+      checkAnswer(
+        df.selectExpr("to_date(t)"),
+        Seq(
+          Row(LocalDate.parse("2015-07-22")),
+          Row(LocalDate.parse("2014-12-31")),
+          Row(LocalDate.parse("2014-12-31"))))
+      checkAnswer(
+        df.selectExpr("to_date(d)"),
+        Seq(
+          Row(LocalDate.parse("2015-07-22")),
+          Row(LocalDate.parse("2015-07-01")),
+          Row(LocalDate.parse("2014-12-31"))))
+      checkAnswer(
+        df.selectExpr("to_date(s)"),
+        Seq(
+          Row(LocalDate.parse("2015-07-22")),
+          Row(LocalDate.parse("2014-12-31")),
+          Row(null)))
 
-    // now with format
-    checkAnswer(
-      df.select(to_date(col("t"), "yyyy-MM-dd")),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
-        Row(Date.valueOf("2014-12-31"))))
-    checkAnswer(
-      df.select(to_date(col("d"), "yyyy-MM-dd")),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
-        Row(Date.valueOf("2014-12-31"))))
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-MM-dd")),
-      Seq(Row(null), Row(Date.valueOf("2014-12-31")), Row(null)))
+      // now with format
+      checkAnswer(
+        df.select(to_date(col("t"), "yyyy-MM-dd")),
+        Seq(
+          Row(LocalDate.parse("2015-07-22")),
+          Row(LocalDate.parse("2014-12-31")),
+          Row(LocalDate.parse("2014-12-31"))))
+      checkAnswer(
+        df.select(to_date(col("d"), "yyyy-MM-dd")),
+        Seq(
+          Row(LocalDate.parse("2015-07-22")),
+          Row(LocalDate.parse("2015-07-01")),
+          Row(LocalDate.parse("2014-12-31"))))
+      checkAnswer(
+        df.select(to_date(col("s"), "yyyy-MM-dd")),
+        Seq(Row(null), Row(LocalDate.parse("2014-12-31")), Row(null)))
 
-    // now switch format
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-dd-MM")),
-      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+      // now switch format
+      checkAnswer(
+        df.select(to_date(col("s"), "yyyy-dd-MM")),
+        Seq(Row(null), Row(null), Row(LocalDate.parse("2014-12-31"))))
 
-    // invalid format
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-hh-MM")),
-      Seq(Row(null), Row(null), Row(null)))
-    checkAnswer(
-      df.select(to_date(col("s"), "yyyy-dd-aa")),
-      Seq(Row(null), Row(null), Row(null)))
+      // invalid format
+      checkAnswer(
+        df.select(to_date(col("s"), "yyyy-hh-MM")),
+        Seq(Row(null), Row(null), Row(null)))
+      checkAnswer(
+        df.select(to_date(col("s"), "yyyy-dd-aa")),
+        Seq(Row(null), Row(null), Row(null)))
 
-    // february
-    val x1 = "2016-02-29"
-    val x2 = "2017-02-29"
-    val df1 = Seq(x1, x2).toDF("x")
-    checkAnswer(
-      df1.select(to_date(col("x"))), Row(Date.valueOf("2016-02-29")) :: Row(null) :: Nil)
+      // february
+      val x1 = "2016-02-29"
+      val x2 = "2017-02-29"
+      val df1 = Seq(x1, x2).toDF("x")
+      checkAnswer(
+        df1.select(to_date(col("x"))),
+        Row(LocalDate.parse("2016-02-29")) :: Row(null) :: Nil)
+    }
   }
 
   test("function trunc") {

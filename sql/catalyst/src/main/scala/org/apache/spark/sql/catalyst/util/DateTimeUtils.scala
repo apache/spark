@@ -582,17 +582,6 @@ object DateTimeUtils {
       microseconds
   }
 
-  def timestampAddInterval(
-      start: SQLTimestamp,
-      months: Int,
-      microseconds: Long): SQLTimestamp = {
-    val newInstant = microsToInstant(start).atZone(ZoneOffset.UTC)
-      .plusMonths(months)
-      .plusNanos(MICROSECONDS.toNanos(microseconds))
-      .toInstant
-    instantToMicros(newInstant)
-  }
-
   /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
    * microseconds since 1.1.1970. If time1 is later than time2, the result is positive.

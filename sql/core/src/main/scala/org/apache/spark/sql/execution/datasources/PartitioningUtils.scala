@@ -613,7 +613,15 @@ object PartitioningUtils {
     val desiredType = litTypes.reduce(findWiderTypeForPartitionColumn)
 
     literals.map { case l @ Literal(_, dataType) =>
-      Literal.create(Cast(l, desiredType, Some(zoneId.getId)).eval(), desiredType)
+      // `string -> date -> timestamp` is different from `string -> timestamp`, because in Spark
+      // date is at UTC timezone while timestamp is at session local timezone. Here we cast date
+      // back to string and then cast to timestamp.
+      if (dataType == DateType && desiredType == TimestampType) {
+        val str = Literal.create(Cast(l, StringType, Some(zoneId.getId)).eval(), StringType)
+        Literal.create(Cast(str, desiredType, Some(zoneId.getId)).eval(), desiredType)
+      } else {
+        Literal.create(Cast(l, desiredType, Some(zoneId.getId)).eval(), desiredType)
+      }
     }
   }
 

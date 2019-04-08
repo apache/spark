@@ -273,7 +273,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         ArrayBuffer(Literal.create(10, IntegerType)))))
   }
 
-  ignore("parse partitions") {
+  test("parse partitions") {
     def check(
         paths: Seq[String],
         spec: PartitionSpec,
