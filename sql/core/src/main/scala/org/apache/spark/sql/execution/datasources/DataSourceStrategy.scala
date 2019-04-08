@@ -265,13 +265,15 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
   override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c =>
+    nullSafeCodeGen(ctx, ev, c => {
+      val setIsNull = if (nullable) s"${ev.isNull} = true" else ""
       s"""if ($c.numBytes() == 0) {
-         |  ${ev.isNull} = true;
+         |  $setIsNull;
          |  ${ev.value} = null;
          |} else {
          |  ${ev.value} = $c;
-         |}""".stripMargin)
+         |}""".stripMargin
+    })
   }
 }
 
@@ -286,12 +288,18 @@ case class UpdateEmptyValueOfPartitionToNull(conf: SQLConf) extends Rule[Logical
       }
     }
     val partitionSet = AttributeSet(partitionColumns)
+    var needConvert = false
     val projectList: Seq[NamedExpression] = query.output.map {
       case p if partitionSet.contains(p) && p.dataType == StringType && p.nullable =>
+        needConvert = true
         Alias(Empty2Null(p), p.name)()
       case attr => attr
     }
-    Project(projectList, query)
+    if (needConvert) {
+      Project(projectList, query)
+    } else {
+      query
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
