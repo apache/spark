@@ -74,10 +74,12 @@ public class Expressions {
    * <p>
    * This transform represents a logical mapping from a value to a bucket id in [0, numBuckets)
    * based on a hash of the value.
+   * <p>
+   * The name reported by transforms created with this method is "bucket".
    *
    * @param numBuckets the number of output buckets
    * @param columns input columns for the bucket transform
-   * @return a logical bucket transform
+   * @return a logical bucket transform with name "bucket"
    */
   public Transform bucket(int numBuckets, String... columns) {
     return LogicalExpressions.bucket(numBuckets,
@@ -88,63 +90,73 @@ public class Expressions {
    * Create an identity transform for a column.
    * <p>
    * This transform represents a logical mapping from a value to itself.
+   * <p>
+   * The name reported by transforms created with this method is "identity".
    *
    * @param column an input column
-   * @return a logical identity transform
+   * @return a logical identity transform with name "identity"
    */
   public Transform identity(String column) {
     return LogicalExpressions.identity(column);
   }
 
   /**
-   * Create a year transform for a timestamp or date column.
+   * Create a yearly transform for a timestamp or date column.
    * <p>
    * This transform represents a logical mapping from a timestamp or date to a year, such as 2018.
+   * <p>
+   * The name reported by transforms created with this method is "years".
    *
    * @param column an input timestamp or date column
-   * @return a logical year transform
+   * @return a logical yearly transform with name "years"
    */
-  public Transform year(String column) {
-    return LogicalExpressions.year(column);
+  public Transform years(String column) {
+    return LogicalExpressions.years(column);
   }
 
   /**
-   * Create a month transform for a timestamp or date column.
+   * Create a monthly transform for a timestamp or date column.
    * <p>
    * This transform represents a logical mapping from a timestamp or date to a month, such as
    * 2018-05.
+   * <p>
+   * The name reported by transforms created with this method is "months".
    *
    * @param column an input timestamp or date column
-   * @return a logical month transform
+   * @return a logical monthly transform with name "months"
    */
-  public Transform month(String column) {
-    return LogicalExpressions.month(column);
+  public Transform months(String column) {
+    return LogicalExpressions.months(column);
   }
 
   /**
-   * Create a date transform for a timestamp or date column.
+   * Create a daily transform for a timestamp or date column.
    * <p>
    * This transform represents a logical mapping from a timestamp or date to a date, such as
    * 2018-05-13.
+   * <p>
+   * The name reported by transforms created with this method is "days".
    *
    * @param column an input timestamp or date column
-   * @return a logical date transform
+   * @return a logical daily transform with name "days"
    */
-  public Transform date(String column) {
-    return LogicalExpressions.date(column);
+  public Transform days(String column) {
+    return LogicalExpressions.days(column);
   }
 
   /**
-   * Create a date and hour transform for a timestamp column.
+   * Create an hourly transform for a timestamp column.
    * <p>
-   * This transform represents a logical mapping from a timestamp to an hour, such as 2018-05-13,
-   * hour 11.
+   * This transform represents a logical mapping from a timestamp to a date and hour, such as
+   * 2018-05-13, hour 19.
+   * <p>
+   * The name reported by transforms created with this method is "hours".
    *
    * @param column an input timestamp column
-   * @return a logical date and hour transform
+   * @return a logical hourly transform with name "hours"
    */
-  public Transform dateHour(String column) {
-    return LogicalExpressions.dateHour(column);
+  public Transform hours(String column) {
+    return LogicalExpressions.hours(column);
   }
 
 }

@@ -84,13 +84,13 @@ private[sql] object LogicalExpressions {
 
   def identity(column: String): IdentityTransform = IdentityTransform(reference(column))
 
-  def year(column: String): YearsTransform = YearsTransform(reference(column))
+  def years(column: String): YearsTransform = YearsTransform(reference(column))
 
-  def month(column: String): MonthsTransform = MonthsTransform(reference(column))
+  def months(column: String): MonthsTransform = MonthsTransform(reference(column))
 
-  def date(column: String): DaysTransform = DaysTransform(reference(column))
+  def days(column: String): DaysTransform = DaysTransform(reference(column))
 
-  def dateHour(column: String): HoursTransform = HoursTransform(reference(column))
+  def hours(column: String): HoursTransform = HoursTransform(reference(column))
 }
 
 /**
