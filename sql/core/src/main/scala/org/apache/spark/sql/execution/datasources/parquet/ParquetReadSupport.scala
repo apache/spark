@@ -137,17 +137,6 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[UnsafeRow] = {
     val parquetRequestedSchema = readContext.getRequestedSchema
-    log.debug {
-      s"""Going to read the following fields from the Parquet file with the following schema:
-         |Parquet file schema:
-         |$fileSchema
-         |Parquet read schema:
-         |$parquetRequestedSchema
-         |Catalyst read schema:
-         |${catalystRequestedSchema.treeString}
-       """.stripMargin
-    }
-
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
