@@ -208,6 +208,31 @@
         </plugins>
       </build>
     </profile>
+    <profile>
+      <id>hadoop-3.2</id>
+      <dependencies>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-common</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-serde</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-shims</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hive</groupId>
+          <artifactId>hive-llap-common</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hive</groupId>
+          <artifactId>hive-llap-client</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 
   <build>

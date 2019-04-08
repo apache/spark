@@ -710,6 +710,8 @@ private[hive] class HiveClientImpl(
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
+   * Since upgrading the built-in Hive to 2.3, hive-llap-client is needed when
+   * running MapReduce jobs with `runHive`.
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
     logDebug(s"Running hiveql '$cmd'")
