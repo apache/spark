@@ -1416,6 +1416,15 @@
             <artifactId>commons-logging</artifactId>
           </exclusion>
           <!-- Begin of Hive 2.3 exclusion -->
+          <!--
+            ORC is needed, but the version should be consistent with the `sql/core` ORC data source.
+            Looks like this is safe, please see the major changes from orc 1.3.3 to 1.5.4:
+            HIVE-17631 and HIVE-19465
+          -->
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
           <!-- jetty-all conflict with jetty 9.4.12.v20180830 -->
           <exclusion>
             <groupId>org.eclipse.jetty.aggregate</groupId>
@@ -1843,7 +1852,7 @@
         </exclusions>
       </dependency>
 
-      <!-- hive-llap-common is needed when registry UDFs in Hive 2.3.
+      <!-- hive-llap-common is needed when registering UDFs in Hive 2.3.
          We add it here, otherwise -Phive-provided won't work. -->
       <dependency>
         <groupId>org.apache.hive</groupId>
@@ -2799,8 +2808,8 @@
         <hive.classifier>core</hive.classifier>
         <hive.version>${hive23.version}</hive.version>
         <hive.version.short>2.3.4</hive.version.short>
-        <hive.parquet.version>${parquet.version}</hive.parquet.version>
         <hive.parquet.group>org.apache.parquet</hive.parquet.group>
+        <hive.parquet.version>1.8.1</hive.parquet.version>
         <orc.classifier></orc.classifier>
         <datanucleus-core.version>4.1.17</datanucleus-core.version>
       </properties>
