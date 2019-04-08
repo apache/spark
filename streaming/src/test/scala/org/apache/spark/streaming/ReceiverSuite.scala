@@ -112,7 +112,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
       assert(receiver.isStopped)
       assert(receiver.onStopCalled)
     }
-    eventually(timeout(1.milliseconds), interval(10.milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       // receiver will be started async
       assert(receiver.onStartCalled)
       assert(executor.isReceiverStarted)
