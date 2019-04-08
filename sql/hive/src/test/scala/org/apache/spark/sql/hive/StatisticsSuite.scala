@@ -100,7 +100,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .asInstanceOf[HiveTableRelation]
 
           val properties = relation.tableMeta.ignoredProperties
-          if (HiveUtils.isHive2) {
+          if (HiveUtils.isHive23) {
             assert(properties("totalSize").toLong > 0, "external table totalSize must be > 0")
             assert(properties.get("rawDataSize").isEmpty)
           } else {
@@ -873,7 +873,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
         // Spark specific statistics. This is triggered by the Hive alterTable API.
         val numRows = extractStatsPropValues(describeResult, "numRows")
-        if (HiveUtils.isHive2) {
+        if (HiveUtils.isHive23) {
           assert(numRows.isDefined && numRows.get == 500)
           val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
           assert(rawDataSize.isDefined && rawDataSize.get == 5312)

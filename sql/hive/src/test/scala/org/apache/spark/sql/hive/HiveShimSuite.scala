@@ -35,7 +35,7 @@ class HiveShimSuite extends SparkFunSuite {
 
     // test when READ_COLUMN_NAMES_CONF_STR is empty
     HiveShim.appendReadColumns(conf, ids, names)
-    if (HiveUtils.isHive2) {
+    if (HiveUtils.isHive23) {
       assert(names === ColumnProjectionUtils.getReadColumnNames(conf))
     } else {
       assert(names.asJava === ColumnProjectionUtils.getReadColumnNames(conf))
@@ -43,7 +43,7 @@ class HiveShimSuite extends SparkFunSuite {
 
     // test when READ_COLUMN_NAMES_CONF_STR is non-empty
     HiveShim.appendReadColumns(conf, moreIds, moreNames)
-    if (HiveUtils.isHive2) {
+    if (HiveUtils.isHive23) {
       assert((names ++ moreNames) === ColumnProjectionUtils.getReadColumnNames(conf))
     } else {
       assert((names ++ moreNames).asJava === ColumnProjectionUtils.getReadColumnNames(conf))
