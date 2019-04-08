@@ -427,7 +427,7 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
-        val readSupport = new ParquetReadSupport(convertTz, isMR = true)
+        val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
           new ParquetRecordReader[UnsafeRow](readSupport, parquetFilter)
