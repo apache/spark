@@ -357,7 +357,7 @@ class LeftSemiPushdownSuite extends PlanTest {
       }
     }
   }
-  
+
   Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
     Seq(Inner, LeftOuter, Cross).foreach { case innerJT =>
       test(s"$outerJT pushdown with outer and inner join condition for join type $innerJT") {
