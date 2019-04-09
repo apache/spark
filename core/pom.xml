@@ -396,6 +396,12 @@
       <artifactId>commons-crypto</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <version>3.23.1</version>
+    </dependency>
+
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

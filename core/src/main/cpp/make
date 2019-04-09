@@ -1,0 +1,2 @@
+#!/usr/bin/sh
+g++ lib_jni_pmdk.cpp -o libjnipmdk.so PersistentMemoryPool.cpp Request.cpp -I$JAVA_HOME -I$JAVA_HOME/include/linux -I$JAVA_HOME/include -std=c++11 -lpmemobj -lpthread -fPIC -shared -g
