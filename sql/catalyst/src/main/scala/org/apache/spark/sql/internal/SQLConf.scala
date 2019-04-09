@@ -1466,14 +1466,6 @@ object SQLConf {
     .intConf
     .createWithDefault(1024)
 
-  val CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS =
-    buildConf("spark.sql.streaming.continuous.executorPollIntervalMs")
-      .internal()
-      .doc("The interval at which continuous execution readers will poll to check whether" +
-        " the epoch has advanced on the driver.")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(100)
-
   val USE_V1_SOURCE_READER_LIST = buildConf("spark.sql.sources.read.useV1SourceList")
     .internal()
     .doc("A comma-separated list of data source short names or fully qualified data source" +
@@ -2117,9 +2109,6 @@ class SQLConf extends Serializable with Logging {
     getConf(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
-
-  def continuousStreamingExecutorPollIntervalMs: Long =
-    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
   def userV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
 

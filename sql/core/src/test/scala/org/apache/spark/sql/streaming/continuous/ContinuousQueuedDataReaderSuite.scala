@@ -37,6 +37,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
 
   val coordinatorId = s"${getClass.getSimpleName}-epochCoordinatorIdForUnitTest"
   val startEpoch = 0
+  val epochInterval = 100L
 
   var epochEndpoint: RpcEndpointRef = _
 
@@ -65,6 +66,8 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
     .thenReturn(startEpoch.toString)
   when(mockContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY))
     .thenReturn(coordinatorId)
+  when(mockContext.getLocalProperty(ContinuousExecution.EPOCH_INTERVAL_KEY))
+    .thenReturn(epochInterval.toString)
 
   /**
    * Set up a ContinuousQueuedDataReader for testing. The blocking queue can be used to send
@@ -93,8 +96,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
       partitionReader,
       new StructType().add("i", "int"),
       mockContext,
-      dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize,
-      epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs)
+      dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize)
 
     (queue, reader)
   }

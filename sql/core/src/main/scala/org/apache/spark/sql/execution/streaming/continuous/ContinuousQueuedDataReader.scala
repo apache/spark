@@ -42,8 +42,7 @@ class ContinuousQueuedDataReader(
     reader: ContinuousPartitionReader[InternalRow],
     schema: StructType,
     context: TaskContext,
-    dataQueueSize: Int,
-    epochPollIntervalMs: Long) extends Closeable {
+    dataQueueSize: Int) extends Closeable {
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset = reader.getOffset
 
@@ -59,12 +58,14 @@ class ContinuousQueuedDataReader(
   private val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
   private val epochCoordEndpoint = EpochCoordinatorRef.get(
     context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
+  private val epochIntervalMs =
+    context.getLocalProperty(ContinuousExecution.EPOCH_INTERVAL_KEY).toLong
 
   private val epochMarkerExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
     s"epoch-poll--$coordinatorId--${context.partitionId()}")
   private val epochMarkerGenerator = new EpochMarkerGenerator
   epochMarkerExecutor.scheduleWithFixedDelay(
-    epochMarkerGenerator, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
+    epochMarkerGenerator, 0, epochIntervalMs, TimeUnit.MILLISECONDS)
 
   private val dataReaderThread = new DataReaderThread(schema)
   dataReaderThread.setDaemon(true)

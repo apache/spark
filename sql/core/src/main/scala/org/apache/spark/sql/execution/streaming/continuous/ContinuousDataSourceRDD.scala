@@ -49,7 +49,6 @@ class ContinuousDataSourceRDDPartition(
 class ContinuousDataSourceRDD(
     sc: SparkContext,
     dataQueueSize: Int,
-    epochPollIntervalMs: Long,
     private val inputPartitions: Seq[InputPartition],
     schema: StructType,
     partitionReaderFactory: ContinuousPartitionReaderFactory)
@@ -82,7 +81,7 @@ class ContinuousDataSourceRDD(
         val partitionReader = partitionReaderFactory.createReader(
           partition.inputPartition)
         partition.queueReader = new ContinuousQueuedDataReader(
-          partition.index, partitionReader, schema, context, dataQueueSize, epochPollIntervalMs)
+          partition.index, partitionReader, schema, context, dataQueueSize)
       }
 
       partition.queueReader

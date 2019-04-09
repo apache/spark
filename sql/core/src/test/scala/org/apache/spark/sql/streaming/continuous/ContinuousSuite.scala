@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.streaming.continuous
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.v2.ContinuousScanExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemoryWriterCommitMessage}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
+import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
 
@@ -49,6 +50,48 @@ class ContinuousSuiteBase extends StreamTest {
         while (System.currentTimeMillis < reader.creationTime + deltaMs) {
           Thread.sleep(reader.creationTime + deltaMs - System.currentTimeMillis)
         }
+    }
+  }
+
+  protected def commitPartitionEpoch(
+      query: StreamExecution,
+      numPartitions: Int,
+      rowsPerSecond: Int,
+      duration: Int,
+      epoch: Long): Unit = {
+    def message(partitionId: Int): MemoryWriterCommitMessage = {
+      val data = Array.tabulate(rowsPerSecond * duration)(idx =>
+        Row(partitionId + numPartitions * idx)).toSeq
+      MemoryWriterCommitMessage(partitionId, data)
+    }
+    query match {
+      case s: ContinuousExecution =>
+        Array.tabulate(numPartitions)(partitionId => {
+          EpochCoordinatorRef.get(s.currentEpochCoordinatorId, SparkEnv.get)
+            .send(CommitPartitionEpoch(partitionId, epoch, message(partitionId)))
+        })
+      case _ => throw new IllegalStateException("microbatch cannot increment epoch")
+    }
+
+  }
+
+  protected def reportPartitionOffset(
+      query: StreamExecution,
+      numPartitions: Int,
+      rowsPerSecond: Int,
+      duration: Int,
+      epoch: Long): Unit = {
+    def offset(partitionId: Int): PartitionOffset = {
+      val currentValue = partitionId + numPartitions * duration * rowsPerSecond
+      RateStreamPartitionOffset(partitionId, currentValue, System.currentTimeMillis())
+    }
+    query match {
+      case s: ContinuousExecution =>
+        Array.tabulate(numPartitions)(partitionId => {
+          EpochCoordinatorRef.get(s.currentEpochCoordinatorId, SparkEnv.get)
+            .send(ReportPartitionOffset(partitionId, epoch, offset(partitionId)))
+        })
+      case _ => throw new IllegalStateException("microbatch cannot increment epoch")
     }
   }
 
@@ -244,8 +287,11 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 10)),
       IncrementEpoch(),
+      Execute(reportPartitionOffset(_, 5, 100, 10, 1)),
+      Execute(commitPartitionEpoch(_, 5, 100, 10, 1)),
+      AwaitEpoch(1),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_)))
+      CheckAnswerRowsContains(scala.Range(0, 5000).map(Row(_)))
     )
   }
 
@@ -262,8 +308,9 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 10)),
       IncrementEpoch(),
+      AwaitEpoch(4),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
+      CheckAnswerRowsContains(scala.Range(0, 5000).map(Row(_))))
   }
 
   test("restarts") {
