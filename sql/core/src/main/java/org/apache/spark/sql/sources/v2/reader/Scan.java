@@ -24,6 +24,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.sources.v2.SupportsContinuousRead;
 import org.apache.spark.sql.sources.v2.SupportsMicroBatchRead;
 import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.sources.v2.TableCapability;
 
 /**
  * A logical representation of a data source scan. This interface is used to provide logical
@@ -32,8 +33,8 @@ import org.apache.spark.sql.sources.v2.Table;
  * This logical representation is shared between batch scan, micro-batch streaming scan and
  * continuous streaming scan. Data sources must implement the corresponding methods in this
  * interface, to match what the table promises to support. For example, {@link #toBatch()} must be
- * implemented, if the {@link Table} that creates this {@link Scan} returns BATCH_READ support in
- * its {@link Table#capabilities()}.
+ * implemented, if the {@link Table} that creates this {@link Scan} returns
+ * {@link TableCapability#BATCH_READ} support in its {@link Table#capabilities()}.
  * </p>
  */
 @Evolving
@@ -61,7 +62,8 @@ public interface Scan {
   /**
    * Returns the physical representation of this scan for batch query. By default this method throws
    * exception, data sources must overwrite this method to provide an implementation, if the
-   * {@link Table} that creates this returns batch read support in its {@link Table#capabilities()}.
+   * {@link Table} that creates this scan returns {@link TableCapability#BATCH_READ} support in its
+   * {@link Table#capabilities()}.
    *
    * @throws UnsupportedOperationException
    */

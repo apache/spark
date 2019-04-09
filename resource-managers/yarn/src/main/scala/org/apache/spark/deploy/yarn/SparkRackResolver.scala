@@ -17,24 +17,100 @@
 
 package org.apache.spark.deploy.yarn
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+
+import com.google.common.base.Strings
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic
+import org.apache.hadoop.net._
+import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
 
+import org.apache.spark.internal.Logging
+
 /**
- * Wrapper around YARN's [[RackResolver]]. This allows Spark tests to easily override the
- * default behavior, since YARN's class self-initializes the first time it's called, and
- * future calls all use the initial configuration.
+ * Re-implement YARN's [[RackResolver]] for hadoop releases without YARN-9332.
+ * This also allows Spark tests to easily override the default behavior, since YARN's class
+ * self-initializes the first time it's called, and future calls all use the initial configuration.
  */
-private[yarn] class SparkRackResolver {
+private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
   if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
     Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
   }
 
-  def resolve(conf: Configuration, hostName: String): String = {
-    RackResolver.resolve(conf, hostName).getNetworkLocation()
+  private val dnsToSwitchMapping: DNSToSwitchMapping = {
+    val dnsToSwitchMappingClass =
+      conf.getClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+        classOf[ScriptBasedMapping], classOf[DNSToSwitchMapping])
+    ReflectionUtils.newInstance(dnsToSwitchMappingClass, conf)
+        .asInstanceOf[DNSToSwitchMapping] match {
+      case c: CachedDNSToSwitchMapping => c
+      case o => new CachedDNSToSwitchMapping(o)
+    }
+  }
+
+  def resolve(hostName: String): String = {
+    coreResolve(Seq(hostName)).head.getNetworkLocation
+  }
+
+  /**
+   * Added in SPARK-13704.
+   * This should be changed to `RackResolver.resolve(conf, hostNames)`
+   * in hadoop releases with YARN-9332.
+   */
+  def resolve(hostNames: Seq[String]): Seq[Node] = {
+    coreResolve(hostNames)
+  }
+
+  private def coreResolve(hostNames: Seq[String]): Seq[Node] = {
+    val nodes = new ArrayBuffer[Node]
+    // dnsToSwitchMapping is thread-safe
+    val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
+    if (rNameList == null || rNameList.isEmpty) {
+      hostNames.foreach(nodes += new NodeBase(_, NetworkTopology.DEFAULT_RACK))
+      logInfo(s"Got an error when resolving hostNames. " +
+        s"Falling back to ${NetworkTopology.DEFAULT_RACK} for all")
+    } else {
+      for ((hostName, rName) <- hostNames.zip(rNameList)) {
+        if (Strings.isNullOrEmpty(rName)) {
+          nodes += new NodeBase(hostName, NetworkTopology.DEFAULT_RACK)
+          logDebug(s"Could not resolve $hostName. " +
+            s"Falling back to ${NetworkTopology.DEFAULT_RACK}")
+        } else {
+          nodes += new NodeBase(hostName, rName)
+        }
+      }
+    }
+    nodes.toList
+  }
+}
+
+/**
+ * Utility to resolve the rack for hosts in an efficient manner.
+ * It will cache the rack for individual hosts to avoid
+ * repeatedly performing the same expensive lookup.
+ */
+object SparkRackResolver extends Logging {
+  @volatile private var instance: SparkRackResolver = _
+
+  /**
+   * It will return the static resolver instance.  If there is already an instance, the passed
+   * conf is entirely ignored.  If there is not a shared instance, it will create one with the
+   * given conf.
+   */
+  def get(conf: Configuration): SparkRackResolver = {
+    if (instance == null) {
+      synchronized {
+        if (instance == null) {
+          instance = new SparkRackResolver(conf)
+        }
+      }
+    }
+    instance
   }
 
 }

@@ -58,15 +58,18 @@ abstract class PartitioningAwareFileIndex(
 
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+    def isNonEmptyFile(f: FileStatus): Boolean = {
+      isDataPath(f.getPath) && f.getLen > 0
+    }
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      PartitionDirectory(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
+      PartitionDirectory(InternalRow.empty, allFiles().filter(isNonEmptyFile)) :: Nil
     } else {
       prunePartitions(partitionFilters, partitionSpec()).map {
         case PartitionPath(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(f => isDataPath(f.getPath))
+              existingDir.filter(isNonEmptyFile)
 
             case None =>
               // Directory does not exist, or has no children files

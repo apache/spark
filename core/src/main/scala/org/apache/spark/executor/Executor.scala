@@ -89,17 +89,14 @@ private[spark] class Executor(
   }
 
   // Start worker thread pool
+  // Use UninterruptibleThread to run tasks so that we can allow running codes without being
+  // interrupted by `Thread.interrupt()`. Some issues, such as KAFKA-1894, HADOOP-10622,
+  // will hang forever if some methods are interrupted.
   private val threadPool = {
     val threadFactory = new ThreadFactoryBuilder()
       .setDaemon(true)
       .setNameFormat("Executor task launch worker-%d")
-      .setThreadFactory(new ThreadFactory {
-        override def newThread(r: Runnable): Thread =
-          // Use UninterruptibleThread to run tasks so that we can allow running codes without being
-          // interrupted by `Thread.interrupt()`. Some issues, such as KAFKA-1894, HADOOP-10622,
-          // will hang forever if some methods are interrupted.
-          new UninterruptibleThread(r, "unused") // thread name will be set by ThreadFactoryBuilder
-      })
+      .setThreadFactory((r: Runnable) => new UninterruptibleThread(r, "unused"))
       .build()
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }

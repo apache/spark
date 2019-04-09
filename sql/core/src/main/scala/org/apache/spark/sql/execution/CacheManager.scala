@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Subqu
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -98,13 +99,11 @@ class CacheManager extends Logging {
    * @param query     The [[Dataset]] to be un-cached.
    * @param cascade   If true, un-cache all the cache entries that refer to the given
    *                  [[Dataset]]; otherwise un-cache the given [[Dataset]] only.
-   * @param blocking  Whether to block until all blocks are deleted.
    */
   def uncacheQuery(
       query: Dataset[_],
-      cascade: Boolean,
-      blocking: Boolean = true): Unit = {
-    uncacheQuery(query.sparkSession, query.logicalPlan, cascade, blocking)
+      cascade: Boolean): Unit = {
+    uncacheQuery(query.sparkSession, query.logicalPlan, cascade)
   }
 
   /**
@@ -119,7 +118,7 @@ class CacheManager extends Logging {
       spark: SparkSession,
       plan: LogicalPlan,
       cascade: Boolean,
-      blocking: Boolean): Unit = {
+      blocking: Boolean = false): Unit = {
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
         _.find(_.sameResult(plan)).isDefined
@@ -255,15 +254,30 @@ class CacheManager extends Logging {
     plan match {
       case lr: LogicalRelation => lr.relation match {
         case hr: HadoopFsRelation =>
-          val prefixToInvalidate = qualifiedPath.toString
-          val invalidate = hr.location.rootPaths
-            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory).toString)
-            .exists(_.startsWith(prefixToInvalidate))
-          if (invalidate) hr.location.refresh()
-          invalidate
+          refreshFileIndexIfNecessary(hr.location, fs, qualifiedPath)
         case _ => false
       }
+
+      case DataSourceV2Relation(fileTable: FileTable, _, _) =>
+        refreshFileIndexIfNecessary(fileTable.fileIndex, fs, qualifiedPath)
+
       case _ => false
     }
+  }
+
+  /**
+   * Refresh the given [[FileIndex]] if any of its root paths starts with `qualifiedPath`.
+   * @return whether the [[FileIndex]] is refreshed.
+   */
+  private def refreshFileIndexIfNecessary(
+      fileIndex: FileIndex,
+      fs: FileSystem,
+      qualifiedPath: Path): Boolean = {
+    val prefixToInvalidate = qualifiedPath.toString
+    val needToRefresh = fileIndex.rootPaths
+      .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory).toString)
+      .exists(_.startsWith(prefixToInvalidate))
+    if (needToRefresh) fileIndex.refresh()
+    needToRefresh
   }
 }

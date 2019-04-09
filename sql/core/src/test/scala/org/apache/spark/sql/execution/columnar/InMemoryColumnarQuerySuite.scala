@@ -340,6 +340,19 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
+   test("cached row count should be calculated") {
+    val data = spark.range(6).toDF
+    val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
+    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, data.logicalPlan)
+
+    // Materialize the data.
+    val expectedAnswer = data.collect()
+    checkAnswer(cached, expectedAnswer)
+
+    // Check that the right row count was calculated.
+    assert(cached.cacheBuilder.rowCountStats.value === 6)
+  }
+
   test("access primitive-type columns in CachedBatch without whole stage codegen") {
     // whole stage codegen is not applied to a row with more than WHOLESTAGE_MAX_NUM_FIELDS fields
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "2") {

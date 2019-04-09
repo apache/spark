@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
