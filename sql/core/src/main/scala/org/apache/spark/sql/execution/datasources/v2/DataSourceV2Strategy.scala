@@ -124,6 +124,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
            |Post-Scan Filters: ${postScanFilters.mkString(",")}
            |Output: ${output.mkString(", ")}
          """.stripMargin)
+
       val plan = BatchScanExec(output, scan)
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
