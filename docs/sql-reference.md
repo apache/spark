@@ -46,8 +46,9 @@ Spark SQL and DataFrames support the following data types:
   - `BooleanType`: Represents boolean values.
 * Datetime type
   - `TimestampType`: Represents values comprising values of fields year, month, day,
-  hour, minute, and second.
-  - `DateType`: Represents values comprising values of fields year, month, day.
+  hour, minute, and second, with the session local time-zone. The timestamp value represents a
+  instantaneous point on the time-line.
+  - `DateType`: Represents values comprising values of fields year, month, day, without a time-zone.
 * Complex types
   - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
   elements with the type of `elementType`. `containsNull` is used to indicate if
