@@ -136,7 +136,8 @@ object BlockId {
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
-  // the extend shuffle/data/index is only used when INDETERMINATE stage rerun
+  // The EXTEND_SHUFFLE extends SHUFFLE regex with shuffle generation id, it is only used in the
+  // scenario of rerunning an INDETERMINATE stage.
   val EXTEND_SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val EXTEND_SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val EXTEND_SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+).index".r
@@ -159,9 +160,11 @@ object BlockId {
     case EXTEND_SHUFFLE(shuffleId, mapId, reduceId, shuffleGenerationId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(shuffleGenerationId.toInt))
     case EXTEND_SHUFFLE_DATA(shuffleId, mapId, reduceId, shuffleGenerationId) =>
-      ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(shuffleGenerationId.toInt))
+      ShuffleDataBlockId(
+        shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(shuffleGenerationId.toInt))
     case EXTEND_SHUFFLE_INDEX(shuffleId, mapId, reduceId, shuffleGenerationId) =>
-      ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(shuffleGenerationId.toInt))
+      ShuffleIndexBlockId(
+        shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(shuffleGenerationId.toInt))
     case BROADCAST(broadcastId, field) =>
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>
