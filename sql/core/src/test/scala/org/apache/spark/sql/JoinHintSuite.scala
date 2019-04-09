@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.log4j.{AppenderSkeleton, Level}
+import org.apache.log4j.spi.LoggingEvent
+
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.joins._
@@ -30,6 +35,41 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
   lazy val df1 = df.selectExpr("id as a1", "id as a2")
   lazy val df2 = df.selectExpr("id as b1", "id as b2")
   lazy val df3 = df.selectExpr("id as c1", "id as c2")
+
+  class MockAppender extends AppenderSkeleton {
+    val loggingEvents = new ArrayBuffer[LoggingEvent]()
+
+    override def append(loggingEvent: LoggingEvent): Unit = loggingEvents.append(loggingEvent)
+    override def close(): Unit = {}
+    override def requiresLayout(): Boolean = false
+  }
+
+  def msgNoHintRelationFound(relation: String, hint: String): String =
+    s"Count not find relation '$relation' for join strategy hint '$hint'."
+
+  def msgNoJoinForJoinHint(strategy: String): String =
+    s"A join hint (strategy=$strategy) is specified but it is not part of a join relation."
+
+  def msgJoinHintOverridden(strategy: String): String =
+    s"Join hint (strategy=$strategy) is overridden by another hint and will not take effect."
+
+  def verifyJoinHintWithWarnings(
+      df: => DataFrame,
+      expectedHints: Seq[JoinHint],
+      warnings: Seq[String]): Unit = {
+    val logAppender = new MockAppender()
+    withLogAppender(logAppender) {
+      verifyJoinHint(df, expectedHints)
+    }
+    val warningMessages = logAppender.loggingEvents
+      .filter(_.getLevel == Level.WARN)
+      .map(_.getRenderedMessage)
+      .filter(_.contains("hint"))
+    assert(warningMessages.size == warnings.size)
+    warnings.foreach { w =>
+      assert(warningMessages.contains(w))
+    }
+  }
 
   def verifyJoinHint(df: DataFrame, expectedHints: Seq[JoinHint]): Unit = {
     val optimized = df.queryExecution.optimizedPlan
@@ -179,25 +219,29 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
   }
 
   test("hint merge") {
-    verifyJoinHint(
+    verifyJoinHintWithWarnings(
       df.hint("broadcast").filter('id > 2).hint("broadcast").join(df, "id"),
       JoinHint(
         Some(HintInfo(strategy = Some(BROADCAST))),
-        None) :: Nil
+        None) :: Nil,
+      Nil
     )
-    verifyJoinHint(
+    verifyJoinHintWithWarnings(
       df.join(df.hint("broadcast").limit(2).hint("broadcast"), "id"),
       JoinHint(
         None,
-        Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
+        Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil,
+      Nil
     )
-    verifyJoinHint(
-      df.hint("merge").filter('id > 2).hint("shuffle_hash").join(df, "id"),
+    verifyJoinHintWithWarnings(
+      df.hint("merge").filter('id > 2).hint("shuffle_hash").join(df, "id").hint("broadcast"),
       JoinHint(
         Some(HintInfo(strategy = Some(SHUFFLE_HASH))),
-        None) :: Nil
+        None) :: Nil,
+      msgJoinHintOverridden("merge") ::
+        msgNoJoinForJoinHint("broadcast") :: Nil
     )
-    verifyJoinHint(
+    verifyJoinHintWithWarnings(
       df.join(df.hint("broadcast").limit(2).hint("merge"), "id")
         .hint("shuffle_hash")
         .hint("shuffle_replicate_nl")
@@ -207,7 +251,9 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         None) ::
         JoinHint(
           None,
-          Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) :: Nil
+          Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) :: Nil,
+      msgJoinHintOverridden("broadcast") ::
+        msgJoinHintOverridden("shuffle_hash") :: Nil
     )
   }
 
@@ -216,25 +262,30 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
       df1.createOrReplaceTempView("a")
       df2.createOrReplaceTempView("b")
       df3.createOrReplaceTempView("c")
-      verifyJoinHint(
-        sql("select /*+ merge(a, c) broadcast(a, b)*/ * from a, b, c " +
+      verifyJoinHintWithWarnings(
+        sql("select /*+ shuffle_hash merge(a, c) broadcast(a, b)*/ * from a, b, c " +
           "where a.a1 = b.b1 and b.b1 = c.c1"),
         JoinHint(
           None,
           Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) ::
           JoinHint(
             Some(HintInfo(strategy = Some(SHUFFLE_MERGE))),
-            Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
+            Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil,
+        msgNoJoinForJoinHint("shuffle_hash") ::
+          msgJoinHintOverridden("broadcast") :: Nil
       )
-      verifyJoinHint(
+      verifyJoinHintWithWarnings(
         sql("select /*+ shuffle_hash(a, b) merge(b, d) broadcast(b)*/ * from a, b, c " +
           "where a.a1 = b.b1 and b.b1 = c.c1"),
         JoinHint.NONE ::
           JoinHint(
             Some(HintInfo(strategy = Some(SHUFFLE_HASH))),
-            Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil
+            Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil,
+        msgNoHintRelationFound("d", "merge(b, d)") ::
+          msgJoinHintOverridden("broadcast") ::
+          msgJoinHintOverridden("merge") :: Nil
       )
-      verifyJoinHint(
+      verifyJoinHintWithWarnings(
         sql(
           """
             |select /*+ broadcast(a, c) merge(a, d)*/ * from a
@@ -249,7 +300,10 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
           Some(HintInfo(strategy = Some(SHUFFLE_MERGE)))) ::
           JoinHint(
             Some(HintInfo(strategy = Some(SHUFFLE_REPLICATE_NL))),
-            Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil
+            Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil,
+        msgNoHintRelationFound("c", "broadcast(a, c)") ::
+          msgJoinHintOverridden("merge") ::
+          msgJoinHintOverridden("shuffle_replicate_nl") :: Nil
       )
     }
   }

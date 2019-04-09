@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -62,23 +64,27 @@ object ResolveHints {
 
     private def applyJoinStrategyHint(
         plan: LogicalPlan,
-        relations: Set[String],
+        relations: mutable.HashSet[String],
         hintName: String): LogicalPlan = {
       // Whether to continue recursing down the tree
       var recurse = true
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case ResolvedHint(u: UnresolvedRelation, _)
+          case ResolvedHint(u: UnresolvedRelation, hint)
               if relations.exists(resolver(_, u.tableIdentifier.table)) =>
-            ResolvedHint(u, createHintInfo(hintName))
-          case ResolvedHint(r: SubqueryAlias, _)
+            relations.remove(u.tableIdentifier.table)
+            ResolvedHint(u, createHintInfo(hintName).merge(hint, handleOverriddenHintInfo))
+          case ResolvedHint(r: SubqueryAlias, hint)
               if relations.exists(resolver(_, r.alias)) =>
-            ResolvedHint(r, createHintInfo(hintName))
+            relations.remove(r.alias)
+            ResolvedHint(r, createHintInfo(hintName).merge(hint, handleOverriddenHintInfo))
 
           case u: UnresolvedRelation if relations.exists(resolver(_, u.tableIdentifier.table)) =>
+            relations.remove(u.tableIdentifier.table)
             ResolvedHint(plan, createHintInfo(hintName))
           case r: SubqueryAlias if relations.exists(resolver(_, r.alias)) =>
+            relations.remove(r.alias)
             ResolvedHint(plan, createHintInfo(hintName))
 
           case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
@@ -103,6 +109,10 @@ object ResolveHints {
       }
     }
 
+    private def handleOverriddenHintInfo(hint: HintInfo): Unit = {
+      logWarning(s"Join hint $hint is overridden by another hint and will not take effect.")
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint if STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         if (h.parameters.isEmpty) {
@@ -110,12 +120,21 @@ object ResolveHints {
           ResolvedHint(h.child, createHintInfo(h.name))
         } else {
           // Otherwise, find within the subtree query plans to apply the hint.
-          applyJoinStrategyHint(h.child, h.parameters.map {
+          val relationNames = h.parameters.map {
             case tableName: String => tableName
             case tableId: UnresolvedAttribute => tableId.name
             case unsupported => throw new AnalysisException("Join strategy hint parameter " +
               s"should be an identifier or string but was $unsupported (${unsupported.getClass}")
-          }.toSet, h.name)
+          }
+          val relationNameSet = new mutable.HashSet[String]
+          relationNames.foreach(relationNameSet.add)
+
+          val applied = applyJoinStrategyHint(h.child, relationNameSet, h.name)
+          relationNameSet.foreach { n =>
+            logWarning(s"Count not find relation '$n' for join strategy hint " +
+              s"'${h.name}${relationNames.mkString("(", ", ", ")")}'.")
+          }
+          applied
         }
     }
   }
@@ -152,7 +171,9 @@ object ResolveHints {
    */
   object RemoveAllHints extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case h: UnresolvedHint => h.child
+      case h: UnresolvedHint =>
+        logWarning(s"Unrecognized hint: ${h.name}${h.parameters.mkString("(", ", ", ")")}")
+        h.child
     }
   }
 
