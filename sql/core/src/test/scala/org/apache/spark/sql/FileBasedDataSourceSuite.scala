@@ -494,6 +494,38 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  test("Do not use cache on overwrite") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          val path = dir.toString
+          spark.range(1000).write.mode("overwrite").orc(path)
+          val df = spark.read.orc(path).cache()
+          assert(df.count() == 1000)
+          spark.range(10).write.mode("overwrite").orc(path)
+          assert(df.count() == 10)
+          assert(spark.read.orc(path).count() == 10)
+        }
+      }
+    }
+  }
+
+  test("Do not use cache on append") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          val path = dir.toString
+          spark.range(1000).write.mode("append").orc(path)
+          val df = spark.read.orc(path).cache()
+          assert(df.count() == 1000)
+          spark.range(10).write.mode("append").orc(path)
+          assert(df.count() == 1010)
+          assert(spark.read.orc(path).count() == 1010)
+        }
+      }
+    }
+  }
+
   test("Return correct results when data columns overlap with partition columns") {
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>
