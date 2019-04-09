@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.time.LocalDate
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -67,9 +67,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case CurrentDate(Some(timeZoneId)) =>
         currentDates.getOrElseUpdate(timeZoneId, {
           Literal.create(
-            DateTimeUtils.millisToDays(
-              MICROSECONDS.toMillis(timestamp),
-              DateTimeUtils.getTimeZone(timeZoneId)),
+            LocalDate.now(DateTimeUtils.getZoneId(timeZoneId)),
             DateType)
         })
       case CurrentTimestamp() => currentTime
