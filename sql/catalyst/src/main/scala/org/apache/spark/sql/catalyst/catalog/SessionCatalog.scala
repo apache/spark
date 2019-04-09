@@ -1105,15 +1105,10 @@ class SessionCatalog(
    * Check if the function with the specified name exists
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
-    
-    if (functionRegistry.functionExists(name)) {
-      return true
-
-    } else {
+    functionRegistry.functionExists(name) || {
       val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
       requireDbExists(db)
       externalCatalog.functionExists(db, name.funcName)
-
     }
   }
 
