@@ -197,10 +197,11 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.start()
 
     val testData = 1 to 10
-    eventually(timeout(2.minutes), interval(10.second)) {
+    eventually(timeout(2.minutes), interval(10.seconds)) {
       testUtils.pushData(testData, aggregateTestData)
-      assert(collected.synchronized { collected === testData.toSet },
-        "\nData received does not match data sent")
+      collected.synchronized {
+        assert(collected === testData.toSet, "\nData received does not match data sent")
+      }
     }
     ssc.stop(stopSparkContext = false)
   }
@@ -230,11 +231,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.start()
 
     val testData = 1 to 10
-    eventually(timeout(2.minutes), interval(10.second)) {
+    eventually(timeout(2.minutes), interval(10.seconds)) {
       testUtils.pushData(testData, aggregateTestData)
       val modData = testData.map(_ + 5)
-      assert(collected.synchronized { collected === modData.toSet },
-        "\nData received does not match data sent")
+      collected.synchronized {
+        assert(collected === modData.toSet, "\nData received does not match data sent")
+      }
     }
     ssc.stop(stopSparkContext = false)
   }
@@ -315,10 +317,11 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       val testData2 = 11 to 20
       val testData3 = 21 to 30
 
-      eventually(timeout(1.minute), interval(10.second)) {
+      eventually(timeout(1.minute), interval(10.seconds)) {
         localTestUtils.pushData(testData1, aggregateTestData)
-        assert(collected.synchronized { collected === testData1.toSet },
-          "\nData received does not match data sent")
+        collected.synchronized {
+          assert(collected === testData1.toSet, "\nData received does not match data sent")
+        }
       }
 
       val shardToSplit = localTestUtils.getShards().head
@@ -331,10 +334,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       assert(splitCloseShards.size == 1)
       assert(splitOpenShards.size == 2)
 
-      eventually(timeout(1.minute), interval(10.second)) {
+      eventually(timeout(1.minute), interval(10.seconds)) {
         localTestUtils.pushData(testData2, aggregateTestData)
-        assert(collected.synchronized { collected === (testData1 ++ testData2).toSet },
-          "\nData received does not match data sent after splitting a shard")
+        collected.synchronized {
+          assert(collected === (testData1 ++ testData2).toSet,
+            "\nData received does not match data sent after splitting a shard")
+        }
       }
 
       val Seq(shardToMerge, adjShard) = splitOpenShards
@@ -347,10 +352,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       assert(mergedCloseShards.size == 3)
       assert(mergedOpenShards.size == 1)
 
-      eventually(timeout(1.minute), interval(10.second)) {
+      eventually(timeout(1.minute), interval(10.seconds)) {
         localTestUtils.pushData(testData3, aggregateTestData)
-        assert(collected.synchronized { collected === (testData1 ++ testData2 ++ testData3).toSet },
-          "\nData received does not match data sent after merging shards")
+        collected.synchronized {
+          assert(collected === (testData1 ++ testData2 ++ testData3).toSet,
+            "\nData received does not match data sent after merging shards")
+        }
       }
     } finally {
       ssc.stop(stopSparkContext = false)
