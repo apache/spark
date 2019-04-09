@@ -25,6 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -36,7 +37,7 @@ case class TestData(key: Int, value: String)
 case class ThreeCloumntable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils {
+    with SQLTestUtils with CodegenInterpretedPlanTest{
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(

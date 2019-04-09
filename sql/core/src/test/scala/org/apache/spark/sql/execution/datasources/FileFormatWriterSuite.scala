@@ -18,14 +18,9 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.test.SharedSQLContext
 
-class FileFormatWriterSuite
-  extends QueryTest
-  with SharedSQLContext
-  with CodegenInterpretedPlanTest {
-
+class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("empty file should be skipped while write to file") {

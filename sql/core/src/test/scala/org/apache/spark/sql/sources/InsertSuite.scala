@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSQLContext
@@ -50,7 +51,7 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   }
 }
 
-class InsertSuite extends DataSourceTest with SharedSQLContext {
+class InsertSuite extends DataSourceTest with SharedSQLContext with CodegenInterpretedPlanTest{
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
