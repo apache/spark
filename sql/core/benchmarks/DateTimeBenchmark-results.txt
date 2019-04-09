@@ -414,3 +414,12 @@ to_date wholestage off                        1477 / 1479          0.7        14
 to_date wholestage on                         1468 / 1473          0.7        1468.2       1.0X
 
 
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+To/from java.sql.Timestamp:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+From java.sql.Timestamp                             283            301          19         17.7          56.6       1.0X
+Collect longs                                      1048           1087          36          4.8         209.6       0.3X
+Collect timestamps                                 1425           1479          56          3.5         285.1       0.2X
+
+
