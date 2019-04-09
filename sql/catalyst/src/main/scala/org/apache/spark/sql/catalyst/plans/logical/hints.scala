@@ -79,12 +79,7 @@ case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
   }
 
   override def toString: String = {
-    val hints = scala.collection.mutable.ArrayBuffer.empty[String]
-    if (strategy.isDefined) {
-      hints += s"strategy=${strategy.get}"
-    }
-
-    if (hints.isEmpty) "none" else hints.mkString("(", ", ", ")")
+    strategy.map(s => s"strategy=$s").getOrElse("none")
   }
 }
 

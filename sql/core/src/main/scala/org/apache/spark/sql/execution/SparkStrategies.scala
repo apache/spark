@@ -292,6 +292,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
         }
 
+        def createJoinWithoutHint() = {
+          broadcastSideBySizes(joinType, left, right).map(createBroadcastHashJoin).getOrElse {
+            val shuffleHashBuildSide = shuffleHashSideBySizes(joinType, left, right)
+            if (!conf.preferSortMergeJoin && shuffleHashBuildSide.isDefined) {
+              createShuffleHashJoin(shuffleHashBuildSide.get)
+            } else if (RowOrdering.isOrderable(leftKeys)) {
+              createSortMergeJoin()
+            } else if (joinType.isInstanceOf[InnerLike]) {
+              createCartesianProduct(left, right, condition)
+            } else {
+              createFinalBroadcastNLJoin(left, right, joinType, condition)
+            }
+          }
+        }
+
         broadcastSideByHints(joinType, left, right, hint).map(createBroadcastHashJoin).getOrElse {
           if (RowOrdering.isOrderable(leftKeys) && hintToSortMergeJoin(hint)) {
             createSortMergeJoin()
@@ -304,21 +319,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               } else {
                 createJoinWithoutHint()
               }
-            }
-          }
-        }
-
-        def createJoinWithoutHint() = {
-          broadcastSideBySizes(joinType, left, right).map(createBroadcastHashJoin).getOrElse {
-            val shuffleHashBuildSide = shuffleHashSideBySizes(joinType, left, right)
-            if (!conf.preferSortMergeJoin && shuffleHashBuildSide.isDefined) {
-              createShuffleHashJoin(shuffleHashBuildSide.get)
-            } else if (RowOrdering.isOrderable(leftKeys)) {
-              createSortMergeJoin()
-            } else if (joinType.isInstanceOf[InnerLike]) {
-              createCartesianProduct(left, right, condition)
-            } else {
-              createFinalBroadcastNLJoin(left, right, joinType, condition)
             }
           }
         }
@@ -340,14 +340,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             planLater(left), planLater(right), buildSide, joinType, condition))
         }
 
-        broadcastSideByHints(joinType, left, right, hint).map(createBroadcastNLJoin).getOrElse {
-          if (joinType.isInstanceOf[InnerLike] && hintToShuffleReplicateNL(hint)) {
-            createCartesianProduct(left, right, condition)
-          } else {
-            createJoinWithoutHint()
-          }
-        }
-
         def createJoinWithoutHint() = {
           broadcastSideBySizes(joinType, left, right).map(createBroadcastNLJoin).getOrElse {
             if (joinType.isInstanceOf[InnerLike]) {
@@ -357,6 +349,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
           }
         }
+
+        broadcastSideByHints(joinType, left, right, hint).map(createBroadcastNLJoin).getOrElse {
+          if (joinType.isInstanceOf[InnerLike] && hintToShuffleReplicateNL(hint)) {
+            createCartesianProduct(left, right, condition)
+          } else {
+            createJoinWithoutHint()
+          }
+        }
+
+      // --- Cases where this strategy does not apply ---------------------------------------------
+      case _ => Nil
     }
   }
 
