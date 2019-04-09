@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import java.time.LocalDate
-import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
