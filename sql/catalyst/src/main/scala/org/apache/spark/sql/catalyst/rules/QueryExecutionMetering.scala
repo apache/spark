@@ -64,13 +64,10 @@ case class QueryExecutionMetering() {
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
     val map = timeMap.asMap().asScala
-    val maxLengthRuleNames = {
-      val lens = map.keys.map(_.toString.length)
-      if (lens.nonEmpty) {
-        lens.max
-      } else {
-        0  // don't crash if no rules run
-      }
+    val maxLengthRuleNames = if (map.isEmpty) {
+      0
+    } else {
+      map.keys.map(_.toString.length).max
     }
 
     val colRuleName = "Rule".padTo(maxLengthRuleNames, " ").mkString
