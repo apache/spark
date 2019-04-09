@@ -1018,7 +1018,10 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
       > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  deprecated = """
+    Deprecated since 3.0.0. See SPARK-25496.
+  """)
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1229,7 +1232,10 @@ case class MonthsBetween(
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-30 15:00:00
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  deprecated = """
+    Deprecated since 3.0.0. See SPARK-25496.
+  """)
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
