@@ -83,7 +83,6 @@ TempStatsStore/
 metastore/
 metastore_db/
 sql/hive-thriftserver/test_warehouses
-sql/hive-thriftserverV2/test_warehouses
 warehouse/
 spark-warehouse/
 

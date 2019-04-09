@@ -19,9 +19,8 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{Arrays => JArrays, List => JList, Properties}
 
-import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet, Utils => JdbcUtils}
+import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet}
 import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.thrift._
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 
@@ -37,13 +36,13 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
       val user = System.getProperty("user.name")
       val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
-      val client = new TCLIService.Client(new TBinaryProtocol(transport))
+      val client = new ThriftserverShimUtils.Client(new TBinaryProtocol(transport))
       transport.open()
       var rs: HiveQueryResultSet = null
       try {
-        val openResp = client.OpenSession(new TOpenSessionReq)
+        val openResp = client.OpenSession(new ThriftserverShimUtils.TOpenSessionReq)
         val sessHandle = openResp.getSessionHandle
-        val schemaReq = new TGetSchemasReq(sessHandle)
+        val schemaReq = new ThriftserverShimUtils.TGetSchemasReq(sessHandle)
 
         if (catalog != null) {
           schemaReq.setCatalogName(catalog)
@@ -55,13 +54,10 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
           schemaReq.setSchemaName(schemaPattern)
         }
 
-        val schemaResp = client.GetSchemas(schemaReq)
-        JdbcUtils.verifySuccess(schemaResp.getStatus)
-
         rs = new HiveQueryResultSet.Builder(connection)
           .setClient(client)
           .setSessionHandle(sessHandle)
-          .setStmtHandle(schemaResp.getOperationHandle)
+          .setStmtHandle(client.GetSchemas(schemaReq).getOperationHandle)
           .build()
         f(rs)
       } finally {
@@ -110,28 +106,24 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
       val user = System.getProperty("user.name")
       val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
-      val client = new TCLIService.Client(new TBinaryProtocol(transport))
+      val client = new ThriftserverShimUtils.Client(new TBinaryProtocol(transport))
       transport.open()
 
       var rs: HiveQueryResultSet = null
 
       try {
-        val openResp = client.OpenSession(new TOpenSessionReq)
+        val openResp = client.OpenSession(new ThriftserverShimUtils.TOpenSessionReq)
         val sessHandle = openResp.getSessionHandle
 
-        val getTableReq = new TGetTablesReq(sessHandle)
+        val getTableReq = new ThriftserverShimUtils.TGetTablesReq(sessHandle)
         getTableReq.setSchemaName(schema)
         getTableReq.setTableName(tableNamePattern)
         getTableReq.setTableTypes(tableTypes)
 
-        val getTableResp = client.GetTables(getTableReq)
-
-        JdbcUtils.verifySuccess(getTableResp.getStatus)
-
         rs = new HiveQueryResultSet.Builder(connection)
           .setClient(client)
           .setSessionHandle(sessHandle)
-          .setStmtHandle(getTableResp.getOperationHandle)
+          .setStmtHandle(client.GetTables(getTableReq).getOperationHandle)
           .build()
 
         f(rs)
