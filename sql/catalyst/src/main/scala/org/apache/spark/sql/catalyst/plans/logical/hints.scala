@@ -90,7 +90,7 @@ case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
     HintInfo(strategy = this.strategy.orElse(other.strategy))
   }
 
-  override def toString: String = if (strategy.isDefined) s"(strategy=${strategy.get})" else "none"
+  override def toString: String = strategy.map(s => s"(strategy=$s)").getOrElse("none")
 }
 
 sealed abstract class JoinStrategyHint {
