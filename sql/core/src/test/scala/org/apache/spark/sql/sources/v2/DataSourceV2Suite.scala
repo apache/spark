@@ -394,13 +394,16 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-27411: DataSourceV2Strategy should not eliminate subquery") {
-    val t2 = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
-    sql("create temporary view t1 (a int) using parquet")
-    val df = t2.where("i < (select max(a) from t1)")
-    val subqueries = df.queryExecution.executedPlan.collect {
-      case p => p.subqueries
-    }.flatten
-    assert(subqueries.length == 1)
+    withTempView("t1") {
+      val t2 = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
+      Seq(2, 3).toDF("a").createTempView("t1")
+      val df = t2.where("i < (select max(a) from t1)").select('i)
+      val subqueries = df.queryExecution.executedPlan.collect {
+        case p => p.subqueries
+      }.flatten
+      assert(subqueries.length == 1)
+      checkAnswer(df, (0 until 3).map(i => Row(i)))
+    }
   }
 }
 
