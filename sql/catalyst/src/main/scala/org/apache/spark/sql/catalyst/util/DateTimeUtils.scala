@@ -359,7 +359,9 @@ object DateTimeUtils {
     days.toInt
   }
 
-  def localDateToDays(localDate: LocalDate): Int = localDate.toEpochDay.toInt
+  def localDateToDays(localDate: LocalDate): Int = {
+    Math.toIntExact(localDate.toEpochDay)
+  }
 
   def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
 
