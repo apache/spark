@@ -281,23 +281,23 @@ case class Empty2Null(child: Expression) extends UnaryExpression with String2Str
 case class UpdateEmptyValueOfPartitionToNull(conf: SQLConf) extends Rule[LogicalPlan] {
   private def updateQueryPlan(query: LogicalPlan,
     partitionColumnNames: Seq[String]): LogicalPlan = {
-    val partitionColumns = partitionColumnNames.map { name =>
-      query.output.find(a => conf.resolver(a.name, name)).getOrElse {
-        throw new AnalysisException(
-          s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
+      val partitionColumns = partitionColumnNames.map { name =>
+        query.output.find(a => conf.resolver(a.name, name)).getOrElse {
+          throw new AnalysisException(
+            s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
+        }
       }
-    }
-    val partitionSet = AttributeSet(partitionColumns)
-    var needConvert = false
-    val projectList: Seq[NamedExpression] = query.output.map {
-      case p if partitionSet.contains(p) && p.dataType == StringType && p.nullable =>
-        needConvert = true
-        Alias(Empty2Null(p), p.name)()
-      case attr => attr
-    }
-    if (needConvert) {
-      Project(projectList, query)
-    } else {
+      val partitionSet = AttributeSet(partitionColumns)
+      var needConvert = false
+      val projectList: Seq[NamedExpression] = query.output.map {
+        case p if partitionSet.contains(p) && p.dataType == StringType && p.nullable =>
+          needConvert = true
+          Alias(Empty2Null(p), p.name)()
+        case attr => attr
+      }
+      if (needConvert) {
+        Project(projectList, query)
+      } else {
       query
     }
   }
@@ -323,6 +323,10 @@ case class UpdateEmptyValueOfPartitionToNull(conf: SQLConf) extends Rule[Logical
       }.toSeq
       val actualQuery = updateQueryPlan(query, dynamicPartitions)
       i.copy(query = actualQuery)
+
+    case c @ CreateTable(tableDesc, _, Some(query)) =>
+      val actualQuery = updateQueryPlan(query, tableDesc.partitionColumnNames)
+      c.copy(query = Some(actualQuery))
   }
 }
 

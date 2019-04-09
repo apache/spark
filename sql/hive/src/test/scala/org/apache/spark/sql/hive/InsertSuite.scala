@@ -23,8 +23,8 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -781,6 +781,32 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               assert(m.contains("Found duplicate column(s) when inserting into"))
             }
           }
+        }
+      }
+    }
+  }
+
+  test("Null and '' values should not cause dynamic partition failure of string types") {
+    withTempView("tmp") {
+      withTable("t1", "t2", "t3") {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          val defaultParValue = ExternalCatalogUtils.DEFAULT_PARTITION_NAME
+          Seq((0, None), (1, Some("")), (2, None)).toDF("id", "p")
+            .write.format("hive").partitionBy("p").mode("overwrite").saveAsTable("t1")
+          checkAnswer(spark.table("t1").sort("id"),
+            Seq(Row(0, defaultParValue), Row(1, defaultParValue), Row(2, defaultParValue)))
+
+          Seq((0, None), (1, Some("")), (2, None)).toDF("id", "p").createOrReplaceTempView("tmp")
+
+          sql(s"create table t2(id long, p string) using hive partitioned by (p)")
+          sql("insert overwrite table t2 partition(p) select id, p from tmp")
+          checkAnswer(spark.table("t2").sort("id"),
+            Seq(Row(0, defaultParValue), Row(1, defaultParValue), Row(2, defaultParValue)))
+
+          sql("create table t3(id long) partitioned by (p string) STORED AS textfile")
+          sql("insert overwrite table t3 partition(p) select id, p from tmp")
+          checkAnswer(spark.table("t3").sort("id"),
+            Seq(Row(0, defaultParValue), Row(1, defaultParValue), Row(2, defaultParValue)))
         }
       }
     }

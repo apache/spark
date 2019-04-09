@@ -589,4 +589,16 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       sql("INSERT INTO TABLE test_table SELECT 2, null")
     }
   }
+
+  test("Null and '' values should not cause dynamic partition failure of string types") {
+    withTable("t1", "t2") {
+      Seq((0, None), (1, Some("")), (2, None)).toDF("id", "p")
+        .write.partitionBy("p").saveAsTable("t1")
+      checkAnswer(spark.table("t1").sort("id"), Seq(Row(0, null), Row(1, null), Row(2, null)))
+
+      sql("create table t2(id long, p string) using parquet partitioned by (p)")
+      sql("insert overwrite table t2 partition(p) select id, p from t1")
+      checkAnswer(spark.table("t2").sort("id"), Seq(Row(0, null), Row(1, null), Row(2, null)))
+    }
+  }
 }
