@@ -496,13 +496,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     return fromPrimitiveArray(arr, Platform.DOUBLE_ARRAY_OFFSET, arr.length, 8);
   }
 
-  public byte[] getBytes() {
-    return UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
-  }
-
   @Override
   public void writeExternal(ObjectOutput out) throws IOException {
-    byte[] bytes = getBytes();
+    byte[] bytes = UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
     out.writeInt(bytes.length);
     out.writeInt(this.numElements);
     out.write(bytes);
