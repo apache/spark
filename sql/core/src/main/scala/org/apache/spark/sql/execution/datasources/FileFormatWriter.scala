@@ -151,7 +151,7 @@ object FileFormatWriter extends Logging {
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
     val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
     // the sort order doesn't matter
-    val actualOrdering = plan.outputOrdering.map(_.child)
+    val actualOrdering = empty2NullPlan.outputOrdering.map(_.child)
     val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
       false
     } else {
@@ -169,7 +169,7 @@ object FileFormatWriter extends Logging {
 
     try {
       val rdd = if (orderingMatched) {
-        plan.execute()
+        empty2NullPlan.execute()
       } else {
         // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
         // the physical plan may have different attribute ids due to optimizer removing some
@@ -179,7 +179,7 @@ object FileFormatWriter extends Logging {
         SortExec(
           orderingExpr,
           global = false,
-          child = plan).execute()
+          child = empty2NullPlan).execute()
       }
 
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
