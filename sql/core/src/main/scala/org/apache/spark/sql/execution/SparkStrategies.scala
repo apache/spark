@@ -182,6 +182,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
     }
 
+    private def hintToBroadcastLeft(hint: JoinHint): Boolean = {
+      hint.leftHint.exists(_.strategy.contains(BROADCAST))
+    }
+
+    private def hintToBroadcastRight(hint: JoinHint): Boolean = {
+      hint.rightHint.exists(_.strategy.contains(BROADCAST))
+    }
+
+    private def hintToShuffleHashLeft(hint: JoinHint): Boolean = {
+      hint.leftHint.exists(_.strategy.contains(SHUFFLE_HASH))
+    }
+
+    private def hintToShuffleHashRight(hint: JoinHint): Boolean = {
+      hint.rightHint.exists(_.strategy.contains(SHUFFLE_HASH))
+    }
+
     private def hintToSortMergeJoin(hint: JoinHint): Boolean = {
       hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)) ||
         hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
@@ -192,58 +208,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
     }
 
-    private def broadcastSideByHints(
-        joinType: JoinType,
-        left: LogicalPlan,
-        right: LogicalPlan,
-        hint: JoinHint): Option[BuildSide] = {
-      val wantToBuildLeft =
-        canBuildLeft(joinType) && hint.leftHint.exists(_.strategy.contains(BROADCAST))
-      val wantToBuildRight =
-        canBuildRight(joinType) && hint.rightHint.exists(_.strategy.contains(BROADCAST))
-      getBuildSide(wantToBuildLeft, wantToBuildRight, left, right)
-    }
-
-    private def shuffleHashSideByHints(
-        joinType: JoinType,
-        left: LogicalPlan,
-        right: LogicalPlan,
-        hint: JoinHint): Option[BuildSide] = {
-      val wantToBuildLeft =
-        canBuildLeft(joinType) && hint.leftHint.exists(_.strategy.contains(SHUFFLE_HASH))
-      val wantToBuildRight =
-        canBuildRight(joinType) && hint.rightHint.exists(_.strategy.contains(SHUFFLE_HASH))
-      getBuildSide(wantToBuildLeft, wantToBuildRight, left, right)
-    }
-
-    private def broadcastSideBySizes(
-        joinType: JoinType,
-        left: LogicalPlan,
-        right: LogicalPlan): Option[BuildSide] = {
-      val wantToBuildLeft = canBuildLeft(joinType) && canBroadcast(left)
-      val wantToBuildRight = canBuildRight(joinType) && canBroadcast(right)
-      getBuildSide(wantToBuildLeft, wantToBuildRight, left, right)
-    }
-
-    private def shuffleHashSideBySizes(
-        joinType: JoinType,
-        left: LogicalPlan,
-        right: LogicalPlan): Option[BuildSide] = {
-      val wantToBuildLeft =
-        canBuildLeft(joinType) && canBuildLocalHashMap(left) && muchSmaller(left, right)
-      val wantToBuildRight =
-        canBuildRight(joinType) && canBuildLocalHashMap(right) && muchSmaller(right, left)
-      getBuildSide(wantToBuildLeft, wantToBuildRight, left, right)
-    }
-
-    private def createCartesianProduct(
-        left: LogicalPlan,
-        right: LogicalPlan,
-        condition: Option[Expression]) = {
-      Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition))
-    }
-
-    private def createFinalBroadcastNLJoin(
+    /**
+     * Create BroadcastNestedLoopJoinExec forcibly as the final solution, when no other join
+     * strategy is applicable.
+     */
+    private def createForcibleBroadcastNLJoin(
         left: LogicalPlan,
         right: LogicalPlan,
         joinType: JoinType,
@@ -258,10 +227,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
-      //   1. broadcast hint: pick broadcast hash join if join type is not full outer. If both sides
+      //   1. broadcast hint: pick broadcast hash join if the join type is supported. If both sides
       //      have the broadcast hints, choose the smaller side (based on stats) to broadcast.
       //   2. sort merge hint: pick sort merge join if join keys are sortable.
-      //   3. shuffle hash hint: We pick shuffle hash join if join type is not full outer. If both
+      //   3. shuffle hash hint: We pick shuffle hash join if the join type is supported. If both
       //      sides have the shuffle hash hints, choose the smaller side (based on stats) as the
       //      build side.
       //   4. shuffle replicate NL hint: pick cartesian product if join type is inner like.
@@ -270,58 +239,81 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   1. Pick broadcast hash join if one side is small enough to broadcast, and the join type
       //      is not full outer. If both sides are small, choose the smaller side (based on stats)
       //      to broadcast.
-      //   2. Pick sort merge join if the join keys are sortable.
-      //   3. Pick shuffle hash join if one side is small enough to build local hash map, and is
-      //      much smaller than the other side.
+      //   2. Pick shuffle hash join if one side is small enough to build local hash map, and is
+      //      much smaller than the other side, and `spark.sql.join.preferSortMergeJoin` is false.
+      //   3. Pick sort merge join if the join keys are sortable.
       //   4. Pick cartesian product if join type is inner like.
       //   5. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice.
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint) =>
-        def createBroadcastHashJoin(buildSide: BuildSide) = {
-          Seq(joins.BroadcastHashJoinExec(
-            leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
+        def createBroadcastHashJoin(buildLeft: Boolean, buildRight: Boolean) = {
+          val wantToBuildLeft = canBuildLeft(joinType) && buildLeft
+          val wantToBuildRight = canBuildRight(joinType) && buildRight
+          getBuildSide(wantToBuildLeft, wantToBuildRight, left, right).map { buildSide =>
+            Seq(joins.BroadcastHashJoinExec(
+              leftKeys,
+              rightKeys,
+              joinType,
+              buildSide,
+              condition,
+              planLater(left),
+              planLater(right)))
+          }
+        }
+
+        def createShuffleHashJoin(buildLeft: Boolean, buildRight: Boolean) = {
+          val wantToBuildLeft = canBuildLeft(joinType) && buildLeft
+          val wantToBuildRight = canBuildRight(joinType) && buildRight
+          getBuildSide(wantToBuildLeft, wantToBuildRight, left, right).map { buildSide =>
+            Seq(joins.ShuffledHashJoinExec(
+              leftKeys,
+              rightKeys,
+              joinType,
+              buildSide,
+              condition,
+              planLater(left),
+              planLater(right)))
+          }
         }
 
         def createSortMergeJoin() = {
-          Seq(joins.SortMergeJoinExec(
-            leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)))
+          if (RowOrdering.isOrderable(leftKeys)) {
+            Some(Seq(joins.SortMergeJoinExec(
+              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right))))
+          } else {
+            None
+          }
         }
 
-        def createShuffleHashJoin(buildSide: BuildSide) = {
-          Seq(joins.ShuffledHashJoinExec(
-            leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
+        def createCartesianProduct() = {
+          if (joinType.isInstanceOf[InnerLike]) {
+            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
+          } else {
+            None
+          }
         }
 
         def createJoinWithoutHint() = {
-          broadcastSideBySizes(joinType, left, right).map(createBroadcastHashJoin).getOrElse {
-            val shuffleHashBuildSide = shuffleHashSideBySizes(joinType, left, right)
-            if (!conf.preferSortMergeJoin && shuffleHashBuildSide.isDefined) {
-              createShuffleHashJoin(shuffleHashBuildSide.get)
-            } else if (RowOrdering.isOrderable(leftKeys)) {
-              createSortMergeJoin()
-            } else if (joinType.isInstanceOf[InnerLike]) {
-              createCartesianProduct(left, right, condition)
-            } else {
-              createFinalBroadcastNLJoin(left, right, joinType, condition)
-            }
-          }
-        }
-
-        broadcastSideByHints(joinType, left, right, hint).map(createBroadcastHashJoin).getOrElse {
-          if (RowOrdering.isOrderable(leftKeys) && hintToSortMergeJoin(hint)) {
-            createSortMergeJoin()
-          } else {
-            shuffleHashSideByHints(joinType, left, right, hint).map { side =>
-              createShuffleHashJoin(side)
-            }.getOrElse {
-              if (joinType.isInstanceOf[InnerLike] && hintToShuffleReplicateNL(hint)) {
-                createCartesianProduct(left, right, condition)
+          createBroadcastHashJoin(canBroadcast(left), canBroadcast(right))
+            .orElse {
+              if (!conf.preferSortMergeJoin) {
+                createShuffleHashJoin(
+                  canBuildLocalHashMap(left) && muchSmaller(left, right),
+                  canBuildLocalHashMap(right) && muchSmaller(right, left))
               } else {
-                createJoinWithoutHint()
+                None
               }
             }
-          }
+            .orElse(createSortMergeJoin())
+            .orElse(createCartesianProduct())
+            .getOrElse(createForcibleBroadcastNLJoin(left, right, joinType, condition))
         }
+
+        createBroadcastHashJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+          .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
+          .orElse(createShuffleHashJoin(hintToShuffleHashLeft(hint), hintToShuffleHashRight(hint)))
+          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+          .getOrElse(createJoinWithoutHint())
 
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast
@@ -335,28 +327,30 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   3. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice.
       case logical.Join(left, right, joinType, condition, hint) =>
-        def createBroadcastNLJoin(buildSide: BuildSide) = {
-          Seq(joins.BroadcastNestedLoopJoinExec(
-            planLater(left), planLater(right), buildSide, joinType, condition))
+        def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {
+          getBuildSide(buildLeft, buildRight, left, right).map { buildSide =>
+            Seq(joins.BroadcastNestedLoopJoinExec(
+              planLater(left), planLater(right), buildSide, joinType, condition))
+          }
+        }
+
+        def createCartesianProduct() = {
+          if (joinType.isInstanceOf[InnerLike]) {
+            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
+          } else {
+            None
+          }
         }
 
         def createJoinWithoutHint() = {
-          broadcastSideBySizes(joinType, left, right).map(createBroadcastNLJoin).getOrElse {
-            if (joinType.isInstanceOf[InnerLike]) {
-              createCartesianProduct(left, right, condition)
-            } else {
-              createFinalBroadcastNLJoin(left, right, joinType, condition)
-            }
-          }
+          createBroadcastNLJoin(canBroadcast(left), canBroadcast(right))
+            .orElse(createCartesianProduct())
+            .getOrElse(createForcibleBroadcastNLJoin(left, right, joinType, condition))
         }
 
-        broadcastSideByHints(joinType, left, right, hint).map(createBroadcastNLJoin).getOrElse {
-          if (joinType.isInstanceOf[InnerLike] && hintToShuffleReplicateNL(hint)) {
-            createCartesianProduct(left, right, condition)
-          } else {
-            createJoinWithoutHint()
-          }
-        }
+        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+          .getOrElse(createJoinWithoutHint())
 
       // --- Cases where this strategy does not apply ---------------------------------------------
       case _ => Nil
