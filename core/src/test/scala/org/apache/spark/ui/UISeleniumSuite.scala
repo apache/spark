@@ -39,7 +39,7 @@ import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
-import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
+import org.apache.spark.internal.config.{EXECUTOR_HEARTBEAT_INTERVAL, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
 import org.apache.spark.status.config._
@@ -733,7 +733,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       master = "local[2]",
       // Set a small heart beat interval to make the test fast
       additionalConfs = Map(
-        "spark.executor.heartbeatInterval" -> "1s",
+        EXECUTOR_HEARTBEAT_INTERVAL.key -> "10ms",
         LIVE_ENTITY_UPDATE_MIN_FLUSH_PERIOD.key -> "10ms"))) { sc =>
       sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
       val f = sc.parallelize(1 to 1000, 1000).foreachAsync { _ =>
