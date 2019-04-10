@@ -30,6 +30,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
+import org.apache.spark.sql.hive.HiveUtils
 
 /**
  * Spark's own GetTablesOperation
@@ -83,7 +84,12 @@ private[hive] class SparkGetTablesOperation(
             catalogTable.identifier.table,
             tableType,
             catalogTable.comment.getOrElse(""))
-          rowSet.addRow(rowData)
+          // Since HIVE-7575(Hive 2.0.0), adds 5 additional columns to the ResultSet of GetTables.
+          if (HiveUtils.isHive23) {
+            rowSet.addRow(rowData ++ Array(null, null, null, null, null))
+          } else {
+            rowSet.addRow(rowData)
+          }
         }
       }
     }

@@ -483,10 +483,13 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement("smallKV", "addJar")(
       {
         statement =>
+          val jarName = if (HiveUtils.isHive23) {
+            "hive-hcatalog-core-2.3.4.jar"
+          } else {
+            "hive-hcatalog-core-0.13.1.jar"
+          }
           val jarFile =
-            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
-              .split("/")
-              .mkString(File.separator)
+            s"../hive/src/test/resources/$jarName".split("/").mkString(File.separator)
 
           statement.executeQuery(s"ADD JAR $jarFile")
       },
@@ -537,7 +540,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      if (HiveUtils.isHive23) {
+        assert(conf.get("spark.sql.hive.version") === Some("2.3.4"))
+      } else {
+        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      }
     }
   }
 
@@ -550,7 +557,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      if (HiveUtils.isHive23) {
+        assert(conf.get("spark.sql.hive.version") === Some("2.3.4"))
+      } else {
+        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      }
     }
   }
 
@@ -628,7 +639,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val sessionHandle = client.openSession(user, "")
       val sessionID = sessionHandle.getSessionId
 
-      assert(pipeoutFileList(sessionID).length == 1)
+      if (HiveUtils.isHive23) {
+        assert(pipeoutFileList(sessionID).length == 2)
+      } else {
+        assert(pipeoutFileList(sessionID).length == 1)
+      }
 
       client.closeSession(sessionHandle)
 
