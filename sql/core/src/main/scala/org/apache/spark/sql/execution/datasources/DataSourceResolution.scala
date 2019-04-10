@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
@@ -31,6 +32,8 @@ import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.StructType
 
 case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport  {
+  import org.apache.spark.sql.catalog.v2.expressions.LogicalExpressions.TransformHelper
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
         table, schema, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
@@ -75,7 +78,7 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
   private def buildCatalogTable(
       table: TableIdentifier,
       schema: StructType,
-      partitionColumnNames: Seq[String],
+      partitioning: Seq[Transform],
       bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
       provider: String,
@@ -104,7 +107,7 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
       storage = storage.copy(locationUri = customLocation),
       schema = schema,
       provider = Some(provider),
-      partitionColumnNames = partitionColumnNames,
+      partitionColumnNames = partitioning.asPartitionColumns,
       bucketSpec = bucketSpec,
       properties = properties,
       comment = comment)
