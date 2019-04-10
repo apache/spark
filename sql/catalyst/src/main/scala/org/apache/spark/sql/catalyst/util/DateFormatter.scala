@@ -34,7 +34,7 @@ class Iso8601DateFormatter(
 
   override def parse(s: String): Int = {
     val localDate = LocalDate.parse(s, formatter)
-    Math.toIntExact(localDate.toEpochDay)
+    DateTimeUtils.localDateToDays(localDate)
   }
 
   override def format(days: Int): String = {

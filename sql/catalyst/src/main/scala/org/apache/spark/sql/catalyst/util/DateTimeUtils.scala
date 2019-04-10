@@ -359,7 +359,9 @@ object DateTimeUtils {
     days.toInt
   }
 
-  def localDateToDays(localDate: LocalDate): Int = localDate.toEpochDay.toInt
+  def localDateToDays(localDate: LocalDate): Int = {
+    Math.toIntExact(localDate.toEpochDay)
+  }
 
   def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
 
@@ -411,7 +413,7 @@ object DateTimeUtils {
     segments(i) = currentSegmentValue
     try {
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-      Some(Math.toIntExact(localDate.toEpochDay))
+      Some(localDateToDays(localDate))
     } catch {
       case NonFatal(_) => None
     }
