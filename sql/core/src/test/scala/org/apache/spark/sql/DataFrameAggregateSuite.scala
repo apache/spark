@@ -903,12 +903,20 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       testData.agg(count_if('key % 2 === 0), count_if('key > 50), count_if('key < 50)),
-      Row(50, 50, 49))
+      Row(50L, 50L, 49L))
     checkAnswer(
       sql("SELECT COUNT_IF(key % 2 = 0), COUNT_IF(key > 50), COUNT_IF(key < 50) FROM testData"),
-      Row(50, 50, 49))
+      Row(50L, 50L, 49L))
+
+    checkAnswer(
+      testData2.groupBy('a).agg(count_if('b % 2 === 0)),
+      Seq(Row(1, 1L), Row(2, 1L), Row(3, 1L)))
+    checkAnswer(
+      sql("SELECT a, COUNT_IF(b % 2 = 0) FROM testData2 GROUP BY a"),
+      Seq(Row(1, 1L), Row(2, 1L), Row(3, 1L)))
 
     checkError(testData.agg(count_if('key)))
+    checkError(testData.agg(count_if("key")))
     checkError(sql("SELECT COUNT_IF(key) FROM testData"))
   }
 }
