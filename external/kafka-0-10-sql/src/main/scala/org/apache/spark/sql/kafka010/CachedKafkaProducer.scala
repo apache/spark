@@ -51,8 +51,6 @@ private[kafka010] case class CachedKafkaProducer(
     closed = false
     producer
   }
-  @volatile
-  private var isCached: Boolean = true
   @GuardedBy("this")
   private var closed: Boolean = true
   private def close(): Unit = {
@@ -71,8 +69,6 @@ private[kafka010] case class CachedKafkaProducer(
   }
 
   private def inUse(): Boolean = inUseCount.get() > 0
-
-  private def unCache(): Unit = isCached = false
 
   private[kafka010] def getInUseCount: Int = inUseCount.get()
 
@@ -104,13 +100,13 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     override def onRemoval(
         notification: RemovalNotification[Seq[(String, Object)], CachedKafkaProducer]): Unit = {
       val producer: CachedKafkaProducer = notification.getValue
+      logDebug(s"Evicting kafka producer $producer, due to ${notification.getCause}.")
       if (producer.inUse()) {
-        logDebug(s"Evicting kafka producer $producer, due to ${notification.getCause}.")
-        // When `inuse` producer is evicted we wait for it to be released before finally closing it.
+        // When `inuse` producer is evicted we wait for it to be released by all the tasks,
+        // before finally closing it.
         closeQueue.add(producer)
-        producer.unCache()
       } else {
-        close(producer)
+        producer.close()
       }
     }
   }
@@ -168,15 +164,12 @@ private[kafka010] object CachedKafkaProducer extends Logging {
         }
       }
     }
-    if (!producer.inUse() && !producer.isCached) {
-      // it will take care of removing it from close queue as well.
-      close(producer)
-    }
+    // We need a close queue, so that we can close the producer(s) outside of a synchronized block.
+    processPendingClose(producer)
   }
 
-  /** Close this producer and process pending closes. */
-  private def close(producer: CachedKafkaProducer): Unit = {
-    producer.close()
+  /** Process pending closes. */
+  private def processPendingClose(producer: CachedKafkaProducer): Unit = {
     // Check and close any other producers previously evicted, but pending to be closed.
     for (p <- closeQueue.iterator().asScala) {
       if (!p.inUse()) {
