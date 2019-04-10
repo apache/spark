@@ -986,4 +986,53 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val queryStats3 = query().queryExecution.optimizedPlan.stats.attributeStats
     assert(queryStats3.map(_._1.name).toSet === Set("c0", "v1", "v2"))
   }
+
+  test("Refresh Qualified Tables") {
+    withTempDatabase { db =>
+      withTable(s"$db.cachedTable") {
+        withCache(s"$db.cachedTable") {
+
+
+          sql(s"CREATE TABLE $db.cachedTable STORED AS PARQUET AS SELECT 1")
+          sql(s"CACHE TABLE $db.cachedTable")
+          assertCached(sql(s"select * from $db.cachedTable"), s"`$db`.`cachedTable`")
+          assert(spark.catalog.isCached(s"$db.cachedTable"),
+            s"Table '$db.cachedTable' should be cached")
+
+          sql(s"REFRESH TABLE $db.cachedTable")
+          assertCached(sql(s"select * from $db.cachedTable"), s"`$db`.`cachedTable`")
+          assert(spark.catalog.isCached(s"$db.cachedTable"),
+            s"Table '$db.cachedTable' should be cached after refresh")
+
+          activateDatabase(db) {
+            assertCached(sql("select * from cachedTable"), s"`$db`.`cachedTable`")
+            assert(spark.catalog.isCached("cachedTable"),
+              "Table 'cachedTable' should be cached after refresh")
+
+            sql(s"REFRESH TABLE cachedTable")
+            assertCached(sql("select * from cachedTable"), s"`$db`.`cachedTable`")
+            assert(spark.catalog.isCached("cachedTable"),
+              "Table 'cachedTable' should be cached after refresh")
+          }
+        }
+      }
+    }
+  }
+
+  test("Refresh Unqualified Tables") {
+    withTable("cachedTable") {
+      withCache("cachedTable") {
+        sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
+        sql("CACHE TABLE cachedTable")
+        assertCached(sql("select * from cachedTable"), "`cachedTable`")
+        assert(spark.catalog.isCached("cachedTable"),
+          "Table 'cachedTable' should be cached")
+
+        sql("REFRESH TABLE cachedTable")
+        assertCached(sql("select * from cachedTable"), "`cachedTable`")
+        assert(spark.catalog.isCached("cachedTable"),
+          "Table 'cachedTable' should be cached after refresh")
+      }
+    }
+  }
 }

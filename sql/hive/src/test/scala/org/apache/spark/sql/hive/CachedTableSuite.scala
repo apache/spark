@@ -49,16 +49,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     maybeBlock.nonEmpty
   }
 
-  // Blocking uncache table for tests
-  private def uncacheTable(tableName: String): Unit = {
-    val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
-    spark.sharedState.cacheManager.uncacheQuery(
-      spark,
-      spark.table(tableName).logicalPlan,
-      cascade = cascade,
-      blocking = true)
-  }
+
 
   test("cache table") {
     val preCacheResults = sql("SELECT * FROM src").collect().toSeq
@@ -201,59 +192,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("CACHE TABLE udfTest AS SELECT * FROM src WHERE floor(key) = 1")
       assertCached(table("udfTest"))
       uncacheTable("udfTest")
-    }
-  }
-
-  test("Refresh Qualified Tables") {
-    withTempDatabase { db =>
-      withTempView("cachedTable") {
-        try {
-          sql(s"CREATE TABLE $db.cachedTable STORED AS PARQUET AS SELECT 1")
-          sql(s"CACHE TABLE $db.cachedTable")
-          assertCached(sql(s"select * from $db.cachedTable"), s"`$db`.`cachedTable`")
-          assert(spark.catalog.isCached(s"$db.cachedTable"),
-            s"Table '$db.cachedTable' should be cached")
-
-          sql(s"REFRESH TABLE $db.cachedTable")
-          assertCached(sql(s"select * from $db.cachedTable"), s"`$db`.`cachedTable`")
-          assert(spark.catalog.isCached(s"$db.cachedTable"),
-            s"Table '$db.cachedTable' should be cached after refresh")
-
-          activateDatabase(db) {
-            assertCached(sql("select * from cachedTable"), s"`$db`.`cachedTable`")
-            assert(spark.catalog.isCached("cachedTable"),
-              "Table 'cachedTable' should be cached after refresh")
-
-            sql(s"REFRESH TABLE cachedTable")
-            assertCached(sql("select * from cachedTable"), s"`$db`.`cachedTable`")
-            assert(spark.catalog.isCached("cachedTable"),
-              "Table 'cachedTable' should be cached after refresh")
-          }
-        } finally {
-          sql(s"UNCACHE TABLE $db.cachedTable")
-          sql(s"DROP TABLE $db.cachedTable")
-        }
-      }
-    }
-  }
-
-  test("Refresh Unqualified Tables") {
-    withTempView("cachedTable") {
-      try {
-        sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
-        sql("CACHE TABLE cachedTable")
-        assertCached(sql("select * from cachedTable"), "`cachedTable`")
-        assert(spark.catalog.isCached("cachedTable"),
-          "Table 'cachedTable' should be cached")
-
-        sql("REFRESH TABLE cachedTable")
-        assertCached(sql("select * from cachedTable"), "`cachedTable`")
-        assert(spark.catalog.isCached("cachedTable"),
-          "Table 'cachedTable' should be cached after refresh")
-      } finally {
-        sql("UNCACHE TABLE cachedTable")
-        sql("DROP TABLE cachedTable")
-      }
     }
   }
 
