@@ -37,16 +37,14 @@ class CountIfSuite extends SparkFunSuite {
     val result1: InternalRow = evaluator.update(
       InternalRow(true),
       InternalRow(false),
-      InternalRow(true)
-    )
+      InternalRow(true))
     assert(result1 === InternalRow(2L))
 
     // update with nulls
     val result2: InternalRow = evaluator.update(
       InternalRow(null),
       InternalRow(null),
-      InternalRow(null)
-    )
+      InternalRow(null))
     assert(result2 === InternalRow(0L))
 
     // update with non-nulls and nulls
@@ -54,8 +52,7 @@ class CountIfSuite extends SparkFunSuite {
       InternalRow(null),
       InternalRow(true),
       InternalRow(null),
-      InternalRow(false)
-    )
+      InternalRow(false))
     assert(result === InternalRow(1L))
   }
 
@@ -68,16 +65,14 @@ class CountIfSuite extends SparkFunSuite {
     val partition1: InternalRow = evaluator.update(
       InternalRow(true),
       InternalRow(false),
-      InternalRow(true)
-    )
+      InternalRow(true))
     assert(evaluator.merge(partition1) === InternalRow(2L))
 
     // merge multiples
     val partition2: InternalRow = evaluator.update(
       InternalRow(false),
       InternalRow(true),
-      InternalRow(null)
-    )
+      InternalRow(null))
     assert(evaluator.merge(partition0, partition1) === InternalRow(2L))
     assert(evaluator.merge(partition0, partition2) === InternalRow(1L))
     assert(evaluator.merge(partition1, partition2) === InternalRow(3L))
@@ -96,16 +91,14 @@ class CountIfSuite extends SparkFunSuite {
     val partition1: InternalRow = evaluator.update(
       InternalRow(true),
       InternalRow(false),
-      InternalRow(true)
-    )
+      InternalRow(true))
     assert(evaluator.eval(partition1) === InternalRow(2L))
 
     // eval after update and merge
     val partition2: InternalRow = evaluator.update(
       InternalRow(false),
       InternalRow(true),
-      InternalRow(null)
-    )
+      InternalRow(null))
     val merge: InternalRow = evaluator.merge(partition0, partition1, partition2)
     assert(evaluator.eval(merge) === InternalRow(3L))
   }

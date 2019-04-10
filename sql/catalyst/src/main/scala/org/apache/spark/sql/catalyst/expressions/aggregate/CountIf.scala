@@ -30,12 +30,10 @@ import org.apache.spark.sql.types._
     Examples:
       > SELECT _FUNC_(col % 2 = 0) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
        2
-      > SELECT _FUNC_(col % 2 = 0) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
-       2
       > SELECT _FUNC_(col IS NULL) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
        1
   """,
-  since = "2.5.0")
+  since = "3.0.0")
 case class CountIf(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil

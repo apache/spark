@@ -377,7 +377,7 @@ object functions {
    * Aggregate function: returns the number of true values in a group.
    *
    * @group agg_funcs
-   * @since 2.5.0
+   * @since 3.0.0
    */
   def count_if(e: Column): Column = withAggregateFunction {
     CountIf(e.expr)
@@ -387,7 +387,7 @@ object functions {
    * Aggregate function: returns the number of true values in a group.
    *
    * @group agg_funcs
-   * @since 2.5.0
+   * @since 3.0.0
    */
   def count_if(columnName: String): TypedColumn[Boolean, Long] =
     count_if(Column(columnName)).as(ExpressionEncoder[Long]())
