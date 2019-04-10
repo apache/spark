@@ -411,7 +411,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         assertBroadcastHashJoin(
           sql(equiJoinQueryWithHint("BROADCAST(t1, t2)" :: Nil)), BuildLeft)
         assertBroadcastNLJoin(
-          sql(nonEquiJoinQueryWithHint("BROADCAST(t1, t2)" :: Nil, "left")), BuildRight)
+          sql(nonEquiJoinQueryWithHint("BROADCAST(t1, t2)" :: Nil, "left")), BuildLeft)
         assertBroadcastNLJoin(
           sql(nonEquiJoinQueryWithHint("BROADCAST(t1, t2)" :: Nil, "right")), BuildLeft)
 
@@ -472,7 +472,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
 
         // Shuffle-merge hint specified but not doable
         assertBroadcastNLJoin(
-          sql(nonEquiJoinQueryWithHint("MERGE(t1, t2)" :: Nil, "left")), BuildRight)
+          sql(nonEquiJoinQueryWithHint("MERGE(t1, t2)" :: Nil, "left")), BuildLeft)
       }
     }
   }
