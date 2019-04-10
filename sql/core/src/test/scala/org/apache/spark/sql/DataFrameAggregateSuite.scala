@@ -894,4 +894,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         error.message.contains("function min_by does not support ordering on type map<int,string>"))
     }
   }
+
+  test("SPARK-27425: count_if function") {
+    def checkError(df: => DataFrame): Unit = {
+      val thrownException = the [AnalysisException] thrownBy df.queryExecution.analyzed
+      assert(thrownException.message.contains("function count_if requires boolean type"))
+    }
+
+    checkAnswer(
+      testData.agg(count_if('key % 2 === 0), count_if('key > 50), count_if('key < 50)),
+      Row(50, 50, 49))
+    checkAnswer(
+      sql("SELECT COUNT_IF(key % 2 = 0), COUNT_IF(key > 50), COUNT_IF(key < 50) FROM testData"),
+      Row(50, 50, 49))
+
+    checkError(testData.agg(count_if('key)))
+    checkError(sql("SELECT COUNT_IF(key) FROM testData"))
+
+  }
 }
