@@ -39,7 +39,6 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
   // in that batch's checkpoint data
   @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time]
 
-  @transient private var fileSystem: FileSystem = null
   protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]]
 
   /**
@@ -80,6 +79,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
         // even after master fails, as the checkpoint data of `time` does not refer to those files
         val filesToDelete = timeToCheckpointFile.filter(_._1 < lastCheckpointFileTime)
         logDebug("Files to delete:\n" + filesToDelete.mkString(","))
+        var fileSystem: FileSystem = null
         filesToDelete.foreach {
           case (time, file) =>
             try {
@@ -87,9 +87,12 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
               if (fileSystem == null) {
                 fileSystem = path.getFileSystem(dstream.ssc.sparkContext.hadoopConfiguration)
               }
-              fileSystem.delete(path, true)
+              if (fileSystem.delete(path, true)) {
+                logInfo("Deleted checkpoint file '" + file + "' for time " + time)
+              } else {
+                logWarning(s"Error deleting old checkpoint file '$file' for time $time")
+              }
               timeToCheckpointFile -= time
-              logInfo("Deleted checkpoint file '" + file + "' for time " + time)
             } catch {
               case e: Exception =>
                 logWarning("Error deleting old checkpoint file '" + file + "' for time " + time, e)

@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.lang.reflect.Method
+
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.orc.{OrcFilters => DatasourceOrcFilters}
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters.buildTree
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -57,22 +61,33 @@ import org.apache.spark.sql.types._
  * known to be convertible.
  */
 private[orc] object OrcFilters extends Logging {
+
+  private def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
+    val method = klass.getMethod(name, args: _*)
+    method.setAccessible(true)
+    method
+  }
+
   def createFilter(schema: StructType, filters: Array[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+    if (HiveUtils.isHive23) {
+      DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
+    } else {
+      val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
 
-    // First, tries to convert each filter individually to see whether it's convertible, and then
-    // collect all convertible ones to build the final `SearchArgument`.
-    val convertibleFilters = for {
-      filter <- filters
-      _ <- buildSearchArgument(dataTypeMap, filter, newBuilder)
-    } yield filter
+      // First, tries to convert each filter individually to see whether it's convertible, and then
+      // collect all convertible ones to build the final `SearchArgument`.
+      val convertibleFilters = for {
+        filter <- filters
+        _ <- buildSearchArgument(dataTypeMap, filter, newBuilder)
+      } yield filter
 
-    for {
-      // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- buildTree(convertibleFilters)
-      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
-      builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
-    } yield builder.build()
+      for {
+        // Combines all convertible filters using `And` to produce a single conjunction
+        conjunction <- buildTree(convertibleFilters)
+        // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
+        builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
+      } yield builder.build()
+    }
   }
 
   private def buildSearchArgument(
@@ -160,31 +175,50 @@ private[orc] object OrcFilters extends Logging {
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().equals(attribute, value).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "equals", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().nullSafeEquals(attribute, value).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "nullSafeEquals", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThan(attribute, value).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "lessThan", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThanEquals(attribute, value).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "lessThanEquals", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThanEquals(attribute, value).end())
+        val bd = builder.startNot()
+        val method = findMethod(bd.getClass, "lessThanEquals", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThan(attribute, value).end())
+        val bd = builder.startNot()
+        val method = findMethod(bd.getClass, "lessThan", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().isNull(attribute).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "isNull", classOf[String])
+        Some(method.invoke(bd, attribute).asInstanceOf[Builder].end())
 
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().isNull(attribute).end())
+        val bd = builder.startNot()
+        val method = findMethod(bd.getClass, "isNull", classOf[String])
+        Some(method.invoke(bd, attribute).asInstanceOf[Builder].end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().in(attribute, values.map(_.asInstanceOf[AnyRef]): _*).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "in", classOf[String], classOf[Array[Object]])
+        Some(method.invoke(bd, attribute, values.map(_.asInstanceOf[AnyRef]))
+          .asInstanceOf[Builder].end())
 
       case _ => None
     }

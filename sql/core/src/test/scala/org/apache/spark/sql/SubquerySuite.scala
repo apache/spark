@@ -21,8 +21,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ExecSubqueryExpression, FileSourceScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ExecSubqueryExpression, FileSourceScanExec, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -1335,6 +1336,39 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |c.id IN (SELECT id FROM b WHERE num = 3)
         """.stripMargin)
       checkAnswer(df3, Seq(Row("a", 2, "a"), Row("a", 2, "b")))
+    }
+  }
+
+  test("SPARK-27279: Reuse Subquery") {
+    Seq(true, false).foreach { reuse =>
+      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
+        val df = sql(
+          """
+            |SELECT (SELECT avg(key) FROM testData) + (SELECT avg(key) FROM testData)
+            |FROM testData
+            |LIMIT 1
+          """.stripMargin)
+
+        var countSubqueryExec = 0
+        var countReuseSubqueryExec = 0
+        df.queryExecution.executedPlan.transformAllExpressions {
+          case s @ ScalarSubquery(_: SubqueryExec, _) =>
+            countSubqueryExec = countSubqueryExec + 1
+            s
+          case s @ ScalarSubquery(_: ReusedSubqueryExec, _) =>
+            countReuseSubqueryExec = countReuseSubqueryExec + 1
+            s
+        }
+
+        if (reuse) {
+          assert(countSubqueryExec == 1, "Subquery reusing not working correctly")
+          assert(countReuseSubqueryExec == 1, "Subquery reusing not working correctly")
+        } else {
+          assert(countSubqueryExec == 2, "expect 2 SubqueryExec when not reusing")
+          assert(countReuseSubqueryExec == 0,
+            "expect 0 ReusedSubqueryExec when not reusing")
+        }
+      }
     }
   }
 }

@@ -81,13 +81,15 @@ abstract class BaseSessionStateBuilder(
   /**
    * SQL-specific key-value configurations.
    *
-   * These either get cloned from a pre-existing instance or newly created. The conf is always
-   * merged with its [[SparkConf]].
+   * These either get cloned from a pre-existing instance or newly created. The conf is merged
+   * with its [[SparkConf]] only when there is no parent session.
    */
   protected lazy val conf: SQLConf = {
-    val conf = parentState.map(_.conf.clone()).getOrElse(new SQLConf)
-    mergeSparkConf(conf, session.sparkContext.conf)
-    conf
+    parentState.map(_.conf.clone()).getOrElse {
+      val conf = new SQLConf
+      mergeSparkConf(conf, session.sparkContext.conf)
+      conf
+    }
   }
 
   /**
@@ -160,7 +162,7 @@ abstract class BaseSessionStateBuilder(
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
-        new FallbackOrcDataSourceV2(session) +:
+        new FallBackFileSourceV2(session) +:
         DataSourceResolution(conf) +:
         customResolutionRules
 
