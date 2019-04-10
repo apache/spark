@@ -205,6 +205,13 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(trueCost ~== doubleArrayCost absTol 1e-6)
     assert(trueCost ~== floatArrayCost absTol 1e-6)
   }
+
+  test("prediction on single instance") {
+    val bikm = new BisectingKMeans().setSeed(123L)
+    val model = bikm.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
+  }
 }
 
 object BisectingKMeansSuite {

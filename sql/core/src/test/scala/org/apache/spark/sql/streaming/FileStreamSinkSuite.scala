@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+import java.nio.file.Files
 import java.util.Locale
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -452,6 +456,55 @@ class FileStreamSinkSuite extends StreamTest {
           }
         }
       }
+    }
+  }
+
+  test("special characters in output path") {
+    withTempDir { tempDir =>
+      val checkpointDir = new File(tempDir, "chk")
+      val outputDir = new File(tempDir, "output @#output")
+      val inputData = MemoryStream[Int]
+      inputData.addData(1, 2, 3)
+      val q = inputData.toDF()
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .format("parquet")
+        .start(outputDir.getCanonicalPath)
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+      // The "_spark_metadata" directory should be in "outputDir"
+      assert(outputDir.listFiles.map(_.getName).contains(FileStreamSink.metadataDir))
+      val outputDf = spark.read.parquet(outputDir.getCanonicalPath).as[Int]
+      checkDatasetUnorderly(outputDf, 1, 2, 3)
+    }
+  }
+
+  testQuietly("cleanup incomplete output for aborted task") {
+    withTempDir { tempDir =>
+      val checkpointDir = new File(tempDir, "chk")
+      val outputDir = new File(tempDir, "output")
+      val inputData = MemoryStream[Int]
+      inputData.addData(1, 2, 3)
+      val q = inputData.toDS().map(_ / 0)
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .format("parquet")
+        .start(outputDir.getCanonicalPath)
+
+      intercept[StreamingQueryException] {
+        try {
+          q.processAllAvailable()
+        } finally {
+          q.stop()
+        }
+      }
+
+      val outputFiles = Files.walk(outputDir.toPath).iterator().asScala
+        .filter(_.toString.endsWith(".parquet"))
+      assert(outputFiles.toList.isEmpty, "Incomplete files should be cleaned up.")
     }
   }
 }

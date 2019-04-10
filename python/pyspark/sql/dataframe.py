@@ -795,9 +795,9 @@ class DataFrame(object):
 
         >>> df = spark.range(10)
         >>> df.sample(0.5, 3).count()
-        4
+        7
         >>> df.sample(fraction=0.5, seed=3).count()
-        4
+        7
         >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
         1
         >>> df.sample(1.0).count()
@@ -865,8 +865,8 @@ class DataFrame(object):
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    5|
-        |  1|    9|
+        |  0|    3|
+        |  1|    6|
         +---+-----+
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
@@ -898,10 +898,10 @@ class DataFrame(object):
 
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
         >>> splits[0].count()
-        1
+        2
 
         >>> splits[1].count()
-        3
+        2
         """
         for w in weights:
             if w < 0.0:
@@ -1000,8 +1000,9 @@ class DataFrame(object):
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
-            ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
-            ``left_semi``, and ``left_anti``.
+            ``full``, ``fullouter``, ``full_outer``, ``left``, ``leftouter``, ``left_outer``,
+            ``right``, ``rightouter``, ``right_outer``, ``semi``, ``leftsemi``, ``left_semi``,
+            ``anti``, ``leftanti`` and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
@@ -1973,6 +1974,11 @@ class DataFrame(object):
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
 
+        .. note:: This method introduces a projection internally. Therefore, calling it multiple
+            times, for instance, via loops in order to add multiple columns can generate big
+            plans which can cause performance issues and even `StackOverflowException`.
+            To avoid this, use :func:`select` with the multiple columns at once.
+
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
 
@@ -2046,6 +2052,31 @@ class DataFrame(object):
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(3.0)
+    def transform(self, func):
+        """Returns a new class:`DataFrame`. Concise syntax for chaining custom transformations.
+
+        :param func: a function that takes and returns a class:`DataFrame`.
+
+        >>> from pyspark.sql.functions import col
+        >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
+        >>> def cast_all_to_int(input_df):
+        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        >>> def sort_columns_asc(input_df):
+        ...     return input_df.select(*sorted(input_df.columns))
+        >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
+        +-----+---+
+        |float|int|
+        +-----+---+
+        |    1|  1|
+        |    2|  2|
+        +-----+---+
+        """
+        result = func(self)
+        assert isinstance(result, DataFrame), "Func returned an instance of type [%s], " \
+                                              "should have been DataFrame." % type(result)
+        return result
+
     @since(1.3)
     def toPandas(self):
         """
@@ -2107,14 +2138,13 @@ class DataFrame(object):
             # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.types import _check_dataframe_convert_date, \
+                    from pyspark.sql.types import _arrow_table_to_pandas, \
                         _check_dataframe_localize_timestamps
                     import pyarrow
                     batches = self._collectAsArrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
-                        pdf = table.to_pandas()
-                        pdf = _check_dataframe_convert_date(pdf, self.schema)
+                        pdf = _arrow_table_to_pandas(table, self.schema)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)

@@ -25,7 +25,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -297,7 +297,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ClearCacheCommand]] logical plan.
    */
   override def visitClearCache(ctx: ClearCacheContext): LogicalPlan = withOrigin(ctx) {
-    ClearCacheCommand()
+    ClearCacheCommand
   }
 
   /**
@@ -370,127 +370,52 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Type to keep track of a table header: (identifier, isTemporary, ifNotExists, isExternal).
+   * Create a [[DescribeQueryCommand]] logical command.
    */
-  type TableHeader = (TableIdentifier, Boolean, Boolean, Boolean)
-
-  /**
-   * Validate a create table statement and return the [[TableIdentifier]].
-   */
-  override def visitCreateTableHeader(
-      ctx: CreateTableHeaderContext): TableHeader = withOrigin(ctx) {
-    val temporary = ctx.TEMPORARY != null
-    val ifNotExists = ctx.EXISTS != null
-    if (temporary && ifNotExists) {
-      operationNotAllowed("CREATE TEMPORARY TABLE ... IF NOT EXISTS", ctx)
-    }
-    (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists, ctx.EXTERNAL != null)
+  override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
+    DescribeQueryCommand(visitQuery(ctx.query))
   }
 
   /**
    * Create a table, returning a [[CreateTable]] logical plan.
    *
-   * Expected format:
-   * {{{
-   *   CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [db_name.]table_name
-   *   USING table_provider
-   *   create_table_clauses
-   *   [[AS] select_statement];
+   * This is used to produce CreateTempViewUsing from CREATE TEMPORARY TABLE.
    *
-   *   create_table_clauses (order insensitive):
-   *     [OPTIONS table_property_list]
-   *     [PARTITIONED BY (col_name, col_name, ...)]
-   *     [CLUSTERED BY (col_name, col_name, ...)
-   *       [SORTED BY (col_name [ASC|DESC], ...)]
-   *       INTO num_buckets BUCKETS
-   *     ]
-   *     [LOCATION path]
-   *     [COMMENT table_comment]
-   *     [TBLPROPERTIES (property_name=property_value, ...)]
-   * }}}
+   * TODO: Remove this. It is used because CreateTempViewUsing is not a Catalyst plan.
+   * Either move CreateTempViewUsing into catalyst as a parsed logical plan, or remove it because
+   * it is deprecated.
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
-    if (external) {
-      operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
-    }
 
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
-    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
-    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
-
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val provider = ctx.tableProvider.qualifiedName.getText
-    val schema = Option(ctx.colTypeList()).map(createSchema)
-    val partitionColumnNames =
-      Option(ctx.partitionColumnNames)
-        .map(visitIdentifierList(_).toArray)
-        .getOrElse(Array.empty[String])
-    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
-
-    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
-    val storage = DataSource.buildStorageFormatFromOptions(options)
-
-    if (location.isDefined && storage.locationUri.isDefined) {
-      throw new ParseException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-          "you can only specify one of them.", ctx)
-    }
-    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
-
-    val tableType = if (customLocation.isDefined) {
-      CatalogTableType.EXTERNAL
+    if (!temp || ctx.query != null) {
+      super.visitCreateTable(ctx)
     } else {
-      CatalogTableType.MANAGED
-    }
-
-    val tableDesc = CatalogTable(
-      identifier = table,
-      tableType = tableType,
-      storage = storage.copy(locationUri = customLocation),
-      schema = schema.getOrElse(new StructType),
-      provider = Some(provider),
-      partitionColumnNames = partitionColumnNames,
-      bucketSpec = bucketSpec,
-      properties = properties,
-      comment = Option(ctx.comment).map(string))
-
-    // Determine the storage mode.
-    val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-
-    if (ctx.query != null) {
-      // Get the backing query.
-      val query = plan(ctx.query)
-
-      if (temp) {
-        operationNotAllowed("CREATE TEMPORARY TABLE ... USING ... AS query", ctx)
+      if (external) {
+        operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
       }
 
-      // Don't allow explicit specification of schema for CTAS
-      if (schema.nonEmpty) {
-        operationNotAllowed(
-          "Schema may not be specified in a Create Table As Select (CTAS) statement",
-          ctx)
-      }
-      CreateTable(tableDesc, mode, Some(query))
-    } else {
-      if (temp) {
-        if (ifNotExists) {
-          operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
-        }
+      checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+      checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
+      checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
+      checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+      checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+      checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
 
-        logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
-          "CREATE TEMPORARY VIEW ... USING ... instead")
+      if (ifNotExists) {
         // Unlike CREATE TEMPORARY VIEW USING, CREATE TEMPORARY TABLE USING does not support
         // IF NOT EXISTS. Users are not allowed to replace the existing temp table.
-        CreateTempViewUsing(table, schema, replace = false, global = false, provider, options)
-      } else {
-        CreateTable(tableDesc, mode, None)
+        operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
+
+      val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+      val provider = ctx.tableProvider.qualifiedName.getText
+      val schema = Option(ctx.colTypeList()).map(createSchema)
+
+      logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
+          "CREATE TEMPORARY VIEW ... USING ... instead")
+
+      CreateTempViewUsing(table, schema, replace = false, global = false, provider, options)
     }
   }
 
@@ -553,77 +478,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     AlterTableRecoverPartitionsCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       "MSCK REPAIR TABLE")
-  }
-
-  /**
-   * Convert a table property list into a key-value map.
-   * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
-   */
-  override def visitTablePropertyList(
-      ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
-    val properties = ctx.tableProperty.asScala.map { property =>
-      val key = visitTablePropertyKey(property.key)
-      val value = visitTablePropertyValue(property.value)
-      key -> value
-    }
-    // Check for duplicate property names.
-    checkDuplicateKeys(properties, ctx)
-    properties.toMap
-  }
-
-  /**
-   * Parse a key-value map from a [[TablePropertyListContext]], assuming all values are specified.
-   */
-  private def visitPropertyKeyValues(ctx: TablePropertyListContext): Map[String, String] = {
-    val props = visitTablePropertyList(ctx)
-    val badKeys = props.collect { case (key, null) => key }
-    if (badKeys.nonEmpty) {
-      operationNotAllowed(
-        s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
-    }
-    props
-  }
-
-  /**
-   * Parse a list of keys from a [[TablePropertyListContext]], assuming no values are specified.
-   */
-  private def visitPropertyKeys(ctx: TablePropertyListContext): Seq[String] = {
-    val props = visitTablePropertyList(ctx)
-    val badKeys = props.filter { case (_, v) => v != null }.keys
-    if (badKeys.nonEmpty) {
-      operationNotAllowed(
-        s"Values should not be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
-    }
-    props.keys.toSeq
-  }
-
-  /**
-   * A table property key can either be String or a collection of dot separated elements. This
-   * function extracts the property key based on whether its a string literal or a table property
-   * identifier.
-   */
-  override def visitTablePropertyKey(key: TablePropertyKeyContext): String = {
-    if (key.STRING != null) {
-      string(key.STRING)
-    } else {
-      key.getText
-    }
-  }
-
-  /**
-   * A table property value can be String, Integer, Boolean or Decimal. This function extracts
-   * the property value based on whether its a string, integer, boolean or decimal literal.
-   */
-  override def visitTablePropertyValue(value: TablePropertyValueContext): String = {
-    if (value == null) {
-      null
-    } else if (value.STRING != null) {
-      string(value.STRING)
-    } else if (value.booleanValue != null) {
-      value.getText.toLowerCase(Locale.ROOT)
-    } else {
-      value.getText
-    }
   }
 
   /**
@@ -997,34 +851,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       tableName = visitTableIdentifier(ctx.tableIdentifier),
       columnName = ctx.identifier.getText,
       newColumn = visitColType(ctx.colType))
-  }
-
-  /**
-   * Create location string.
-   */
-  override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {
-    string(ctx.STRING)
-  }
-
-  /**
-   * Create a [[BucketSpec]].
-   */
-  override def visitBucketSpec(ctx: BucketSpecContext): BucketSpec = withOrigin(ctx) {
-    BucketSpec(
-      ctx.INTEGER_VALUE.getText.toInt,
-      visitIdentifierList(ctx.identifierList),
-      Option(ctx.orderedIdentifierList)
-        .toSeq
-        .flatMap(_.orderedIdentifier.asScala)
-        .map { orderedIdCtx =>
-          Option(orderedIdCtx.ordering).map(_.getText).foreach { dir =>
-            if (dir.toLowerCase(Locale.ROOT) != "asc") {
-              operationNotAllowed(s"Column ordering must be ASC, was '$dir'", ctx)
-            }
-          }
-
-          orderedIdCtx.identifier.getText
-        })
   }
 
   /**
@@ -1431,15 +1257,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (ctx.identifierList != null) {
       operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
     } else {
-      // CREATE VIEW ... AS INSERT INTO is not allowed.
-      ctx.query.queryNoWith match {
-        case s: SingleInsertQueryContext if s.insertInto != null =>
-          operationNotAllowed("CREATE VIEW ... AS INSERT INTO", ctx)
-        case _: MultiInsertQueryContext =>
-          operationNotAllowed("CREATE VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)
-        case _ => // OK
-      }
-
       val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
         icl.identifierComment.asScala.map { ic =>
           ic.identifier.getText -> Option(ic.STRING).map(string)
@@ -1476,14 +1293,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
-    // ALTER VIEW ... AS INSERT INTO is not allowed.
-    ctx.query.queryNoWith match {
-      case s: SingleInsertQueryContext if s.insertInto != null =>
-        operationNotAllowed("ALTER VIEW ... AS INSERT INTO", ctx)
-      case _: MultiInsertQueryContext =>
-        operationNotAllowed("ALTER VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)
-      case _ => // OK
-    }
     AlterViewAsCommand(
       name = visitTableIdentifier(ctx.tableIdentifier),
       originalText = source(ctx.query),

@@ -26,7 +26,6 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
@@ -35,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
+import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -144,7 +144,7 @@ private[spark] class HadoopDelegationTokenManager(
   def obtainDelegationTokens(creds: Credentials): Long = {
     delegationTokenProviders.values.flatMap { provider =>
       if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
-        provider.obtainDelegationTokens(hadoopConf, sparkConf, fileSystemsToAccess(), creds)
+        provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
@@ -179,14 +179,6 @@ private[spark] class HadoopDelegationTokenManager(
       .getOption(key)
       .map(_.toBoolean)
       .getOrElse(isEnabledDeprecated)
-  }
-
-  /**
-   * List of file systems for which to obtain delegation tokens. The base implementation
-   * returns just the default file system in the given Hadoop configuration.
-   */
-  protected def fileSystemsToAccess(): Set[FileSystem] = {
-    Set(FileSystem.get(hadoopConf))
   }
 
   private def scheduleRenewal(delay: Long): Unit = {

@@ -172,7 +172,7 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
-    <script src={prependBaseUri(request, "/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery-1.12.4.min.js")}></script>
     <script src={prependBaseUri(request, "/static/vis.min.js")}></script>
     <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
@@ -195,14 +195,14 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet" href={prependBaseUri(request,
-      "/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+      "/static/jquery.dataTables.1.10.18.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/dataTables.bootstrap.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.4.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.18.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
     <script src={prependBaseUri(request, "/static/dataTables.bootstrap.min.js")}></script>
@@ -363,7 +363,8 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       reasonToNumKilled: Map[String, Int],
       total: Int): Seq[Node] = {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val ratio = if (total == 0) 100.0 else (completed.toDouble/total)*100
+    val completeWidth = "width: %s%%".format(ratio)
     // started + completed can be > total when there are speculative tasks
     val boundedStarted = math.min(started, total - completed)
     val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)

@@ -28,6 +28,7 @@ import okhttp3.Dispatcher
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -41,6 +42,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       master: String,
       namespace: Option[String],
       kubernetesAuthConfPrefix: String,
+      clientType: ClientType.Value,
       sparkConf: SparkConf,
       defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
@@ -79,6 +81,8 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .withApiVersion("v1")
       .withMasterUrl(master)
       .withWebsocketPingInterval(0)
+      .withRequestTimeout(clientType.requestTimeout(sparkConf))
+      .withConnectionTimeout(clientType.connectionTimeout(sparkConf))
       .withOption(oauthTokenValue) {
         (token, configBuilder) => configBuilder.withOauthToken(token)
       }.withOption(oauthTokenFile) {
@@ -110,5 +114,21 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
         configurator(opt, configBuilder)
       }.getOrElse(configBuilder)
     }
+  }
+
+  object ClientType extends Enumeration {
+    import scala.language.implicitConversions
+    val Driver = Val(DRIVER_CLIENT_REQUEST_TIMEOUT, DRIVER_CLIENT_CONNECTION_TIMEOUT)
+    val Submission = Val(SUBMISSION_CLIENT_REQUEST_TIMEOUT, SUBMISSION_CLIENT_CONNECTION_TIMEOUT)
+
+    protected case class Val(
+        requestTimeoutEntry: ConfigEntry[Int],
+        connectionTimeoutEntry: ConfigEntry[Int])
+      extends super.Val {
+      def requestTimeout(conf: SparkConf): Int = conf.get(requestTimeoutEntry)
+      def connectionTimeout(conf: SparkConf): Int = conf.get(connectionTimeoutEntry)
+    }
+
+    implicit def convert(value: Value): Val = value.asInstanceOf[Val]
   }
 }

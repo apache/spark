@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -168,9 +168,7 @@ private[spark] class MetricsSystem private (
   def removeSource(source: Source) {
     sources -= source
     val regName = buildRegistryName(source)
-    registry.removeMatching(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name.startsWith(regName)
-    })
+    registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
   }
 
   private def registerSources() {
@@ -234,4 +232,30 @@ private[spark] object MetricsSystem {
       instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
     new MetricsSystem(instance, conf, securityMgr)
   }
+}
+
+private[spark] object MetricsSystemInstances {
+  // The Spark standalone master process
+  val MASTER = "master"
+
+  // A component within the master which reports on various applications
+  val APPLICATIONS = "applications"
+
+  // A Spark standalone worker process
+  val WORKER = "worker"
+
+  // A Spark executor
+  val EXECUTOR = "executor"
+
+  // The Spark driver process (the process in which your SparkContext is created)
+  val DRIVER = "driver"
+
+  // The Spark shuffle service
+  val SHUFFLE_SERVICE = "shuffleService"
+
+  // The Spark ApplicationMaster when running on YARN
+  val APPLICATION_MASTER = "applicationMaster"
+
+  // The Spark cluster scheduler when running on Mesos
+  val MESOS_CLUSTER = "mesos_cluster"
 }

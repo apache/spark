@@ -121,12 +121,14 @@ class GaussianMixtureModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int = {
+  @Since("3.0.0")
+  def predict(features: Vector): Int = {
     val r = predictProbability(features)
     r.argmax
   }
 
-  private[clustering] def predictProbability(features: Vector): Vector = {
+  @Since("3.0.0")
+  def predictProbability(features: Vector): Vector = {
     val probs: Array[Double] =
       GaussianMixtureModel.computeProbabilities(features.asBreeze.toDenseVector, gaussians, weights)
     Vectors.dense(probs)
@@ -369,8 +371,8 @@ class GaussianMixture @Since("2.0.0") (
           case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
         })
 
-      bcWeights.destroy(blocking = false)
-      bcGaussians.destroy(blocking = false)
+      bcWeights.destroy()
+      bcGaussians.destroy()
 
       if (iter == 0) {
         val numSamples = sums.count
@@ -409,7 +411,7 @@ class GaussianMixture @Since("2.0.0") (
       iter += 1
     }
 
-    instances.unpersist(false)
+    instances.unpersist()
     val gaussianDists = gaussians.map { case (mean, covVec) =>
       val cov = GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values)
       new MultivariateGaussian(mean, cov)

@@ -37,8 +37,7 @@ import org.apache.spark.sql.sources.v2.reader.streaming._
  * @param offsetReader  a reader used to get kafka offsets. Note that the actual data will be
  *                      read by per-task consumers generated later.
  * @param kafkaParams   String params for per-task Kafka consumers.
- * @param sourceOptions The [[org.apache.spark.sql.sources.v2.DataSourceOptions]] params which
- *                      are not Kafka consumer params.
+ * @param sourceOptions Params which are not Kafka consumer params.
  * @param metadataPath Path to a directory this reader can use for writing metadata.
  * @param initialOffsets The Kafka offsets to start reading data at.
  * @param failOnDataLoss Flag indicating whether reading should fail in data loss

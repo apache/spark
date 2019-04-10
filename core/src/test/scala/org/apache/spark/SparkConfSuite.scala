@@ -32,7 +32,7 @@ import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
+import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -140,13 +140,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(sc.appName === "My other app")
   }
 
-  test("creating SparkContext with cpus per tasks bigger than cores per executors") {
-    val conf = new SparkConf(false)
-      .set(EXECUTOR_CORES, 1)
-      .set(CPUS_PER_TASK, 2)
-    intercept[SparkException] { sc = new SparkContext(conf) }
-  }
-
   test("nested property names") {
     // This wasn't supported by some external conf parsing libraries
     System.setProperty("spark.test.a", "a")
@@ -164,16 +157,15 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("Thread safeness - SPARK-5425") {
     val executor = Executors.newSingleThreadScheduledExecutor()
-    val sf = executor.scheduleAtFixedRate(new Runnable {
-      override def run(): Unit =
-        System.setProperty("spark.5425." + Random.nextInt(), Random.nextInt().toString)
-    }, 0, 1, TimeUnit.MILLISECONDS)
+    executor.scheduleAtFixedRate(
+      () => System.setProperty("spark.5425." + Random.nextInt(), Random.nextInt().toString),
+      0, 1, TimeUnit.MILLISECONDS)
 
     try {
-      val t0 = System.currentTimeMillis()
-      while ((System.currentTimeMillis() - t0) < 1000) {
+      val t0 = System.nanoTime()
+      while ((System.nanoTime() - t0) < TimeUnit.SECONDS.toNanos(1)) {
         val conf = Try(new SparkConf(loadDefaults = true))
-        assert(conf.isSuccess === true)
+        assert(conf.isSuccess)
       }
     } finally {
       executor.shutdownNow()
@@ -264,6 +256,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set("spark.scheduler.listenerbus.eventqueue.size", "84")
     assert(conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY) === 84)
+
+    conf.set("spark.yarn.access.namenodes", "testNode")
+    assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
+
+    conf.set("spark.yarn.access.hadoopFileSystems", "testNode")
+    assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
   }
 
   test("akka deprecated configs") {
@@ -346,6 +344,32 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }
+  }
+
+  test("SPARK-26998: SSL configuration not needed on executors") {
+    val conf = new SparkConf(false)
+    conf.set("spark.ssl.enabled", "true")
+    conf.set("spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.keyStorePassword", "password")
+    conf.set("spark.ssl.trustStorePassword", "password")
+
+    val filtered = conf.getAll.filter { case (k, _) => SparkConf.isExecutorStartupConf(k) }
+    assert(filtered.isEmpty)
+  }
+
+  test("SPARK-27244 toDebugString redacts sensitive information") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set("dummy.password", "dummy-password")
+      .set("spark.hadoop.hive.server2.keystore.password", "1234")
+      .set("spark.hadoop.javax.jdo.option.ConnectionPassword", "1234")
+      .set("spark.regular.property", "regular_value")
+    assert(conf.toDebugString ==
+      s"""
+        |dummy.password=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.hadoop.hive.server2.keystore.password=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.hadoop.javax.jdo.option.ConnectionPassword=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.regular.property=regular_value
+      """.stripMargin.trim)
   }
 
   val defaultIllegalValue = "SomeIllegalValue"

@@ -2,6 +2,21 @@
 layout: global
 title: Generic Load/Save Functions
 displayTitle: Generic Load/Save Functions
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -40,6 +55,11 @@ that you would like to pass to the data source. Data sources are specified by th
 name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can also use their short
 names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
 source type can be converted into other types using this syntax.
+
+Please refer the API documentation for available options of built-in sources, for example,
+`org.apache.spark.sql.DataFrameReader` and `org.apache.spark.sql.DataFrameWriter`. The
+options documented there should be applicable through non-Scala Spark APIs (e.g. PySpark)
+as well. For other formats, refer to the API documentation of the particular format.
 
 To load a JSON file you can use:
 

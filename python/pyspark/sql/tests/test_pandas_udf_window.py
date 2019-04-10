@@ -25,6 +25,9 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarro
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
 
+if have_pandas:
+    from pandas.util.testing import assert_frame_equal
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
@@ -48,8 +51,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def pandas_agg_count_udf(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         @pandas_udf('long', PandasUDFType.GROUPED_AGG)
         def count(v):
             return len(v)
@@ -127,8 +128,8 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         result2 = df.select(mean_udf(df['v']).over(w))
         expected2 = df.select(mean(df['v']).over(w))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected2.toPandas(), result2.toPandas())
 
     def test_multiple_udfs(self):
         df = self.data
@@ -142,7 +143,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
             .withColumn('max_v', max(df['v']).over(w)) \
             .withColumn('min_w', min(df['w']).over(w))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_replace_existing(self):
         df = self.data
@@ -151,7 +152,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         result1 = df.withColumn('v', self.pandas_agg_mean_udf(df['v']).over(w))
         expected1 = df.withColumn('v', mean(df['v']).over(w))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_mixed_sql(self):
         df = self.data
@@ -161,7 +162,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         result1 = df.withColumn('v', mean_udf(df['v'] * 2).over(w) + 1)
         expected1 = df.withColumn('v', mean(df['v'] * 2).over(w) + 1)
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_mixed_udf(self):
         df = self.data
@@ -185,8 +186,8 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
             'v2',
             time_two(mean(time_two(df['v'])).over(w)))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected2.toPandas(), result2.toPandas())
 
     def test_without_partitionBy(self):
         df = self.data
@@ -199,8 +200,8 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         result2 = df.select(mean_udf(df['v']).over(w))
         expected2 = df.select(mean(df['v']).over(w))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected2.toPandas(), result2.toPandas())
 
     def test_mixed_sql_and_udf(self):
         df = self.data
@@ -229,10 +230,10 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         expected4 = df.withColumn('max_v', max(df['v']).over(w)) \
             .withColumn('rank', rank().over(ow))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
-        self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
-        self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected2.toPandas(), result2.toPandas())
+        assert_frame_equal(expected3.toPandas(), result3.toPandas())
+        assert_frame_equal(expected4.toPandas(), result4.toPandas())
 
     def test_array_type(self):
         df = self.data
@@ -276,7 +277,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
             .withColumn('max_v', max(df['v']).over(w2)) \
             .withColumn('min_v', min(df['v']).over(w1))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_growing_window(self):
         from pyspark.sql.functions import mean
@@ -293,7 +294,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         expected1 = df.withColumn('m1', mean(df['v']).over(w1)) \
             .withColumn('m2', mean(df['v']).over(w2))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_sliding_window(self):
         from pyspark.sql.functions import mean
@@ -310,7 +311,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         expected1 = df.withColumn('m1', mean(df['v']).over(w1)) \
             .withColumn('m2', mean(df['v']).over(w2))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_shrinking_window(self):
         from pyspark.sql.functions import mean
@@ -327,7 +328,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         expected1 = df.withColumn('m1', mean(df['v']).over(w1)) \
             .withColumn('m2', mean(df['v']).over(w2))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_bounded_mixed(self):
         from pyspark.sql.functions import mean, max
@@ -347,7 +348,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
             .withColumn('max_v', max(df['v']).over(w2)) \
             .withColumn('mean_unbounded_v', mean(df['v']).over(w1))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
 
 if __name__ == "__main__":

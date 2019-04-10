@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import java.util
+import java.util.Collections
+
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
@@ -25,6 +28,7 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  *  A source that generates increment long values with timestamps. Each generated row has two
@@ -40,18 +44,17 @@ import org.apache.spark.sql.types._
  *    generated rows. The source will try its best to reach `rowsPerSecond`, but the query may
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
-class RateStreamProvider extends DataSourceV2
-  with TableProvider with DataSourceRegister {
+class RateStreamProvider extends TableProvider with DataSourceRegister {
   import RateStreamProvider._
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     val rowsPerSecond = options.getLong(ROWS_PER_SECOND, 1)
     if (rowsPerSecond <= 0) {
       throw new IllegalArgumentException(
         s"Invalid value '$rowsPerSecond'. The option 'rowsPerSecond' must be positive")
     }
 
-    val rampUpTimeSeconds = Option(options.get(RAMP_UP_TIME).orElse(null))
+    val rampUpTimeSeconds = Option(options.get(RAMP_UP_TIME))
       .map(JavaUtils.timeStringAsSec)
       .getOrElse(0L)
     if (rampUpTimeSeconds < 0) {
@@ -84,19 +87,17 @@ class RateStreamTable(
 
   override def schema(): StructType = RateStreamProvider.SCHEMA
 
-  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new ScanBuilder {
-    override def build(): Scan = new Scan {
-      override def readSchema(): StructType = RateStreamProvider.SCHEMA
+  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
 
-      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-        new RateStreamMicroBatchStream(
-          rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
-      }
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
-      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-        new RateStreamContinuousStream(rowsPerSecond, numPartitions, options)
-      }
-    }
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+      new RateStreamMicroBatchStream(
+        rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
+
+    override def toContinuousStream(checkpointLocation: String): ContinuousStream =
+      new RateStreamContinuousStream(rowsPerSecond, numPartitions)
   }
 }
 

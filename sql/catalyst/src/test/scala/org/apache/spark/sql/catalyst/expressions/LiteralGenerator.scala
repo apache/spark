@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.scalacheck.{Arbitrary, Gen}
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -102,8 +103,16 @@ object LiteralGenerator {
   lazy val dateLiteralGen: Gen[Literal] =
     for { d <- Arbitrary.arbInt.arbitrary } yield Literal.create(new Date(d), DateType)
 
-  lazy val timestampLiteralGen: Gen[Literal] =
-    for { t <- Arbitrary.arbLong.arbitrary } yield Literal.create(new Timestamp(t), TimestampType)
+  lazy val timestampLiteralGen: Gen[Literal] = {
+    // Catalyst's Timestamp type stores number of microseconds since epoch in
+    // a variable of Long type. To prevent arithmetic overflow of Long on
+    // conversion from milliseconds to microseconds, the range of random milliseconds
+    // since epoch is restricted here.
+    val maxMillis = Long.MaxValue / DateTimeUtils.MICROS_PER_MILLIS
+    val minMillis = Long.MinValue / DateTimeUtils.MICROS_PER_MILLIS
+    for { millis <- Gen.choose(minMillis, maxMillis) }
+      yield Literal.create(new Timestamp(millis), TimestampType)
+  }
 
   lazy val calendarIntervalLiterGen: Gen[Literal] =
     for { m <- Arbitrary.arbInt.arbitrary; s <- Arbitrary.arbLong.arbitrary}

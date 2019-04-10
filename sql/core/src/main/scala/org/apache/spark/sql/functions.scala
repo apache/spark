@@ -2167,6 +2167,19 @@ object functions {
     new Murmur3Hash(cols.map(_.expr))
   }
 
+  /**
+   * Calculates the hash code of given columns using the 64-bit
+   * variant of the xxHash algorithm, and returns the result as a long
+   * column.
+   *
+   * @group misc_funcs
+   * @since 3.0.0
+   */
+  @scala.annotation.varargs
+  def xxhash64(cols: Column*): Column = withExpr {
+    new XxHash64(cols.map(_.expr))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2559,7 +2572,7 @@ object functions {
   }
 
   /**
-   * Returns the current date as a date column.
+   * Returns the current date in the UTC time zone as a date column.
    *
    * @group datetime_funcs
    * @since 1.5.0
@@ -2975,6 +2988,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     FromUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -2986,6 +3000,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     FromUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3004,6 +3019,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3015,6 +3031,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     ToUTCTimestamp(ts.expr, tz.expr)
   }

@@ -2,6 +2,21 @@
 layout: global
 displayTitle: Spark Security
 title: Security
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -752,6 +767,15 @@ configuration has Kerberos authentication turned (`hbase.security.authentication
 Similarly, a Hive token will be obtained if Hive is in the classpath, and the configuration includes
 URIs for remote metastore services (`hive.metastore.uris` is not empty).
 
+If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
+explicitly provided to Spark at launch time. This is done by listing them in the
+`spark.kerberos.access.hadoopFileSystems` property, described in the configuration section below.
+
+Spark also supports custom delegation token providers using the Java Services
+mechanism (see `java.util.ServiceLoader`). Implementations of
+`org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
+by listing their names in the corresponding file in the jar's `META-INF/services` directory.
+
 Delegation token support is currently only supported in YARN and Mesos modes. Consult the
 deployment-specific page for more information.
 
@@ -767,6 +791,18 @@ The following options provides finer-grained control for this feature:
   By default, credentials for all supported services are retrieved when those services are
   configured, but it's possible to disable that behavior if it somehow conflicts with the
   application being run.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kerberos.access.hadoopFileSystems</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of secure Hadoop filesystems your Spark application is going to access. For
+    example, <code>spark.kerberos.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
+    webhdfs://nn3.com:50070</code>. The Spark application must have access to the filesystems listed
+    and Kerberos must be properly configured to be able to access them (either in the same realm
+    or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
+    the Spark application can access those remote Hadoop filesystems.
   </td>
 </tr>
 </table>
