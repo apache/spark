@@ -970,13 +970,14 @@ trait ScalaReflection extends Logging {
   }
 
   /**
-   * Returns the property names and types for all the properties of the input object.
+   * Returns: Seq[(porpertyName, getterName, setterName, propertyType)]
    *
-   * Each property, propertyName, of an object is defined by a getter 'getPropertyName():type'
-   * and a setter 'setPropertyName(value: type)' functions.
+   * Properties of the object are defined by a getter '[get]PropertyName():propertyType' and a
+   * setter '[set]PropertyName(value: propertyType):Unit' functions; where [get]PropertyName is
+   * the name of the getter function, and [set]PropertyName is the name of the setter function.
    */
   def getObjectProperties(tpe: `Type`): Seq[(String, String, String, Type)] = {
-    def fieldName(name: String): String = {
+    def propertyName(name: String): String = {
       if (name.indexOf("get") == 0 || name.indexOf("set") == 0) {
         name.substring(3)
       } else {
@@ -1004,8 +1005,8 @@ trait ScalaReflection extends Logging {
     (for {
       a <- getters
       b <- setters
-      if fieldName(a._1) == fieldName(b._1) && a._2 =:= b._2
-    } yield (fieldName(a._1), a._1, b._1, a._2))
+      if propertyName(a._1) == propertyName(b._1) && a._2 =:= b._2
+    } yield (propertyName(a._1), a._1, b._1, a._2))
       .toSeq
   }
 
