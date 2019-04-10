@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.clustering.{KMeans => NewKMeans}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
@@ -118,26 +117,6 @@ class KMeans private (
   def setInitializationMode(initializationMode: String): this.type = {
     KMeans.validateInitMode(initializationMode)
     this.initializationMode = initializationMode
-    this
-  }
-
-  /**
-   * This function has no effect since Spark 2.0.0.
-   */
-  @Since("1.4.0")
-  @deprecated("This has no effect and always returns 1", "2.1.0")
-  def getRuns: Int = {
-    logWarning("Getting number of runs has no effect since Spark 2.0.0.")
-    1
-  }
-
-  /**
-   * This function has no effect since Spark 2.0.0.
-   */
-  @Since("0.8.0")
-  @deprecated("This has no effect", "2.1.0")
-  def setRuns(runs: Int): this.type = {
-    logWarning("Setting number of runs has no effect since Spark 2.0.0.")
     this
   }
 
