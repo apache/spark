@@ -282,14 +282,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcast
       case j @ logical.Join(left, right, joinType, condition, hint)
-          if canBroadcastByHints(joinType, left, right, hint) =>
-        val buildSide = broadcastSideByHints(joinType, left, right, hint)
+          if hint.leftHint.exists(_.broadcast) || hint.rightHint.exists(_.broadcast) =>
+        val buildLeft = hint.leftHint.exists(_.broadcast)
+        val buildRight = hint.rightHint.exists(_.broadcast)
+        val buildSide = broadcastSide(buildLeft, buildRight, left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       case j @ logical.Join(left, right, joinType, condition, _)
-          if canBroadcastBySizes(joinType, left, right) =>
-        val buildSide = broadcastSideBySizes(joinType, left, right)
+          if canBroadcast(left) || canBroadcast(right) =>
+        val buildSide = broadcastSide(canBroadcast(left), canBroadcast(right), left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
