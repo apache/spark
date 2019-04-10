@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class UnsafeArraySuite extends SparkFunSuite {
@@ -203,5 +205,18 @@ class UnsafeArraySuite extends SparkFunSuite {
 
     val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
     assert(doubleEncoder.toRow(doubleArray).getArray(0).toDoubleArray.sameElements(doubleArray))
+  }
+
+  test("unsafe java serialization") {
+    val offset = 32
+    val data = new Array[Byte](1024)
+    Platform.putLong(data, offset, 1)
+    val arrayData = new UnsafeArrayData()
+    arrayData.pointTo(data, offset, data.length)
+    arrayData.setLong(0, 19285)
+    val ser = new JavaSerializer(new SparkConf).newInstance()
+    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(arrayData))
+    assert(arrayDataSer.getLong(0) == 19285)
+    assert(arrayDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }
 }
