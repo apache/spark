@@ -1155,7 +1155,7 @@ def to_date(col, format=None):
 def to_timestamp(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
-    using the optionally specified format. Specify formats according to
+    in microsecond precision using the optionally specified format. Specify formats according to
     `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted (equivalent to ``col.cast("timestamp")``).

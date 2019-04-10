@@ -1849,8 +1849,8 @@ setMethod("to_csv", signature(x = "Column"),
           })
 
 #' @details
-#' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
-#' a format according to the rules in:
+#' \code{to_timestamp}: Converts the column into a TimestampType in microsecond precision.
+#' You may optionally specify a format according to the rules in:
 #' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
