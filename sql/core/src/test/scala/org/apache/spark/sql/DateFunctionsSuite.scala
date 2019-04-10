@@ -639,6 +639,8 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val ts2 = Timestamp.valueOf("2015-07-25 02:02:02")
     val s1 = "2015/07/24 10:00:00.5"
     val s2 = "2015/07/25 02:02:02.6"
+    val ts1m = Timestamp.valueOf("2015-07-24 10:00:00.5")
+    val ts2m = Timestamp.valueOf("2015-07-25 02:02:02.6")
     val ss1 = "2015-07-24 10:00:00"
     val ss2 = "2015-07-25 02:02:02"
     val fmt = "yyyy/MM/dd HH:mm:ss.S"
@@ -649,7 +651,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
       Row(ts1), Row(ts2)))
     checkAnswer(df.select(to_timestamp(col("s"), fmt)), Seq(
-      Row(ts1), Row(ts2)))
+      Row(ts1m), Row(ts2m)))
     checkAnswer(df.select(to_timestamp(col("ts"), fmt)), Seq(
       Row(ts1), Row(ts2)))
     checkAnswer(df.select(to_timestamp(col("d"), "yyyy-MM-dd")), Seq(
@@ -758,7 +760,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val timestamp = "1970-01-01T00:00:00.123456Z"
       val df = Seq(timestamp).toDF("t")
-      checkAnswer(df.select(to_timestamp($"t", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX")),
+      checkAnswer(df.select(to_timestamp($"t", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX")),
         Seq(Row(Instant.parse(timestamp))))
     }
   }
