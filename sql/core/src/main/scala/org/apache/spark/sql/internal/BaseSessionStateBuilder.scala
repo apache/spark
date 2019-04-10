@@ -81,8 +81,8 @@ abstract class BaseSessionStateBuilder(
   /**
    * SQL-specific key-value configurations.
    *
-   * These either get cloned from a pre-existing instance or newly created. The conf is always
-   * merged with its [[SparkConf]].
+   * These either get cloned from a pre-existing instance or newly created. The conf is merged
+   * with its [[SparkConf]] only when there is no parent session.
    */
   protected lazy val conf: SQLConf = {
     parentState.map(_.conf.clone()).getOrElse {
