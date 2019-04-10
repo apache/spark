@@ -910,6 +910,5 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkError(testData.agg(count_if('key)))
     checkError(sql("SELECT COUNT_IF(key) FROM testData"))
-
   }
 }
