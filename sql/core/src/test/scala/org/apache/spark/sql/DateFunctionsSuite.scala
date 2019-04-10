@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -749,6 +750,16 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Seq(
           Row(Timestamp.valueOf("2015-07-24 07:00:00")),
           Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+    }
+  }
+
+
+  test("to_timestamp with microseconds precision") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val timestamp = "1970-01-01T00:00:00.123456Z"
+      val df = Seq(timestamp).toDF("t")
+      checkAnswer(df.select(to_timestamp($"t", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX")),
+        Seq(Row(Instant.parse(timestamp))))
     }
   }
 }
