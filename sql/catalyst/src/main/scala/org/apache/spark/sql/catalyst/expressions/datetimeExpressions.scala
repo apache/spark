@@ -604,7 +604,11 @@ case class ToUnixTimestamp(
        1460041200
   """,
   since = "1.5.0")
-case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Option[String] = None)
+case class UnixTimestamp(
+    timeExp: Expression,
+    format: Expression,
+    timeZoneId: Option[String] = None,
+    override val downScaleFactor: Long = MICROS_PER_SECOND)
   extends UnixTime {
 
   def this(timeExp: Expression, format: Expression) = this(timeExp, format, None)
@@ -629,6 +633,8 @@ case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Op
 abstract class UnixTime
   extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
 
+  protected val downScaleFactor: Long = MICROS_PER_SECOND
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
 
@@ -650,16 +656,15 @@ abstract class UnixTime
     } else {
       left.dataType match {
         case DateType =>
-          DateTimeUtils.daysToMillis(t.asInstanceOf[Int], timeZone) / MILLIS_PER_SECOND
+          epochDaysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
         case TimestampType =>
-          t.asInstanceOf[Long] / MICROS_PER_SECOND
+          t.asInstanceOf[Long] / downScaleFactor
         case StringType if right.foldable =>
           if (constFormat == null || formatter == null) {
             null
           } else {
             try {
-              formatter.parse(
-                t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
+              formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case NonFatal(_) => null
             }
@@ -672,7 +677,7 @@ abstract class UnixTime
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
               TimestampFormatter(formatString, zoneId).parse(
-                t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
+                t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case NonFatal(_) => null
             }
@@ -697,7 +702,7 @@ abstract class UnixTime
             $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
-                ${ev.value} = $formatterName.parse(${eval1.value}.toString()) / $MICROS_PER_SECOND;
+                ${ev.value} = $formatterName.parse(${eval1.value}.toString()) / $downScaleFactor;
               } catch (java.lang.IllegalArgumentException e) {
                 ${ev.isNull} = true;
               } catch (java.text.ParseException e) {
@@ -717,7 +722,7 @@ abstract class UnixTime
           s"""
             try {
               ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
-                .parse($string.toString()) / $MICROS_PER_SECOND;
+                .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             } catch (java.text.ParseException e) {
@@ -736,10 +741,10 @@ abstract class UnixTime
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = ${eval1.value} / $MICROS_PER_SECOND;
+            ${ev.value} = ${eval1.value} / $downScaleFactor;
           }""")
       case DateType =>
-        val tz = ctx.addReferenceObj("timeZone", timeZone)
+        val zid = ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId")
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
         ev.copy(code = code"""
@@ -747,7 +752,7 @@ abstract class UnixTime
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / $MILLIS_PER_SECOND;
+            ${ev.value} = $dtu.epochDaysToMicros(${eval1.value}, $zid) / $downScaleFactor;
           }""")
     }
   }
@@ -1342,8 +1347,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 @ExpressionDescription(
   usage = """
     _FUNC_(timestamp[, fmt]) - Parses the `timestamp` expression with the `fmt` expression to
-      a timestamp. Returns null with invalid input. By default, it follows casting rules to
-      a timestamp if the `fmt` is omitted.
+      a timestamp in microsecond precision. Returns null with invalid input. By default,
+      it follows casting rules to a timestamp if the `fmt` is omitted.
   """,
   examples = """
     Examples:
@@ -1357,7 +1362,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), Cast(UnixTimestamp(left, format), TimestampType))
+    this(left, Option(format), UnixTimestamp(left, format, None, 1))
   }
 
   def this(left: Expression) = this(left, None, Cast(left, TimestampType))
