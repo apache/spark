@@ -339,17 +339,21 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("auto gather stats after insert command") {
     val table = "change_stats_insert_datasource_table"
-    val autoUpdate = true
+    Seq(false, true).foreach { autoUpdate =>
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
-          // analyze to get initial stats
           // insert into command
           sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
-            val stats = getCatalogTable(table).stats
+          val stats = getCatalogTable(table).stats
+          if (autoUpdate) {
             assert(stats.isDefined)
             assert(stats.get.sizeInBytes >= 0)
+          } else {
+            assert(stats.isEmpty)
+          }
         }
+      }
     }
   }
 
