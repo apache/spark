@@ -30,7 +30,8 @@ public class UnsafeDataUtils {
             return (byte[]) baseObject;
         } else {
             byte[] bytes = new byte[sizeInBytes];
-            Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+            Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET,
+                    sizeInBytes);
             return bytes;
         }
     }
