@@ -292,4 +292,14 @@ class CreateTableAsSelectSuite
       assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
     }
   }
+
+	test("check the parquet column format") {
+		withTable("t") {
+			val e = intercept[AnalysisException] {
+				sql("CREATE TABLE t USING parquet AS SELECT count(1), 2")
+			}.getMessage
+			assert(e.contains("contains invalid character(s) among \" ,;{}()\\n\\t=\""))
+		}
+	}
+
 }
