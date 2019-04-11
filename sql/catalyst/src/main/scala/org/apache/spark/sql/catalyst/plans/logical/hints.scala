@@ -66,17 +66,94 @@ object JoinHint {
 /**
  * The hint attributes to be applied on a specific node.
  *
- * @param broadcast If set to true, it indicates that the broadcast hash join is the preferred join
- *                  strategy and the node with this hint is preferred to be the build side.
+ * @param strategy The preferred join strategy.
  */
-case class HintInfo(broadcast: Boolean = false) {
+case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
 
-  override def toString: String = {
-    val hints = scala.collection.mutable.ArrayBuffer.empty[String]
-    if (broadcast) {
-      hints += "broadcast"
+  /**
+   * Combine this [[HintInfo]] with another [[HintInfo]] and return the new [[HintInfo]].
+   * @param other the other [[HintInfo]]
+   * @param hintOverriddenCallback a callback to notify if any [[HintInfo]] has been overridden
+   *                               in this merge.
+   *
+   * Currently, for join strategy hints, the new [[HintInfo]] will contain the strategy in this
+   * [[HintInfo]] if defined, otherwise the strategy in the other [[HintInfo]]. The
+   * `hintOverriddenCallback` will be called if this [[HintInfo]] and the other [[HintInfo]]
+   * both have a strategy defined but the join strategies are different.
+   */
+  def merge(other: HintInfo, hintOverriddenCallback: HintInfo => Unit): HintInfo = {
+    if (this.strategy.isDefined &&
+        other.strategy.isDefined &&
+        this.strategy.get != other.strategy.get) {
+      hintOverriddenCallback(other)
     }
-
-    if (hints.isEmpty) "none" else hints.mkString("(", ", ", ")")
+    HintInfo(strategy = this.strategy.orElse(other.strategy))
   }
+
+  override def toString: String = strategy.map(s => s"(strategy=$s)").getOrElse("none")
+}
+
+sealed abstract class JoinStrategyHint {
+
+  def displayName: String
+  def hintAliases: Set[String]
+
+  override def toString: String = displayName
+}
+
+/**
+ * The enumeration of join strategy hints.
+ *
+ * The hinted strategy will be used for the join with which it is associated if doable. In case
+ * of contradicting strategy hints specified for each side of the join, hints are prioritized as
+ * BROADCAST over SHUFFLE_MERGE over SHUFFLE_HASH over SHUFFLE_REPLICATE_NL.
+ */
+object JoinStrategyHint {
+
+  val strategies: Set[JoinStrategyHint] = Set(
+    BROADCAST,
+    SHUFFLE_MERGE,
+    SHUFFLE_HASH,
+    SHUFFLE_REPLICATE_NL)
+}
+
+/**
+ * The hint for broadcast hash join or broadcast nested loop join, depending on the availability of
+ * equi-join keys.
+ */
+case object BROADCAST extends JoinStrategyHint {
+  override def displayName: String = "broadcast"
+  override def hintAliases: Set[String] = Set(
+    "BROADCAST",
+    "BROADCASTJOIN",
+    "MAPJOIN")
+}
+
+/**
+ * The hint for shuffle sort merge join.
+ */
+case object SHUFFLE_MERGE extends JoinStrategyHint {
+  override def displayName: String = "merge"
+  override def hintAliases: Set[String] = Set(
+    "SHUFFLE_MERGE",
+    "MERGE",
+    "MERGEJOIN")
+}
+
+/**
+ * The hint for shuffle hash join.
+ */
+case object SHUFFLE_HASH extends JoinStrategyHint {
+  override def displayName: String = "shuffle_hash"
+  override def hintAliases: Set[String] = Set(
+    "SHUFFLE_HASH")
+}
+
+/**
+ * The hint for shuffle-and-replicate nested loop join, a.k.a. cartesian product join.
+ */
+case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
+  override def displayName: String = "shuffle_replicate_nl"
+  override def hintAliases: Set[String] = Set(
+    "SHUFFLE_REPLICATE_NL")
 }
