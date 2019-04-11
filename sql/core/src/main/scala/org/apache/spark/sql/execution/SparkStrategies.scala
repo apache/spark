@@ -168,11 +168,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       if (wantToBuildLeft && wantToBuildRight) {
         // returns the smaller side base on its estimated physical size, if we want to build the
         // both sides.
-        if (right.stats.sizeInBytes <= left.stats.sizeInBytes) {
-          Some(BuildRight)
-        } else {
-          Some(BuildLeft)
-        }
+        Some(getSmallerSide(left, right))
       } else if (wantToBuildLeft) {
         Some(BuildLeft)
       } else if (wantToBuildRight) {
@@ -180,6 +176,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       } else {
         None
       }
+    }
+
+    private def getSmallerSide(left: LogicalPlan, right: LogicalPlan) = {
+      if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
     }
 
     private def hintToBroadcastLeft(hint: JoinHint): Boolean = {
@@ -208,22 +208,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
     }
 
-    /**
-     * Create BroadcastNestedLoopJoinExec forcibly as the final solution, when no other join
-     * strategy is applicable.
-     */
-    private def createForcibleBroadcastNLJoin(
-        left: LogicalPlan,
-        right: LogicalPlan,
-        joinType: JoinType,
-        condition: Option[Expression]) = {
-      val smallerSide =
-        if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
-      // This join could be very slow or OOM
-      Seq(joins.BroadcastNestedLoopJoinExec(
-        planLater(left), planLater(right), smallerSide, joinType, condition))
-    }
-
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
@@ -237,7 +221,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //
       // If there is no hint or the hints are not applicable, we follow these rules one by one:
       //   1. Pick broadcast hash join if one side is small enough to broadcast, and the join type
-      //      is not full outer. If both sides are small, choose the smaller side (based on stats)
+      //      is supported. If both sides are small, choose the smaller side (based on stats)
       //      to broadcast.
       //   2. Pick shuffle hash join if one side is small enough to build local hash map, and is
       //      much smaller than the other side, and `spark.sql.join.preferSortMergeJoin` is false.
@@ -306,7 +290,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
             .orElse(createSortMergeJoin())
             .orElse(createCartesianProduct())
-            .getOrElse(createForcibleBroadcastNLJoin(left, right, joinType, condition))
+            .getOrElse {
+              // This join could be very slow or OOM
+              val buildSide = getSmallerSide(left, right)
+              Seq(joins.BroadcastNestedLoopJoinExec(
+                planLater(left), planLater(right), buildSide, joinType, condition))
+            }
         }
 
         createBroadcastHashJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
@@ -321,11 +310,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   2. shuffle replicate NL hint: pick cartesian product if join type is inner like.
       //
       // If there is no hint or the hints are not applicable, we follow these rules one by one:
-      //   1. Pick broadcast nested loop join if one side is small enough to broadcast. If both
-      //      sides are small, choose the smaller side (based on stats) to broadcast.
-      //   2. Pick cartesian product if join type is inner like.
-      //   3. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
-      //      other choice.
+      //   1. Pick cartesian product if join type is inner like, and both sides are too big to
+      //      to broadcast.
+      //   2. Pick broadcast nested loop join. Pick the smaller side (based on stats) to broadcast.
       case logical.Join(left, right, joinType, condition, hint) =>
         def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {
           getBuildSide(buildLeft, buildRight, left, right).map { buildSide =>
@@ -343,9 +330,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastNLJoin(canBroadcast(left), canBroadcast(right))
-            .orElse(createCartesianProduct())
-            .getOrElse(createForcibleBroadcastNLJoin(left, right, joinType, condition))
+          (if (!canBroadcast(left) && !canBroadcast(right)) createCartesianProduct() else None)
+            .getOrElse {
+              // This join could be very slow or OOM
+              val buildSide = getSmallerSide(left, right)
+              Seq(joins.BroadcastNestedLoopJoinExec(
+                planLater(left), planLater(right), buildSide, joinType, condition))
+            }
         }
 
         if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
@@ -353,8 +344,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
             .getOrElse(createJoinWithoutHint())
         } else {
-          val smallerSide =
-            if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
+          val smallerSide = getSmallerSide(left, right)
           val buildSide = if (canBuildLeft(joinType)) {
             // For RIGHT JOIN, we may broadcast left side even if the hint asks us to broadcast
             // the right side. This is for history reasons.
