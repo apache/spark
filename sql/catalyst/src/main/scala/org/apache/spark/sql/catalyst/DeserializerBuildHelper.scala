@@ -138,6 +138,15 @@ object DeserializerBuildHelper {
       returnNullable = returnNullable)
   }
 
+  def createDeserializerForJavaByteBuffer(path: Expression, returnNullable: Boolean): Expression = {
+    StaticInvoke(
+      classOf[java.nio.ByteBuffer],
+      ObjectType(classOf[java.nio.ByteBuffer]),
+      "wrap",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   def createDeserializerForScalaBigInt(path: Expression): Expression = {
     Invoke(path, "toScalaBigInt", ObjectType(classOf[scala.math.BigInt]),
       returnNullable = false)

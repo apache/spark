@@ -311,14 +311,20 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(
     AvroExample1.newBuilder()
-      .setIps(List("127.0.0.1", "127.0.0.0").asJava)
-      .setAdditional(Map(
+      .setMyarray(List("Foo", "Bar").asJava)
+      .setMyboolean(true)
+      .setMybytes(java.nio.ByteBuffer.wrap("MyBytes".getBytes()))
+      .setMydouble(2.5)
+      .setMyfixed(new Magic("magic".getBytes))
+      .setMyfloat(25.0F)
+      .setMyint(100)
+      .setMylong(10L)
+      .setMystring("hello")
+      .setMymap(Map(
         "foo" -> new java.lang.Integer(1),
         "bar" -> new java.lang.Integer(2)).asJava)
-      .setTimestamp("12345678")
-      .setMessage("test map")
-      .setAvroExampleMagic1(new AvroExampleMagic1("magic".getBytes))
-    .build(),
+      .setMymoney(Money.newBuilder().setAmount(100.0F).setCurrency(Currency.EUR).build())
+      .build(),
     "Avro encoder with map, array and fixed types")(
     ExpressionEncoder[AvroExample1])
 

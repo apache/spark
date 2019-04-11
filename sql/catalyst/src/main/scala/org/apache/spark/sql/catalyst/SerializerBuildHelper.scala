@@ -120,6 +120,10 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
+  def createSerializerForJavaByteBuffer(inputObject: Expression): Expression = {
+    Invoke(inputObject, "array", BinaryType)
+  }
+
   def createSerializerForScalaBigInt(inputObject: Expression): Expression = {
     createSerializerForJavaBigInteger(inputObject)
   }

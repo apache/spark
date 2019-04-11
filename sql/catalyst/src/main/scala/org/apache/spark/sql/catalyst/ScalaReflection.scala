@@ -234,6 +234,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.math.BigInteger]) =>
         createDeserializerForJavaBigInteger(path, returnNullable = false)
 
+      case t if isSubtype(t, localTypeOf[java.nio.ByteBuffer]) =>
+        createDeserializerForJavaByteBuffer(path, returnNullable = false)
+
       case t if isSubtype(t, localTypeOf[scala.math.BigInt]) =>
         createDeserializerForScalaBigInt(path)
 
@@ -562,6 +565,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.math.BigInteger]) =>
         createSerializerForJavaBigInteger(inputObject)
 
+      case t if isSubtype(t, localTypeOf[java.nio.ByteBuffer]) =>
+        createSerializerForJavaByteBuffer(inputObject)
+
       case t if isSubtype(t, localTypeOf[scala.math.BigInt]) =>
         createSerializerForScalaBigInt(inputObject)
 
@@ -725,7 +731,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[Option[_]]) =>
         val TypeRef(_, _, Seq(optType)) = t
         Schema(schemaFor(optType).dataType, nullable = true)
-      case t if isSubtype(t, localTypeOf[Array[Byte]]) => Schema(BinaryType, nullable = true)
+      case t if isSubtype(t, localTypeOf[Array[Byte]]) ||
+                isSubtype(t, localTypeOf[java.nio.ByteBuffer]) =>
+        Schema(BinaryType, nullable = true)
       case t if isSubtype(t, localTypeOf[Array[_]]) =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
