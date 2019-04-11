@@ -28,11 +28,10 @@ public class UnsafeDataUtils {
                 && baseOffset == Platform.BYTE_ARRAY_OFFSET
                 && (((byte[]) baseObject).length == sizeInBytes)) {
             return (byte[]) baseObject;
-        } else {
-            byte[] bytes = new byte[sizeInBytes];
-            Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET,
-                    sizeInBytes);
-            return bytes;
         }
+        byte[] bytes = new byte[sizeInBytes];
+        Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET,
+                sizeInBytes);
+        return bytes;
     }
 }
