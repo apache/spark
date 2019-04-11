@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.ZoneId
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.serializer.{KryoSerializer, JavaSerializer}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
