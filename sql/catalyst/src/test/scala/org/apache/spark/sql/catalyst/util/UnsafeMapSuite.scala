@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class UnsafeMapSuite extends SparkFunSuite {
 
