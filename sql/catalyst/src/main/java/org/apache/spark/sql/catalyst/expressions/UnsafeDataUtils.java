@@ -21,7 +21,10 @@ import org.apache.spark.unsafe.Platform;
 /**
  * General utilities available for unsafe data
  */
-public class UnsafeDataUtils {
+final class UnsafeDataUtils {
+
+    private UnsafeDataUtils() {
+    }
 
     public static byte[] getBytes(Object baseObject, long baseOffset, int sizeInBytes) {
         if (baseObject instanceof byte[]
