@@ -36,7 +36,7 @@ case class OrcScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(schema) with SupportsPushDownFilters {
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -44,7 +44,8 @@ case class OrcScanBuilder(
   }
 
   override def build(): Scan = {
-    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, readSchema, options)
+    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
+      readDataSchema(), readPartitionSchema(), options)
   }
 
   private var _pushedFilters: Array[Filter] = Array.empty

@@ -109,7 +109,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
+  def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = withSchedulerPool {
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
@@ -210,7 +210,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def execute(): Unit = {
+  private def execute(): Unit = withSchedulerPool {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
@@ -225,10 +225,6 @@ private[hive] class SparkExecuteStatementOperation(
       statementId,
       parentSession.getUsername)
     sqlContext.sparkContext.setJobGroup(statementId, statement)
-    val pool = sessionToActivePool.get(parentSession.getSessionHandle)
-    // It may have unpredictably behavior since we use thread pools to execute quries and
-    // the 'spark.scheduler.pool' may not be 'default' when we did not set its value.(SPARK-26914)
-    sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
     try {
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -289,6 +285,20 @@ private[hive] class SparkExecuteStatementOperation(
     }
     if (statementId != null) {
       sqlContext.sparkContext.cancelJobGroup(statementId)
+    }
+  }
+
+  private def withSchedulerPool[T](body: => T): T = {
+    val pool = sessionToActivePool.get(parentSession.getSessionHandle)
+    if (pool != null) {
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
+    }
+    try {
+      body
+    } finally {
+      if (pool != null) {
+        sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, null)
+      }
     }
   }
 }

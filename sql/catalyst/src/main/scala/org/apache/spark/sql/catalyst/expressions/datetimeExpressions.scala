@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.{Instant, LocalDate, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDate, ZoneId}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -54,26 +54,30 @@ trait TimeZoneAwareExpression extends Expression {
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 }
 
-// scalastyle:off line.size.limit
 /**
- * Returns the current date in the UTC time zone at the start of query evaluation.
+ * Returns the current date at the start of query evaluation.
  * All calls of current_date within the same query return the same value.
  *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current date in the UTC time zone at the start of query evaluation.",
+  usage = "_FUNC_() - Returns the current date at the start of query evaluation.",
   since = "1.5.0")
-// scalastyle:on line.size.limit
-case class CurrentDate() extends LeafExpression with CodegenFallback {
+case class CurrentDate(timeZoneId: Option[String] = None)
+  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
+
+  def this() = this(None)
 
   override def foldable: Boolean = true
   override def nullable: Boolean = false
 
   override def dataType: DataType = DateType
 
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
   override def eval(input: InternalRow): Any = {
-    LocalDate.now(ZoneOffset.UTC).toEpochDay.toInt
+    localDateToDays(LocalDate.now(zoneId))
   }
 
   override def prettyName: String = "current_date"
@@ -1018,7 +1022,10 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
       > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  deprecated = """
+    Deprecated since 3.0.0. See SPARK-25496.
+  """)
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1229,7 +1236,10 @@ case class MonthsBetween(
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-30 15:00:00
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  deprecated = """
+    Deprecated since 3.0.0. See SPARK-25496.
+  """)
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {

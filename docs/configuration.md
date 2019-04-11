@@ -875,6 +875,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.liveUpdate.minFlushPeriod</code></td>
+  <td>1s</td>
+  <td>
+    Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
+    task events are not fired frequently.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.port</code></td>
   <td>4040</td>
   <td>
@@ -1001,7 +1009,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
     This setting applies for the Spark History Server too.
-  <td>
+  </td>
 </tr>
 </table>
 

@@ -70,8 +70,16 @@ abstract class FileTable(
     val partitionSchema = fileIndex.partitionSchema
     SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
       "in the partition schema", caseSensitive)
-    PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
-      partitionSchema, caseSensitive)._1
+    val partitionNameSet: Set[String] =
+      partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
+
+    // When data and partition schemas have overlapping columns,
+    // tableSchema = dataSchema - overlapSchema + partitionSchema
+    val fields = dataSchema.fields.filterNot { field =>
+      val colName = PartitioningUtils.getColName(field, caseSensitive)
+      partitionNameSet.contains(colName)
+    } ++ partitionSchema.fields
+    StructType(fields)
   }
 
   override def capabilities(): java.util.Set[TableCapability] = FileTable.CAPABILITIES

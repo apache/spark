@@ -222,9 +222,6 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException("Dynamic allocation of executors requires the external " +
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
-    if (tasksPerExecutorForFullParallelism == 0) {
-      throw new SparkException(s"${EXECUTOR_CORES.key} must not be < ${CPUS_PER_TASK.key}.")
-    }
 
     if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
       throw new SparkException(
