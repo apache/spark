@@ -1362,7 +1362,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), UnixTimestamp(left, format, None, 1))
+    this(left, Option(format), Cast(UnixTimestamp(left, format, None, 1), TimestampType, None, 1))
   }
 
   def this(left: Expression) = this(left, None, Cast(left, TimestampType))

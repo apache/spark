@@ -203,7 +203,11 @@ object Cast {
       > SELECT _FUNC_('10' as int);
        10
   """)
-case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
+case class Cast(
+    child: Expression,
+    dataType: DataType,
+    timeZoneId: Option[String] = None,
+    timestampScaleFactor: Long = MICROS_PER_SECOND)
   extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
 
   def this(child: Expression, dataType: DataType) = this(child, dataType, None)
@@ -395,21 +399,21 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
-    (d.toBigDecimal * MICROS_PER_SECOND).longValue()
+    (d.toBigDecimal * timestampScaleFactor).longValue()
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
-    if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
+    if (d.isNaN || d.isInfinite) null else (d * timestampScaleFactor).toLong
   }
 
   // converting seconds to us
-  private[this] def longToTimestamp(t: Long): Long = SECONDS.toMicros(t)
+  private[this] def longToTimestamp(t: Long): Long = t * timestampScaleFactor
   // converting us to seconds
   private[this] def timestampToLong(ts: Long): Long = {
-    Math.floorDiv(ts, MICROS_PER_SECOND)
+    Math.floorDiv(ts, timestampScaleFactor)
   }
   // converting us to seconds in double
   private[this] def timestampToDouble(ts: Long): Double = {
-    ts / MICROS_PER_SECOND.toDouble
+    ts / timestampScaleFactor.toDouble
   }
 
   // DateConverter
@@ -1059,7 +1063,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           if (Double.isNaN($c) || Double.isInfinite($c)) {
             $evNull = true;
           } else {
-            $evPrim = (long)($c * $MICROS_PER_SECOND);
+            $evPrim = (long)($c * $timestampScaleFactor);
           }
         """
     case FloatType =>
@@ -1068,7 +1072,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           if (Float.isNaN($c) || Float.isInfinite($c)) {
             $evNull = true;
           } else {
-            $evPrim = (long)($c * $MICROS_PER_SECOND);
+            $evPrim = (long)($c * $timestampScaleFactor);
           }
         """
   }
@@ -1085,14 +1089,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
-    val block = inline"new java.math.BigDecimal($MICROS_PER_SECOND)"
+    val block = inline"new java.math.BigDecimal($timestampScaleFactor)"
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
   }
-  private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * (long)$MICROS_PER_SECOND"
+  private[this] def longToTimeStampCode(l: ExprValue): Block = {
+    code"$l * (long)$timestampScaleFactor"
+  }
   private[this] def timestampToIntegerCode(ts: ExprValue): Block =
-    code"java.lang.Math.floorDiv($ts, $MICROS_PER_SECOND)"
+    code"java.lang.Math.floorDiv($ts, $timestampScaleFactor)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
-    code"$ts / (double)$MICROS_PER_SECOND"
+    code"$ts / (double)$timestampScaleFactor"
 
   private[this] def castToBooleanCode(from: DataType): CastFunction = from match {
     case StringType =>
