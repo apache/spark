@@ -71,7 +71,7 @@ case class Exists(
   override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(plan: BaseSubqueryExec): Exists = copy(plan = plan)
 
-  // whether the subquery returns one or more records
+  // Whether the subquery returns one or more records
   @volatile private var result: Boolean = _
   @volatile private var updated: Boolean = false
 

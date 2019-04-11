@@ -561,9 +561,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 /**
  * This rule rewrites uncorrelated PredicateSubquery expressions as Exists.
  * The uncorrelated Exists can be evaluated using a subplan instead of a semi-join.
- * Besides, we use `limit 1` and `select 1` after the subquery to reduce the network overhead.
+ * Also, we can use `limit 1` and `select 1` after the subquery to reduce the result set.
  * `InSubquery` can be rewritten as uncorrelated Exists only when the left side
- * values are literals and the subquery is uncorrelated.
+ * values are literals and the subquery has no outer reference.
  * Example:
  * 3 in (select b from t) => exists(select 1 from t where b = 3 limit 1)
  */

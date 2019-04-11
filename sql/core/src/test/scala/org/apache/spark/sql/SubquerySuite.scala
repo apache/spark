@@ -1372,7 +1372,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-xxxx: Rewrite Uncorrelated Subquery") {
+  test("SPARK-27440: Rewrite Uncorrelated Subquery") {
     withTempView("t1", "t2") {
       sql("create temporary view t1 as select * from values ('b',null) as t1(t1a, t1b)")
       sql("create temporary view t2 as select * from values ('a',1), ('b',2) as t2(t2a, t2b)")
