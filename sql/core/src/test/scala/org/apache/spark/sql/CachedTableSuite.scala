@@ -93,17 +93,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }.sum
   }
 
-  // Blocking uncache table for tests
-  private def uncacheTable(tableName: String): Unit = {
-    val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
-    spark.sharedState.cacheManager.uncacheQuery(
-      spark,
-      spark.table(tableName).logicalPlan,
-      cascade = cascade,
-      blocking = true)
-  }
-
   test("cache temp table") {
     withTempView("tempTable") {
       testData.select('key).createOrReplaceTempView("tempTable")
