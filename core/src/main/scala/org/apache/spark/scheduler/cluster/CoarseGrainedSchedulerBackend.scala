@@ -72,8 +72,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // protection. But accessing `executorDataMap` out of `DriverEndpoint.receive/receiveAndReply`
   // must be protected by `CoarseGrainedSchedulerBackend.this`. Besides, `executorDataMap` should
   // only be modified in `DriverEndpoint.receive/receiveAndReply` with protection by
-  // `CoarseGrainedSchedulerBackend.this`.
-  private val executorDataMap = new HashMap[String, ExecutorData]
+  // `CoarseGrainedSchedulerBackend.this`. Visible for testing.
+  private[spark] val executorDataMap = new HashMap[String, ExecutorData]
 
   // Number of executors requested by the cluster manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
