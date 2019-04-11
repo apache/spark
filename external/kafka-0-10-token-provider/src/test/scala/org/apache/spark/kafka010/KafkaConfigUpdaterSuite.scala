@@ -20,7 +20,6 @@ package org.apache.spark.kafka010
 import org.apache.kafka.common.config.SaslConfigs
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.config.Kafka
 
 class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   private val identifier = "cluster1"
@@ -90,8 +89,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     val params = Map.empty[String, String]
     setSparkEnv(
       Map(
-        Kafka.CLUSTERS.key -> identifier,
-        s"spark.kafka.$identifier.bootstrap.servers" -> "127.0.0.1:0"
+        s"spark.kafka.clusters.$identifier.bootstrap.servers" -> "127.0.0.1:0"
       )
     )
     addTokenToUGI(identifier)
@@ -110,9 +108,8 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     val params = Map.empty[String, String]
     setSparkEnv(
       Map(
-        Kafka.CLUSTERS.key -> identifier,
-        s"spark.kafka.$identifier.bootstrap.servers" -> "127.0.0.1:0",
-        s"spark.kafka.$identifier.sasl.token.mechanism" -> "intentionally_invalid"
+        s"spark.kafka.clusters.$identifier.bootstrap.servers" -> "127.0.0.1:0",
+        s"spark.kafka.clusters.$identifier.sasl.token.mechanism" -> "intentionally_invalid"
       )
     )
     addTokenToUGI(identifier)

@@ -36,7 +36,7 @@ import org.apache.spark.kafka010.KafkaConfigUpdater
  * All three strategies have overloaded constructors that allow you to specify
  * the starting offset for a particular partition.
  */
-sealed trait ConsumerStrategy {
+private[kafka010] sealed trait ConsumerStrategy {
   /** Create a [[KafkaConsumer]] and subscribe to topics according to a desired strategy */
   def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
 
@@ -54,7 +54,7 @@ sealed trait ConsumerStrategy {
 /**
  * Specify a fixed collection of partitions.
  */
-case class AssignStrategy(partitions: Array[TopicPartition],
+private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition],
     tokenClusterId: Option[String]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
@@ -70,7 +70,7 @@ case class AssignStrategy(partitions: Array[TopicPartition],
 /**
  * Subscribe to a fixed collection of topics.
  */
-case class SubscribeStrategy(topics: Seq[String],
+private[kafka010] case class SubscribeStrategy(topics: Seq[String],
     tokenClusterId: Option[String]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
@@ -86,7 +86,7 @@ case class SubscribeStrategy(topics: Seq[String],
 /**
  * Use a regex to specify topics of interest.
  */
-case class SubscribePatternStrategy(topicPattern: String,
+private[kafka010] case class SubscribePatternStrategy(topicPattern: String,
     tokenClusterId: Option[String]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {

@@ -76,7 +76,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   private[kafka010] def createAdminClientProperties(sparkConf: SparkConf,
-    clusterConf: KafkaTokenClusterConf): ju.Properties = {
+      clusterConf: KafkaTokenClusterConf): ju.Properties = {
     val adminClientProperties = new ju.Properties
 
     adminClientProperties.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
@@ -147,7 +147,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   private def setKeyStoreProperties(clusterConf: KafkaTokenClusterConf,
-    properties: ju.Properties): Unit = {
+      properties: ju.Properties): Unit = {
     clusterConf.keyStoreLocation.foreach { keystoreLocation =>
       properties.put("ssl.keystore.location", keystoreLocation)
     }
@@ -160,7 +160,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   private def getKeytabJaasParams(sparkConf: SparkConf,
-    clusterConf: KafkaTokenClusterConf): String = {
+      clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
@@ -174,7 +174,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   private def getTicketCacheJaasParams(sparkConf: SparkConf,
-    clusterConf: KafkaTokenClusterConf): String = {
+      clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
