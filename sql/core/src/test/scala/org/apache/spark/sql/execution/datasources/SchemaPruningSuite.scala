@@ -407,7 +407,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  private val schemaEquality = new Equality[StructType] {
+  protected val schemaEquality = new Equality[StructType] {
     override def areEqual(a: StructType, b: Any): Boolean =
       b match {
         case otherType: StructType => a.sameType(otherType)
@@ -422,7 +422,7 @@ abstract class SchemaPruningSuite
     df.collect()
   }
 
-  private def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
+  protected def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
       df.queryExecution.executedPlan.collect {
         case scan: FileSourceScanExec => scan.requiredSchema

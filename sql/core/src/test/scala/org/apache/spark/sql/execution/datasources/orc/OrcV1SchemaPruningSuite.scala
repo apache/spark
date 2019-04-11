@@ -21,7 +21,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
 import org.apache.spark.sql.internal.SQLConf
 
-class OrcSchemaPruningSuite extends SchemaPruningSuite {
+class OrcV1SchemaPruningSuite extends SchemaPruningSuite {
   override protected val dataSourceName: String = "orc"
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.ORC_VECTORIZED_READER_ENABLED.key
