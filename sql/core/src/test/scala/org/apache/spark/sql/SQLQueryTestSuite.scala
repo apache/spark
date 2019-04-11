@@ -21,7 +21,6 @@ import java.io.File
 import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
-import scala.util.matching.Regex
 
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -106,7 +105,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
   private val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
 
-  private val validFileExtensionsPattern = ".*\\.sql$".r
+  private val validFileExtensions = ".sql"
 
   /** List of test cases to ignore, in lower cases. */
   private val blackList = Set(
@@ -330,13 +329,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   /** Returns all the files (not directories) in a directory, recursively. */
   private def listFilesRecursively(path: File): Seq[File] = {
     val (dirs, files) = path.listFiles().partition(_.isDirectory)
-    val filteredFiles = files.filter { f =>
-      validFileExtensionsPattern.findFirstMatchIn(f.getName.toLowerCase(Locale.ROOT)) match {
-        case Some(_) => true
-        case None => false
-
-      }
-    }
+    // Filter out test files with invalid extensions such as temp files created
+    // by vi (.swp), Mac (.DS_Store) etc.
+    val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
     filteredFiles ++ dirs.flatMap(listFilesRecursively)
   }
 
