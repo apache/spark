@@ -378,41 +378,45 @@ trunc mm wholestage on                         208 /  216         48.0          
 Parsing
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-to timestamp str:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-to timestamp str wholestage off                165 /  166          6.1         164.7       1.0X
-to timestamp str wholestage on                 160 /  163          6.2         160.5       1.0X
+to timestamp str:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+to timestamp str wholestage off                     169            172           4          5.9         169.2       1.0X
+to timestamp str wholestage on                      163            166           2          6.1         162.9       1.0X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-to_timestamp:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-to_timestamp wholestage off                   1316 / 1320          0.8        1315.7       1.0X
-to_timestamp wholestage on                    1288 / 1294          0.8        1287.5       1.0X
+to_timestamp:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+to_timestamp wholestage off                        1266           1270           6          0.8        1266.4       1.0X
+to_timestamp wholestage on                         1235           1241           4          0.8        1234.9       1.0X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-to_unix_timestamp:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-to_unix_timestamp wholestage off              1295 / 1297          0.8        1295.1       1.0X
-to_unix_timestamp wholestage on               1409 / 1414          0.7        1409.2       0.9X
+to_unix_timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+to_unix_timestamp wholestage off                   1238           1240           3          0.8        1238.0       1.0X
+to_unix_timestamp wholestage on                    1235           1244          14          0.8        1235.4       1.0X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-to date str:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-to date str wholestage off                     155 /  157          6.4         155.4       1.0X
-to date str wholestage on                      154 /  156          6.5         154.3       1.0X
+to date str:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+to date str wholestage off                          160            163           4          6.3         159.5       1.0X
+to date str wholestage on                           157            159           2          6.4         157.4       1.0X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-to_date:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-to_date wholestage off                        1477 / 1479          0.7        1477.3       1.0X
-to_date wholestage on                         1468 / 1473          0.7        1468.2       1.0X
+to_date:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+to_date wholestage off                             1468           1469           2          0.7        1467.9       1.0X
+to_date wholestage on                              1473           1490          16          0.7        1473.0       1.0X
 
+
+================================================================================================
+Conversion from/to external types
+================================================================================================
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
