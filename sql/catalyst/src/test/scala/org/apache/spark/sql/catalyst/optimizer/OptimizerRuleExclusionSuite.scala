@@ -21,7 +21,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_EXCLUDED_RULES
+import org.apache.spark.sql.internal.StaticSQLConf.OPTIMIZER_NON_EXCLUDABLE_RULES
 
 
 class OptimizerRuleExclusionSuite extends PlanTest {
@@ -84,6 +86,20 @@ class OptimizerRuleExclusionSuite extends PlanTest {
     verifyExcludedRules(
       new SimpleTestOptimizer(),
       Seq(
+        ReplaceIntersectWithSemiJoin.ruleName,
+        PullupCorrelatedPredicates.ruleName,
+        RewriteCorrelatedScalarSubquery.ruleName,
+        RewritePredicateSubquery.ruleName,
+        RewriteExceptAll.ruleName,
+        RewriteIntersectAll.ruleName))
+  }
+
+  test("Try to exclude some non-excludable rules defined by nonExcludedRules") {
+    SQLConf.get.setConfString(OPTIMIZER_NON_EXCLUDABLE_RULES.key, PushPredicateThroughJoin.ruleName)
+    verifyExcludedRules(
+      new SimpleTestOptimizer(),
+      Seq(
+        PushPredicateThroughJoin.ruleName,
         ReplaceIntersectWithSemiJoin.ruleName,
         PullupCorrelatedPredicates.ruleName,
         RewriteCorrelatedScalarSubquery.ruleName,

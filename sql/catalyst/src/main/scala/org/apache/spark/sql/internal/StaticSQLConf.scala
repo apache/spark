@@ -138,4 +138,11 @@ object StaticSQLConf {
     .intConf
     .checkValue(_ >= 0, "Must be set greater or equal to zero")
     .createWithDefault(Int.MaxValue)
+
+  val OPTIMIZER_NON_EXCLUDABLE_RULES = buildStaticConf("spark.sql.optimizer.nonExcludedRules")
+    .doc("Configures a list of rules to be kept in the optimizer, in which the rules are " +
+      "specified by their rule names and separated by comma. This prevent users from " +
+      "excluding rules dynamically by using `spark.sql.optimizer.excludedRules` configuration.")
+    .stringConf
+    .createOptional
 }

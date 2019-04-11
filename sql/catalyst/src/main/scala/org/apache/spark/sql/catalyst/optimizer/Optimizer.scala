@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.OPTIMIZER_NON_EXCLUDABLE_RULES
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -218,7 +219,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       PullOutPythonUDFInJoinCondition.ruleName ::
-      NormalizeFloatingNumbers.ruleName :: Nil
+      NormalizeFloatingNumbers.ruleName :: Nil ++
+      SQLConf.get.getConf(OPTIMIZER_NON_EXCLUDABLE_RULES).toSeq.flatMap(Utils.stringToSeq)
 
   /**
    * Optimize all the subqueries inside expression.
