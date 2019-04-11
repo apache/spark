@@ -185,11 +185,11 @@ public class LevelDB implements KVStore {
 
   @Override
   public <T> KVStoreView<T> view(Class<T> type) throws Exception {
-    return new KVStoreView<T>(type) {
+    return new KVStoreView<T>() {
       @Override
       public Iterator<T> iterator() {
         try {
-          return new LevelDBIterator<>(LevelDB.this, this);
+          return new LevelDBIterator<>(type, LevelDB.this, this);
         } catch (Exception e) {
           throw Throwables.propagate(e);
         }

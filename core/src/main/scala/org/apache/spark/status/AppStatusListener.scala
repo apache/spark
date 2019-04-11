@@ -1144,8 +1144,6 @@ private[spark] class AppStatusListener(
       s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
     }
 
-    logDebug(s"Cleanup stages ${stages.size} for total count of $count")
-
     val stageKeys = stages.map { s =>
       val key = Array(s.info.stageId, s.info.attemptId)
       kvstore.delete(s.getClass(), key)
