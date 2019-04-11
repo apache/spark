@@ -443,7 +443,7 @@ object DataType {
         fieldCompatible
 
       case (w: AtomicType, r: AtomicType) =>
-        if (!Cast.canSafeCast(w, r)) {
+        if (!Cast.canUpCast(w, r)) {
           addError(s"Cannot safely cast '$context': $w to $r")
           false
         } else {

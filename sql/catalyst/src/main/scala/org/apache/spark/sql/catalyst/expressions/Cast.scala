@@ -139,16 +139,17 @@ object Cast {
   }
 
   /**
-   * Returns true iff we can safely cast the `from` type to `to` type without any truncating or
+   * Returns true iff we can safely up-cast the `from` type to `to` type without any truncating or
    * precision lose, e.g. int -> long, date -> timestamp.
    */
-  def canSafeCast(from: AtomicType, to: AtomicType): Boolean = (from, to) match {
+  def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
-    case (from, to) if legalNumericPrecedence(from, to) => true
+    case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
     case (_, StringType) => true
+    // TODO: consider complex types.
     case _ => false
   }
 

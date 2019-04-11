@@ -980,12 +980,12 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
 
       safeTargetTypes.foreach { to =>
-        assert(Cast.canSafeCast(from, to), s"It should be possible to safely cast $from to $to")
+        assert(Cast.canUpCast(from, to), s"It should be possible to safely cast $from to $to")
         assert(!Cast.mayTruncate(from, to), s"No truncation is expected when casting $from to $to")
       }
 
       unsafeTargetTypes.foreach { to =>
-        assert(!Cast.canSafeCast(from, to), s"It shouldn't be possible to safely cast $from to $to")
+        assert(!Cast.canUpCast(from, to), s"It shouldn't be possible to safely cast $from to $to")
         assert(Cast.mayTruncate(from, to), s"Truncation is expected when casting $from to $to")
       }
     }
