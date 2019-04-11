@@ -1371,4 +1371,38 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-xxxx: Rewrite Uncorrelated Subquery") {
+    withTempView("t1", "t2") {
+      sql("create temporary view t1 as select * from values ('b',null) as t1(t1a, t1b)")
+      sql("create temporary view t2 as select * from values ('a',1), ('b',2) as t2(t2a, t2b)")
+      // Exists
+      val exists = sql(
+        """
+          |select t2b
+          |from   t2
+          |where  exists(select 1 from t1)
+        """.stripMargin)
+      val subqueries = exists.queryExecution.executedPlan.collect {
+        case p => p.subqueries
+      }.flatten
+      assert(subqueries.length == 1)
+      checkAnswer(exists, Seq(Row(1), Row(2)))
+      exists.explain(true)
+
+      // InSubquery
+      val in = sql(
+        """
+          |select t2b
+          |from   t2
+          |where  "b" in (select t1a from t1)
+        """.stripMargin
+      )
+      val inSubqueries = in.queryExecution.executedPlan.collect {
+        case p => p.subqueries
+      }.flatten
+      assert(inSubqueries.length == 1)
+      checkAnswer(in, Seq(Row(1), Row(2)))
+    }
+  }
 }

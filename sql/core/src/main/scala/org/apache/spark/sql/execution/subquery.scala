@@ -56,6 +56,43 @@ object ExecSubqueryExpression {
 }
 
 /**
+ * Exists is used to test for the existence of any record in a subquery.
+ *
+ * This is the physical copy of Exists to be used inside SparkPlan.
+ */
+case class Exists(
+    plan: BaseSubqueryExec,
+    exprId: ExprId)
+  extends ExecSubqueryExpression {
+
+  override def dataType: DataType = BooleanType
+  override def children: Seq[Expression] = Nil
+  override def nullable: Boolean = false
+  override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
+  override def withNewPlan(plan: BaseSubqueryExec): Exists = copy(plan = plan)
+
+  // whether the subquery returns one or more records
+  @volatile private var result: Boolean = _
+  @volatile private var updated: Boolean = false
+
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
+    result = rows.nonEmpty
+    updated = true
+  }
+
+  override def eval(input: InternalRow): Boolean = {
+    require(updated, s"$this has not finished")
+    result
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    require(updated, s"$this has not finished")
+    Literal.create(result, BooleanType).doGenCode(ctx, ev)
+  }
+}
+
+/**
  * A subquery that will return only one row and one column.
  *
  * This is the physical copy of ScalarSubquery to be used inside SparkPlan.
@@ -118,6 +155,12 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         ScalarSubquery(
           SubqueryExec(s"subquery${subquery.exprId.id}", executedPlan),
           subquery.exprId)
+      case subquery: expressions.Exists =>
+        val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
+        Exists(
+          SubqueryExec(s"exists${subquery.exprId.id}", executedPlan),
+          subquery.exprId
+        )
     }
   }
 }

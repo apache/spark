@@ -92,10 +92,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  def isCorrelatedExists(e: Expression): Boolean = e match {
+    case Exists(_, children, _) if children.isEmpty => false
+    case _ => true
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(condition, child) =>
       val (withSubquery, withoutSubquery) =
-        splitConjunctivePredicates(condition).partition(SubqueryExpression.hasInOrExistsSubquery)
+        splitConjunctivePredicates(condition)
+          .partition(e => SubqueryExpression.hasInOrExistsSubquery(e) && isCorrelatedExists(e))
 
       // Construct the pruned filter condition.
       val newFilter: LogicalPlan = withoutSubquery match {
@@ -551,3 +557,36 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       }
   }
 }
+
+/**
+ * This rule rewrites uncorrelated PredicateSubquery expressions as Exists.
+ * The uncorrelated Exists can be evaluated using a subplan instead of a semi-join.
+ * Besides, we use `limit 1` and `select 1` after the subquery to reduce the network overhead.
+ * `InSubquery` can be rewritten as uncorrelated Exists only when the left side
+ * values are literals and the subquery is uncorrelated.
+ * Example:
+ * 3 in (select b from t) => exists(select 1 from t where b = 3 limit 1)
+ */
+object RewriteUncorrelatedSubquery extends Rule[LogicalPlan] {
+  /**
+   * Wrap the subquery with `limit 1` and `project 1`.
+   */
+  def buildSubquery(sub: LogicalPlan): LogicalPlan = {
+    Project(Seq(Alias(Literal.create(1, IntegerType), "1")()),
+      Limit(Literal.create(1, IntegerType), sub))
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Filter(condition, child) =>
+      val newCondition = condition transform {
+        case InSubquery(values, ListQuery(sub, children, _, childOutputs))
+          if children.isEmpty && values.forall(_.isInstanceOf[Literal]) =>
+          val subCondition = values.zip(childOutputs).map(EqualTo.tupled).reduce(And)
+          Exists(buildSubquery(Filter(subCondition, sub)))
+        case Exists(sub, children, _) if children.isEmpty =>
+          Exists(buildSubquery(sub))
+      }
+      Filter(newCondition, child)
+  }
+}
+
