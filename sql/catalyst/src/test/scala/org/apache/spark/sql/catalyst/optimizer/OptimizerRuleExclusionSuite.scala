@@ -95,17 +95,15 @@ class OptimizerRuleExclusionSuite extends PlanTest {
   }
 
   test("Try to exclude some non-excludable rules defined by nonExcludedRules") {
-    SQLConf.get.setConfString(OPTIMIZER_NON_EXCLUDABLE_RULES.key, PushPredicateThroughJoin.ruleName)
-    verifyExcludedRules(
-      new SimpleTestOptimizer(),
-      Seq(
-        PushPredicateThroughJoin.ruleName,
-        ReplaceIntersectWithSemiJoin.ruleName,
-        PullupCorrelatedPredicates.ruleName,
-        RewriteCorrelatedScalarSubquery.ruleName,
-        RewritePredicateSubquery.ruleName,
-        RewriteExceptAll.ruleName,
-        RewriteIntersectAll.ruleName))
+    val optimizer = new SimpleTestOptimizer()
+    val rule1 = PushPredicateThroughJoin.ruleName
+
+    // We cannot use `withSQLConf` to set static configurations.
+    SQLConf.get.setConfString(OPTIMIZER_NON_EXCLUDABLE_RULES.key, rule1)
+    withSQLConf(OPTIMIZER_EXCLUDED_RULES.key -> rule1) {
+      assert(optimizer.batches.exists(batch => batch.rules.exists(rule => rule.ruleName == rule1)))
+    }
+    SQLConf.get.unsetConf(OPTIMIZER_NON_EXCLUDABLE_RULES.key)
   }
 
   test("Custom optimizer") {
