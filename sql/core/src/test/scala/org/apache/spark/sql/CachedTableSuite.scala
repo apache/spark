@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.spark.CleanerListener
 import org.apache.spark.executor.DataReadMethod._
@@ -251,7 +250,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("UNCACHE TABLE testData")
     assert(!spark.catalog.isCached("testData"), "Table 'testData' should not be cached")
 
-    eventually(timeout(10 seconds)) {
+    eventually(timeout(10.seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
   }
@@ -267,7 +266,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         "Eagerly cached in-memory table should have already been materialized")
 
       uncacheTable("testCacheTable")
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
     }
@@ -284,7 +283,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         "Eagerly cached in-memory table should have already been materialized")
 
       uncacheTable("testCacheTable")
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
     }
@@ -305,7 +304,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       "Lazily cached in-memory table should have been materialized")
 
     uncacheTable("testData")
-    eventually(timeout(10 seconds)) {
+    eventually(timeout(10.seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
   }
@@ -446,7 +445,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
     System.gc()
 
-    eventually(timeout(10 seconds)) {
+    eventually(timeout(10.seconds)) {
       assert(toBeCleanedAccIds.synchronized { toBeCleanedAccIds.isEmpty },
         "batchStats accumulators should be cleared after GC when uncacheTable")
     }

@@ -17,34 +17,31 @@
 
 package test.org.apache.spark.sql.sources.v2;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
-import org.apache.spark.sql.sources.v2.SupportsRead;
-import org.apache.spark.sql.sources.v2.Table;
-import org.apache.spark.sql.sources.v2.TableCapability;
+import org.apache.spark.sql.sources.v2.reader.Batch;
+import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory;
+import org.apache.spark.sql.sources.v2.reader.Scan;
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 import org.apache.spark.sql.types.StructType;
 
-abstract class JavaSimpleBatchTable implements Table, SupportsRead {
-  private static final Set<TableCapability> CAPABILITIES = new HashSet<>(Arrays.asList(
-      TableCapability.BATCH_READ,
-      TableCapability.BATCH_WRITE,
-      TableCapability.TRUNCATE));
+abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
 
   @Override
-  public StructType schema() {
+  public Scan build() {
+    return this;
+  }
+
+  @Override
+  public Batch toBatch() {
+    return this;
+  }
+
+  @Override
+  public StructType readSchema() {
     return new StructType().add("i", "int").add("j", "int");
   }
 
   @Override
-  public String name() {
-    return this.getClass().toString();
-  }
-
-  @Override
-  public Set<TableCapability> capabilities() {
-    return CAPABILITIES;
+  public PartitionReaderFactory createReaderFactory() {
+    return new JavaSimpleReaderFactory();
   }
 }
-
