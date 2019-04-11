@@ -301,10 +301,10 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
         // INNER JOIN && t1Size < t2Size => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2", bl, BuildLeft)
-        // FULL JOIN && no join key && t1Size < t2Size => BuildLeft
+        // FULL JOIN && t1Size < t2Size => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 FULL JOIN t2", bl, BuildLeft)
-        // LEFT JOIN && no join key && t1Size < t2Size => BuildLeft
-        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildLeft)
+        // LEFT JOIN => BuildRight
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildRight)
         // RIGHT JOIN => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
         // INNER JOIN && broadcast(t1) => BuildLeft
@@ -345,11 +345,11 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
         assertJoinBuildSide("SELECT * FROM t2 FULL OUTER JOIN t1", bl, BuildRight)
 
-        assertJoinBuildSide("SELECT * FROM t1 LEFT JOIN t2", bl, BuildLeft)
+        assertJoinBuildSide("SELECT * FROM t1 LEFT JOIN t2", bl, BuildRight)
         assertJoinBuildSide("SELECT * FROM t2 LEFT JOIN t1", bl, BuildRight)
 
         assertJoinBuildSide("SELECT * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
-        assertJoinBuildSide("SELECT * FROM t2 RIGHT JOIN t1", bl, BuildRight)
+        assertJoinBuildSide("SELECT * FROM t2 RIGHT JOIN t1", bl, BuildLeft)
       }
     }
   }

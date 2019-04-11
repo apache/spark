@@ -348,9 +348,38 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .getOrElse(createForcibleBroadcastNLJoin(left, right, joinType, condition))
         }
 
-        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
+        if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
+          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        } else {
+          val smallerSide =
+            if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
+          val buildSide = if (canBuildLeft(joinType)) {
+            // For RIGHT JOIN, we may broadcast left side even if the hint asks us to broadcast
+            // the right side. This is for history reasons.
+            if (hintToBroadcastLeft(hint) || canBroadcast(left)) {
+              BuildLeft
+            } else if (hintToBroadcastRight(hint)) {
+              BuildRight
+            } else {
+              smallerSide
+            }
+          } else {
+            // For LEFT JOIN, we may broadcast right side even if the hint asks us to broadcast
+            // the left side. This is for history reasons.
+            if (hintToBroadcastRight(hint) || canBroadcast(right)) {
+              BuildRight
+            } else if (hintToBroadcastLeft(hint)) {
+              BuildLeft
+            } else {
+              smallerSide
+            }
+          }
+          Seq(joins.BroadcastNestedLoopJoinExec(
+            planLater(left), planLater(right), buildSide, joinType, condition))
+        }
+
 
       // --- Cases where this strategy does not apply ---------------------------------------------
       case _ => Nil
