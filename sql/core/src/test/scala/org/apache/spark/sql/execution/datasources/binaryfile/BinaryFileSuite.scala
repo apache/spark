@@ -23,12 +23,10 @@ import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.functions.{col, substring_index}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
-import org.apache.spark.sql.types.LongType
 
 class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
-  import testImplicits._
 
   private lazy val filePath = testFile("test-data/text-partitioned")
 
@@ -39,11 +37,12 @@ class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils 
   test("binary file test") {
 
     val resultDF = spark.read.format("binaryFile")
+      .option("pathGlobFilter", "*.txt")
       .load(filePath)
       .select(
-        substring_index(col("status.path"), "/", -1).as("path"),
-        col("status.modification_time"),
-        col("status.length"),
+        col("status.path"),
+        col("status.modificationTime"),
+        col("status.len"),
         col("content"),
         col("year")
       )
@@ -54,7 +53,7 @@ class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils 
       val dirPath = partitionDirStatus.getPath
 
       for (fileStatus <- fs.listStatus(dirPath)) {
-        val fname = fileStatus.getPath.getName
+        val fpath = fileStatus.getPath.toString.replace("file:/", "file:///")
         val flen = fileStatus.getLen
         val modificationTime = new Timestamp(fileStatus.getModificationTime)
 
@@ -70,13 +69,18 @@ class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils 
 
         val partitionName = dirPath.getName.split("=")(1)
         val year = partitionName.toInt
-        val row = Row(fname, modificationTime, flen, fcontent, year)
+        val row = Row(fpath, modificationTime, flen, fcontent, year)
         expectedRowSet.add(row)
       }
     }
 
     val result = resultDF.collect()
     assert(Set(result: _*) === expectedRowSet.toSet)
+
+    val resultDF2 = spark.read.format("binaryFile")
+      .option("pathGlobFilter", "*.a")
+      .load(filePath)
+    assert(resultDF2.count() === 0)
   }
 
 }

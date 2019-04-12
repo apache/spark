@@ -51,6 +51,13 @@ private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceReg
     throw new UnsupportedOperationException("Write is not supported for binary file data source")
   }
 
+  override def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    false
+  }
+
   override def shortName(): String = "binaryFile"
 
   override protected def buildReader(
@@ -67,15 +74,16 @@ private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceReg
 
     val binaryFileSourceOptions = new BinaryFileSourceOptions(options)
 
-    val pathFilterRegex = binaryFileSourceOptions.pathFilterRegex
-    val globFilter = if (pathFilterRegex.isEmpty) { null } else {
-      new GlobFilter(pathFilterRegex)
-    }
+    val pathGlobPattern = binaryFileSourceOptions.pathGlobFilter
 
     (file: PartitionedFile) => {
       val path = file.filePath
       val fsPath = new Path(path)
 
+      // TODO: Improve performance here: each file will recompile the glob pattern here.
+      val globFilter = if (pathGlobPattern.isEmpty) { null } else {
+        new GlobFilter(pathGlobPattern)
+      }
       if (globFilter == null || globFilter.accept(fsPath)) {
         val fs = fsPath.getFileSystem(broadcastedHadoopConf.value.value)
         val fileStatus = fs.getFileStatus(fsPath)
@@ -114,7 +122,7 @@ private[binaryfile] class BinaryFileSourceOptions(
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   /**
-   * only include files with path matching the regex pattern.
+   * only include files with path matching the glob pattern.
    */
-  val pathFilterRegex = parameters.getOrElse("pathFilterRegex", "").toString
+  val pathGlobFilter = parameters.getOrElse("pathGlobFilter", "").toString
 }

@@ -29,8 +29,31 @@ import org.apache.spark.sql.types._
  *
  * The schema of "status" column described above is:
  *  - path: `StringType` (the file path)
- *  - modification_time: `TimestampType` (last modification time of the file)
- *  - length: `LongType` (the file length)
+ *  - modificationTime: `TimestampType` (last modification time of the file)
+ *  - len: `LongType` (the file length)
+ *
+ * To use binary file data source, you need to set "binaryFile" as the format in `DataFrameReader`
+ * and optionally specify the data source options, available options include:
+ *  - pathGlobFilter: Only include files with path matching the glob pattern.
+ *                    The glob pattern keep the same behavior with hadoop API
+ *                    `org.apache.hadoop.fs.FileSystem.globStatus(pathPattern)`
+ *
+ * Example:
+ * {{{
+ *   // Scala
+ *   val df = spark.read.format("binaryFile")
+ *     .option("pathGlobFilter", "*.txt")
+ *     .load("path/to/fileDir")
+ *
+ *   // Java
+ *   Dataset<Row> df = spark.read().format("binaryFile")
+ *     .option("pathGlobFilter", "*.txt")
+ *     .load("path/to/fileDir");
+ * }}}
+ *
+ * @note This binary file data source does not support saving dataframe to binary files.
+ * @note This class is public for documentation purpose. Please don't use this class directly.
+ * Rather, use the data source API as illustrated above.
  */
 class BinaryFileDataSource private() {}
 
@@ -38,8 +61,8 @@ object BinaryFileDataSource {
 
   val fileStatusSchema = StructType(
     StructField("path", StringType, true) ::
-      StructField("modification_time", TimestampType, true) ::
-      StructField("length", LongType, true) :: Nil)
+      StructField("modificationTime", TimestampType, true) ::
+      StructField("len", LongType, true) :: Nil)
 
   val binaryFileSchema = StructType(
     StructField("status", fileStatusSchema, true) ::
