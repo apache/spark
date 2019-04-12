@@ -34,7 +34,7 @@ class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils 
 
   private lazy val fs = fsFilePath.getFileSystem(sparkContext.hadoopConfiguration)
 
-  def testBinaryFileDataSource(pathGlobFilter: String, expectedCount: Int): Unit = {
+  def testBinaryFileDataSource(pathGlobFilter: String): Unit = {
     val resultDF = spark.read.format("binaryFile")
       .option("pathGlobFilter", pathGlobFilter)
       .load(filePath)
@@ -79,15 +79,14 @@ class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils 
 
     val result = resultDF.collect()
     assert(Set(result: _*) === expectedRowSet.toSet)
-    assert(result.length === expectedCount)
   }
 
   test("binary file data source test") {
-    testBinaryFileDataSource(pathGlobFilter = "*.*", expectedCount = 4)
-    testBinaryFileDataSource(pathGlobFilter = "*.bin", expectedCount = 1)
-    testBinaryFileDataSource(pathGlobFilter = "*.txt", expectedCount = 2)
-    testBinaryFileDataSource(pathGlobFilter = "*.{txt,csv}", expectedCount = 3)
-    testBinaryFileDataSource(pathGlobFilter = "*.json", expectedCount = 0)
+    testBinaryFileDataSource(pathGlobFilter = "*.*")
+    testBinaryFileDataSource(pathGlobFilter = "*.bin")
+    testBinaryFileDataSource(pathGlobFilter = "*.txt")
+    testBinaryFileDataSource(pathGlobFilter = "*.{txt,csv}")
+    testBinaryFileDataSource(pathGlobFilter = "*.json")
   }
 
   test ("binary file data source do not support write operation") {
