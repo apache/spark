@@ -44,13 +44,13 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
   }
 
   override def openSession(
-                            protocol: ThriftserverShimUtils.TProtocolVersion,
-                            username: String,
-                            passwd: String,
-                            ipAddress: String,
-                            sessionConf: java.util.Map[String, String],
-                            withImpersonation: Boolean,
-                            delegationToken: String): SessionHandle = {
+      protocol: ThriftserverShimUtils.TProtocolVersion,
+      username: String,
+      passwd: String,
+      ipAddress: String,
+      sessionConf: java.util.Map[String, String],
+      withImpersonation: Boolean,
+      delegationToken: String): SessionHandle = {
     val sessionHandle =
       super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
           delegationToken)
