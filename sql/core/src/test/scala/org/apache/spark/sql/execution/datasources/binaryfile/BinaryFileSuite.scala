@@ -44,7 +44,7 @@ class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils 
         col("status.modificationTime"),
         col("status.len"),
         col("content"),
-        col("year")
+        col("year") // this is a partition column
       )
 
     val expectedRowSet = new collection.mutable.HashSet[Row]()

@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.sql.types._
 
 /**
- * `binaryfile` package implements Spark SQL data source API for loading binary file data
- * as `DataFrame`.
+ * This "binaryFile" data source format implements Spark SQL data source API for loading binary
+ * file data as `DataFrame`.
  *
  * The loaded `DataFrame` has two columns, the schema is:
  *  - status: `StructType` (the file status information)
@@ -29,7 +30,9 @@ import org.apache.spark.sql.types._
  *
  * The schema of "status" column described above is:
  *  - path: `StringType` (the file path)
- *  - modificationTime: `TimestampType` (last modification time of the file)
+ *  - modificationTime: `TimestampType` (last modification time of the file, on some FS
+ *                                       implementation, this might be not available
+ *                                       and fallback to some default value.)
  *  - len: `LongType` (the file length)
  *
  * To use binary file data source, you need to set "binaryFile" as the format in `DataFrameReader`
@@ -55,17 +58,23 @@ import org.apache.spark.sql.types._
  * @note This class is public for documentation purpose. Please don't use this class directly.
  * Rather, use the data source API as illustrated above.
  */
+@Experimental
+@Since("3.0.0")
 class BinaryFileDataSource private() {}
 
 object BinaryFileDataSource {
 
-  val fileStatusSchema = StructType(
+  private val fileStatusSchema = StructType(
     StructField("path", StringType, true) ::
-      StructField("modificationTime", TimestampType, true) ::
-      StructField("len", LongType, true) :: Nil)
+    StructField("modificationTime", TimestampType, true) ::
+    StructField("len", LongType, true) :: Nil)
 
+  /**
+   * The schema of the dataframe returned by binaryFile data source.
+   * See doc in `BinaryFileDataSource`
+   */
   val binaryFileSchema = StructType(
     StructField("status", fileStatusSchema, true) ::
-      StructField("content", BinaryType, true) :: Nil)
+    StructField("content", BinaryType, true) :: Nil)
 
 }
