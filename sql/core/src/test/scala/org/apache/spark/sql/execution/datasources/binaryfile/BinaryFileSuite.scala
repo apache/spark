@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.binaryfile
 import java.sql.Timestamp
 
 import com.google.common.io.{ByteStreams, Closeables}
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{GlobFilter, Path}
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions.col
@@ -28,16 +28,15 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
-  private lazy val filePath = testFile("test-data/text-partitioned")
+  private lazy val filePath = testFile("test-data/binaryfile-partitioned")
 
   private lazy val fsFilePath = new Path(filePath)
 
   private lazy val fs = fsFilePath.getFileSystem(sparkContext.hadoopConfiguration)
 
-  test("binary file test") {
-
+  def testBinaryFileDataSource(pathGlobFilter: String, expectedCount: Int): Unit = {
     val resultDF = spark.read.format("binaryFile")
-      .option("pathGlobFilter", "*.txt")
+      .option("pathGlobFilter", pathGlobFilter)
       .load(filePath)
       .select(
         col("status.path"),
@@ -49,38 +48,58 @@ class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils 
 
     val expectedRowSet = new collection.mutable.HashSet[Row]()
 
+    val globFilter = new GlobFilter(pathGlobFilter)
     for (partitionDirStatus <- fs.listStatus(fsFilePath)) {
       val dirPath = partitionDirStatus.getPath
 
+      val partitionName = dirPath.getName.split("=")(1)
+      val year = partitionName.toInt // partition column "year" value which is `Int` type
+
       for (fileStatus <- fs.listStatus(dirPath)) {
-        val fpath = fileStatus.getPath.toString.replace("file:/", "file:///")
-        val flen = fileStatus.getLen
-        val modificationTime = new Timestamp(fileStatus.getModificationTime)
+        if (globFilter.accept(fileStatus.getPath)) {
+          val fpath = fileStatus.getPath.toString.replace("file:/", "file:///")
+          val flen = fileStatus.getLen
+          val modificationTime = new Timestamp(fileStatus.getModificationTime)
 
-        val fcontent = {
-          val stream = fs.open(fileStatus.getPath)
-          val content = try {
-            ByteStreams.toByteArray(stream)
-          } finally {
-            Closeables.close(stream, true)
+          val fcontent = {
+            val stream = fs.open(fileStatus.getPath)
+            val content = try {
+              ByteStreams.toByteArray(stream)
+            } finally {
+              Closeables.close(stream, true)
+            }
+            content
           }
-          content
-        }
 
-        val partitionName = dirPath.getName.split("=")(1)
-        val year = partitionName.toInt
-        val row = Row(fpath, modificationTime, flen, fcontent, year)
-        expectedRowSet.add(row)
+          val row = Row(fpath, modificationTime, flen, fcontent, year)
+          expectedRowSet.add(row)
+        }
       }
     }
 
     val result = resultDF.collect()
     assert(Set(result: _*) === expectedRowSet.toSet)
+    assert(result.length === expectedCount)
+  }
 
-    val resultDF2 = spark.read.format("binaryFile")
-      .option("pathGlobFilter", "*.a")
-      .load(filePath)
-    assert(resultDF2.count() === 0)
+  test("binary file data source test") {
+    testBinaryFileDataSource(pathGlobFilter = "*.*", expectedCount = 4)
+    testBinaryFileDataSource(pathGlobFilter = "*.bin", expectedCount = 1)
+    testBinaryFileDataSource(pathGlobFilter = "*.txt", expectedCount = 2)
+    testBinaryFileDataSource(pathGlobFilter = "*.{txt,csv}", expectedCount = 3)
+    testBinaryFileDataSource(pathGlobFilter = "*.json", expectedCount = 0)
+  }
+
+  test ("binary file data source do not support write operation") {
+    val df = spark.read.format("binaryFile").load(filePath)
+    withTempDir { tmpDir =>
+      val thrown = intercept[UnsupportedOperationException] {
+        df.write
+          .format("binaryFile")
+          .save(tmpDir + "/test_save")
+      }
+      assert(thrown.getMessage.contains("Write is not supported for binary file data source"))
+    }
   }
 
 }
