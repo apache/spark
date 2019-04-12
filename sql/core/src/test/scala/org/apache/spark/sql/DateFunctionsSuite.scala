@@ -755,7 +755,6 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-
   test("to_timestamp with microseconds precision") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val timestamp = "1970-01-01T00:00:00.123456Z"
