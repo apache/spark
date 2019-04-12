@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expres
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -113,7 +114,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
-      if (existingProvider != specifiedProvider) {
+      if (!compatibleProviders(existingProvider, specifiedProvider)) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
           s"`${specifiedProvider.getSimpleName}`.")
@@ -233,6 +234,24 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
+  }
+
+  private def compatibleProviders(a: Class[_], b: Class[_]): Boolean = {
+    if (a == b) {
+      true
+    } else {
+      // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
+      // [[FileFormat]], the two providers are compatible.
+      val backwardCompatible1 = a.newInstance() match {
+        case f: FileDataSourceV2 if f.fallbackFileFormat == b => true
+        case _ => false
+      }
+      val backwardCompatible2 = b.newInstance() match {
+        case f: FileDataSourceV2 if f.fallbackFileFormat == a => true
+        case _ => false
+      }
+      backwardCompatible1 || backwardCompatible2
+    }
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
