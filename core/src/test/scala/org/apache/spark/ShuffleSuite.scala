@@ -418,6 +418,22 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     manager.unregisterShuffle(0)
   }
+
+  test("[SPARK-27562]: test shuffle with shuffle digest enabled is true") {
+      conf.set(config.SHUFFLE_DIGEST_ENABLED, true)
+      val sc = new SparkContext("local", "test", conf)
+      val numRecords = 10000
+
+      val wordCount = sc.parallelize(1 to numRecords, 4)
+        .map(key => (key, 1))
+        .reduceByKey(_ + _)
+        .collect()
+      val count = wordCount.length
+      val sum = wordCount.map(value => value._1).sum
+      assert(count == numRecords)
+      assert(sum == (1 to numRecords).sum)
+      sc.stop()
+    }
 }
 
 /**

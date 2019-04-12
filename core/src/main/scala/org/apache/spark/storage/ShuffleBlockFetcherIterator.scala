@@ -32,7 +32,7 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.util.TransportConf
+import org.apache.spark.network.util.{DigestUtils, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -80,7 +80,8 @@ final class ShuffleBlockFetcherIterator(
     detectCorrupt: Boolean,
     detectCorruptUseExtraMemory: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter,
-    doBatchFetch: Boolean)
+    doBatchFetch: Boolean,
+    digestEnabled: Boolean)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -210,7 +211,7 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val result = iter.next()
       result match {
-        case SuccessFetchResult(_, _, address, _, buf, _) =>
+        case SuccessFetchResult(_, _, address, _, buf, _, _) =>
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
@@ -572,7 +573,8 @@ final class ShuffleBlockFetcherIterator(
       shuffleMetrics.incFetchWaitTime(fetchWaitTime)
 
       result match {
-        case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
+        case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone,
+        digest) =>
           if (address != blockManager.blockManagerId) {
             if (hostLocalBlocks.contains(blockId -> mapIndex)) {
               shuffleMetrics.incLocalBlocksFetched(1)
@@ -611,7 +613,7 @@ final class ShuffleBlockFetcherIterator(
             throwFetchFailedException(blockId, mapIndex, address, new IOException(msg))
           }
 
-          val in = try {
+          var in = try {
             buf.createInputStream()
           } catch {
             // The exception could only be throwed by local shuffle block
@@ -626,16 +628,60 @@ final class ShuffleBlockFetcherIterator(
               buf.release()
               throwFetchFailedException(blockId, mapIndex, address, e)
           }
+
+          // If shuffle digest enabled is true, check the block with checkSum.
+          var failedOnDigestCheck = false
+          if (digestEnabled) {
+            if (digest >= 0) {
+              val digestToCheck = try {
+                DigestUtils.getDigest(in)
+              } catch {
+                case e: IOException =>
+                  logError("Error occurs when checking digest", e)
+                  buf.release()
+                  throwFetchFailedException(blockId, mapIndex, address, e)
+              }
+              failedOnDigestCheck = digest != digestToCheck
+              if (!failedOnDigestCheck) {
+                buf.release()
+                val e = new CheckDigestFailedException(s"The digest to check $digestToCheck " +
+                s"of $blockId is not equal with origin $digest")
+                if (corruptedBlocks.contains(blockId)) {
+                  throwFetchFailedException(blockId, mapIndex, address, e)
+                } else {
+                  logError("The digest of read data is not correct and fetch again", e)
+                  corruptedBlocks += blockId
+                  fetchRequests += FetchRequest(
+                    address, Array(FetchBlockInfo(blockId, size, mapIndex)))
+                  result = null
+                  in.close()
+                }
+              }
+              // If digest check passed, reset or recreate the inputStream
+              if (!failedOnDigestCheck) {
+                if (in.markSupported()) {
+                  in.reset()
+                } else {
+                  in = buf.createInputStream()
+                }
+              }
+            } else {
+              logDebug(s"The digest for address: ${address.host} and blockID:" +
+                s"$blockId is null, local address is ${blockManager.blockManagerId.host}")
+            }
+          }
           try {
-            input = streamWrapper(blockId, in)
-            // If the stream is compressed or wrapped, then we optionally decompress/unwrap the
-            // first maxBytesInFlight/3 bytes into memory, to check for corruption in that portion
-            // of the data. But even if 'detectCorruptUseExtraMemory' configuration is off, or if
-            // the corruption is later, we'll still detect the corruption later in the stream.
-            streamCompressedOrEncrypted = !input.eq(in)
-            if (streamCompressedOrEncrypted && detectCorruptUseExtraMemory) {
-              // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              input = Utils.copyStreamUpTo(input, maxBytesInFlight / 3)
+            if (!failedOnDigestCheck) {
+              input = streamWrapper(blockId, in)
+              // If the stream is compressed or wrapped, then we optionally decompress/unwrap the
+              // first maxBytesInFlight/3 bytes into memory, to check for corruption in that portion
+              // of the data. But even if 'detectCorruptUseExtraMemory' configuration is off, or if
+              // the corruption is later, we'll still detect the corruption later in the stream.
+              streamCompressedOrEncrypted = !input.eq(in)
+              if (!digestEnabled && streamCompressedOrEncrypted && detectCorruptUseExtraMemory) {
+                // TODO: manage the memory used here, and spill it into disk in case of OOM.
+                input = Utils.copyStreamUpTo(input, maxBytesInFlight / 3)
+              }
             }
           } catch {
             case e: IOException =>
@@ -962,13 +1008,15 @@ object ShuffleBlockFetcherIterator {
 
   /**
    * Result of a fetch from a remote block successfully.
+   *
    * @param blockId block id
    * @param mapIndex the mapIndex for this block, which indicate the index in the map stage.
    * @param address BlockManager that the block was fetched from.
    * @param size estimated size of the block. Note that this is NOT the exact bytes.
    *             Size of remote block is used to calculate bytesInFlight.
-   * @param buf `ManagedBuffer` for the content.
+   * @param buf              `ManagedBuffer` for the content.
    * @param isNetworkReqDone Is this the last network request for this host in this fetch request.
+   * @param digest Is the digest of the result, default is -1L.
    */
   private[storage] case class SuccessFetchResult(
       blockId: BlockId,
@@ -976,7 +1024,8 @@ object ShuffleBlockFetcherIterator {
       address: BlockManagerId,
       size: Long,
       buf: ManagedBuffer,
-      isNetworkReqDone: Boolean) extends FetchResult {
+      isNetworkReqDone: Boolean,
+      digest: Long = -1L) extends FetchResult {
     require(buf != null)
     require(size >= 0)
   }
@@ -994,4 +1043,12 @@ object ShuffleBlockFetcherIterator {
       address: BlockManagerId,
       e: Throwable)
     extends FetchResult
+
+  /**
+   * An exception that the origin digest is not equal with the fetchResult's digest.
+   */
+  private case class CheckDigestFailedException(
+      message: String,
+      cause: Throwable = null)
+    extends Exception(message, cause)
 }

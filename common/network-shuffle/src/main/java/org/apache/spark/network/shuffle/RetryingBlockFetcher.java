@@ -189,6 +189,11 @@ public class RetryingBlockFetcher {
   private class RetryingBlockFetchListener implements BlockFetchingListener {
     @Override
     public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
+      onBlockFetchSuccess(blockId, data, -1L);
+    }
+
+    @Override
+    public void onBlockFetchSuccess(String blockId, ManagedBuffer data, long digest) {
       // We will only forward this success message to our parent listener if this block request is
       // outstanding and we are still the active listener.
       boolean shouldForwardSuccess = false;
@@ -201,7 +206,11 @@ public class RetryingBlockFetcher {
 
       // Now actually invoke the parent listener, outside of the synchronized block.
       if (shouldForwardSuccess) {
-        listener.onBlockFetchSuccess(blockId, data);
+        if (digest < 0) {
+          listener.onBlockFetchSuccess(blockId, data);
+        } else {
+          listener.onBlockFetchSuccess(blockId, data, digest);
+        }
       }
     }
 

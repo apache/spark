@@ -15,34 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.shuffle;
+package org.apache.spark.network.buffer;
 
-import java.util.Optional;
+import java.io.File;
+
+import com.google.common.base.Objects;
+
+import org.apache.spark.network.util.TransportConf;
 
 /**
- * Contains offset and length of the shuffle block data.
+ * A {@link ManagedBuffer} backed by a segment in a file with digest.
  */
-public class ShuffleIndexRecord {
-  private final long offset;
-  private final long length;
-  private final Optional<Long> digest;
+public final class DigestFileSegmentManagedBuffer extends FileSegmentManagedBuffer {
 
-  public ShuffleIndexRecord(long offset, long length, Optional<Long> digest) {
-    this.offset = offset;
-    this.length = length;
+  private final long digest;
+
+  public DigestFileSegmentManagedBuffer(TransportConf conf, File file, long offset, long length,
+    long digest) {
+    super(conf, file, offset, length);
     this.digest = digest;
   }
 
-  public long getOffset() {
-    return offset;
-  }
+  public long getDigest() { return digest; }
 
-  public long getLength() {
-    return length;
-  }
-
-  public Optional<Long> getDigest() {
-    return digest;
+  @Override
+  public String toString() {
+    return Objects.toStringHelper(this)
+      .add("file", getFile())
+      .add("offset", getOffset())
+      .add("length", getLength())
+      .add("digest", digest)
+      .toString();
   }
 }
-

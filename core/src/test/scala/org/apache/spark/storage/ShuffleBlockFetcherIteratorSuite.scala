@@ -175,6 +175,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
+      false,
       false)
 
     // 3 local blocks fetched in initialization
@@ -251,6 +252,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
+      false,
       false)
     intercept[FetchFailedException] { iterator.next() }
   }
@@ -285,6 +287,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
+      false,
       false)
     // After initialize() we'll have 2 FetchRequests and each is 1000 bytes. So only the
     // first FetchRequests can be sent, and the second one will hit maxBytesInFlight so
@@ -330,6 +333,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
+      false,
       false)
     // After initialize(), we'll have 2 FetchRequests that one has 2 blocks inside and another one
     // has only one block. So only the first FetchRequest can be sent. The second FetchRequest will
@@ -412,7 +416,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
-      true)
+      true,
+      false)
 
     // 3 local blocks batch fetched in initialization
     verify(blockManager, times(1)).getLocalBlockData(any())
@@ -472,7 +477,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
-      true)
+      true,
+      false)
 
     var numResults = 0
     // After initialize(), there will be 6 FetchRequests. And each of the first 5 requests
@@ -529,7 +535,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
-      true)
+      true,
+      false)
     var numResults = 0
     // After initialize(), there will be 2 FetchRequests. First one has 2 merged blocks and each
     // of them is merged from 2 shuffle blocks, second one has 1 merged block which is merged from
@@ -596,6 +603,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       taskContext.taskMetrics.createTempShuffleReadMetrics(),
+      false,
       false)
 
     verify(blocks(ShuffleBlockId(0, 0, 0)), times(0)).release()
@@ -666,6 +674,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       taskContext.taskMetrics.createTempShuffleReadMetrics(),
+      false,
       false)
 
     // Continue only after the mock calls onBlockFetchFailure
@@ -756,6 +765,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       true,
       taskContext.taskMetrics.createTempShuffleReadMetrics(),
+      false,
       false)
 
     // Continue only after the mock calls onBlockFetchFailure
@@ -827,6 +837,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       true,
       taskContext.taskMetrics.createTempShuffleReadMetrics(),
+      false,
       false)
 
     // We'll get back the block which has corruption after maxBytesInFlight/3 because the other
@@ -892,6 +903,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       true,
       taskContext.taskMetrics.createTempShuffleReadMetrics(),
+      false,
       false)
     val (id, st) = iterator.next()
     // Check that the test setup is correct -- make sure we have a concatenated stream.
@@ -955,6 +967,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       taskContext.taskMetrics.createTempShuffleReadMetrics(),
+      false,
       false)
 
     // Continue only after the mock calls onBlockFetchFailure
@@ -1017,6 +1030,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         detectCorrupt = true,
         false,
         taskContext.taskMetrics.createTempShuffleReadMetrics(),
+        false,
         false)
     }
 
@@ -1066,6 +1080,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       taskContext.taskMetrics.createTempShuffleReadMetrics(),
+      false,
       false)
 
     // All blocks fetched return zero length and should trigger a receive-side error:

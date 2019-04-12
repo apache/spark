@@ -50,6 +50,12 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
   private Message decode(Message.Type msgType, ByteBuf in) {
     switch (msgType) {
+      case DigestChunkFetchSuccess:
+        return DigestChunkFetchSuccess.decode(in);
+
+      case DigestStreamResponse:
+        return DigestStreamResponse.decode(in);
+
       case ChunkFetchRequest:
         return ChunkFetchRequest.decode(in);
 
