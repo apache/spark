@@ -39,13 +39,8 @@ private[kafka010] case class CachedKafkaProducer(
 
   private val configMap = kafkaParams.map(x => x._1 -> x._2).toMap.asJava
 
-  private def updatedAuthConfigIfNeeded(kafkaParamsMap: ju.Map[String, Object]) =
-    KafkaConfigUpdater("executor", kafkaParamsMap.asScala.toMap)
-      .setAuthenticationConfigIfNeeded()
-      .build()
-
   lazy val kafkaProducer: KafkaProducer[Array[Byte], Array[Byte]] = {
-    val producer = new KafkaProducer[Array[Byte], Array[Byte]](updatedAuthConfigIfNeeded(configMap))
+    val producer = new KafkaProducer[Array[Byte], Array[Byte]](configMap)
     logDebug(s"Created a new instance of KafkaProducer for " +
       s"$kafkaParams with Id: $id")
     closed = false
@@ -59,7 +54,7 @@ private[kafka010] case class CachedKafkaProducer(
         if (!closed) {
           closed = true
           kafkaProducer.close()
-          logInfo(s"Closed kafka producer: $this")
+          logDebug(s"Closed kafka producer: $this")
         }
       }
     } catch {
@@ -94,6 +89,11 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     }
   }
 
+  private def updatedAuthConfigIfNeeded(kafkaParamsMap: ju.Map[String, Object]) =
+    KafkaConfigUpdater("executor", kafkaParamsMap.asScala.toMap)
+      .setAuthenticationConfigIfNeeded()
+      .build()
+
   private val closeQueue = new ConcurrentLinkedQueue[CachedKafkaProducer]()
 
   private val removalListener = new RemovalListener[Seq[(String, Object)], CachedKafkaProducer]() {
@@ -122,7 +122,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * one instance per specified kafkaParams.
    */
   private[kafka010] def acquire(kafkaParamsMap: ju.Map[String, Object]): CachedKafkaProducer = {
-    val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParamsMap)
+    val paramsSeq: Seq[(String, Object)] = paramsToSeq(updatedAuthConfigIfNeeded(kafkaParamsMap))
     try {
       val producer = this.synchronized {
         val cachedKafkaProducer: CachedKafkaProducer = guavaCache.get(paramsSeq)
@@ -148,7 +148,6 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     this.synchronized {
       // It should be ok to call release multiple times on the same producer object.
       if (producer.inUse()) {
-        // So that we do not end up with -ve in-use counts.
         producer.inUseCount.decrementAndGet()
         logDebug(s"Released producer $producer.")
       } else {
@@ -165,11 +164,11 @@ private[kafka010] object CachedKafkaProducer extends Logging {
       }
     }
     // We need a close queue, so that we can close the producer(s) outside of a synchronized block.
-    processPendingClose(producer)
+    processPendingClose()
   }
 
   /** Process pending closes. */
-  private def processPendingClose(producer: CachedKafkaProducer): Unit = {
+  private def processPendingClose(): Unit = {
     // Check and close any other producers previously evicted, but pending to be closed.
     for (p <- closeQueue.iterator().asScala) {
       if (!p.inUse()) {

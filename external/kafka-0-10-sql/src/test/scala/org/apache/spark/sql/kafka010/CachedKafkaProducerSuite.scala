@@ -40,7 +40,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
   }
 
   test("Should return the cached instance on calling acquire with same params.") {
-    val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
+    val kafkaParams = generateKafkaParams
     val producer = CachedKafkaProducer.acquire(kafkaParams)
     val producer2 = CachedKafkaProducer.acquire(kafkaParams)
     assert(producer.kafkaProducer == producer2.kafkaProducer)
@@ -50,7 +50,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
   }
 
   test("Should return the new instance on calling acquire with different params.") {
-    val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
+    val kafkaParams = generateKafkaParams
     val producer = CachedKafkaProducer.acquire(kafkaParams)
     kafkaParams.remove("acks") // mutate the kafka params.
     val producer2 = CachedKafkaProducer.acquire(kafkaParams)
@@ -89,7 +89,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
   }
 
   test("Should not close a producer in-use.") {
-    val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
+    val kafkaParams = generateKafkaParams
     val producer: CachedKafkaProducer = CachedKafkaProducer.acquire(kafkaParams)
     producer.kafkaProducer // initializing the producer.
     assert(producer.getInUseCount == 1)
@@ -112,14 +112,6 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
 class CachedKafkaProducerStressSuite extends KafkaContinuousTest with KafkaTest {
 
   override val brokerProps = Map("auto.create.topics.enable" -> "false")
-
-  override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
-    }
-    super.afterAll()
-  }
 
   override def sparkConf: SparkConf = {
     val conf = super.sparkConf
