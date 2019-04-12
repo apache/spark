@@ -86,10 +86,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SASL_SSL.name)
-    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG) ===
-      trustStoreLocation)
-    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG) ===
-      trustStorePassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG)
+      === trustStoreLocation)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
+      === trustStorePassword)
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG))
     assert(!adminClientProperties.containsKey(SslConfigs.SSL_KEY_PASSWORD_CONFIG))
@@ -105,10 +105,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       === bootStrapServers)
     assert(adminClientProperties.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG)
       === SSL.name)
-    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG) ===
-      trustStoreLocation)
-    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG) ===
-      trustStorePassword)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG)
+      === trustStoreLocation)
+    assert(adminClientProperties.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
+      === trustStorePassword)
     assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG) === keyStoreLocation)
     assert(adminClientProperties.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG) === keyStorePassword)
     assert(adminClientProperties.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG) === keyPassword)
@@ -142,7 +142,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
     val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
     assert(saslJaasConfig.contains("Krb5LoginModule required"))
+    assert(saslJaasConfig.contains(s"debug="))
     assert(saslJaasConfig.contains("useKeyTab=true"))
+    assert(saslJaasConfig.contains(s"""keyTab="$keytab""""))
+    assert(saslJaasConfig.contains(s"""principal="$principal""""))
   }
 
   test("createAdminClientProperties without keytab should set ticket cache dynamic jaas config") {
@@ -157,6 +160,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
     val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
     assert(saslJaasConfig.contains("Krb5LoginModule required"))
+    assert(saslJaasConfig.contains(s"debug="))
     assert(saslJaasConfig.contains("useTicketCache=true"))
   }
 

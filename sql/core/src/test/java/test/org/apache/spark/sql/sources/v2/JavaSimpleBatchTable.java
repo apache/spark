@@ -17,17 +17,13 @@
 
 package test.org.apache.spark.sql.sources.v2;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.v2.SupportsRead;
 import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.sources.v2.TableCapability;
-import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
 abstract class JavaSimpleBatchTable implements Table, SupportsRead {
@@ -49,56 +45,6 @@ abstract class JavaSimpleBatchTable implements Table, SupportsRead {
   @Override
   public Set<TableCapability> capabilities() {
     return CAPABILITIES;
-  }
-}
-
-abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
-
-  @Override
-  public Scan build() {
-    return this;
-  }
-
-  @Override
-  public Batch toBatch() {
-    return this;
-  }
-
-  @Override
-  public StructType readSchema() {
-    return new StructType().add("i", "int").add("j", "int");
-  }
-
-  @Override
-  public PartitionReaderFactory createReaderFactory() {
-    return new JavaSimpleReaderFactory();
-  }
-}
-
-class JavaSimpleReaderFactory implements PartitionReaderFactory {
-
-  @Override
-  public PartitionReader<InternalRow> createReader(InputPartition partition) {
-    JavaRangeInputPartition p = (JavaRangeInputPartition) partition;
-    return new PartitionReader<InternalRow>() {
-      private int current = p.start - 1;
-
-      @Override
-      public boolean next() throws IOException {
-        current += 1;
-        return current < p.end;
-      }
-
-      @Override
-      public InternalRow get() {
-        return new GenericInternalRow(new Object[] {current, -current});
-      }
-
-      @Override
-      public void close() throws IOException {
-
-      }
-    };
   }
 }
 

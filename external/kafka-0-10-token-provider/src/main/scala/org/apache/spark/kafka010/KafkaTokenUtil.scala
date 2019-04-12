@@ -28,7 +28,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, CreateDelegationTokenOptions}
-import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
 import org.apache.kafka.common.security.JaasContext
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 import org.apache.kafka.common.security.scram.ScramLoginModule
@@ -139,23 +139,23 @@ private[spark] object KafkaTokenUtil extends Logging {
   private def setTrustStoreProperties(clusterConf: KafkaTokenClusterConf,
     properties: ju.Properties): Unit = {
     clusterConf.trustStoreLocation.foreach { truststoreLocation =>
-      properties.put("ssl.truststore.location", truststoreLocation)
+      properties.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, truststoreLocation)
     }
     clusterConf.trustStorePassword.foreach { truststorePassword =>
-      properties.put("ssl.truststore.password", truststorePassword)
+      properties.put(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, truststorePassword)
     }
   }
 
   private def setKeyStoreProperties(clusterConf: KafkaTokenClusterConf,
       properties: ju.Properties): Unit = {
     clusterConf.keyStoreLocation.foreach { keystoreLocation =>
-      properties.put("ssl.keystore.location", keystoreLocation)
+      properties.put(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, keystoreLocation)
     }
     clusterConf.keyStorePassword.foreach { keystorePassword =>
-      properties.put("ssl.keystore.password", keystorePassword)
+      properties.put(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, keystorePassword)
     }
     clusterConf.keyPassword.foreach { keyPassword =>
-      properties.put("ssl.key.password", keyPassword)
+      properties.put(SslConfigs.SSL_KEY_PASSWORD_CONFIG, keyPassword)
     }
   }
 
@@ -164,6 +164,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
+      | debug=${isGlobalKrbDebugEnabled()}
       | useKeyTab=true
       | serviceName="${clusterConf.kerberosServiceName}"
       | keyTab="${sparkConf.get(KEYTAB).get}"
@@ -178,6 +179,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     val params =
       s"""
       |${getKrb5LoginModuleName} required
+      | debug=${isGlobalKrbDebugEnabled()}
       | useTicketCache=true
       | serviceName="${clusterConf.kerberosServiceName}";
       """.stripMargin.replace("\n", "")
@@ -194,6 +196,16 @@ private[spark] object KafkaTokenUtil extends Logging {
       "com.ibm.security.auth.module.Krb5LoginModule"
     } else {
       "com.sun.security.auth.module.Krb5LoginModule"
+    }
+  }
+
+  private def isGlobalKrbDebugEnabled(): Boolean = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      val debug = System.getenv("com.ibm.security.krb5.Krb5Debug")
+      debug != null && debug.equalsIgnoreCase("all")
+    } else {
+      val debug = System.getenv("sun.security.krb5.debug")
+      debug != null && debug.equalsIgnoreCase("true")
     }
   }
 

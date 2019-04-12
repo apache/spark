@@ -21,7 +21,6 @@ import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
@@ -138,13 +137,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     sc = new SparkContext("local[2]", "My other app", conf)
     assert(sc.master === "local[2]")
     assert(sc.appName === "My other app")
-  }
-
-  test("creating SparkContext with cpus per tasks bigger than cores per executors") {
-    val conf = new SparkConf(false)
-      .set(EXECUTOR_CORES, 1)
-      .set(CPUS_PER_TASK, 2)
-    intercept[SparkException] { sc = new SparkContext(conf) }
   }
 
   test("nested property names") {
@@ -286,10 +278,10 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(RpcUtils.retryWaitMs(conf) === 2L)
 
     conf.set("spark.akka.askTimeout", "3")
-    assert(RpcUtils.askRpcTimeout(conf).duration === (3 seconds))
+    assert(RpcUtils.askRpcTimeout(conf).duration === 3.seconds)
 
     conf.set("spark.akka.lookupTimeout", "4")
-    assert(RpcUtils.lookupRpcTimeout(conf).duration === (4 seconds))
+    assert(RpcUtils.lookupRpcTimeout(conf).duration === 4.seconds)
   }
 
   test("SPARK-13727") {

@@ -15,20 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.catalog.v2.expressions;
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.annotation.Experimental;
 
-class OrcSchemaPruningSuite extends SchemaPruningSuite {
-  override protected val dataSourceName: String = "orc"
-  override protected val vectorizedReaderEnabledKey: String =
-    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
-
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
+/**
+ * Base class of the public logical expression API.
+ */
+@Experimental
+public interface Expression {
+  /**
+   * Format the expression as a human readable SQL-like string.
+   */
+  String describe();
 }
