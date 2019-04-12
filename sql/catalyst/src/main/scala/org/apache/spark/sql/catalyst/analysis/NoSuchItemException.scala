@@ -38,7 +38,7 @@ class NoSuchNamespaceException(message: String) extends AnalysisException(messag
 
 class NoSuchTableException(message: String) extends AnalysisException(message) {
   def this(db: String, table: String) = {
-    this(s"Table '$table' not found in database '$db'")
+    this(s"Table or view '$table' not found in database '$db'")
   }
 
   def this(tableIdent: Identifier) = {
