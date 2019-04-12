@@ -391,7 +391,6 @@ trait CodegenSupport extends SparkPlan {
    * limit-not-reached checks.
    */
   final def limitNotReachedCond: String = {
-    // InputAdapter is also a leaf node.
     if (!canCheckLimitNotReached) {
       val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
         "in its data producing loop."
@@ -431,7 +430,7 @@ trait BlockingOperatorWithCodegen extends CodegenSupport {
   // false) for the Limit operators after this blocking operator.
   override def limitNotReachedChecks: Seq[String] = Nil
 
-  // This is a blocking node so the node cna produce these checks
+  // This is a blocking node so the node can produce these checks
   override protected def canCheckLimitNotReached: Boolean = true
 }
 
@@ -507,7 +506,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
 
   override def inputRDD: RDD[InternalRow] = child.execute()
 
-  // This is a leaf node so the node can produce not limit reached checks.
+  // This is a leaf node so the node can produce limit not reached checks.
   override protected def canCheckLimitNotReached: Boolean = true
 
   // InputAdapter does not need UnsafeProjection.
