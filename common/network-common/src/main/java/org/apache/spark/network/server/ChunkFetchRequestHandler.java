@@ -25,15 +25,13 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import org.apache.spark.network.buffer.DigestFileSegmentManagedBuffer;
+import org.apache.spark.network.protocol.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.protocol.ChunkFetchFailure;
-import org.apache.spark.network.protocol.ChunkFetchRequest;
-import org.apache.spark.network.protocol.ChunkFetchSuccess;
-import org.apache.spark.network.protocol.Encodable;
 
 import static org.apache.spark.network.util.NettyUtils.*;
 
@@ -111,8 +109,16 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
     }
 
     streamManager.chunkBeingSent(msg.streamChunkId.streamId);
-    respond(channel, new ChunkFetchSuccess(msg.streamChunkId, buf)).addListener(
-      (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
+    if (buf instanceof DigestFileSegmentManagedBuffer) {
+      respond(channel, new DigestChunkFetchSuccess(msg.streamChunkId, buf,
+              ((DigestFileSegmentManagedBuffer)buf).getDigest()))
+              .addListener((ChannelFutureListener) future ->
+                      streamManager.chunkSent(msg.streamChunkId.streamId));
+    } else {
+      respond(channel, new ChunkFetchSuccess(msg.streamChunkId, buf)).addListener(
+              (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
+    }
+
   }
 
   /**

@@ -36,6 +36,11 @@ public interface ChunkReceivedCallback {
    */
   void onSuccess(int chunkIndex, ManagedBuffer buffer);
 
+  /** Called with a extra digest parameter upon receipt of a particular chunk.*/
+  default void onSuccess(int chunkIndex, ManagedBuffer buffer, long digest) {
+    onSuccess(chunkIndex, buffer);
+  }
+
   /**
    * Called upon failure to fetch a particular chunk. Note that this may actually be called due
    * to failure to fetch a prior chunk in this stream.

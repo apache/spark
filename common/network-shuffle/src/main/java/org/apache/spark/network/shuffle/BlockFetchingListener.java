@@ -30,6 +30,15 @@ public interface BlockFetchingListener extends EventListener {
   void onBlockFetchSuccess(String blockId, ManagedBuffer data);
 
   /**
+   * Called once per successfully fetch block during shuffle, which has a parameter present the
+   * checkSum of shuffle block. Here provide a default method body for that not every
+   * blockFetchingListener need to implement one onBlockFetchSuccess method.
+   */
+  default void onBlockFetchSuccess(String blockId, ManagedBuffer data, long digest) {
+    onBlockFetchSuccess(blockId, data);
+  }
+
+  /**
    * Called at least once per block upon failures.
    */
   void onBlockFetchFailure(String blockId, Throwable exception);

@@ -206,6 +206,24 @@ public class RetryingBlockFetcher {
     }
 
     @Override
+    public void onBlockFetchSuccess(String blockId, ManagedBuffer data, long digest) {
+      // We will only forward this success message to our parent listener if this block request is
+      // outstanding and we are still the active listener.
+      boolean shouldForwardSuccess = false;
+      synchronized (RetryingBlockFetcher.this) {
+        if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
+          outstandingBlocksIds.remove(blockId);
+          shouldForwardSuccess = true;
+        }
+      }
+
+      // Now actually invoke the parent listener, outside of the synchronized block.
+      if (shouldForwardSuccess) {
+        listener.onBlockFetchSuccess(blockId, data, digest);
+      }
+    }
+
+    @Override
     public void onBlockFetchFailure(String blockId, Throwable exception) {
       // We will only forward this failure to our parent listener if this block request is
       // outstanding, we are still the active listener, AND we cannot retry the fetch.
