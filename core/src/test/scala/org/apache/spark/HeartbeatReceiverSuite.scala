@@ -211,6 +211,7 @@ class HeartbeatReceiverSuite
       assert(!fakeSchedulerBackend.executorDataMap.contains(executorId1))
       assert(!fakeSchedulerBackend.executorDataMap.contains(executorId2))
     }
+    fakeSchedulerBackend.stop()
   }
 
   /** Manually send a heartbeat and return the response. */
