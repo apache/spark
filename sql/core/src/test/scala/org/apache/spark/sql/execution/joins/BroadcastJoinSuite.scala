@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
+import org.apache.spark.sql.catalyst.plans.logical.BROADCAST
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
@@ -216,10 +217,10 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
         .optimizedPlan
 
-      assert(plan1.asInstanceOf[Join].hint.leftHint.get.broadcast)
+      assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
       assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
       assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
-      assert(plan2.asInstanceOf[Join].hint.rightHint.get.broadcast)
+      assert(plan2.asInstanceOf[Join].hint.rightHint.get.strategy.contains(BROADCAST))
       assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
       assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
     }

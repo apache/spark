@@ -541,7 +541,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-    val zid = ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId")
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val locale = ctx.addReferenceObj("locale", Locale.US)
     defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
@@ -715,13 +715,15 @@ abstract class UnixTime
             }""")
         }
       case StringType =>
-        val tz = ctx.addReferenceObj("zoneId", zoneId)
+        val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
         val locale = ctx.addReferenceObj("locale", Locale.US)
         val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
               ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
+                .parse($string.toString()) / $downScaleFactor;
+              ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
                 .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
@@ -854,13 +856,13 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           }""")
       }
     } else {
-      val tz = ctx.addReferenceObj("zoneId", zoneId)
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       val locale = ctx.addReferenceObj("locale", Locale.US)
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.value} = UTF8String.fromString($tf.apply($f.toString(), $tz, $locale).
+          ${ev.value} = UTF8String.fromString($tf.apply($f.toString(), $zid, $locale).
             format($seconds * 1000000L));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;

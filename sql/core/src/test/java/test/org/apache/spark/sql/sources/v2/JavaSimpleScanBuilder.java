@@ -15,20 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.orc
+package test.org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.Batch;
+import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory;
+import org.apache.spark.sql.sources.v2.reader.Scan;
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
+import org.apache.spark.sql.types.StructType;
 
-class OrcSchemaPruningSuite extends SchemaPruningSuite {
-  override protected val dataSourceName: String = "orc"
-  override protected val vectorizedReaderEnabledKey: String =
-    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
 
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
+  @Override
+  public Scan build() {
+    return this;
+  }
+
+  @Override
+  public Batch toBatch() {
+    return this;
+  }
+
+  @Override
+  public StructType readSchema() {
+    return new StructType().add("i", "int").add("j", "int");
+  }
+
+  @Override
+  public PartitionReaderFactory createReaderFactory() {
+    return new JavaSimpleReaderFactory();
+  }
 }

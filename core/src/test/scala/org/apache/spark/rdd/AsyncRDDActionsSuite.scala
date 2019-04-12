@@ -142,7 +142,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     }
     assert(f.get() === 10)
 
-    failAfter(10 seconds) {
+    failAfter(10.seconds) {
       sem.acquire(2)
     }
   }
@@ -178,7 +178,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       f.get()
     }
 
-    failAfter(10 seconds) {
+    failAfter(10.seconds) {
       sem.acquire(2)
     }
   }
