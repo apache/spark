@@ -137,7 +137,7 @@ object ImageSchema {
       ImageIO.read(new ByteArrayInputStream(bytes))
     } catch {
       // Catch runtime exception because `ImageIO` may throw unexcepted `RuntimeException`.
-      // But do not catch the declared `IOException` (regareded as FileSystem failure)
+      // But do not catch the declared `IOException` (regarded as FileSystem failure)
       case _: RuntimeException => null
     }
 
