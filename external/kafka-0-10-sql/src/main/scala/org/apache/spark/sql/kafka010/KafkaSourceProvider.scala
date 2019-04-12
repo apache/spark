@@ -347,7 +347,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     validateGeneralOptions(caseInsensitiveParams)
 
     // Don't want to throw an error, but at least log a warning.
-    if (caseInsensitiveParams.get(MAX_OFFSET_PER_TRIGGER_OPTION_KEY).isDefined) {
+    if (caseInsensitiveParams.get(MAX_OFFSET_PER_TRIGGER.toLowerCase(Locale.ROOT)).isDefined) {
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
   }
@@ -456,13 +456,19 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 }
 
 private[kafka010] object KafkaSourceProvider extends Logging {
+  private val ASSIGN = "assign"
+  private val SUBSCRIBE_PATTERN = "subscribepattern"
+  private val SUBSCRIBE = "subscribe"
   private val STRATEGY_OPTION_KEYS = Set(SUBSCRIBE, SUBSCRIBE_PATTERN, ASSIGN)
   private[kafka010] val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
-  private val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
+  private[kafka010] val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
+  private[kafka010] val MAX_OFFSET_PER_TRIGGER = "maxOffsetsPerTrigger"
+  private[kafka010] val FETCH_OFFSET_NUM_RETRY = "fetchOffset.numRetries"
+  private[kafka010] val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchOffset.retryIntervalMs"
+  private[kafka010] val CONSUMER_POLL_TIMEOUT = "kafkaConsumer.pollTimeoutMs"
   private val GROUP_ID_PREFIX = "groupidprefix"
-  private val MAX_OFFSET_PER_TRIGGER_OPTION_KEY = "maxoffsetspertrigger"
 
   val TOPIC_OPTION_KEY = "topic"
 

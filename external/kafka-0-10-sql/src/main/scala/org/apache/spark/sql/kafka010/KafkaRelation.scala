@@ -47,7 +47,7 @@ private[kafka010] class KafkaRelation(
     "Ending offset not allowed to be set to earliest offsets.")
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
-    CONSUMER_POLL_TIMEOUT,
+    KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
     (sqlContext.sparkContext.conf.get(Network.NETWORK_TIMEOUT) * 1000L).toString
   ).toLong
 

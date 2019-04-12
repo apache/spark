@@ -37,13 +37,4 @@ package object kafka010 {   // scalastyle:ignore
       .doc("The size of consumers cached.")
       .intConf
       .createWithDefault(64)
-
-  val MAX_OFFSET_PER_TRIGGER = "maxOffsetsPerTrigger"
-  val MIN_PARTITIONS = "minPartitions"
-  val FETCH_OFFSET_NUM_RETRY = "fetchOffset.numRetries"
-  val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchOffset.retryIntervalMs"
-  val CONSUMER_POLL_TIMEOUT = "kafkaConsumer.pollTimeoutMs"
-  val ASSIGN = "assign"
-  val SUBSCRIBE_PATTERN = "subscribepattern"
-  val SUBSCRIBE = "subscribe"
  }

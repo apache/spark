@@ -64,10 +64,11 @@ private[kafka010] class KafkaMicroBatchStream(
     failOnDataLoss: Boolean) extends RateControlMicroBatchStream with Logging {
 
   private val pollTimeoutMs = options.getLong(
-    CONSUMER_POLL_TIMEOUT,
+    KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
     SparkEnv.get.conf.get(Network.NETWORK_TIMEOUT) * 1000L)
 
-  private val maxOffsetsPerTrigger = Option(options.get(MAX_OFFSET_PER_TRIGGER)).map(_.toLong)
+  private val maxOffsetsPerTrigger = Option(options.get(KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER))
+    .map(_.toLong)
 
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
 
