@@ -526,6 +526,19 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  test("UDF input_file_name()") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(10).write.orc(path)
+          val row = spark.read.orc(path).select(input_file_name).first()
+          assert(row.getString(0).contains(path))
+        }
+      }
+    }
+  }
+
   test("Return correct results when data columns overlap with partition columns") {
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>

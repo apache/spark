@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.io.{FileNotFoundException, IOException}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.PartitionReader
 
@@ -35,8 +36,7 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
       if (readers.hasNext) {
         if (ignoreMissingFiles || ignoreCorruptFiles) {
           try {
-            currentReader = readers.next()
-            logInfo(s"Reading file $currentReader")
+            currentReader = getNextReader()
           } catch {
             case e: FileNotFoundException if ignoreMissingFiles =>
               logWarning(s"Skipped missing file: $currentReader", e)
@@ -48,11 +48,11 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
               logWarning(
                 s"Skipped the rest of the content in the corrupted file: $currentReader", e)
               currentReader = null
+              InputFileBlockHolder.unset()
               return false
           }
         } else {
-          currentReader = readers.next()
-          logInfo(s"Reading file $currentReader")
+          currentReader = getNextReader()
         }
       } else {
         return false
@@ -84,5 +84,15 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
     if (currentReader != null) {
       currentReader.close()
     }
+    InputFileBlockHolder.unset()
+  }
+
+  private def getNextReader(): PartitionedFileReader[T] = {
+    val reader = readers.next()
+    logInfo(s"Reading file $reader")
+    // Sets InputFileBlockHolder for the file block's information
+    val file = reader.file
+    InputFileBlockHolder.set(file.filePath, file.start, file.length)
+    reader
   }
 }
