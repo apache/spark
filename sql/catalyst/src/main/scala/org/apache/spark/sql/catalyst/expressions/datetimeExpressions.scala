@@ -721,8 +721,6 @@ abstract class UnixTime
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
-                .parse($string.toString()) / $downScaleFactor;
               ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
                 .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
