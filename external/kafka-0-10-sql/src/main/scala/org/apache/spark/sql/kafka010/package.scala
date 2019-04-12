@@ -28,13 +28,13 @@ package object kafka010 {   // scalastyle:ignore
 
   private[spark] val PRODUCER_CACHE_TIMEOUT =
     ConfigBuilder("spark.kafka.producer.cache.timeout")
-      .doc("expire time to remove the unused producers.")
+      .doc("The expire time to remove the unused producers.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(10))
 
   private[spark] val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.sql.kafkaConsumerCache.capacity")
-      .doc("the cache size of consumers.")
+      .doc("The size of consumers cached.")
       .intConf
       .createWithDefault(64)
 
