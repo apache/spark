@@ -639,7 +639,7 @@ case class DescribeTableCommand(
  *    select * from (from a select * select *)
  * 7. Common table expressions (CTEs)
  */
-case class DescribeQueryCommand(query: LogicalPlan)
+case class DescribeQueryCommand(queryText: String)(query: LogicalPlan)
   extends DescribeCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

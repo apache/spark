@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
@@ -373,7 +374,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[DescribeQueryCommand]] logical command.
    */
   override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
-    DescribeQueryCommand(visitQuery(ctx.query))
+    val query = ctx.query
+    val startIndex = query.start.getStartIndex
+    val endIndex = query.stop.getStopIndex
+    val interval = new Interval(startIndex, endIndex)
+    DescribeQueryCommand(query.start.getInputStream.getText(interval))(visitQuery(ctx.query))
   }
 
   /**
