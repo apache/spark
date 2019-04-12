@@ -20,11 +20,34 @@ package org.apache.spark.sql.hive.execution
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+
+  private var originalConvertMetastoreParquet = CONVERT_METASTORE_PARQUET.defaultValueString
+  private var originalConvertMetastoreORC = CONVERT_METASTORE_ORC.defaultValueString
+  private var originalORCImplementation = ORC_IMPLEMENTATION.defaultValueString
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalConvertMetastoreParquet = spark.conf.get(CONVERT_METASTORE_PARQUET.key)
+    originalConvertMetastoreORC = spark.conf.get(CONVERT_METASTORE_ORC.key)
+    originalORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+
+    spark.conf.set(CONVERT_METASTORE_PARQUET.key, "false")
+    spark.conf.set(CONVERT_METASTORE_ORC.key, "false")
+    spark.conf.set(ORC_IMPLEMENTATION.key, "hive")
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.set(CONVERT_METASTORE_PARQUET.key, originalConvertMetastoreParquet)
+    spark.conf.set(CONVERT_METASTORE_ORC.key, originalConvertMetastoreORC)
+    spark.conf.set(ORC_IMPLEMENTATION.key, originalORCImplementation)
+    super.afterAll()
+  }
 
   private def checkNumericTypes(fileFormat: String, dataType: String, value: Any): Unit = {
     withTable("hive_serde") {
@@ -68,6 +91,16 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
       checkAnswer(spark.table("hive_serde"), Row("s"))
       spark.sql(s"INSERT INTO TABLE hive_serde values('$value')")
       checkAnswer(spark.table("hive_serde"), Seq(Row("s"), Row(value)))
+    }
+  }
+
+  private def checkCharTypes(fileFormat: String): Unit = {
+    withTable("hive_serde") {
+      hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 CHAR(10)) STORED AS $fileFormat")
+      hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('s')")
+      checkAnswer(spark.table("hive_serde"), Row("s" + " " * 9))
+      spark.sql(s"INSERT INTO TABLE hive_serde values('s3')")
+      checkAnswer(spark.table("hive_serde"), Seq(Row("s" + " " * 9), Row("s3" + " " * 8)))
     }
   }
 
@@ -121,35 +154,32 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     }
   }
 
-  withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
-    HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
-    Seq("PARQUET", "ORC").foreach { fileFormat =>
-      test(s"Read/Write Hive $fileFormat serde table") {
-        // Numeric Types
-        checkNumericTypes(fileFormat, "TINYINT", 2)
-        checkNumericTypes(fileFormat, "SMALLINT", 2)
-        checkNumericTypes(fileFormat, "INT", 2)
-        checkNumericTypes(fileFormat, "BIGINT", 2)
-        checkNumericTypes(fileFormat, "FLOAT", 2.1F)
-        checkNumericTypes(fileFormat, "DOUBLE", 2.1D)
-        checkNumericTypes(fileFormat, "DECIMAL(9, 2)", 2.1D)
-        checkNumericTypes(fileFormat, "DECIMAL(18, 2)", 2.1D)
-        checkNumericTypes(fileFormat, "DECIMAL(38, 2)", 2.1D)
+  Seq("PARQUET", "ORC").foreach { fileFormat =>
+    test(s"Read/Write Hive $fileFormat serde table") {
+      // Numeric Types
+      checkNumericTypes(fileFormat, "TINYINT", 2)
+      checkNumericTypes(fileFormat, "SMALLINT", 2)
+      checkNumericTypes(fileFormat, "INT", 2)
+      checkNumericTypes(fileFormat, "BIGINT", 2)
+      checkNumericTypes(fileFormat, "FLOAT", 2.1F)
+      checkNumericTypes(fileFormat, "DOUBLE", 2.1D)
+      checkNumericTypes(fileFormat, "DECIMAL(9, 2)", 2.1D)
+      checkNumericTypes(fileFormat, "DECIMAL(18, 2)", 2.1D)
+      checkNumericTypes(fileFormat, "DECIMAL(38, 2)", 2.1D)
 
-        // Date/Time Types
-        checkDateTimeTypes(fileFormat)
+      // Date/Time Types
+      checkDateTimeTypes(fileFormat)
 
-        // String Types
-        checkStringTypes(fileFormat, "STRING", "s1")
-        checkStringTypes(fileFormat, "VARCHAR(10)", "s2")
-        checkStringTypes(fileFormat, "CHAR(10)", "s3")
+      // String Types
+      checkStringTypes(fileFormat, "STRING", "s1")
+      checkStringTypes(fileFormat, "VARCHAR(10)", "s2")
+      checkCharTypes(fileFormat)
 
-        // Misc Types
-        checkMiscTypes(fileFormat)
+      // Misc Types
+      checkMiscTypes(fileFormat)
 
-        // Complex Types
-        checkComplexTypes(fileFormat)
-      }
+      // Complex Types
+      checkComplexTypes(fileFormat)
     }
   }
 }
