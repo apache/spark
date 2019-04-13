@@ -132,8 +132,10 @@ object JavaTypeInference {
         }
 
         val fields = getObjectProperties(other).map {
-          case (propertyName, getterMethod, setterMethod, returnType) =>
-            val (dataType, nullable) = inferDataType(TypeToken.of(returnType), seenTypeSet + other)
+          case (propertyName, getterMethod, setterMethod) =>
+            val (dataType, nullable) = inferDataType(
+              TypeToken.of(getterMethod.getGenericReturnType),
+              seenTypeSet + other)
             new StructField(propertyName, dataType, nullable)
         }
         (new StructType(fields), true)
@@ -147,7 +149,7 @@ object JavaTypeInference {
    * setter 'void [set]PropertyName(propertyType value)' functions; where [get]PropertyName is
    * the name of the getter function, and [set]PropertyName is the name of the setter function.
    */
-  def getObjectProperties(beanClass: Class[_]): Array[(String, Method, Method, Class[_])] = {
+  def getObjectProperties(beanClass: Class[_]): Array[(String, Method, Method)] = {
     def propertyName(name: String): String = {
       if (name.indexOf("get") == 0 || name.indexOf("set") == 0) {
         name.substring(3)
@@ -170,7 +172,7 @@ object JavaTypeInference {
       a <- getters
       b <- setters
       if propertyName(a._1.getName) == propertyName(b._1.getName) && a._2 == b._2
-    } yield (propertyName(a._1.getName), a._1, b._1, a._2)
+    } yield (propertyName(a._1.getName), a._1, b._1)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
@@ -345,8 +347,8 @@ object JavaTypeInference {
 
       case other =>
         val setters = getObjectProperties(other).map {
-          case (fieldName, getterMethod, setterMethod, returnType) =>
-            val fieldType = TypeToken.of(returnType)
+          case (fieldName, getterMethod, setterMethod) =>
+            val fieldType = TypeToken.of(getterMethod.getGenericReturnType)
             val (dataType, nullable) = inferDataType(fieldType)
             val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
             val setter = expressionWithNullSafety(
@@ -451,8 +453,8 @@ object JavaTypeInference {
 
         case other =>
           val fields = getObjectProperties(other).map {
-            case (fieldName, getterMethod, setterMethod, returnType) =>
-            val fieldType = TypeToken.of(returnType)
+            case (fieldName, getterMethod, setterMethod) =>
+            val fieldType = TypeToken.of(getterMethod.getGenericReturnType)
             val fieldValue = Invoke(
               inputObject,
               getterMethod.getName,
