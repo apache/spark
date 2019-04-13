@@ -23,7 +23,6 @@ import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -307,6 +306,25 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Option.empty[Int], "empty option of int")
   encodeDecodeTest(Option("abc"), "option of string")
   encodeDecodeTest(Option.empty[String], "empty option of string")
+
+  encodeDecodeTest(
+    AvroExample1.newBuilder()
+      .setMyarray(List("Foo", "Bar").asJava)
+      .setMyboolean(true)
+      .setMybytes(java.nio.ByteBuffer.wrap("MyBytes".getBytes()))
+      .setMydouble(2.5)
+      .setMyfixed(new Magic("magic".getBytes))
+      .setMyfloat(25.0F)
+      .setMyint(100)
+      .setMylong(10L)
+      .setMystring("hello")
+      .setMymap(Map(
+        "foo" -> new java.lang.Integer(1),
+        "bar" -> new java.lang.Integer(2)).asJava)
+      .setMymoney(Money.newBuilder().setAmount(100.0F).setCurrency(Currency.EUR).build())
+      .build(),
+    "Avro encoder with map, array and fixed types")(
+    Encoders.bean[AvroExample1](classOf[AvroExample1]))
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
