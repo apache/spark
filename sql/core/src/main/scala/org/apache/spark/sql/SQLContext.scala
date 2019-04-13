@@ -761,9 +761,8 @@ object SQLContext {
     def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
       val methodConverters =
         JavaTypeInference.getObjectProperties(cls).zip(fieldTypes)
-          .map { case ((propertyName, getterName, setterName, returnType), fieldType) =>
-            val method = cls.getMethod(getterName)
-            method -> createConverter(returnType, fieldType)
+          .map { case ((propertyName, getterMethod, setterMethod, returnType), fieldType) =>
+            getterMethod -> createConverter(returnType, fieldType)
           }
       value =>
         if (value == null) {

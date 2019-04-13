@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.lang.{Iterable => JIterable}
+import java.lang.reflect.Method
 import java.lang.reflect.Type
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
 
@@ -131,9 +132,9 @@ object JavaTypeInference {
         }
 
         val fields = getObjectProperties(other).map {
-          case (propertyName, getterName, setterName, returnType) =>
-          val (dataType, nullable) = inferDataType(TypeToken.of(returnType), seenTypeSet + other)
-          new StructField(propertyName, dataType, nullable)
+          case (propertyName, getterMethod, setterMethod, returnType) =>
+            val (dataType, nullable) = inferDataType(TypeToken.of(returnType), seenTypeSet + other)
+            new StructField(propertyName, dataType, nullable)
         }
         (new StructType(fields), true)
     }
@@ -146,7 +147,7 @@ object JavaTypeInference {
    * setter 'void [set]PropertyName(propertyType value)' functions; where [get]PropertyName is
    * the name of the getter function, and [set]PropertyName is the name of the setter function.
    */
-  def getObjectProperties(beanClass: Class[_]): Array[(String, String, String, Class[_])] = {
+  def getObjectProperties(beanClass: Class[_]): Array[(String, Method, Method, Class[_])] = {
     def propertyName(name: String): String = {
       if (name.indexOf("get") == 0 || name.indexOf("set") == 0) {
         name.substring(3)
@@ -157,19 +158,19 @@ object JavaTypeInference {
 
     val getters = beanClass.getMethods.filter(method => method.getParameterCount == 0)
       .map(method => {
-        (method.getName, method.getReturnType)
+        (method, method.getReturnType)
       })
 
     val setters = beanClass.getMethods.filter(method => method.getReturnType == Void.TYPE &&
       method.getParameterCount == 1).map(method => {
-      (method.getName, method.getParameterTypes.head)
+      (method, method.getParameterTypes.head)
     })
 
     for {
       a <- getters
       b <- setters
-      if propertyName(a._1) == propertyName(b._1) && a._2 == b._2
-    } yield (propertyName(a._1), a._1, b._1, a._2)
+      if propertyName(a._1.getName) == propertyName(b._1.getName) && a._2 == b._2
+    } yield (propertyName(a._1.getName), a._1, b._1, a._2)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
@@ -344,7 +345,7 @@ object JavaTypeInference {
 
       case other =>
         val setters = getObjectProperties(other).map {
-          case (fieldName, getterName, setterName, returnType) =>
+          case (fieldName, getterMethod, setterMethod, returnType) =>
             val fieldType = TypeToken.of(returnType)
             val (dataType, nullable) = inferDataType(fieldType)
             val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
@@ -353,7 +354,7 @@ object JavaTypeInference {
                 newTypePath),
               nullable = nullable,
               newTypePath)
-            setterName -> setter
+            setterMethod.getName -> setter
         }.toMap
 
         val newInstance = NewInstance(other, Nil, ObjectType(other), propagateNull = false)
@@ -450,11 +451,11 @@ object JavaTypeInference {
 
         case other =>
           val fields = getObjectProperties(other).map {
-            case (fieldName, getterName, setterName, returnType) =>
+            case (fieldName, getterMethod, setterMethod, returnType) =>
             val fieldType = TypeToken.of(returnType)
             val fieldValue = Invoke(
               inputObject,
-              getterName,
+              getterMethod.getName,
               inferExternalType(fieldType.getRawType))
             (fieldName, serializerFor(fieldValue, fieldType))
           }
