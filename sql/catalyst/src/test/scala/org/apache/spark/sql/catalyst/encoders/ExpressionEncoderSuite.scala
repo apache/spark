@@ -21,8 +21,10 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -324,7 +326,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       .setMymoney(Money.newBuilder().setAmount(100.0F).setCurrency(Currency.EUR).build())
       .build(),
     "Avro encoder with map, array and fixed types")(
-    Encoders.bean[AvroExample1](classOf[AvroExample1]))
+    Encoders.bean[AvroExample1](classOf[AvroExample1])
+      .asInstanceOf[ExpressionEncoder[AvroExample1]])
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
