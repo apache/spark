@@ -744,7 +744,7 @@ abstract class UnixTime
             ${ev.value} = ${eval1.value} / $downScaleFactor;
           }""")
       case DateType =>
-        val zid = ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId")
+        val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
         ev.copy(code = code"""
