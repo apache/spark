@@ -19,6 +19,7 @@ package org.apache.spark.rpc.netty
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.SparkContext
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc.RpcEnvFileServer
@@ -58,7 +59,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
         new File(dir, fname)
     }
 
-    if (file != null && file.isFile()) {
+    if (file != null && file.isFile) {
       new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
     } else {
       null
@@ -70,7 +71,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     require(existingPath == null || existingPath == file,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")
-    s"${rpcEnv.address.toSparkURL}/files/${Utils.encodeFileNameToURIRawPath(file.getName())}"
+    s"${rpcEnv.address.toSparkURL}/files/${Utils.encodeFileNameToURIRawPath(file.getName)}"
   }
 
   override def addJar(file: File): String = {
@@ -78,7 +79,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     require(existingPath == null || existingPath == file,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")
-    s"${rpcEnv.address.toSparkURL}/jars/${Utils.encodeFileNameToURIRawPath(file.getName())}"
+    s"${rpcEnv.address.toSparkURL}/jars/${Utils.encodeFileNameToURIRawPath(file.getName)}"
   }
 
   override def addDirectory(baseUri: String, path: File): String = {
