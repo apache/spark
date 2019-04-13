@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.Type
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
@@ -131,28 +130,46 @@ object JavaTypeInference {
               s"of class $other")
         }
 
-        // TODO: we should only collect properties that have getter and setter. However, some tests
-        // pass in scala case class as java bean class which doesn't have getter and setter.
-        val properties = getJavaBeanReadableProperties(other)
-        val fields = properties.map { property =>
-          val returnType = typeToken.method(property.getReadMethod).getReturnType
-          val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
-          new StructField(property.getName, dataType, nullable)
+        val fields = getObjectProperties(other).map {
+          case (propertyName, getterName, setterName, returnType) =>
+          val (dataType, nullable) = inferDataType(TypeToken.of(returnType), seenTypeSet + other)
+          new StructField(propertyName, dataType, nullable)
         }
         (new StructType(fields), true)
     }
   }
 
-  def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
-    val beanInfo = Introspector.getBeanInfo(beanClass)
-    beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
-      .filterNot(_.getName == "declaringClass")
-      .filter(_.getReadMethod != null)
-  }
+  /**
+   * Returns: Array[(porpertyName, getterName, setterName, propertyType)]
+   *
+   * Properties of the object are defined by a getter 'propertyType [get]PropertyName()' and a
+   * setter 'void [set]PropertyName(propertyType value)' functions; where [get]PropertyName is
+   * the name of the getter function, and [set]PropertyName is the name of the setter function.
+   */
+  def getObjectProperties(beanClass: Class[_]): Array[(String, String, String, Class[_])] = {
+    def propertyName(name: String): String = {
+      if (name.indexOf("get") == 0 || name.indexOf("set") == 0) {
+        name.substring(3)
+      } else {
+        name
+      }
+    }
 
-  private def getJavaBeanReadableAndWritableProperties(
-      beanClass: Class[_]): Array[PropertyDescriptor] = {
-    getJavaBeanReadableProperties(beanClass).filter(_.getWriteMethod != null)
+    val getters = beanClass.getMethods.filter(method => method.getParameterCount == 0)
+      .map(method => {
+        (method.getName, method.getReturnType)
+      })
+
+    val setters = beanClass.getMethods.filter(method => method.getReturnType == Void.TYPE &&
+      method.getParameterCount == 1).map(method => {
+      (method.getName, method.getParameterTypes.head)
+    })
+
+    for {
+      a <- getters
+      b <- setters
+      if propertyName(a._1) == propertyName(b._1) && a._2 == b._2
+    } yield (propertyName(a._1), a._1, b._1, a._2)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
@@ -317,24 +334,26 @@ object JavaTypeInference {
           keyData :: valueData :: Nil,
           returnNullable = false)
 
+      case other if other == classOf[java.nio.ByteBuffer] =>
+        createDeserializerForJavaByteBuffer(path, returnNullable = false)
+
       case other if other.isEnum =>
         createDeserializerForTypesSupportValueOf(
           createDeserializerForString(path, returnNullable = false),
           other)
 
       case other =>
-        val properties = getJavaBeanReadableAndWritableProperties(other)
-        val setters = properties.map { p =>
-          val fieldName = p.getName
-          val fieldType = typeToken.method(p.getReadMethod).getReturnType
-          val (dataType, nullable) = inferDataType(fieldType)
-          val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
-          val setter = expressionWithNullSafety(
-            deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath),
-              newTypePath),
-            nullable = nullable,
-            newTypePath)
-          p.getWriteMethod.getName -> setter
+        val setters = getObjectProperties(other).map {
+          case (fieldName, getterName, setterName, returnType) =>
+            val fieldType = TypeToken.of(returnType)
+            val (dataType, nullable) = inferDataType(fieldType)
+            val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
+            val setter = expressionWithNullSafety(
+              deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath),
+                newTypePath),
+              nullable = nullable,
+              newTypePath)
+            setterName -> setter
         }.toMap
 
         val newInstance = NewInstance(other, Nil, ObjectType(other), propagateNull = false)
@@ -401,6 +420,9 @@ object JavaTypeInference {
         case c if c == classOf[java.lang.Float] => createSerializerForFloat(inputObject)
         case c if c == classOf[java.lang.Double] => createSerializerForDouble(inputObject)
 
+        case c if c == classOf[java.nio.ByteBuffer] =>
+          createSerializerForJavaByteBuffer(inputObject)
+
         case _ if typeToken.isArray =>
           toCatalystArray(inputObject, typeToken.getComponentType)
 
@@ -427,13 +449,12 @@ object JavaTypeInference {
             Invoke(inputObject, "name", ObjectType(classOf[String]), returnNullable = false))
 
         case other =>
-          val properties = getJavaBeanReadableAndWritableProperties(other)
-          val fields = properties.map { p =>
-            val fieldName = p.getName
-            val fieldType = typeToken.method(p.getReadMethod).getReturnType
+          val fields = getObjectProperties(other).map {
+            case (fieldName, getterName, setterName, returnType) =>
+            val fieldType = TypeToken.of(returnType)
             val fieldValue = Invoke(
               inputObject,
-              p.getReadMethod.getName,
+              getterName,
               inferExternalType(fieldType.getRawType))
             (fieldName, serializerFor(fieldValue, fieldType))
           }

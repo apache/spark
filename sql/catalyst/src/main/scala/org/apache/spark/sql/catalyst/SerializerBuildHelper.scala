@@ -124,6 +124,10 @@ object SerializerBuildHelper {
     createSerializerForJavaBigInteger(inputObject)
   }
 
+  def createSerializerForJavaByteBuffer(inputObject: Expression): Expression = {
+    Invoke(inputObject, "array", BinaryType)
+  }
+
   def createSerializerForPrimitiveArray(
       inputObject: Expression,
       dataType: DataType): Expression = {

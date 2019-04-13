@@ -143,6 +143,15 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
+  def createDeserializerForJavaByteBuffer(path: Expression, returnNullable: Boolean): Expression = {
+    StaticInvoke(
+      classOf[java.nio.ByteBuffer],
+      ObjectType(classOf[java.nio.ByteBuffer]),
+      "wrap",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   /**
    * When we build the `deserializer` for an encoder, we set up a lot of "unresolved" stuff
    * and lost the required data type, which may lead to runtime error if the real type doesn't

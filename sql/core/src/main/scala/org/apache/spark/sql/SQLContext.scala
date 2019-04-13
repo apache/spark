@@ -760,10 +760,10 @@ object SQLContext {
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
       val methodConverters =
-        JavaTypeInference.getJavaBeanReadableProperties(cls).zip(fieldTypes)
-          .map { case (property, fieldType) =>
-            val method = property.getReadMethod
-            method -> createConverter(method.getReturnType, fieldType)
+        JavaTypeInference.getObjectProperties(cls).zip(fieldTypes)
+          .map { case ((propertyName, getterName, setterName, returnType), fieldType) =>
+            val method = cls.getMethod(getterName)
+            method -> createConverter(returnType, fieldType)
           }
       value =>
         if (value == null) {
