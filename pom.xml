@@ -2809,7 +2809,7 @@
         <hive.version>${hive23.version}</hive.version>
         <hive.version.short>2.3.4</hive.version.short>
         <hive.parquet.group>org.apache.parquet</hive.parquet.group>
-        <hive.parquet.version>${parquet.version}</hive.parquet.version>
+        <hive.parquet.version>1.8.1</hive.parquet.version>
         <orc.classifier></orc.classifier>
         <datanucleus-core.version>4.1.17</datanucleus-core.version>
       </properties>
@@ -2943,9 +2943,6 @@
     </profile>
     <profile>
       <id>orc-provided</id>
-    </profile>
-    <profile>
-      <id>parquet-provided</id>
     </profile>
     <profile>
       <id>sparkr</id>

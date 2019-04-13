@@ -34,6 +34,7 @@
     <sbt.project.name>assembly</sbt.project.name>
     <build.testJarPhase>none</build.testJarPhase>
     <build.copyDependenciesPhase>package</build.copyDependenciesPhase>
+    <parquet.deps.scope>provided</parquet.deps.scope>
   </properties>
 
   <dependencies>
@@ -234,12 +235,6 @@
       <id>orc-provided</id>
       <properties>
         <orc.deps.scope>provided</orc.deps.scope>
-      </properties>
-    </profile>
-    <profile>
-      <id>parquet-provided</id>
-      <properties>
-        <parquet.deps.scope>provided</parquet.deps.scope>
       </properties>
     </profile>
 
