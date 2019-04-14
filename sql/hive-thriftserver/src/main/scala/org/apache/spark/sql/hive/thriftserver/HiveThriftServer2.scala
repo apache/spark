@@ -129,7 +129,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] object ExecutionState extends Enumeration {
-    val STARTED, COMPILED, FAILED, FINISHED, CANCELLED = Value
+    val STARTED, COMPILED, FAILED, FINISHED, CANCELED = Value
     type ExecutionState = Value
   }
 
@@ -167,7 +167,7 @@ object HiveThriftServer2 extends Logging {
     private var onlineSessionNum: Int = 0
     private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
-    private val runningStatement = new mutable.LinkedHashMap[String, mutable.Set[String]]
+    private val runningStatements = new mutable.LinkedHashMap[String, mutable.Set[String]]
     private val retainedStatements = conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
     private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
     private var totalRunning = 0
@@ -200,7 +200,7 @@ object HiveThriftServer2 extends Logging {
         val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
         sessionList.put(sessionId, info)
         onlineSessionNum += 1
-        runningStatement.put(sessionId, mutable.Set[String]())
+        runningStatements.put(sessionId, mutable.Set[String]())
         trimSessionIfNecessary()
       }
     }
@@ -208,12 +208,12 @@ object HiveThriftServer2 extends Logging {
     def onSessionClosed(sessionId: String): Unit = synchronized {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
       for {
-        statementIds <- runningStatement.get(sessionId)
+        statementIds <- runningStatements.get(sessionId)
         statementId <- statementIds
       } {
         onStatementCancel(statementId)
       }
-      runningStatement.remove(sessionId)
+      runningStatements.remove(sessionId)
       onlineSessionNum -= 1
       trimSessionIfNecessary()
     }
@@ -230,7 +230,7 @@ object HiveThriftServer2 extends Logging {
       trimExecutionIfNecessary()
       sessionList(sessionId).totalExecution += 1
       executionList(id).groupId = groupId
-      runningStatement(sessionId).add(groupId)
+      runningStatements(sessionId).add(groupId)
       totalRunning += 1
     }
 
@@ -246,7 +246,7 @@ object HiveThriftServer2 extends Logging {
         executionList(id).state = ExecutionState.FAILED
         totalRunning -= 1
         for (info <- executionList.get(id)) {
-          runningStatement(info.sessionId).remove(id)
+          runningStatements(info.sessionId).remove(id)
         }
         trimExecutionIfNecessary()
       }
@@ -257,17 +257,17 @@ object HiveThriftServer2 extends Logging {
       executionList(id).state = ExecutionState.FINISHED
       totalRunning -= 1
       for (info <- executionList.get(id)) {
-        runningStatement(info.sessionId).remove(id)
+        runningStatements(info.sessionId).remove(id)
       }
       trimExecutionIfNecessary()
     }
 
     def onStatementCancel(id: String): Unit = synchronized {
       executionList(id).finishTimestamp = System.currentTimeMillis
-      executionList(id).state = ExecutionState.CANCELLED
+      executionList(id).state = ExecutionState.CANCELED
       totalRunning -= 1
       for (info <- executionList.get(id)) {
-        runningStatement(info.sessionId).remove(id)
+        runningStatements(info.sessionId).remove(id)
       }
       trimExecutionIfNecessary()
     }

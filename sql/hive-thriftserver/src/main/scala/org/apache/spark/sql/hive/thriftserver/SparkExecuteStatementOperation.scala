@@ -251,6 +251,8 @@ private[hive] class SparkExecuteStatementOperation(
     } catch {
       case e: HiveSQLException =>
         if (getStatus().getState() == OperationState.CANCELED) {
+          setState(OperationState.CANCELED)
+          HiveThriftServer2.listener.onStatementCancel(statementId)
           return
         } else {
           setState(OperationState.ERROR)
