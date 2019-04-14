@@ -1026,7 +1026,7 @@ object functions {
    * Creates a new column with empty arrays of the given type.
    *
    * @group normal_funcs
-   * @since 2.4.0
+   * @since 3.0.0
    */
   def array(elementType: DataType): Column = withExpr {
     Literal.create(Seq.empty, ArrayType(elementType, false))
