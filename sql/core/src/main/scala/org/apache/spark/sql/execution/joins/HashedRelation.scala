@@ -235,7 +235,7 @@ private[joins] class UnsafeHashedRelation(
       0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
-      .getOrElse(new SparkConf().getSizeAsBytes(BUFFER_PAGESIZE.key, "16m"))
+      .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
 
     // TODO(josh): We won't need this dummy memory manager after future refactorings; revisit
     // during code review
@@ -285,8 +285,7 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager: TaskMemoryManager): HashedRelation = {
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
-      .getOrElse(new SparkConf().getSizeAsBytes(BUFFER_PAGESIZE.key, "16m"))
-
+      .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
     val binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       // Only 70% of the slots can be used before growing, more capacity help to reduce collision
