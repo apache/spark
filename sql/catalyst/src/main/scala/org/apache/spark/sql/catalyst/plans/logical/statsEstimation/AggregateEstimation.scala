@@ -41,11 +41,11 @@ object AggregateEstimation {
       var outputRows: BigInt = agg.groupingExpressions.foldLeft(BigInt(1))(
         (res, expr) => {
           val columnStat = childStats.attributeStats(expr.asInstanceOf[Attribute])
-          val distinctValue: BigInt = if (columnStat.distinctCount.get == 0 &&
-            columnStat.nullCount.get > 0) {
+          val distinctCount = columnStat.distinctCount.get
+          val distinctValue: BigInt = if (distinctCount == 0 && columnStat.nullCount.get > 0) {
             1
           } else {
-            columnStat.distinctCount.get
+            distinctCount
           }
           res * distinctValue
         })
