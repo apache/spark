@@ -106,13 +106,16 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.newScanBuilder()
 
+      val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
       val normalizedFilters = DataSourceStrategy.normalizeFilters(
-        filters.filterNot(SubqueryExpression.hasSubquery), relation.output)
+        withoutSubquery, relation.output)
 
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFilters) = pushFilters(scanBuilder, normalizedFilters)
+      val (pushedFilters, postScanFiltersWithoutSubquery) =
+        pushFilters(scanBuilder, normalizedFilters)
+      val postScanFilters = postScanFiltersWithoutSubquery ++ withSubquery
       val (scan, output) = pruneColumns(scanBuilder, relation, project ++ postScanFilters)
       logInfo(
         s"""

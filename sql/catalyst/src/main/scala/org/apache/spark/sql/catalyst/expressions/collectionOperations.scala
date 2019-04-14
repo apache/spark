@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -273,7 +272,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.length == 0) {
+    if (children.isEmpty) {
       emptyInputGenCode(ev)
     } else {
       nonEmptyInputGenCode(ctx, ev)
@@ -718,17 +717,15 @@ trait ArraySortLike extends ExpectsInputTypes {
       case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
-    new Comparator[Any]() {
-      override def compare(o1: Any, o2: Any): Int = {
-        if (o1 == null && o2 == null) {
-          0
-        } else if (o1 == null) {
-          nullOrder
-        } else if (o2 == null) {
-          -nullOrder
-        } else {
-          ordering.compare(o1, o2)
-        }
+    (o1: Any, o2: Any) => {
+      if (o1 == null && o2 == null) {
+        0
+      } else if (o1 == null) {
+        nullOrder
+      } else if (o2 == null) {
+        -nullOrder
+      } else {
+        ordering.compare(o1, o2)
       }
     }
   }
@@ -740,17 +737,15 @@ trait ArraySortLike extends ExpectsInputTypes {
       case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
-    new Comparator[Any]() {
-      override def compare(o1: Any, o2: Any): Int = {
-        if (o1 == null && o2 == null) {
-          0
-        } else if (o1 == null) {
-          -nullOrder
-        } else if (o2 == null) {
-          nullOrder
-        } else {
-          ordering.compare(o2, o1)
-        }
+    (o1: Any, o2: Any) => {
+      if (o1 == null && o2 == null) {
+        0
+      } else if (o1 == null) {
+        -nullOrder
+      } else if (o2 == null) {
+        nullOrder
+      } else {
+        ordering.compare(o2, o1)
       }
     }
   }
@@ -769,7 +764,6 @@ trait ArraySortLike extends ExpectsInputTypes {
   }
 
   def sortCodegen(ctx: CodegenContext, ev: ExprCode, base: String, order: String): String = {
-    val arrayData = classOf[ArrayData].getName
     val genericArrayData = classOf[GenericArrayData].getName
     val unsafeArrayData = classOf[UnsafeArrayData].getName
     val array = ctx.freshName("array")
@@ -964,7 +958,9 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
       > SELECT _FUNC_(array(1, 20, null, 3));
        [20,null,3,1]
   """,
-  note = "The function is non-deterministic.",
+  note = """
+    The function is non-deterministic.
+  """,
   since = "2.4.0")
 case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   extends UnaryExpression with ExpectsInputTypes with Stateful with ExpressionWithRandomSeed {
@@ -1048,7 +1044,9 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
        [3,4,1,2]
   """,
   since = "1.5.0",
-  note = "Reverse logic for arrays is available since 2.4.0."
+  note = """
+    Reverse logic for arrays is available since 2.4.0.
+  """
 )
 case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -2062,7 +2060,9 @@ case class ElementAt(left: Expression, right: Expression)
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
        [1,2,3,4,5,6]
   """,
-  note = "Concat logic for arrays is available since 2.4.0.")
+  note = """
+    Concat logic for arrays is available since 2.4.0.
+  """)
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
@@ -2784,7 +2784,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
     } else {
       if (count.asInstanceOf[Int] > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw new RuntimeException(s"Unsuccessful try to create array with $count elements " +
-          s"due to exceeding the array size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
+          s"due to exceeding the array size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       }
       val element = left.eval(input)
       new GenericArrayData(Array.fill(count.asInstanceOf[Int])(element))

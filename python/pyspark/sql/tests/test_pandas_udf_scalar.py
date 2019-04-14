@@ -41,6 +41,12 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled,\
     pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
 
+if have_pandas:
+    import pandas as pd
+
+if have_pyarrow:
+    import pyarrow as pa
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
@@ -70,7 +76,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def nondeterministic_vectorized_udf(self):
-        import pandas as pd
         import numpy as np
 
         @pandas_udf('double')
@@ -205,7 +210,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_string_in_udf(self):
-        import pandas as pd
         df = self.spark.range(10)
         str_f = pandas_udf(lambda x: pd.Series(map(str, x)), StringType())
         actual = df.select(str_f(col('id')))
@@ -236,8 +240,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_binary(self):
-        import pyarrow as pa
-
         if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(
@@ -269,9 +271,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(df.collect(), result.collect())
 
     def test_vectorized_udf_struct_type(self):
-        import pandas as pd
-        import pyarrow as pa
-
         df = self.spark.range(10)
         return_type = StructType([
             StructField('id', LongType()),
@@ -305,8 +304,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             self.assertEqual(expected, actual.collect())
 
     def test_vectorized_udf_struct_complex(self):
-        import pandas as pd
-
         df = self.spark.range(10)
         return_type = StructType([
             StructField('ts', TimestampType()),
@@ -359,8 +356,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 df.select(raise_exception(col('id'))).collect()
 
     def test_vectorized_udf_invalid_length(self):
-        import pandas as pd
-
         df = self.spark.range(10)
         raise_exception = pandas_udf(lambda _: pd.Series(1), LongType())
         with QuietTest(self.sc):
@@ -377,8 +372,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_chained_struct_type(self):
-        import pandas as pd
-
         df = self.spark.range(10)
         return_type = StructType([
             StructField('id', LongType()),
@@ -470,7 +463,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(returnType=StringType())
         def check_data(idx, date, date_copy):
-            import pandas as pd
             msgs = []
             is_equal = date.isnull()
             for i in range(len(idx)):
@@ -509,7 +501,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(returnType=StringType())
         def check_data(idx, timestamp, timestamp_copy):
-            import pandas as pd
             msgs = []
             is_equal = timestamp.isnull()  # use this array to check values are equal
             for i in range(len(idx)):
@@ -533,8 +524,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             self.assertIsNone(result[i][3])  # "check_data" col
 
     def test_vectorized_udf_return_timestamp_tz(self):
-        import pandas as pd
-
         df = self.spark.range(10)
 
         @pandas_udf(returnType=TimestampType())
@@ -551,8 +540,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             self.assertEquals(expected, ts)
 
     def test_vectorized_udf_check_config(self):
-        import pandas as pd
-
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
             df = self.spark.range(10, numPartitions=1)
 
@@ -565,8 +552,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 self.assertTrue(r <= 3)
 
     def test_vectorized_udf_timestamps_respect_session_timezone(self):
-        import pandas as pd
-
         schema = StructType([
             StructField("idx", LongType(), True),
             StructField("timestamp", TimestampType(), True)])
@@ -653,7 +638,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
     def test_type_annotation(self):
-        from pyspark.sql.functions import pandas_udf
         # Regression test to check if type hints can be used. See SPARK-23569.
         # Note that it throws an error during compilation in lower Python versions if 'exec'
         # is not used. Also, note that we explicitly use another dictionary to avoid modifications
@@ -670,8 +654,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(df.first()[0], 0)
 
     def test_mixed_udf(self):
-        import pandas as pd
-
         df = self.spark.range(0, 1).toDF('v')
 
         # Test mixture of multiple UDFs and Pandas UDFs.
@@ -772,8 +754,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(expected.collect(), df_multi_2.collect())
 
     def test_mixed_udf_and_sql(self):
-        import pandas as pd
-
         df = self.spark.range(0, 1).toDF('v')
 
         # Test mixture of UDFs, Pandas UDFs and SQL expression.
@@ -831,7 +811,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
     def test_datasource_with_udf(self):
         # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
         # This needs to a separate test because Arrow dependency is optional
-        import pandas as pd
         import numpy as np
 
         path = tempfile.mkdtemp()

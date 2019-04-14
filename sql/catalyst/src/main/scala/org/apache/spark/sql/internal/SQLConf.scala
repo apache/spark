@@ -184,8 +184,8 @@ object SQLConf {
   val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
-      "plan after a rule is applied. The value can be 'trace', 'debug', 'info', 'warn', or " +
-      "'error'. The default log level is 'trace'.")
+      "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
+      "'warn', or 'error'. The default log level is 'trace'.")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
@@ -195,9 +195,15 @@ object SQLConf {
 
   val OPTIMIZER_PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.optimizer.planChangeLog.rules")
     .internal()
-    .doc("If this configuration is set, the optimizer will only log plan changes caused by " +
-      "applying the rules specified in this configuration. The value can be a list of rule " +
-      "names separated by comma.")
+    .doc("Configures a list of rules to be logged in the optimizer, in which the rules are " +
+      "specified by their rule names and separated by comma.")
+    .stringConf
+    .createOptional
+
+  val OPTIMIZER_PLAN_CHANGE_LOG_BATCHES = buildConf("spark.sql.optimizer.planChangeLog.batches")
+    .internal()
+    .doc("Configures a list of batches to be logged in the optimizer, in which the batches " +
+      "are specified by their batch names and separated by comma.")
     .stringConf
     .createOptional
 
@@ -1488,7 +1494,7 @@ object SQLConf {
       " register class names for which data source V2 write paths are disabled. Writes from these" +
       " sources will fall back to the V1 sources.")
     .stringConf
-    .createWithDefault("csv,orc")
+    .createWithDefault("csv,orc,text")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1723,6 +1729,12 @@ object SQLConf {
       "and java.sql.Date are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
+
+  val UTC_TIMESTAMP_FUNC_ENABLED = buildConf("spark.sql.legacy.utcTimestampFunc.enabled")
+    .doc("The configuration property enables the to_utc_timestamp() " +
+         "and from_utc_timestamp() functions.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -1756,6 +1768,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerPlanChangeLogLevel: String = getConf(OPTIMIZER_PLAN_CHANGE_LOG_LEVEL)
 
   def optimizerPlanChangeRules: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_RULES)
+
+  def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
@@ -1915,6 +1929,8 @@ class SQLConf extends Serializable with Logging {
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+
+  def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

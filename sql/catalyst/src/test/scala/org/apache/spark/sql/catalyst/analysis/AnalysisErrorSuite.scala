@@ -599,4 +599,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan5,
                         "Accessing outer query column is not allowed in" :: Nil)
   }
+
+  test("Error on filter condition containing aggregate expressions") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val plan = Filter('a === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    assertAnalysisError(plan,
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
+  }
 }
