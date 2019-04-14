@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 import scala.language.postfixOps
-
 import org.apache.spark.CleanerListener
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
@@ -33,7 +32,8 @@ import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
@@ -978,28 +978,30 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
   test("Refresh Qualified Tables") {
     withTempDatabase { db =>
-      withTable(s"$db.cachedTable") {
+      withTempPath { path =>
+        spark.catalog.createTable(
+          s"$db.cachedTable",
+          "PARQUET", 
+          StructType(Array(StructField("key", StringType))),
+          Map("LOCATION" -> path.toURI.toString))
         withCache(s"$db.cachedTable") {
-
-
-          sql(s"CREATE TABLE $db.cachedTable STORED AS PARQUET AS SELECT 1")
-          sql(s"CACHE TABLE $db.cachedTable")
-          assertCached(sql(s"select * from $db.cachedTable"), s"`$db`.`cachedTable`")
+          spark.catalog.cacheTable(s"$db.cachedTable")
+          assertCached(spark.table(s"$db.cachedTable"), s"$db.cachedTable")
           assert(spark.catalog.isCached(s"$db.cachedTable"),
             s"Table '$db.cachedTable' should be cached")
 
-          sql(s"REFRESH TABLE $db.cachedTable")
-          assertCached(sql(s"select * from $db.cachedTable"), s"`$db`.`cachedTable`")
+          spark.catalog.refreshTable(s"$db.cachedTable")
+          assertCached(spark.table(s"$db.cachedTable"), s"$db.cachedTable")
           assert(spark.catalog.isCached(s"$db.cachedTable"),
             s"Table '$db.cachedTable' should be cached after refresh")
 
           activateDatabase(db) {
-            assertCached(sql("select * from cachedTable"), s"`$db`.`cachedTable`")
+            assertCached(spark.table("cachedTable"), s"$db.cachedTable")
             assert(spark.catalog.isCached("cachedTable"),
               "Table 'cachedTable' should be cached after refresh")
 
-            sql(s"REFRESH TABLE cachedTable")
-            assertCached(sql("select * from cachedTable"), s"`$db`.`cachedTable`")
+            spark.catalog.refreshTable(s"cachedTable")
+            assertCached(spark.table("cachedTable"), s"$db.cachedTable")
             assert(spark.catalog.isCached("cachedTable"),
               "Table 'cachedTable' should be cached after refresh")
           }
@@ -1009,16 +1011,20 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("Refresh Unqualified Tables") {
-    withTable("cachedTable") {
+    withTempPath { path =>
+      spark.catalog.createTable(
+        "cachedTable",
+        "PARQUET",
+        StructType(Array(StructField("key", StringType))),
+        Map("LOCATION" -> path.toURI.toString))
       withCache("cachedTable") {
-        sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
-        sql("CACHE TABLE cachedTable")
-        assertCached(sql("select * from cachedTable"), "`cachedTable`")
+        spark.catalog.cacheTable("cachedTable")
+        assertCached(sql("select * from cachedTable"), "cachedTable")
         assert(spark.catalog.isCached("cachedTable"),
           "Table 'cachedTable' should be cached")
 
-        sql("REFRESH TABLE cachedTable")
-        assertCached(sql("select * from cachedTable"), "`cachedTable`")
+        spark.catalog.refreshTable("cachedTable")
+        assertCached(sql("select * from cachedTable"), "cachedTable")
         assert(spark.catalog.isCached("cachedTable"),
           "Table 'cachedTable' should be cached after refresh")
       }

@@ -117,7 +117,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
    * Run a test on a separate `UninterruptibleThread`.
    */
   protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
-    (body: => Unit): Unit = {
+                                             (body: => Unit): Unit = {
     val timeoutMillis = 10000
     @transient var ex: Throwable = null
 
@@ -303,7 +303,11 @@ private[sql] trait SQLTestUtilsBase
    * Drops cache `cacheName` after calling `f`.
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    try {
+      f
+    } catch {
+      case cause: Throwable => throw cause
+    } finally {
       cacheNames.foreach { name =>
         uncacheTable(name)
       }
