@@ -148,7 +148,9 @@ class ForeachDataWriter[T](
     ForeachWriterCommitMessage
   }
 
-  override def abort(): Unit = {}
+  override def abort(): Unit = {
+    writer.abort()
+  }
 }
 
 /**

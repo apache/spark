@@ -2145,6 +2145,10 @@ streamingDatasetOfString.writeStream.foreach(
     def close(errorOrNull: Throwable): Unit = {
       // Close the connection
     }
+
+    def abort(): Unit = {
+      // Close the connection, this method is optional
+    }
   }
 ).start()
 {% endhighlight %}
@@ -2167,6 +2171,10 @@ streamingDatasetOfString.writeStream().foreach(
 
     @Override public void close(Throwable errorOrNull) {
       // Close the connection
+    }
+
+    @Override public void abort() {
+      // Close the connection, this method is optional
     }
   }
 ).start();
@@ -2239,6 +2247,8 @@ When the streaming query is started, Spark calls the function or the object’s 
       - If open(...) returns true, for each row in the partition and batch/epoch, method process(row) is called.
 
       - Method close(error) is called with error (if any) seen while processing rows.
+
+      - Method abort is called after closed with error is being called or after an unexpected error (such as on task interruption)
 
 - The close() method (if it exists) is called if an open() method exists and returns successfully (irrespective of the return value), except if the JVM or Python process crashes in the middle.
 
