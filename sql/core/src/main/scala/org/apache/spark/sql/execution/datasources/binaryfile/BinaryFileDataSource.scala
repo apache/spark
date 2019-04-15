@@ -41,6 +41,9 @@ import org.apache.spark.sql.types._
  *                    The glob pattern keeps the same behavior with Hadoop API
  *                    `org.apache.hadoop.fs.FileSystem.globStatus(pathPattern)`
  *
+ * In order to control the partition size, we can set spark sql configuration
+ * `spark.sql.files.maxPartitionBytes` and `spark.sql.files.openCostInBytes`.
+ *
  * Example:
  * {{{
  *   // Scala
