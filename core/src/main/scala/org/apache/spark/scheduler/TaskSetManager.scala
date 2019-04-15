@@ -806,9 +806,6 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
-    // There may be multiple tasksets for this stage -- we let all of them know that the partition
-    // was completed.  This may result in some of the tasksets getting completed.
-    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -819,12 +816,9 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: TaskInfo): Unit = {
+  private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
-        if (speculationEnabled && !isZombie) {
-          successfulTaskDurations.insert(taskInfo.duration)
-        }
         tasksSuccessful += 1
         successful(index) = true
         if (tasksSuccessful == numTasks) {
@@ -1041,7 +1035,11 @@ private[spark] class TaskSetManager(
     val minFinishedForSpeculation = (speculationQuantile * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
 
-    if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
+    // It's possible that a task is marked as completed by the scheduler, then the size of
+    // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
+    // tasks that are submitted by this `TaskSetManager` and are completed successfully.
+    val numSuccessfulTasks = successfulTaskDurations.size()
+    if (numSuccessfulTasks >= minFinishedForSpeculation && numSuccessfulTasks > 0) {
       val time = clock.getTimeMillis()
       val medianDuration = successfulTaskDurations.median
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)

@@ -155,6 +155,12 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     }
   }
 
+  def enqueuePartitionCompletionNotification(stageId: Int, partitionId: Int): Unit = {
+    getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
+      scheduler.markPartitionCompleted(stageId, partitionId)
+    })
+  }
+
   def stop() {
     getTaskResultExecutor.shutdownNow()
   }
