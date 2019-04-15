@@ -364,6 +364,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     val filledQuery = if (insertedCols == None) {
       insert.query
     } else {
+      // Because `HiveFileFormat` writes data according to the index of columns which belongs target table,
+      // in order to align the data, we need to fill in some empty expressions.
       val cols = insertedCols.get
       val project = insert.query.asInstanceOf[Project]
       val filledProjectList = ArrayBuffer.empty[NamedExpression]
