@@ -160,20 +160,15 @@ object JavaTypeInference {
     }
 
     val getters = beanClass.getMethods.filter(method => method.getParameterCount == 0)
-      .map(method => {
-        (method, method.getReturnType)
-      })
 
     val setters = beanClass.getMethods.filter(method => method.getReturnType == Void.TYPE &&
-      method.getParameterCount == 1).map(method => {
-      (method, method.getParameterTypes.head)
-    })
+      method.getParameterCount == 1)
 
     for {
       a <- getters
       b <- setters
-      if propertyName(a._1.getName) == propertyName(b._1.getName) && a._2 == b._2
-    } yield (propertyName(a._1.getName), a._1, b._1)
+      if propertyName(a.getName) == propertyName(b.getName) && a.getReturnType == b.getParameterTypes.head
+    } yield (propertyName(a.getName), a, b)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
