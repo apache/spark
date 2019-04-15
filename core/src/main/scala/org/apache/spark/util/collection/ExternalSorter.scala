@@ -26,10 +26,11 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.ByteStreams
 
 import org.apache.spark._
+import org.apache.spark.api.shuffle.{ShuffleMapOutputWriter, ShufflePartitionWriter}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
-import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
+import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -670,11 +671,9 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
-   * Write all the data added into this ExternalSorter into a file in the disk store. This is
-   * called by the SortShuffleWriter.
-   *
-   * @param blockId block ID to write to. The index file will be blockId.name + ".index".
-   * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
+   * TODO remove this, as this is only used by UnsafeRowSerializerSuite in the SQL project.
+   * We should figure out an alternative way to test that so that we can remove this otherwise
+   * unused code path.
    */
   def writePartitionedFile(
       blockId: BlockId,
@@ -711,6 +710,123 @@ private[spark] class ExternalSorter[K, V, C](
     }
 
     writer.close()
+    context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+    context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
+
+    lengths
+  }
+
+  private def writeEmptyPartition(mapOutputWriter: ShuffleMapOutputWriter): Unit = {
+    var partitionWriter: ShufflePartitionWriter = null
+    try {
+      partitionWriter = mapOutputWriter.getNextPartitionWriter
+    } finally {
+      if (partitionWriter != null) {
+        partitionWriter.close()
+      }
+    }
+  }
+
+  /**
+   * Write all the data added into this ExternalSorter into a map output writer that pushes bytes
+   * to some arbitrary backing store. This is called by the SortShuffleWriter.
+   *
+   * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
+   */
+  def writePartitionedMapOutput(
+      shuffleId: Int, mapId: Int, mapOutputWriter: ShuffleMapOutputWriter): Array[Long] = {
+    // Track location of each range in the map output
+    val lengths = new Array[Long](numPartitions)
+    var nextPartitionId = 0
+    if (spills.isEmpty) {
+      // Case where we only have in-memory data
+      val collection = if (aggregator.isDefined) map else buffer
+      val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
+      while (it.hasNext()) {
+        val partitionId = it.nextPartition()
+        // The contract for the plugin is that we will ask for a writer for every partition
+        // even if it's empty. However, the external sorter will return non-contiguous
+        // partition ids. So this loop "backfills" the empty partitions that form the gaps.
+
+        // The algorithm as a whole is correct because the partition ids are returned by the
+        // iterator in ascending order.
+        for (emptyPartition <- nextPartitionId until partitionId) {
+          writeEmptyPartition(mapOutputWriter)
+        }
+        var partitionWriter: ShufflePartitionWriter = null
+        var partitionPairsWriter: ShufflePartitionPairsWriter = null
+        try {
+          partitionWriter = mapOutputWriter.getNextPartitionWriter
+          val blockId = ShuffleBlockId(shuffleId, mapId, partitionId)
+          partitionPairsWriter = new ShufflePartitionPairsWriter(
+            partitionWriter,
+            serializerManager,
+            serInstance,
+            blockId,
+            context.taskMetrics().shuffleWriteMetrics)
+          while (it.hasNext && it.nextPartition() == partitionId) {
+            it.writeNext(partitionPairsWriter)
+          }
+        } finally {
+          if (partitionPairsWriter != null) {
+            partitionPairsWriter.close()
+          }
+          if (partitionWriter != null) {
+            partitionWriter.close()
+          }
+        }
+        if (partitionWriter != null) {
+          lengths(partitionId) = partitionWriter.getNumBytesWritten
+        }
+        nextPartitionId = partitionId + 1
+      }
+    } else {
+      // We must perform merge-sort; get an iterator by partition and write everything directly.
+      for ((id, elements) <- this.partitionedIterator) {
+        // The contract for the plugin is that we will ask for a writer for every partition
+        // even if it's empty. However, the external sorter will return non-contiguous
+        // partition ids. So this loop "backfills" the empty partitions that form the gaps.
+
+        // The algorithm as a whole is correct because the partition ids are returned by the
+        // iterator in ascending order.
+        for (emptyPartition <- nextPartitionId until id) {
+          writeEmptyPartition(mapOutputWriter)
+        }
+        val blockId = ShuffleBlockId(shuffleId, mapId, id)
+        var partitionWriter: ShufflePartitionWriter = null
+        var partitionPairsWriter: ShufflePartitionPairsWriter = null
+        try {
+          partitionWriter = mapOutputWriter.getNextPartitionWriter
+          partitionPairsWriter = new ShufflePartitionPairsWriter(
+            partitionWriter,
+            serializerManager,
+            serInstance,
+            blockId,
+            context.taskMetrics().shuffleWriteMetrics)
+          if (elements.hasNext) {
+            for (elem <- elements) {
+              partitionPairsWriter.write(elem._1, elem._2)
+            }
+          }
+        } finally {
+          if (partitionPairsWriter!= null) {
+            partitionPairsWriter.close()
+          }
+        }
+        if (partitionWriter != null) {
+          lengths(id) = partitionWriter.getNumBytesWritten
+        }
+        nextPartitionId = id + 1
+      }
+    }
+
+    // The iterator may have stopped short of opening a writer for every partition. So fill in the
+    // remaining empty partitions.
+    for (emptyPartition <- nextPartitionId until numPartitions) {
+      writeEmptyPartition(mapOutputWriter)
+    }
+
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
@@ -781,7 +897,7 @@ private[spark] class ExternalSorter[K, V, C](
         val inMemoryIterator = new WritablePartitionedIterator {
           private[this] var cur = if (upstream.hasNext) upstream.next() else null
 
-          def writeNext(writer: DiskBlockObjectWriter): Unit = {
+          def writeNext(writer: PairsWriter): Unit = {
             writer.write(cur._1._2, cur._2)
             cur = if (upstream.hasNext) upstream.next() else null
           }
