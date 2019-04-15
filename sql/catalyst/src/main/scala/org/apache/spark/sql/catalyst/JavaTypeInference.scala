@@ -153,9 +153,9 @@ object JavaTypeInference {
   def getObjectProperties(beanClass: Class[_]): Array[(String, Method, Method)] = {
     def propertyName(name: String): String = {
       if (name.indexOf("get") == 0 || name.indexOf("set") == 0) {
-        name.substring(3)
+        "." + name.substring(3)
       } else {
-        name
+        "," + name
       }
     }
 
@@ -169,7 +169,7 @@ object JavaTypeInference {
       b <- setters
       if propertyName(a.getName) == propertyName(b.getName) &&
         a.getReturnType == b.getParameterTypes.head
-    } yield (propertyName(a.getName), a, b)
+    } yield (propertyName(a.getName).substring(1), a, b)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
