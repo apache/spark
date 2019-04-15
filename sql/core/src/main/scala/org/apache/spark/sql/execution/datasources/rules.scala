@@ -114,7 +114,9 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
-      if (!compatibleProviders(existingProvider, specifiedProvider)) {
+      // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
+      // [[FileFormat]], the two providers are considered compatible.
+      if (fallBackV2ToV1(existingProvider) != fallBackV2ToV1(specifiedProvider)) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
           s"`${specifiedProvider.getSimpleName}`.")
@@ -236,22 +238,9 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       }
   }
 
-  private def compatibleProviders(a: Class[_], b: Class[_]): Boolean = {
-    if (a == b) {
-      true
-    } else {
-      // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
-      // [[FileFormat]], the two providers are compatible.
-      val backwardCompatible1 = a.newInstance() match {
-        case f: FileDataSourceV2 if f.fallbackFileFormat == b => true
-        case _ => false
-      }
-      val backwardCompatible2 = b.newInstance() match {
-        case f: FileDataSourceV2 if f.fallbackFileFormat == a => true
-        case _ => false
-      }
-      backwardCompatible1 || backwardCompatible2
-    }
+  private def fallBackV2ToV1(cls: Class[_]): Class[_] = cls.newInstance match {
+    case f: FileDataSourceV2 => f.fallbackFileFormat
+    case _ => cls
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
