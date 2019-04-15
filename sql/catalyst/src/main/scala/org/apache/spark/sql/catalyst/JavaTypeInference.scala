@@ -167,7 +167,8 @@ object JavaTypeInference {
     for {
       a <- getters
       b <- setters
-      if propertyName(a.getName) == propertyName(b.getName) && a.getReturnType == b.getParameterTypes.head
+      if propertyName(a.getName) == propertyName(b.getName) &&
+        a.getReturnType == b.getParameterTypes.head
     } yield (propertyName(a.getName), a, b)
   }
 
