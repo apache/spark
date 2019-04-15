@@ -24,16 +24,16 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, GlobFilter, Path}
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
 private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceRegister {
@@ -81,22 +81,20 @@ private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceReg
       val fsPath = new Path(path)
 
       // TODO: Improve performance here: each file will recompile the glob pattern here.
-      val globFilter = if (pathGlobPattern.isEmpty) { null } else {
-        new GlobFilter(pathGlobPattern)
-      }
-      if (globFilter == null || globFilter.accept(fsPath)) {
+      val globFilter = pathGlobPattern.map(new GlobFilter(_))
+      if (!globFilter.isDefined || globFilter.get.accept(fsPath)) {
         val fs = fsPath.getFileSystem(broadcastedHadoopConf.value.value)
         val fileStatus = fs.getFileStatus(fsPath)
         val length = fileStatus.getLen()
         val modificationTime = new Timestamp(fileStatus.getModificationTime())
         val stream = fs.open(fsPath)
+
         val content = try {
           ByteStreams.toByteArray(stream)
         } finally {
           Closeables.close(stream, true)
         }
 
-        val converter = RowEncoder(dataSchema)
         val fullOutput = dataSchema.map { f =>
           AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
         }
@@ -106,9 +104,16 @@ private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceReg
 
         val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
-        val row = Row(Row(path, modificationTime, length), content)
+        val internalRow = InternalRow(
+          InternalRow(
+            UTF8String.fromString(path),
+            DateTimeUtils.fromJavaTimestamp(modificationTime),
+            length
+          ),
+          content
+        )
 
-        Iterator(requiredColumns(converter.toRow(row)))
+        Iterator(requiredColumns(internalRow))
       } else {
         Iterator.empty
       }
@@ -124,5 +129,8 @@ private[binaryfile] class BinaryFileSourceOptions(
   /**
    * only include files with path matching the glob pattern.
    */
-  val pathGlobFilter = parameters.getOrElse("pathGlobFilter", "").toString
+  val pathGlobFilter: Option[String] = {
+    val filter = parameters.getOrElse("pathGlobFilter", null)
+    if (filter != null) Some(filter) else None
+  }
 }

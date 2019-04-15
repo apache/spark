@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
  * To use binary file data source, you need to set "binaryFile" as the format in `DataFrameReader`
  * and optionally specify the data source options, available options include:
  *  - pathGlobFilter: Only include files with path matching the glob pattern.
- *                    The glob pattern keep the same behavior with hadoop API
+ *                    The glob pattern keeps the same behavior with Hadoop API
  *                    `org.apache.hadoop.fs.FileSystem.globStatus(pathPattern)`
  *
  * Example:
@@ -65,16 +65,16 @@ class BinaryFileDataSource private() {}
 object BinaryFileDataSource {
 
   private val fileStatusSchema = StructType(
-    StructField("path", StringType, true) ::
-    StructField("modificationTime", TimestampType, true) ::
-    StructField("len", LongType, true) :: Nil)
+    StructField("path", StringType, false) ::
+    StructField("modificationTime", TimestampType, false) ::
+    StructField("len", LongType, false) :: Nil)
 
   /**
    * The schema of the dataframe returned by binaryFile data source.
    * See doc in `BinaryFileDataSource`
    */
   val binaryFileSchema = StructType(
-    StructField("status", fileStatusSchema, true) ::
-    StructField("content", BinaryType, true) :: Nil)
+    StructField("status", fileStatusSchema, false) ::
+    StructField("content", BinaryType, false) :: Nil)
 
 }
