@@ -52,7 +52,7 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
     new WritablePartitionedIterator {
       private[this] var cur = if (it.hasNext) it.next() else null
 
-      def writeNext(writer: DiskBlockObjectWriter): Unit = {
+      def writeNext(writer: PairsWriter): Unit = {
         writer.write(cur._1._2, cur._2)
         cur = if (it.hasNext) it.next() else null
       }
@@ -89,7 +89,7 @@ private[spark] object WritablePartitionedPairCollection {
  * has an associated partition.
  */
 private[spark] trait WritablePartitionedIterator {
-  def writeNext(writer: DiskBlockObjectWriter): Unit
+  def writeNext(writer: PairsWriter): Unit
 
   def hasNext(): Boolean
 
