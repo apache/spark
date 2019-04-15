@@ -446,6 +446,85 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       assert(thrown.getMessage.contains(key))
     }
   }
+
+  test("specify resource count and addresses") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+
+    // only specify resource count
+    conf.setResources("gpu", 2, None, false)
+    assert(conf.getResources(false).get("gpu").get.getCount() == 2)
+    assert(conf.getResources(false).get("gpu").get.getAddresses().sameElements(Array.empty[String]))
+    conf.validateSettings()
+
+    // specify resource count and addresses
+    conf.setResources("gpu", 2, Some(Seq("0", "1")), false)
+    assert(conf.getResources(false).get("gpu").get.getCount() == 2)
+    assert(conf.getResources(false).get("gpu").get.getAddresses().sameElements(Seq("0", "1")))
+    conf.validateSettings()
+
+    // conflict number of resource count and addresses size
+    intercept[SparkException] {
+      conf.setResources("gpu", 2, Some(Seq("0", "1", "2")), false)
+    }
+
+    // specify resource on the driver
+    assert(conf.getResources(true).isEmpty)
+    conf.setResources("gpu", 2, Some(Seq("0", "1")), true)
+    assert(conf.getResources(true).get("gpu").get.getCount() == 2)
+    assert(conf.getResources(true).get("gpu").get.getAddresses().sameElements(Seq("0", "1")))
+    conf.validateSettings()
+  }
+
+  test("specify resource requirement") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+
+    // resource required but not on executors.
+    assert(conf.getResourceRequirements().isEmpty)
+    conf.setResourceRequirement("gpu", 2)
+    assert(conf.getResourceRequirements().get("gpu").get == 2)
+    intercept[SparkException] {
+      conf.validateSettings()
+    }
+
+    // specify resource on executors.
+    conf.setResources("gpu", 2, None, false)
+    conf.validateSettings()
+  }
+
+  test("verify available resources and resource requirements") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+
+    // resource on executors less than resource requirement
+    conf.setResourceRequirement("gpu", 3)
+    conf.setResources("gpu", 2, None, false)
+    intercept[SparkException] {
+      conf.validateSettings()
+    }
+
+    // valid case
+    conf.setResourceRequirement("gpu", 2)
+    conf.setResources("gpu", 2, None, false)
+    conf.validateSettings()
+
+    // resource on executors not fully used compated to resource requirement
+    conf.setResourceRequirement("gpu", 3)
+    conf.setResources("gpu", 3, None, false)
+    conf.set(EXECUTOR_CORES.key, "4")
+    conf.set(CPUS_PER_TASK.key, "1")
+    intercept[SparkException] {
+      conf.validateSettings()
+    }
+
+    // valid case
+    conf.setResourceRequirement("gpu", 2)
+    conf.setResources("gpu", 8, None, false)
+    conf.set(EXECUTOR_CORES.key, "4")
+    conf.set(CPUS_PER_TASK.key, "1")
+    conf.validateSettings()
+  }
 }
 
 class Class1 {}

@@ -23,8 +23,10 @@ import java.nio.charset.StandardCharsets
 import java.util.Properties
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap, Map}
+import scala.collection.immutable
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.spark.ResourceInformation
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
@@ -54,6 +56,7 @@ private[spark] class TaskDescription(
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
     val properties: Properties,
+    val resources: immutable.Map[String, ResourceInformation],
     val serializedTask: ByteBuffer) {
 
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
@@ -65,6 +68,21 @@ private[spark] object TaskDescription {
     for ((key, value) <- map) {
       dataOut.writeUTF(key)
       dataOut.writeLong(value)
+    }
+  }
+
+  private def serializeResources(map: immutable.Map[String, ResourceInformation],
+      dataOut: DataOutputStream): Unit = {
+    dataOut.writeInt(map.size)
+    for ((key, value) <- map) {
+      dataOut.writeUTF(key)
+      dataOut.writeUTF(value.getName())
+      dataOut.writeUTF(value.getUnits())
+      dataOut.writeLong(value.getCount())
+      dataOut.writeInt(value.getAddresses.size)
+      for (identifier <- value.getAddresses()) {
+        dataOut.writeUTF(identifier)
+      }
     }
   }
 
@@ -95,6 +113,9 @@ private[spark] object TaskDescription {
       dataOut.write(bytes)
     }
 
+    // Write resources.
+    serializeResources(taskDescription.resources, dataOut)
+
     // Write the task. The task is already serialized, so write it directly to the byte buffer.
     Utils.writeByteBuffer(taskDescription.serializedTask, bytesOut)
 
@@ -110,6 +131,25 @@ private[spark] object TaskDescription {
       map(dataIn.readUTF()) = dataIn.readLong()
     }
     map
+  }
+
+  private def deserializeResources(dataIn: DataInputStream):
+      immutable.Map[String, ResourceInformation] = {
+    val map = new HashMap[String, ResourceInformation]()
+    val mapSize = dataIn.readInt()
+    for (i <- 0 until mapSize) {
+      val resType = dataIn.readUTF()
+      val name = dataIn.readUTF()
+      val units = dataIn.readUTF()
+      val count = dataIn.readLong()
+      val numIdentifier = dataIn.readInt()
+      val identifiers = new ArrayBuffer[String](numIdentifier)
+      for (j <- 0 until numIdentifier) {
+        identifiers += dataIn.readUTF()
+      }
+      map(resType) = new ResourceInformation(name, units, count, identifiers.toArray)
+    }
+    map.toMap
   }
 
   def decode(byteBuffer: ByteBuffer): TaskDescription = {
@@ -138,10 +178,13 @@ private[spark] object TaskDescription {
       properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8))
     }
 
+    // Read resources.
+    val resources = deserializeResources(dataIn)
+
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
     new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, taskFiles,
-      taskJars, properties, serializedTask)
+      taskJars, properties, resources, serializedTask)
   }
 }

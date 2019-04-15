@@ -843,6 +843,38 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     file.getPath()
   }
 
+
+  test("test gpu support under local-cluster mode") {
+    val conf = new SparkConf()
+      .setResources("gpu", 3, Some(Seq("0", "1", "2")), false)
+      .setResources("gpu", 3, Some(Seq("0", "1", "8")), true)
+      .setResourceRequirement("gpu", 1)
+      .setMaster("local-cluster[3, 3, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+
+    // Ensure all executors has started
+    eventually(timeout(10.seconds)) {
+      assert(sc.statusTracker.getExecutorInfos.size == 3)
+    }
+
+    val resources = sc.getResources()
+    assert(resources.get("gpu").get.getAddresses() === Array("0", "1", "8"))
+    assert(resources.get("gpu").get.getCount() === 3)
+    assert(resources.get("gpu").get.getName() === "gpu")
+    assert(resources.get("gpu").get.getUnits() === "")
+
+    val rdd = sc.makeRDD(1 to 10, 9).mapPartitions { it =>
+      val context = TaskContext.get()
+      context.resources().get(ResourceInformation.GPU).get.getAddresses().iterator
+    }
+    val gpus = rdd.collect()
+    assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
+
+    eventually(timeout(10.seconds)) {
+      assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
 }
 
 object SparkContextSuite {

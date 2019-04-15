@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
@@ -139,12 +140,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(executorId, taskId, state, data) =>
+      case StatusUpdate(executorId, taskId, state, data, resources) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
+              for ((k, v) <- resources) {
+                executorInfo.availableResources.get(k).foreach { r =>
+                  r.incCount(v.getCount())
+                  r.addAddresses(v.getAddresses())
+                }
+              }
               makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
@@ -210,7 +217,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val data = new ExecutorData(executorRef, executorAddress, hostname,
-            cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes)
+            cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes, resources,
+            mutable.Map.empty[String, SchedulerResourceInformation] ++= resources.mapValues(v =>
+              new SchedulerResourceInformation(v.getName(), v.getUnits(), v.getCount(),
+                v.getAddresses().to[ArrayBuffer])))
+
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -263,7 +274,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
-              Some(executorData.executorAddress.hostPort))
+              Some(executorData.executorAddress.hostPort), executorData.availableResources.toMap)
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
@@ -289,7 +300,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val executorData = executorDataMap(executorId)
           val workOffers = IndexedSeq(
             new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
-              Some(executorData.executorAddress.hostPort)))
+              Some(executorData.executorAddress.hostPort), executorData.availableResources.toMap))
           scheduler.resourceOffers(workOffers)
         } else {
           Seq.empty
@@ -325,6 +336,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         else {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
+
+          for ((k, v) <- task.resources) {
+            executorData.availableResources.get(k).foreach { r =>
+              r.decCount(v.getCount())
+              r.removeAddresses(v.getAddresses())
+            }
+          }
 
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
             s"${executorData.executorHost}.")
@@ -523,6 +541,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.values.map { executor =>
       executor.totalCores / scheduler.CPUS_PER_TASK
     }.sum
+  }
+
+  // this function is for testing only
+  def getExecutorAvailableResources(executorId: String):
+      mutable.Map[String, SchedulerResourceInformation] = {
+    executorDataMap.get(executorId).map(_.availableResources).
+      getOrElse(mutable.Map.empty[String, SchedulerResourceInformation])
   }
 
   /**

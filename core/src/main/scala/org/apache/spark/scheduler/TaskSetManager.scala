@@ -21,6 +21,7 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.collection.immutable.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
@@ -467,7 +468,9 @@ private[spark] class TaskSetManager(
   def resourceOffer(
       execId: String,
       host: String,
-      maxLocality: TaskLocality.TaskLocality)
+      maxLocality: TaskLocality.TaskLocality,
+      hostGpuIndices: ArrayBuffer[String],
+      gpuResources: SchedulerResourceInformation)
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -532,6 +535,15 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
+        val extraResources = if (sched.GPUS_PER_TASK > 0) {
+          // doing minimal checking here to keep things fast
+          val indices = hostGpuIndices.take(sched.GPUS_PER_TASK).toArray
+          Map(ResourceInformation.GPU -> new ResourceInformation(gpuResources.getName(),
+            gpuResources.getUnits(), sched.GPUS_PER_TASK, indices))
+        } else {
+          Map.empty[String, ResourceInformation]
+        }
+
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
           taskId,
@@ -543,6 +555,7 @@ private[spark] class TaskSetManager(
           addedFiles,
           addedJars,
           task.localProperties,
+          extraResources,
           serializedTask)
       }
     } else {
