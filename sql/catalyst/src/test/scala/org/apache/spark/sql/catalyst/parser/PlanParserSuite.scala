@@ -188,7 +188,7 @@ class PlanParserSuite extends AnalysisTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), partition, plan, overwrite, ifPartitionNotExists)
+      InsertIntoTable(table("s"), None, partition, plan, overwrite, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -207,6 +207,31 @@ class PlanParserSuite extends AnalysisTest {
         table("s"), Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
         InsertIntoTable(
           table("u"), Map.empty, plan2, false, ifPartitionNotExists = false)))
+  }
+
+  test("insert into and choose inserted columns") {
+    val sql = "select a2, b2 from t"
+    val plan = table("t").select('a2, 'b2)
+    def insert(
+        insertCols: Option[Seq[String]],
+        partition: Map[String, Option[String]],
+        overwrite: Boolean = false,
+        ifPartitionNotExists: Boolean = false): LogicalPlan =
+      InsertIntoTable(table("s"), insertCols, partition, plan, overwrite, ifPartitionNotExists)
+
+    // Single inserts
+    assertEqual(s"insert into s(a1, b1) $sql",
+      insert(Option(Seq("a1", "b1")), Map.empty))
+    assertEqual(s"insert into table s(a1, b1) partition (c = 'd', e = 1) $sql",
+      insert(Option(Seq("a1", "b1")), Map("c" -> Option("d"), "e" -> Option("1"))))
+
+    // Multi insert
+    val plan2 = table("t").where('x > 5).select('a4, 'b4)
+    assertEqual("from t insert into s(a1, b1) select a2, b2 limit 1 insert into u(a3, b3) select a4, b4 where x > 5",
+      InsertIntoTable(
+        table("s"), Option(Seq("a1", "b1")), Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
+        InsertIntoTable(
+          table("u"), Option(Seq("a3", "b3")), Map.empty, plan2, false, ifPartitionNotExists = false)))
   }
 
   test ("insert with if not exists") {

@@ -22,13 +22,13 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, Literal, NamedExpression, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{AtomicType, NullType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -338,18 +338,49 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       insert.partition, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
+    val selectedCols = if (insertedCols == None) {
+      insert.table.output
+    } else {
+      val tableCols = insert.table.output.map(_.name)
+      val noexistsCols = insertedCols.get.filterNot(col => tableCols.contains(col))
+      if (noexistsCols.size > 0) {
+        throw new AnalysisException(s"Target table $tblName dose not exists these columns: $noexistsCols.")
+      }
+      insert.table.output.filter(a => insertedCols.get.contains(a.name))
+    }
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
         s"$tblName requires that the data to be inserted have the same number of columns as the " +
-          s"target table: target table has ${insert.table.output.size} column(s) but the " +
-          s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
+          s"the number of columns selected in the target table: the number of columns selected has " +
+          s"${expectedColumns.length} column(s) but the inserted data has " +
+          s"${insert.query.output.length + staticPartCols.size} column(s), " +
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
+    val tableColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    val tableCols = tableColumns.map(_.name)
+    val filledQuery = if (insertedCols == None) {
+      insert.query
+    } else {
+      val cols = insertedCols.get
+      val project = insert.query.asInstanceOf[Project]
+      val filledProjectList = ArrayBuffer.empty[NamedExpression]
+      var i = 0
+      tableCols.foreach { tableCol =>
+        if (cols.contains(tableCol)) {
+          filledProjectList += project.projectList(i)
+          i += 1
+        } else {
+          filledProjectList += Alias(Literal(null, NullType), "NULL")()
+        }
+      }
+      project.copy(projectList = filledProjectList.seq)
+    }
+
     val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
-      insert.query, expectedColumns, conf)
+      filledQuery, tableColumns, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
@@ -369,17 +400,17 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoTable(table, insertedCols, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
-          preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
+          preprocess(i, metadata.identifier.quotedString, insertedCols, metadata.partitionColumnNames)
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(i, tblName, h.partitionSchema.map(_.name))
+          preprocess(i, tblName, None, h.partitionSchema.map(_.name))
         case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(i, tblName, Nil)
+          preprocess(i, tblName, None, Nil)
         case _ => i
       }
   }
