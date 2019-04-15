@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 import org.apache.spark.sql.{Column, DataFrame, functions}
-import org.opencypher.okapi.api.types.CypherType._
 import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap, CypherValue}
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.api.expr.Expr
@@ -54,7 +53,6 @@ object SparkCypherFunctions {
       new Column(UnresolvedExtractValue(column.expr, idx.expr))
   }
 
-
   def list_slice(list: Column, maybeFrom: Option[Column], maybeTo: Option[Column]): Column = {
     val start = maybeFrom.map(_ + ONE_LIT).getOrElse(ONE_LIT)
     val length = (maybeTo.getOrElse(size(list)) - start) + ONE_LIT
@@ -80,11 +78,15 @@ object SparkCypherFunctions {
   private val TRUE_EXPR: Expression = functions.lit(true).expr
 
   def filter_true[T: TypeTag](items: Seq[T], mask: Seq[Column]): Column = {
-    filter_with_mask(items, mask, LambdaFunction(EqualTo(GetStructField(x, 1), TRUE_EXPR), Seq(x)))
+    filter_with_mask(items, mask, LambdaFunction(EqualTo(GetStructField(x, 1), TRUE_EXPR), Seq(x), hidden = false))
   }
 
   def filter_not_null[T: TypeTag](items: Seq[T], mask: Seq[Column]): Column = {
-    filter_with_mask(items, mask, LambdaFunction(IsNotNull(GetStructField(x, 1)), Seq(x)))
+    filter_with_mask(items, mask, LambdaFunction(IsNotNull(GetStructField(x, 1)), Seq(x), hidden = false))
+  }
+
+  def make_big_decimal(unscaledVal: Column, precision: Int, scale: Int): Column = {
+    new Column(MakeDecimal(unscaledVal.expr, precision, scale))
   }
 
   private def filter_with_mask[T: TypeTag](items: Seq[T], mask: Seq[Column], predicate: LambdaFunction): Column = {
@@ -95,7 +97,7 @@ object SparkCypherFunctions {
       val itemLiterals = functions.array(items.map(functions.typedLit): _*)
       val zippedArray = functions.arrays_zip(itemLiterals, functions.array(mask: _*))
       val filtered = ArrayFilter(zippedArray.expr, predicate)
-      val transform = ArrayTransform(filtered, LambdaFunction(GetStructField(x, 0), Seq(x)))
+      val transform = ArrayTransform(filtered, LambdaFunction(GetStructField(x, 0), Seq(x), hidden = false))
       new Column(transform)
     }
   }

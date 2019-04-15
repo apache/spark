@@ -18,11 +18,9 @@
 
 package org.apache.spark.cypher.conversions
 
-import org.apache.spark.cypher.conversions.TemporalConversions._
 import org.apache.spark.cypher.{SparkCypherNode, SparkCypherRelationship}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.unsafe.types.CalendarInterval
 import org.opencypher.okapi.api.types.{CTList, CTMap, CTNode, CTRelationship}
 import org.opencypher.okapi.api.value.CypherValue._
 import org.opencypher.okapi.api.value._
@@ -43,15 +41,9 @@ final case class RowConversion(exprToColumn: Seq[(Expr, String)]) extends (Row =
   // TODO: Validate all column types. At the moment null values are cast to the expected type...
   private def constructValue(row: Row, v: Var): CypherValue = {
     v.cypherType.material match {
-      case _: CTNode =>
-        collectNode(row, v)
-
-      case _: CTRelationship =>
-        collectRel(row, v)
-
-      case CTList(_) if !header.exprToColumn.contains(v) =>
-        collectComplexList(row, v)
-
+      case n if n.subTypeOf(CTNode.nullable) => collectNode(row, v)
+      case r if r.subTypeOf(CTRelationship.nullable) => collectRel(row, v)
+      case l if l.subTypeOf(CTList.nullable) && !header.exprToColumn.contains(v) => collectComplexList(row, v)
       case _ => constructFromExpression(row, v)
     }
   }
@@ -74,10 +66,7 @@ final case class RowConversion(exprToColumn: Seq[(Expr, String)]) extends (Row =
 
       case _ =>
         val raw = row.getAs[Any](header.column(expr))
-        raw match {
-          case interval: CalendarInterval => interval.toDuration
-          case other => CypherValue(other)
-        }
+        CypherValue(raw)
     }
   }
 

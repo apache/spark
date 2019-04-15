@@ -31,22 +31,7 @@ import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object TypeConversions {
 
-  // Spark data types that are supported within the Cypher type system
-  val supportedTypes: Seq[DataType] = Seq(
-    // numeric
-    ByteType,
-    ShortType,
-    IntegerType,
-    LongType,
-    FloatType,
-    DoubleType,
-    // other
-    StringType,
-    BooleanType,
-    DateType,
-    TimestampType,
-    NullType
-  )
+  val DEFAULT_PRECISION = 20
 
   implicit class CypherTypeOps(val ct: CypherType) extends AnyVal {
 
@@ -63,27 +48,22 @@ object TypeConversions {
         ct.material match {
           case CTString => Some(StringType)
           case CTInteger => Some(LongType)
-          case CTBoolean => Some(BooleanType)
+          case CTBigDecimal(p, s) => Some(DataTypes.createDecimalType(p, s))
           case CTFloat => Some(DoubleType)
           case CTLocalDateTime => Some(TimestampType)
           case CTDate => Some(DateType)
           case CTDuration => Some(CalendarIntervalType)
           case CTIdentity => Some(BinaryType)
-          case _: CTNode => Some(BinaryType)
-          case _: CTRelationship => Some(BinaryType)
+          case b if b.subTypeOf(CTBoolean) => Some(BooleanType)
+          case n if n.subTypeOf(CTEntity.nullable) => Some(BinaryType)
           // Spark uses String as the default array inner type
-          case CTList(CTVoid) => Some(ArrayType(StringType, containsNull = false))
+          case CTMap(inner) => Some(StructType(inner.map { case (key, vType) => vType.toStructField(key) }.toSeq))
+          case CTEmptyList => Some(ArrayType(StringType, containsNull = false))
           case CTList(CTNull) => Some(ArrayType(StringType, containsNull = true))
-          case CTList(CTNumber) => Some(ArrayType(DoubleType, containsNull = false))
-          case CTList(CTNumber.nullable) => Some(ArrayType(DoubleType, containsNull = true))
-          case CTList(elemType) => elemType.toSparkType.map(ArrayType(_, elemType.isNullable))
-          case CTMap(inner) =>
-            val innerFields = inner.map {
-              case (key, valueType) => valueType.toStructField(key)
-            }.toSeq
-            Some(StructType(innerFields))
-          case _ =>
-            None
+          case CTList(inner) if inner.subTypeOf(CTBoolean.nullable) => Some(ArrayType(BooleanType, containsNull = inner.isNullable))
+          case CTList(elemType) if elemType.toSparkType.isDefined => elemType.toSparkType.map(ArrayType(_, elemType.isNullable))
+          case l if l.subTypeOf(CTList(CTNumber.nullable)) => Some(ArrayType(DoubleType, containsNull = l.isNullable))
+          case _ => None
         }
     }
 
@@ -132,13 +112,14 @@ object TypeConversions {
         case LongType => Some(CTInteger)
         case BooleanType => Some(CTBoolean)
         case DoubleType => Some(CTFloat)
+        case dt: DecimalType => Some(CTBigDecimal(dt.precision, dt.scale))
         case TimestampType => Some(CTLocalDateTime)
         case DateType => Some(CTDate)
         case CalendarIntervalType => Some(CTDuration)
-        case ArrayType(NullType, _) => Some(CTList(CTVoid))
+        case ArrayType(NullType, _) => Some(CTEmptyList)
         case BinaryType => Some(CTIdentity)
         case ArrayType(elemType, containsNull) =>
-          elemType.toCypherType(containsNull).map(CTList)
+          elemType.toCypherType(containsNull).map(CTList(_))
         case NullType => Some(CTNull)
         case StructType(fields) =>
           val convertedFields = fields.map { field => field.name -> field.dataType.toCypherType(field.nullable) }.toMap
@@ -158,11 +139,7 @@ object TypeConversions {
       *
       * @return true, iff the data type is supported
       */
-    def isCypherCompatible: Boolean = dt match {
-      case ArrayType(internalType, _) => internalType.isCypherCompatible
-      case StructType(fields) => fields.forall(_.dataType.isCypherCompatible)
-      case other => supportedTypes.contains(other)
-    }
+    def isCypherCompatible: Boolean = cypherCompatibleDataType.isDefined
 
     /**
       * Converts the given Spark data type into a Cypher type system compatible Spark data type.
