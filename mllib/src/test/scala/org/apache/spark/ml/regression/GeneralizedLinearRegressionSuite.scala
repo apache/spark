@@ -19,7 +19,7 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.feature.{LabeledPoint, RFormula}
@@ -28,7 +28,6 @@ import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.random._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -269,7 +268,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       ("inverse", datasetGaussianInverse))) {
       for (fitIntercept <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily("gaussian").setLink(link)
-          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction").setTol(1e-3)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gaussian family, " +
@@ -328,7 +327,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     for (fitIntercept <- Seq(false, true);
          regParam <- Seq(0.0, 0.1, 1.0)) {
       val trainer = new GeneralizedLinearRegression().setFamily("gaussian")
-        .setFitIntercept(fitIntercept).setRegParam(regParam)
+        .setFitIntercept(fitIntercept).setRegParam(regParam).setTol(1e-3)
       val model = trainer.fit(datasetGaussianIdentity)
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gaussian family, " +
@@ -384,7 +383,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       ("cloglog", datasetBinomial))) {
       for (fitIntercept <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily("binomial").setLink(link)
-          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction").setTol(1e-3)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1),
           model.coefficients(2), model.coefficients(3))
@@ -457,7 +456,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       ("sqrt", datasetPoissonSqrt))) {
       for (fitIntercept <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily("poisson").setLink(link)
-          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction").setTol(1e-3)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
@@ -515,7 +514,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     val dataset = datasetPoissonLogWithZero
     for (fitIntercept <- Seq(false, true)) {
       val trainer = new GeneralizedLinearRegression().setFamily("poisson").setLink(link)
-        .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+        .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction").setTol(1e-3)
       val model = trainer.fit(dataset)
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
@@ -573,7 +572,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       ("identity", datasetGammaIdentity), ("log", datasetGammaLog))) {
       for (fitIntercept <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily("Gamma").setLink(link)
-          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction").setTol(1e-3)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gamma family, " +
@@ -659,7 +658,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
          variancePower <- Seq(1.6, 2.5)) {
       val trainer = new GeneralizedLinearRegression().setFamily("tweedie")
         .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
-        .setVariancePower(variancePower).setLinkPower(linkPower)
+        .setVariancePower(variancePower).setLinkPower(linkPower).setTol(1e-4)
       val model = trainer.fit(datasetTweedie)
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
@@ -736,7 +735,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       for (variancePower <- Seq(0.0, 1.0, 2.0, 1.5)) {
         val trainer = new GeneralizedLinearRegression().setFamily("tweedie")
           .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
-          .setVariancePower(variancePower)
+          .setVariancePower(variancePower).setTol(1e-3)
         val model = trainer.fit(datasetTweedie)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
