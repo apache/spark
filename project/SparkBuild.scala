@@ -458,6 +458,7 @@ object SparkParallelTestGrouping {
 
   private val testsWhichShouldRunInTheirOwnDedicatedJvm = Set(
     "org.apache.spark.DistributedSuite",
+    "org.apache.spark.ShuffleNettySuite",
     "org.apache.spark.sql.catalyst.expressions.DateExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.HashExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.CastSuite",
@@ -467,6 +468,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.execution.HashAggregationQueryWithControlledFallbackSuite",
     "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
+    "org.apache.spark.ml.classification.LogisticRegressionSuite",
+    "org.apache.spark.ml.classification.LinearSVCSuite",
     "org.apache.spark.sql.SQLQueryTestSuite"
   )
 
@@ -1017,7 +1020,7 @@ object TestSettings {
       // The number of concurrent test groups is empirically chosen based on experience
       // with Jenkins flakiness.
       if (sys.env.contains("SERIAL_SBT_TESTS")) (concurrentRestrictions in Global).value
-      else Seq(Tags.limit(Tags.ForkedTestGroup, 16))
+      else Seq(Tags.limit(Tags.ForkedTestGroup, 8))
     }
   )
 
