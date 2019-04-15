@@ -149,6 +149,10 @@ object Cast {
     case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
     case (_, StringType) => true
+    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
+    // `timestampToLong` for details.
+    case (TimestampType, LongType) => true
+    case (LongType, TimestampType) => true
     // TODO: consider complex types.
     case _ => false
   }
