@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.orc.OrcConf.COMPRESS
-import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.orc.OrcOptions
@@ -117,7 +116,7 @@ object HiveOptions {
     tableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
       case formatName if formatName.endsWith("parquetoutputformat") =>
         val compressionCodec = new ParquetOptions(tableProps, sqlConf).compressionCodecClassName
-        Option((ParquetOutputFormat.COMPRESSION, compressionCodec))
+        Option(("parquet.compression", compressionCodec))
       case formatName if formatName.endsWith("orcoutputformat") =>
         val compressionCodec = new OrcOptions(tableProps, sqlConf).compressionCodec
         Option((COMPRESS.getAttribute, compressionCodec))

@@ -2945,9 +2945,6 @@
       <id>orc-provided</id>
     </profile>
     <profile>
-      <id>parquet-provided</id>
-    </profile>
-    <profile>
       <id>sparkr</id>
     </profile>
   </profiles>
