@@ -151,25 +151,19 @@ object JavaTypeInference {
    * the name of the getter function, and [set]PropertyName is the name of the setter function.
    */
   def getObjectProperties(beanClass: Class[_]): Array[(String, Method, Method)] = {
-    def propertyName(name: String): String = {
-      if (name.indexOf("get") == 0 || name.indexOf("set") == 0) {
-        "." + name.substring(3)
-      } else {
-        "," + name
-      }
-    }
-
-    val getters = beanClass.getMethods.filter(method => method.getParameterCount == 0)
-
-    val setters = beanClass.getMethods.filter(method => method.getReturnType == Void.TYPE &&
-      method.getParameterCount == 1)
-
     for {
-      a <- getters
-      b <- setters
-      if propertyName(a.getName) == propertyName(b.getName) &&
+      a <- beanClass.getMethods.filter(method => method.getParameterCount == 0)
+      b <- beanClass.getMethods.filter(method => method.getReturnType == Void.TYPE &&
+        method.getParameterCount == 1)
+      if (a.getName == b.getName ||
+        (a.getName.indexOf("get") == 0 && b.getName.indexOf("set") == 0 &&
+          a.getName.substring(3) == b.getName.substring(3))) &&
         a.getReturnType == b.getParameterTypes.head
-    } yield (propertyName(a.getName).substring(1), a, b)
+    } yield (if (a.getName.indexOf("get") == 0 && b.getName.indexOf("set") == 0) {
+      a.getName.substring(3)
+    } else {
+      a.getName
+    }, a, b)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
