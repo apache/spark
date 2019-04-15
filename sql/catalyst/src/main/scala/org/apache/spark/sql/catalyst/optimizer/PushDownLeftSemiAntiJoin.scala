@@ -175,10 +175,10 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
    * the left leg or the right leg of the join.
    */
   object PushdownDirection extends Enumeration {
-    val toRightBranch, toLeftBranch, none = Value
+    val TO_LEFT_BRANCH, TO_RIGHT_BRANCH, NONE = Value
   }
 
-  object AllowedJoins {
+  object AllowedJoin {
     def unapply(join: Join): Option[Join] = join.joinType match {
       case Inner | Cross | LeftOuter | RightOuter => Some(join)
       case _ => None
@@ -195,7 +195,7 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
     val rightOutput = rightChild.outputSet
 
     if (joinCond.nonEmpty) {
-      val noPushdown = (PushdownDirection.none, None)
+      val noPushdown = (PushdownDirection.NONE, None)
       val conditions = splitConjunctivePredicates(joinCond.get)
       val (leftConditions, rest) =
         conditions.partition(_.references.subsetOf(left.outputSet ++ rightOutput))
@@ -205,11 +205,11 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
       if (rest.isEmpty && leftConditions.nonEmpty) {
         // When the join conditions can be computed based on the left leg of
         // leftsemi/anti join then push the leftsemi/anti join to the left side.
-        (PushdownDirection.toLeftBranch, leftConditions.reduceLeftOption(And))
+        (PushdownDirection.TO_LEFT_BRANCH, leftConditions.reduceLeftOption(And))
       } else if (leftConditions.isEmpty && rightConditions.nonEmpty && commonConditions.isEmpty) {
         // When the join conditions can be computed based on the attributes from right leg of
         // leftsemi/anti join then push the leftsemi/anti join to the right side.
-        (PushdownDirection.toRightBranch, rightConditions.reduceLeftOption(And))
+        (PushdownDirection.TO_RIGHT_BRANCH, rightConditions.reduceLeftOption(And))
       } else {
         noPushdown
       }
@@ -221,12 +221,12 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
        * 2) if a right outer join, to the right leg of join,
        */
       val action = joinType match {
-        case RightOuter =>
-          PushdownDirection.toRightBranch
         case _: InnerLike | LeftOuter =>
-          PushdownDirection.toLeftBranch
+          PushdownDirection.TO_LEFT_BRANCH
+        case RightOuter =>
+          PushdownDirection.TO_RIGHT_BRANCH
         case _ =>
-          PushdownDirection.none
+          PushdownDirection.NONE
       }
       (action, None)
     }
@@ -234,18 +234,18 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // push LeftSemi/LeftAnti down into the join below
-    case j @ Join(AllowedJoins(left), right, LeftSemiOrAnti(joinType), joinCond, parentHint) =>
+    case j @ Join(AllowedJoin(left), right, LeftSemiOrAnti(joinType), joinCond, parentHint) =>
       val (childJoinType, childLeft, childRight, childCondition, childHint) =
         (left.joinType, left.left, left.right, left.condition, left.hint)
       val (action, newJoinCond) = pushTo(left, right, joinCond)
 
       action match {
-        case PushdownDirection.toLeftBranch
+        case PushdownDirection.TO_LEFT_BRANCH
           if (childJoinType == LeftOuter || childJoinType.isInstanceOf[InnerLike]) =>
           // push down leftsemi/anti join to the left table
           val newLeft = Join(childLeft, right, joinType, newJoinCond, parentHint)
           Join(newLeft, childRight, childJoinType, childCondition, childHint)
-        case PushdownDirection.toRightBranch
+        case PushdownDirection.TO_RIGHT_BRANCH
           if (childJoinType == RightOuter || childJoinType.isInstanceOf[InnerLike]) =>
           // push down leftsemi/anti join to the right table
           val newRight = Join(childRight, right, joinType, newJoinCond, parentHint)
