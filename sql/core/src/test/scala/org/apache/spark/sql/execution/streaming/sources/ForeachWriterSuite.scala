@@ -292,7 +292,6 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
       assert(allEvents(0)(1) === ForeachWriterSuite.Process(value = 1))
 
       // `close` should be called with the error
-      // `close` should be called with the error
       val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
       assert(errorEvent.error.get.isInstanceOf[RuntimeException])
       assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
