@@ -1550,6 +1550,15 @@ object SQLConf {
         "WHERE, which does not follow SQL standard.")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_PASS_PARTITION_BY_AS_OPTIONS =
+    buildConf("spark.sql.legacy.sources.write.passPartitionByAsOptions")
+      .internal()
+      .doc("Whether to pass the partitionBy columns as options in DataFrameWriter. " +
+        "Data source V1 now silently drops partitionBy columns for non-file-format sources; " +
+        "turning the flag on provides a way for these sources to see these partitionBy columns.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
