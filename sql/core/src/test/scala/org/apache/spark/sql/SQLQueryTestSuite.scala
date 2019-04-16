@@ -296,7 +296,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         .map(_.replaceAll("#\\d+", "#x")
         .replaceAll(
           // scalastyle:off
-          "Location.*/sql/core/spark-warehouse/(SQLQueryTestSuite/|SparkServiceSQLQueryTestSuite/)?",
+          "Location.*/sql/core/spark-warehouse/(SQLQueryTestSuite/)?",
           s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
         // scalastyle:on
         .replaceAll("Created By.*", s"Created By $notIncludedMsg")
