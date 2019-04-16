@@ -317,62 +317,58 @@ class LeftSemiPushdownSuite extends PlanTest {
   }
 
   Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
-    Seq(Inner, LeftOuter, Cross).foreach { case innerJT =>
+    Seq(Inner, LeftOuter, Cross, RightOuter).foreach { case innerJT =>
       test(s"$outerJT pushdown with empty join condition join type $innerJT") {
         val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, None)
         val originalQuery = joinedRelation.join(testRelation, joinType = outerJT, None)
         val optimized = Optimize.execute(originalQuery.analyze)
 
-        val pushedDownJoin = testRelation1.join(testRelation, joinType = outerJT, None)
-        val correctAnswer = pushedDownJoin.join(testRelation2, joinType = innerJT, None)
+        val correctAnswer = if (innerJT == RightOuter) {
+          val pushedDownJoin = testRelation2.join(testRelation, joinType = outerJT, None)
+          testRelation1.join(pushedDownJoin, joinType = innerJT, None)
+        } else {
+          val pushedDownJoin = testRelation1.join(testRelation, joinType = outerJT, None)
+          pushedDownJoin.join(testRelation2, joinType = innerJT, None)
+        }
         comparePlans(optimized, correctAnswer)
       }
     }
   }
 
-  Seq(LeftSemi, LeftAnti).foreach { case jt =>
-      test(s"$jt pushdown with empty join condition join type RightOuter") {
-        val joinedRelation = testRelation1.join(testRelation2, joinType = RightOuter, None)
-        val originalQuery = joinedRelation.join(testRelation, joinType = jt, None)
-        val optimized = Optimize.execute(originalQuery.analyze)
+  Seq(Some('d === 'e), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, LeftOuter, Cross).foreach { case innerJT =>
+        test(s"$outerJT pushdown to left of join type: $innerJT join condition $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery =
+            joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
+          val optimized = Optimize.execute(originalQuery.analyze)
 
-        val pushedDownJoin = testRelation2.join(testRelation, joinType = jt, None)
-        val correctAnswer = testRelation1.join(pushedDownJoin, joinType = RightOuter, None)
-        comparePlans(optimized, correctAnswer)
-      }
-  }
-
-  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
-    Seq(Inner, LeftOuter, Cross).foreach { case innerJT =>
-      test(s"$outerJT pushdown with join condition referring to left leg of join type $innerJT") {
-        val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, None)
-        val originalQuery =
-          joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
-        val optimized = Optimize.execute(originalQuery.analyze)
-
-        val pushedDownJoin =
-          testRelation1.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
-        val correctAnswer = pushedDownJoin.join(testRelation2, joinType = innerJT, None).analyze
-        comparePlans(optimized, correctAnswer)
+          val pushedDownJoin =
+            testRelation1.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
+          val correctAnswer =
+            pushedDownJoin.join(testRelation2, joinType = innerJT, innerJoinCond).analyze
+          comparePlans(optimized, correctAnswer)
+        }
       }
     }
   }
 
-  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
-    Seq(Inner, LeftOuter, Cross).foreach { case innerJT =>
-      test(s"$outerJT pushdown with outer and inner join condition for join type $innerJT") {
-        val joinedRelation =
-          testRelation1.join(testRelation2, joinType = innerJT, condition = Some('d === 'e))
-        val originalQuery =
-          joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
-        val optimized = Optimize.execute(originalQuery.analyze)
+  Seq(Some('e === 'd), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, RightOuter, Cross).foreach { case innerJT =>
+        test(s"$outerJT pushdown to right of join type: $innerJT join condition $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery =
+            joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
+          val optimized = Optimize.execute(originalQuery.analyze)
 
-        val pushedDownJoin =
-          testRelation1.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
-        val correctAnswer = pushedDownJoin
-          .join(testRelation2, joinType = innerJT, condition = Some('d === 'e))
-          .analyze
-        comparePlans(optimized, correctAnswer)
+          val pushedDownJoin =
+            testRelation2.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
+          val correctAnswer =
+            testRelation1.join(pushedDownJoin, joinType = innerJT, innerJoinCond).analyze
+          comparePlans(optimized, correctAnswer)
+        }
       }
     }
   }
@@ -384,41 +380,6 @@ class LeftSemiPushdownSuite extends PlanTest {
         joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'd))
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, originalQuery.analyze)
-    }
-  }
-
-  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
-    Seq(Inner, RightOuter, Cross).foreach { case innerJT =>
-      test(s"$outerJT pushdown with join condition referring to right leg - join type $innerJT") {
-        val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, None)
-        val originalQuery =
-          joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
-        val optimized = Optimize.execute(originalQuery.analyze)
-
-        val pushedDownJoin =
-          testRelation2.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
-        val correctAnswer = testRelation1.join(pushedDownJoin, joinType = innerJT, None).analyze
-        comparePlans(optimized, correctAnswer)
-      }
-    }
-  }
-
-  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
-    Seq(Inner, RightOuter, Cross).foreach { case innerJT =>
-      test(s"$outerJT pushdown with outer and inner join conditions for join type $innerJT") {
-        val joinedRelation = testRelation1.
-          join(testRelation2, joinType = innerJT, condition = Some('e === 'd))
-        val originalQuery =
-          joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
-        val optimized = Optimize.execute(originalQuery.analyze)
-
-        val pushedDownJoin =
-          testRelation2.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
-        val correctAnswer = testRelation1.
-          join(pushedDownJoin, joinType = innerJT, condition = Some('e === 'd))
-          .analyze
-        comparePlans(optimized, correctAnswer)
-      }
     }
   }
 
