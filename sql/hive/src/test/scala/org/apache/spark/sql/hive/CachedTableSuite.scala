@@ -22,11 +22,7 @@ import java.io.File
 import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.datasources.{
-  CatalogFileIndex,
-  HadoopFsRelation,
-  LogicalRelation
-}
+import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -53,17 +49,23 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     maybeBlock.nonEmpty
   }
 
+
+
   test("cache table") {
     val preCacheResults = sql("SELECT * FROM src").collect().toSeq
 
     cacheTable("src")
     assertCached(sql("SELECT * FROM src"))
 
-    checkAnswer(sql("SELECT * FROM src"), preCacheResults)
+    checkAnswer(
+      sql("SELECT * FROM src"),
+      preCacheResults)
 
     assertCached(sql("SELECT * FROM src s"))
 
-    checkAnswer(sql("SELECT * FROM src s"), preCacheResults)
+    checkAnswer(
+      sql("SELECT * FROM src s"),
+      preCacheResults)
 
     uncacheTable("src")
     assertCached(sql("SELECT * FROM src"), 0)
@@ -177,7 +179,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "Lazily cached in-memory table shouldn't be materialized eagerly")
 
     sql("SELECT COUNT(*) FROM src").collect()
-    assert(isMaterialized(rddId), "Lazily cached in-memory table should have been materialized")
+    assert(
+      isMaterialized(rddId),
+      "Lazily cached in-memory table should have been materialized")
 
     uncacheTable("src")
     assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
@@ -207,7 +211,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     // We are using the new data.
     assertCached(table("refreshTable"))
-    checkAnswer(table("refreshTable"), table("src").union(table("src")).collect())
+    checkAnswer(
+      table("refreshTable"),
+      table("src").union(table("src")).collect())
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
@@ -217,7 +223,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     // Refresh the table. REFRESH TABLE command should not make a uncached
     // table cached.
     sql("REFRESH TABLE refreshTable")
-    checkAnswer(table("refreshTable"), table("src").union(table("src")).collect())
+    checkAnswer(
+      table("refreshTable"),
+      table("src").union(table("src")).collect())
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
 
@@ -231,7 +239,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
     sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
-    checkAnswer(table("refreshTable"), table("src").collect())
+    checkAnswer(
+      table("refreshTable"),
+      table("src").collect())
     // Cache the table.
     sql("CACHE TABLE refreshTable")
     assertCached(table("refreshTable"))
@@ -241,7 +251,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     // We are using the new data.
     assertCached(table("refreshTable"))
-    checkAnswer(table("refreshTable"), table("src").union(table("src")).collect())
+    checkAnswer(
+      table("refreshTable"),
+      table("src").union(table("src")).collect())
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
@@ -251,7 +263,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     // Refresh the table. REFRESH command should not make a uncached
     // table cached.
     sql(s"REFRESH ${tempPath.toString}")
-    checkAnswer(table("refreshTable"), table("src").union(table("src")).collect())
+    checkAnswer(
+      table("refreshTable"),
+      table("src").union(table("src")).collect())
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
 
@@ -269,16 +283,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         activateDatabase(db) {
           assertCached(spark.table("cachedTable"))
           sql("UNCACHE TABLE cachedTable")
-          assert(
-            !spark.catalog.isCached("cachedTable"),
-            "Table 'cachedTable' should not be cached")
+          assert(!spark.catalog.isCached("cachedTable"), "Table 'cachedTable' should not be cached")
           sql(s"CACHE TABLE cachedTable")
           assert(spark.catalog.isCached("cachedTable"), "Table 'cachedTable' should be cached")
         }
 
         sql(s"UNCACHE TABLE $db.cachedTable")
-        assert(
-          !spark.catalog.isCached(s"$db.cachedTable"),
+        assert(!spark.catalog.isCached(s"$db.cachedTable"),
           "Table 'cachedTable' should not be cached")
       }
     }
@@ -290,9 +301,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         val e = intercept[ParseException] {
           sql(s"CACHE TABLE $db.cachedTable AS SELECT 1")
         }.getMessage
-        assert(
-          e.contains("It is not allowed to add database prefix ") &&
-            e.contains("to the table name in CACHE TABLE AS SELECT"))
+        assert(e.contains("It is not allowed to add database prefix ") &&
+          e.contains("to the table name in CACHE TABLE AS SELECT"))
       }
     }
   }

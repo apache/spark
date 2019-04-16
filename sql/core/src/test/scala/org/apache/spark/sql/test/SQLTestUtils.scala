@@ -116,8 +116,8 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   /**
    * Run a test on a separate `UninterruptibleThread`.
    */
-  protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)(
-      body: => Unit): Unit = {
+  protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
+                                             (body: => Unit): Unit = {
     val timeoutMillis = 10000
     @transient var ex: Throwable = null
 
@@ -175,7 +175,8 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
    */
   protected def waitForTasksToFinish(): Unit = {
     eventually(timeout(10.seconds)) {
-      assert(spark.sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
     }
   }
 
@@ -185,8 +186,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
    */
   protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
     val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
-    try f(files)
-    finally {
+    try f(files) finally {
       // wait for all tasks to finish before deleting files
       waitForTasksToFinish()
       files.foreach(Utils.deleteRecursively)
@@ -204,10 +204,10 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 private[sql] trait SQLTestUtilsBase
-    extends Eventually
-    with BeforeAndAfterAll
-    with SQLTestData
-    with PlanTestBase { self: Suite =>
+  extends Eventually
+  with BeforeAndAfterAll
+  with SQLTestData
+  with PlanTestBase { self: Suite =>
 
   protected def sparkContext = spark.sparkContext
 
@@ -241,13 +241,12 @@ private[sql] trait SQLTestUtilsBase
     } finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
-      functions.foreach {
-        case (functionName, isTemporary) =>
-          val withTemporary = if (isTemporary) "TEMPORARY" else ""
-          spark.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
-          assert(
-            !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
-            s"Function $functionName should have been dropped. But, it still exists.")
+      functions.foreach { case (functionName, isTemporary) =>
+        val withTemporary = if (isTemporary) "TEMPORARY" else ""
+        spark.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
+        assert(
+          !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
+          s"Function $functionName should have been dropped. But, it still exists.")
       }
     }
   }
@@ -256,12 +255,10 @@ private[sql] trait SQLTestUtilsBase
    * Drops temporary view `viewNames` after calling `f`.
    */
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
-    try f
-    finally {
+    try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp views that never got created.
-      try viewNames.foreach(spark.catalog.dropTempView)
-      catch {
+      try viewNames.foreach(spark.catalog.dropTempView) catch {
         case _: NoSuchTableException =>
       }
     }
@@ -271,12 +268,10 @@ private[sql] trait SQLTestUtilsBase
    * Drops global temporary view `viewNames` after calling `f`.
    */
   protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
-    try f
-    finally {
+    try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // global temp views that never got created.
-      try viewNames.foreach(spark.catalog.dropGlobalTempView)
-      catch {
+      try viewNames.foreach(spark.catalog.dropGlobalTempView) catch {
         case _: NoSuchTableException =>
       }
     }
@@ -286,8 +281,7 @@ private[sql] trait SQLTestUtilsBase
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    try f
-    finally {
+    try f finally {
       tableNames.foreach { name =>
         spark.sql(s"DROP TABLE IF EXISTS $name")
       }
@@ -298,8 +292,7 @@ private[sql] trait SQLTestUtilsBase
    * Drops view `viewName` after calling `f`.
    */
   protected def withView(viewNames: String*)(f: => Unit): Unit = {
-    try f
-    finally {
+    try f finally {
       viewNames.foreach { name =>
         spark.sql(s"DROP VIEW IF EXISTS $name")
       }
@@ -343,13 +336,11 @@ private[sql] trait SQLTestUtilsBase
 
     try {
       spark.sql(s"CREATE DATABASE $dbName")
-    } catch {
-      case cause: Throwable =>
-        fail("Failed to create temporary database", cause)
+    } catch { case cause: Throwable =>
+      fail("Failed to create temporary database", cause)
     }
 
-    try f(dbName)
-    finally {
+    try f(dbName) finally {
       if (spark.catalog.currentDatabase == dbName) {
         spark.sql(s"USE $DEFAULT_DATABASE")
       }
@@ -361,8 +352,7 @@ private[sql] trait SQLTestUtilsBase
    * Drops database `dbName` after calling `f`.
    */
   protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
-    try f
-    finally {
+    try f finally {
       dbNames.foreach { name =>
         spark.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
       }
@@ -391,8 +381,7 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
     spark.sessionState.catalog.setCurrentDatabase(db)
-    try f
-    finally spark.sessionState.catalog.setCurrentDatabase("default")
+    try f finally spark.sessionState.catalog.setCurrentDatabase("default")
   }
 
   /**
@@ -414,6 +403,7 @@ private[sql] trait SQLTestUtilsBase
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     Dataset.ofRows(spark, plan)
   }
+
 
   /**
    * This method is used to make the given path qualified, when a path
@@ -465,10 +455,10 @@ private[sql] object SQLTestUtils {
         s"""
            | == Results ==
            | ${sideBySide(
-             s"== Expected Answer - ${expectedAnswer.size} ==" +:
-               prepareAnswer(expectedAnswer).map(_.toString()),
-             s"== Actual Answer - ${sparkAnswer.size} ==" +:
-               prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
+          s"== Expected Answer - ${expectedAnswer.size} ==" +:
+            prepareAnswer(expectedAnswer).map(_.toString()),
+          s"== Actual Answer - ${sparkAnswer.size} ==" +:
+            prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
       """.stripMargin
       Some(errorMessage)
     } else {
