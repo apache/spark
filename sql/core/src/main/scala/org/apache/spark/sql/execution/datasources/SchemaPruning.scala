@@ -73,11 +73,15 @@ object SchemaPruning extends Rule[LogicalPlan] {
           }).getOrElse(op)
     }
 
+  /**
+   * This method returns optional logical plan. `None` is returned if no nested field is required or
+   * all nested fields are required.
+   */
   private def prunePhysicalColumns(
       output: Seq[AttributeReference],
       projects: Seq[NamedExpression],
       filters: Seq[Expression],
-      orgDataSchema: StructType,
+      dataSchema: StructType,
       leafNodeBuilder: StructType => LeafNode): Option[LogicalPlan] = {
     val (normalizedProjects, normalizedFilters) =
       normalizeAttributeRefNames(output, projects, filters)
@@ -86,7 +90,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op
     if (requestedRootFields.exists { root: RootField => !root.derivedFromAtt }) {
-      val dataSchema = orgDataSchema
       val prunedDataSchema = pruneDataSchema(dataSchema, requestedRootFields)
 
       // If the data schema is different from the pruned data schema, continue. Otherwise,
