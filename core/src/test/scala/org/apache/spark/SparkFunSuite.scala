@@ -113,7 +113,7 @@ abstract class SparkFunSuite
    * returns.
    */
   protected def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir()
+    val dir = Utils.createTempDir(registerShutdownDeleteDir = false)
     try f(dir) finally {
       Utils.deleteRecursively(dir)
     }
