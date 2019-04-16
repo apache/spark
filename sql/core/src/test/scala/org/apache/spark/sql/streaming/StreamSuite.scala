@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
+import java.io.{File, IOException, InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
 
 import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1083,15 +1083,15 @@ class StreamSuite extends StreamTest {
 
   test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
     " to Dataset - use v2 sink") {
-    testCurrentTimestampOnStreamingQuery(useV2Sink = true)
+    testCurrentTimestampOnStreamingQuery()
   }
 
   test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
     " to Dataset - use v1 sink") {
-    testCurrentTimestampOnStreamingQuery(useV2Sink = false)
+    testCurrentTimestampOnStreamingQuery()
   }
 
-  private def testCurrentTimestampOnStreamingQuery(useV2Sink: Boolean): Unit = {
+  private def testCurrentTimestampOnStreamingQuery(): Unit = {
     val input = MemoryStream[Int]
     val df = input.toDS().withColumn("cur_timestamp", lit(current_timestamp()))
 
@@ -1109,7 +1109,7 @@ class StreamSuite extends StreamTest {
 
     var lastTimestamp = System.currentTimeMillis()
     val currentDate = DateTimeUtils.millisToDays(lastTimestamp)
-    testStream(df, useV2Sink = useV2Sink) (
+    testStream(df) (
       AddData(input, 1),
       CheckLastBatch { rows: Seq[Row] =>
         lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 1)
