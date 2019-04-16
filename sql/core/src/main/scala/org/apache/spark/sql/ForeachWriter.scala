@@ -141,8 +141,8 @@ abstract class ForeachWriter[T] extends Serializable {
   def close(errorOrNull: Throwable): Unit
 
   /**
-    * Called when an unexpected error has raised or when the task has been interrupted
-    * should be used in order to release resources such as connections
-    */
+   * Called when an unexpected error has raised or when the task has been interrupted
+   * should be used in order to release resources such as connections
+   */
   def abort(): Unit = {}
 }
