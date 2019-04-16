@@ -492,7 +492,8 @@ object SparkParallelTestGrouping {
       tests.groupBy(test => testNameToTestGroup(test.name)).map { case (groupName, groupTests) =>
         val forkOptions = {
           if (groupName == DEFAULT_TEST_GROUP) {
-            defaultForkOptions
+            defaultForkOptions.copy(runJVMOptions = defaultForkOptions.runJVMOptions ++
+              Seq(s"-Djava.io.tmpdir=${baseDirectory.value}/target/tmp/default"))
           } else {
             defaultForkOptions.copy(runJVMOptions = defaultForkOptions.runJVMOptions ++
               Seq(s"-Djava.io.tmpdir=${baseDirectory.value}/target/tmp/$groupName"))
