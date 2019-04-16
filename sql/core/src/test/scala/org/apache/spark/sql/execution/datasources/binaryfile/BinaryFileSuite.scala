@@ -81,7 +81,7 @@ class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils 
       .select(
         col("status.path"),
         col("status.modificationTime"),
-        col("status.len"),
+        col("status.length"),
         col("content"),
         col("year") // this is a partition column
       )

@@ -25,15 +25,15 @@ import org.apache.spark.sql.types._
  * file data as `DataFrame`.
  *
  * The loaded `DataFrame` has two columns, the schema is:
- *  - status: `StructType` (the file status information)
  *  - content: `BinaryType` (binary data of the file content)
+ *  - status: `StructType` (the file status information)
  *
  * The schema of "status" column described above is:
  *  - path: `StringType` (the file path)
  *  - modificationTime: `TimestampType` (last modification time of the file, on some FS
  *                                       implementation, this might be not available
  *                                       and fallback to some default value.)
- *  - len: `LongType` (the file length)
+ *  - length: `LongType` (the file length)
  *
  * To use binary file data source, you need to set "binaryFile" as the format in `DataFrameReader`
  * and optionally specify the data source options, available options include:
@@ -70,7 +70,7 @@ object BinaryFileDataSource {
   private val fileStatusSchema = StructType(
     StructField("path", StringType, false) ::
     StructField("modificationTime", TimestampType, false) ::
-    StructField("len", LongType, false) :: Nil)
+    StructField("length", LongType, false) :: Nil)
 
   /**
    * The schema of the dataframe returned by binaryFile data source.
