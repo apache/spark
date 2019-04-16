@@ -641,6 +641,23 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  /**
+   * Marks the task has completed in the active TaskSetManager for the given stage.
+   *
+   * After stage failure and retry, there may be multiple TaskSetManagers for the stage.
+   * If an earlier zombie attempt of a stage completes a task, we can ask the later active attempt
+   * to skip submitting and running the task for the same partition, to save resource. That also
+   * means that a task completion from an earlier zombie attempt can lead to the entire stage
+   * getting marked as successful.
+   */
+  private[scheduler] def handlePartitionCompleted(
+      stageId: Int,
+      partitionId: Int) = synchronized {
+    taskSetsByStageIdAndAttempt.get(stageId).foreach(_.values.filter(!_.isZombie).foreach { tsm =>
+      tsm.markPartitionCompleted(partitionId)
+    })
+  }
+
   def error(message: String) {
     synchronized {
       if (taskSetsByStageIdAndAttempt.nonEmpty) {
@@ -871,23 +888,6 @@ private[spark] class TaskSchedulerImpl(
     } yield {
       manager
     }
-  }
-
-  /**
-   * Marks the task has completed in the active TaskSetManager for the given stage.
-   *
-   * After stage failure and retry, there may be multiple TaskSetManagers for the stage.
-   * If an earlier zombie attempt of a stage completes a task, we can ask the later active attempt
-   * to skip submitting and running the task for the same partition, to save resource. That also
-   * means that a task completion from an earlier zombie attempt can lead to the entire stage
-   * getting marked as successful.
-   */
-  private[scheduler] def markPartitionCompleted(
-      stageId: Int,
-      partitionId: Int) = {
-    taskSetsByStageIdAndAttempt.get(stageId).foreach(_.values.filter(!_.isZombie).foreach { tsm =>
-      tsm.markPartitionCompleted(partitionId)
-    })
   }
 }
 

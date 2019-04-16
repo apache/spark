@@ -819,6 +819,10 @@ private[spark] class TaskSetManager(
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
+        if (speculationEnabled && !isZombie) {
+          // The task is skipped, its duration should be 0.
+          successfulTaskDurations.insert(0)
+        }
         tasksSuccessful += 1
         successful(index) = true
         if (tasksSuccessful == numTasks) {
@@ -1035,11 +1039,7 @@ private[spark] class TaskSetManager(
     val minFinishedForSpeculation = (speculationQuantile * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
 
-    // It's possible that a task is marked as completed by the scheduler, then the size of
-    // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
-    // tasks that are submitted by this `TaskSetManager` and are completed successfully.
-    val numSuccessfulTasks = successfulTaskDurations.size()
-    if (numSuccessfulTasks >= minFinishedForSpeculation && numSuccessfulTasks > 0) {
+    if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
       val time = clock.getTimeMillis()
       val medianDuration = successfulTaskDurations.median
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
