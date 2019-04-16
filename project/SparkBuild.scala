@@ -458,14 +458,11 @@ object SparkParallelTestGrouping {
 
   private val testsWhichShouldRunInTheirOwnDedicatedJvm = Set(
     "org.apache.spark.DistributedSuite",
-    "org.apache.spark.ShuffleNettySuite",
     "org.apache.spark.sql.catalyst.expressions.DateExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.HashExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.CastSuite",
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
-    "org.apache.spark.sql.hive.StatisticsSuite",
     "org.apache.spark.sql.hive.execution.HiveCompatibilitySuite",
-    "org.apache.spark.sql.hive.execution.HashAggregationQueryWithControlledFallbackSuite",
     "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
