@@ -33,11 +33,17 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class SQLQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   setupTestData()
+
+  test("remove temp paths") {
+    val dir = System.getProperty("java.io.tmpdir") + "/target/tmp/default"
+    Utils.deleteRecursively(new File(dir))
+  }
 
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
