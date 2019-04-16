@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expres
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -113,7 +114,9 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
-      if (existingProvider != specifiedProvider) {
+      // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
+      // [[FileFormat]], the two providers are considered compatible.
+      if (fallBackV2ToV1(existingProvider) != fallBackV2ToV1(specifiedProvider)) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
           s"`${specifiedProvider.getSimpleName}`.")
@@ -233,6 +236,11 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
+  }
+
+  private def fallBackV2ToV1(cls: Class[_]): Class[_] = cls.newInstance match {
+    case f: FileDataSourceV2 => f.fallbackFileFormat
+    case _ => cls
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
