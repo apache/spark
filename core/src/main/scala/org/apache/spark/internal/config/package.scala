@@ -1303,4 +1303,10 @@ package object config {
     .doc("Staging directory used while submitting applications.")
     .stringConf
     .createOptional
+
+  private[spark] val BUFFER_PAGESIZE = ConfigBuilder("spark.buffer.pageSize")
+    .doc("The amount of memory used per page in bytes")
+    .bytesConf(ByteUnit.BYTE)
+    .createOptional
+
 }
