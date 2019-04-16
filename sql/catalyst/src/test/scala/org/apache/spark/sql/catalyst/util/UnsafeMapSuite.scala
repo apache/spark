@@ -39,7 +39,7 @@ class UnsafeMapSuite extends SparkFunSuite {
     val valueArray = new UnsafeArrayData()
     Platform.putLong(baseObject, offset + 8 + keyArray.getSizeInBytes, 1)
     valueArray.pointTo(baseObject, offset + 8 + keyArray.getSizeInBytes, keyArraySize)
-    valueArray.setLong(0, 19285)
+    valueArray.setLong(0, 19286)
     unsafeMap.pointTo(baseObject, offset, baseObject.length)
     unsafeMap
   }
@@ -49,7 +49,7 @@ class UnsafeMapSuite extends SparkFunSuite {
     val mapDataSer = ser.deserialize[UnsafeMapData](ser.serialize(unsafeMapData))
     assert(mapDataSer.numElements() == 1)
     assert(mapDataSer.keyArray().getInt(0) == 19285)
-    assert(mapDataSer.valueArray().getInt(0) == 19285)
+    assert(mapDataSer.valueArray().getInt(0) == 19286)
     assert(mapDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }
 
@@ -58,7 +58,7 @@ class UnsafeMapSuite extends SparkFunSuite {
     val mapDataSer = ser.deserialize[UnsafeMapData](ser.serialize(unsafeMapData))
     assert(mapDataSer.numElements() == 1)
     assert(mapDataSer.keyArray().getInt(0) == 19285)
-    assert(mapDataSer.valueArray().getInt(0) == 19285)
+    assert(mapDataSer.valueArray().getInt(0) == 19286)
     assert(mapDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }
 }
