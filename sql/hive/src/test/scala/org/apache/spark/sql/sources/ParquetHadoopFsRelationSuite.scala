@@ -21,7 +21,6 @@ import java.io.File
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
-import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils

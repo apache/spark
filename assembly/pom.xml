@@ -31,7 +31,6 @@
   <packaging>pom</packaging>
 
   <properties>
-    <parquet.deps.scope>provided</parquet.deps.scope>
     <sbt.project.name>assembly</sbt.project.name>
     <build.testJarPhase>none</build.testJarPhase>
     <build.copyDependenciesPhase>package</build.copyDependenciesPhase>

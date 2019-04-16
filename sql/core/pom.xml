@@ -99,10 +99,12 @@
     <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-hadoop</artifactId>
+        <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
@@ -214,35 +216,6 @@
                 <source>src/test/gen-java</source>
               </sources>
             </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <shadedArtifactAttached>false</shadedArtifactAttached>
-          <artifactSet>
-            <includes>
-              <include>org.apache.parquet:*</include>
-            </includes>
-          </artifactSet>
-          <relocations>
-            <relocation>
-              <pattern>org.apache.parquet</pattern>
-              <shadedPattern>${spark.shade.packageName}.parquet</shadedPattern>
-              <includes>
-                <include>org.apache.parquet.**</include>
-              </includes>
-            </relocation>
-          </relocations>
-        </configuration>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
           </execution>
         </executions>
       </plugin>

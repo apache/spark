@@ -222,7 +222,6 @@
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <orc.deps.scope>compile</orc.deps.scope>
-    <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
 
     <!--
@@ -1970,13 +1969,13 @@
         <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-column</artifactId>
         <version>${parquet.version}</version>
-        <scope>${parquet.deps.scope}</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-hadoop</artifactId>
         <version>${parquet.version}</version>
-        <scope>${parquet.deps.scope}</scope>
+        <scope>provided</scope>
         <exclusions>
           <exclusion>
             <groupId>commons-pool</groupId>
@@ -2567,6 +2566,12 @@
               <include>org.eclipse.jetty:jetty-security</include>
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
+              <include>org.apache.parquet:parquet-column</include>
+              <include>org.apache.parquet:parquet-common</include>
+              <include>org.apache.parquet:parquet-encoding</include>
+              <include>org.apache.parquet:parquet-hadoop</include>
+              <include>org.apache.parquet:parquet-format</include>
+              <include>org.apache.parquet:parquet-jackson</include>
               <include>com.google.guava:guava</include>
               <include>org.jpmml:*</include>
             </includes>
@@ -2577,6 +2582,13 @@
               <shadedPattern>${spark.shade.packageName}.jetty</shadedPattern>
               <includes>
                 <include>org.eclipse.jetty.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>org.apache.parquet</pattern>
+              <shadedPattern>${spark.shade.packageName}.parquet</shadedPattern>
+              <includes>
+                <include>org.apache.parquet.**</include>
               </includes>
             </relocation>
             <relocation>
