@@ -77,7 +77,7 @@ object BinaryFileDataSource {
    * See doc in `BinaryFileDataSource`
    */
   val binaryFileSchema = StructType(
-    StructField("status", fileStatusSchema, false) ::
-    StructField("content", BinaryType, false) :: Nil)
+    StructField("content", BinaryType, false)::
+    StructField("status", fileStatusSchema, false) :: Nil)
 
 }

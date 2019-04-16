@@ -105,12 +105,12 @@ private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceReg
         val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
         val internalRow = InternalRow(
+          content,
           InternalRow(
             UTF8String.fromString(path),
             DateTimeUtils.fromJavaTimestamp(modificationTime),
             length
-          ),
-          content
+          )
         )
 
         Iterator(requiredColumns(internalRow))
