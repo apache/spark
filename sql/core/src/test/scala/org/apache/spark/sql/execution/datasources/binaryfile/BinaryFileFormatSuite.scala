@@ -31,7 +31,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.util.Utils
 
-class BinaryFileSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   private var testDir: String = _
 

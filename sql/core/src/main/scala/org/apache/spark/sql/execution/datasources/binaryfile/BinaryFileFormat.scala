@@ -27,19 +27,38 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
 
+/**
+ * The binary file data source.
+ *
+ * It reads binary files and converts each file into a single record that contains the raw content
+ * and metadata of the file.
+ *
+ * Example:
+ * {{{
+ *   // Scala
+ *   val df = spark.read.format("binaryFile")
+ *     .option("pathGlobFilter", "*.png")
+ *     .load("/path/to/fileDir")
+ *
+ *   // Java
+ *   Dataset<Row> df = spark.read().format("binaryFile")
+ *     .option("pathGlobFilter", "*.png")
+ *     .load("/path/to/fileDir");
+ * }}}
+ */
 class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = Some(BinaryFileDataSource.binaryFileSchema)
+      files: Seq[FileStatus]): Option[StructType] = Some(BinaryFileFormat.schema)
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -121,13 +140,38 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
   }
 }
 
+object BinaryFileFormat {
+
+  private val fileStatusSchema = StructType(
+    StructField("path", StringType, false) ::
+      StructField("modificationTime", TimestampType, false) ::
+      StructField("length", LongType, false) :: Nil)
+
+  /**
+   * Schema for the binary file data source.
+   *
+   * Schema:
+   *  - content (BinaryType): The content of the file.
+   *  - status (StructType): The status of the file.
+   *    - path (StringType): The path of the file.
+   *    - modificationTime (TimestampType): The modification time of the file.
+   *      In some Hadoop FileSystem implementation, this might be unavailable and fallback to some
+   *      default value.
+   *    - length (LongType): The length of the file in bytes.
+   */
+  val schema = StructType(
+    StructField("content", BinaryType, true) ::
+      StructField("status", fileStatusSchema, false) :: Nil)
+}
+
 class BinaryFileSourceOptions(
     @transient private val parameters: CaseInsensitiveMap[String]) extends Serializable {
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   /**
-   * only include files with path matching the glob pattern.
+   * An optional glob pattern to only include files with paths matching the pattern.
+   * The syntax follows [[org.apache.hadoop.fs.GlobFilter]].
    */
   val pathGlobFilter: Option[String] = parameters.get("pathGlobFilter")
 }
