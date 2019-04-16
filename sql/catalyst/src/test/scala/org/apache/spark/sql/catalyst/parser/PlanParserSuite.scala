@@ -204,9 +204,9 @@ class PlanParserSuite extends AnalysisTest {
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
+        table("s"), None, Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
         InsertIntoTable(
-          table("u"), Map.empty, plan2, false, ifPartitionNotExists = false)))
+          table("u"), None, Map.empty, plan2, false, ifPartitionNotExists = false)))
   }
 
   test("insert into and choose inserted columns") {
@@ -219,12 +219,12 @@ class PlanParserSuite extends AnalysisTest {
     val queryPlan3 = table("t").select('A2)
     val queryPlan4 = table("t").select('A2, 'B2)
     def insert(
-        insertCols: Option[Seq[String]],
+        insertedCols: Option[Seq[String]],
         partition: Map[String, Option[String]],
         query: LogicalPlan,
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), insertCols, partition, query, overwrite, ifPartitionNotExists)
+      InsertIntoTable(table("s"), insertedCols, partition, query, overwrite, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert into s(a1) $sql1",
@@ -667,7 +667,7 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(
         "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t"),
-      InsertIntoTable(table("s"), Map.empty,
+      InsertIntoTable(table("s"), None, Map.empty,
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           UnresolvedHint("COALESCE", Seq(Literal(500)),
             UnresolvedHint("COALESCE", Seq(Literal(10)),
