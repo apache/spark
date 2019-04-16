@@ -210,28 +210,53 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("insert into and choose inserted columns") {
-    val sql = "select a2, b2 from t"
-    val plan = table("t").select('a2, 'b2)
+    val sql1 = "select a2 from t"
+    val sql2 = "select a2, b2 from t"
+    val sql3 = "select A2 from t"
+    val sql4 = "select A2, B2 from t"
+    val queryPlan1 = table("t").select('a2)
+    val queryPlan2 = table("t").select('a2, 'b2)
+    val queryPlan3 = table("t").select('A2)
+    val queryPlan4 = table("t").select('A2, 'B2)
     def insert(
         insertCols: Option[Seq[String]],
         partition: Map[String, Option[String]],
+        query: LogicalPlan,
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), insertCols, partition, plan, overwrite, ifPartitionNotExists)
+      InsertIntoTable(table("s"), insertCols, partition, query, overwrite, ifPartitionNotExists)
 
     // Single inserts
-    assertEqual(s"insert into s(a1, b1) $sql",
-      insert(Option(Seq("a1", "b1")), Map.empty))
-    assertEqual(s"insert into table s(a1, b1) partition (c = 'd', e = 1) $sql",
-      insert(Option(Seq("a1", "b1")), Map("c" -> Option("d"), "e" -> Option("1"))))
+    assertEqual(s"insert into s(a1) $sql1",
+      insert(Option(Seq("a1")), Map.empty, queryPlan1))
+    assertEqual(s"insert into table s(a1) partition (c = 'd', e = 1) $sql1",
+      insert(Option(Seq("a1")), Map("c" -> Option("d"), "e" -> Option("1")), queryPlan1))
+    assertEqual(s"insert into s(a1, b1) $sql2",
+      insert(Option(Seq("a1", "b1")), Map.empty, queryPlan2))
+    assertEqual(s"insert into table s(a1, b1) partition (c = 'd', e = 1) $sql2",
+      insert(Option(Seq("a1", "b1")), Map("c" -> Option("d"), "e" -> Option("1")), queryPlan2))
+    assertEqual(s"insert into s(A1) $sql3",
+      insert(Option(Seq("A1")), Map.empty, queryPlan3))
+    assertEqual(s"insert into table s(A1) partition (c = 'd', e = 1) $sql3",
+      insert(Option(Seq("A1")), Map("c" -> Option("d"), "e" -> Option("1")), queryPlan3))
+    assertEqual(s"insert into s(A1, B1) $sql4",
+      insert(Option(Seq("A1", "B1")), Map.empty, queryPlan4))
+    assertEqual(s"insert into table s(A1, B1) partition (c = 'd', e = 1) $sql4",
+      insert(Option(Seq("A1", "B1")), Map("c" -> Option("d"), "e" -> Option("1")), queryPlan4))
 
     // Multi insert
-    val plan2 = table("t").where('x > 5).select('a4, 'b4)
+    val multiQueryPlan1 = table("t").where('x > 5).select('a4, 'b4)
     assertEqual("from t insert into s(a1, b1) select a2, b2 limit 1 insert into u(a3, b3) select a4, b4 where x > 5",
       InsertIntoTable(
-        table("s"), Option(Seq("a1", "b1")), Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
+        table("s"), Option(Seq("a1", "b1")), Map.empty, queryPlan2.limit(1), false, ifPartitionNotExists = false).union(
         InsertIntoTable(
-          table("u"), Option(Seq("a3", "b3")), Map.empty, plan2, false, ifPartitionNotExists = false)))
+          table("u"), Option(Seq("a3", "b3")), Map.empty, multiQueryPlan1, false, ifPartitionNotExists = false)))
+    val multiQueryPlan2 = table("t").where('x > 5).select('A4, 'B4)
+    assertEqual("from t insert into s(A1, B1) select A2, B2 limit 1 insert into u(A3, B3) select A4, B4 where x > 5",
+      InsertIntoTable(
+        table("s"), Option(Seq("A1", "B1")), Map.empty, queryPlan4.limit(1), false, ifPartitionNotExists = false).union(
+        InsertIntoTable(
+          table("u"), Option(Seq("A3", "B3")), Map.empty, multiQueryPlan2, false, ifPartitionNotExists = false)))
   }
 
   test ("insert with if not exists") {
