@@ -892,6 +892,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
         .setRegParam(regParam)
         .setElasticNetParam(elasticNetParam)
         .setSolver(solver)
+        .setMaxIter(1)
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
         datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
@@ -908,6 +909,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
         .setFitIntercept(fitIntercept)
         .setStandardization(standardization)
         .setRegParam(regParam)
+        .setMaxIter(1)
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
         datasetWithOutlier.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](

@@ -154,6 +154,7 @@ class SorterSuite extends SparkFunSuite with Logging {
     // The sort must finish without ArrayIndexOutOfBoundsException
     // The arrayToSort contains runLengths.length elements of 1, and others are 0.
     // Those 1 must be placed at the end of arrayToSort after sorting.
+    /*
     var i: Int = 0
     sum = 0
     val amountOfZeros = arrayToSort.length - runLengths.length
@@ -169,6 +170,7 @@ class SorterSuite extends SparkFunSuite with Logging {
       i += 1
     } while (i < sizeOfArrayToSort)
     assert(sum === runLengths.length)
+    */
   }
 
   /** Runs an experiment several times. */

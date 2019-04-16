@@ -42,16 +42,14 @@ object CommandUtils extends Logging {
 
   /** Change statistics after changing data by commands. */
   def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
-    if (table.stats.nonEmpty) {
-      val catalog = sparkSession.sessionState.catalog
-      if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-        val newTable = catalog.getTableMetadata(table.identifier)
-        val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
-        val newStats = CatalogStatistics(sizeInBytes = newSize)
-        catalog.alterTableStats(table.identifier, Some(newStats))
-      } else {
-        catalog.alterTableStats(table.identifier, None)
-      }
+    val catalog = sparkSession.sessionState.catalog
+    if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+      val newTable = catalog.getTableMetadata(table.identifier)
+      val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
+      val newStats = CatalogStatistics(sizeInBytes = newSize)
+      catalog.alterTableStats(table.identifier, Some(newStats))
+    } else if (table.stats.nonEmpty) {
+      catalog.alterTableStats(table.identifier, None)
     }
   }
 

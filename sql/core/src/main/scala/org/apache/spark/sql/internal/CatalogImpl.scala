@@ -23,7 +23,11 @@ import scala.util.control.NonFatal
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{
+  DefinedByConstructorParams,
+  FunctionIdentifier,
+  TableIdentifier
+}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -31,7 +35,6 @@ import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
-
 
 /**
  * Internal implementation of the user-facing `Catalog`.
@@ -139,8 +142,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
     requireDatabaseExists(dbName)
-    val functions = sessionCatalog.listFunctions(dbName).map { case (functIdent, _) =>
-      makeFunction(functIdent)
+    val functions = sessionCatalog.listFunctions(dbName).map {
+      case (functIdent, _) =>
+        makeFunction(functIdent)
     }
     CatalogImpl.makeDataset(functions, sparkSession)
   }
@@ -347,8 +351,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableType = tableType,
       storage = storage,
       schema = schema,
-      provider = Some(source)
-    )
+      provider = Some(source))
     val plan = CreateTable(tableDesc, SaveMode.ErrorIfExists, None)
     sparkSession.sessionState.executePlan(plan).toRdd
     sparkSession.table(tableIdent)
@@ -364,8 +367,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false)
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, viewDef, cascade = false)
       sessionCatalog.dropTempView(viewName)
     }
   }
@@ -380,8 +382,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false)
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, viewDef, cascade = false)
       sessionCatalog.dropGlobalTempView(viewName)
     }
   }
@@ -398,8 +399,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def recoverPartitions(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    sparkSession.sessionState.executePlan(
-      AlterTableRecoverPartitionsCommand(tableIdent)).toRdd
+    sparkSession.sessionState.executePlan(AlterTableRecoverPartitionsCommand(tableIdent)).toRdd
   }
 
   /**
@@ -419,7 +419,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def cacheTable(tableName: String): Unit = {
-    sparkSession.sharedState.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
+    sparkSession.sharedState.cacheManager
+      .cacheQuery(sparkSession.table(tableName), Some(tableName))
   }
 
   /**
@@ -429,8 +430,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.3.0
    */
   override def cacheTable(tableName: String, storageLevel: StorageLevel): Unit = {
-    sparkSession.sharedState.cacheManager.cacheQuery(
-      sparkSession.table(tableName), Some(tableName), storageLevel)
+    sparkSession.sharedState.cacheManager
+      .cacheQuery(sparkSession.table(tableName), Some(tableName), storageLevel)
   }
 
   /**
@@ -518,7 +519,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     sparkSession.sharedState.cacheManager.recacheByPath(sparkSession, resourcePath)
   }
 }
-
 
 private[sql] object CatalogImpl {
 
