@@ -968,6 +968,74 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("append a table with file source V2 provider using the v1 file format") {
+    def createDF(from: Int, to: Int): DataFrame = {
+      (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
+    }
+
+    withTable("appendCSV") {
+      createDF(0, 9)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2")
+        .saveAsTable("appendCSV")
+      createDF(10, 19)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
+        .saveAsTable("appendCSV")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+
+    withTable("appendCSV") {
+      createDF(0, 9).write.mode(SaveMode.Append).format("csv").saveAsTable("appendCSV")
+      createDF(10, 19)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
+        .saveAsTable("appendCSV")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+  }
+
+  test("append a table with v1 file format provider using file source V2 format") {
+    def createDF(from: Int, to: Int): DataFrame = {
+      (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
+    }
+
+    withTable("appendCSV") {
+      createDF(0, 9)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
+        .saveAsTable("appendCSV")
+      createDF(10, 19)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2")
+        .saveAsTable("appendCSV")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+
+    withTable("appendCSV") {
+      createDF(0, 9)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
+        .saveAsTable("appendCSV")
+      createDF(10, 19).write.mode(SaveMode.Append).format("csv").saveAsTable("appendCSV")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+  }
+
   test("SPARK-8156:create table to specific database by 'use dbname' ") {
 
     val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
