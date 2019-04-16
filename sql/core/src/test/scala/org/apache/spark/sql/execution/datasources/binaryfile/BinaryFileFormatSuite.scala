@@ -79,9 +79,9 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       .option("pathGlobFilter", pathGlobFilter)
       .load(testDir)
       .select(
-        col("status.path"),
-        col("status.modificationTime"),
-        col("status.length"),
+        col("path"),
+        col("modificationTime"),
+        col("length"),
         col("content"),
         col("year") // this is a partition column
       )
@@ -138,6 +138,37 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       }
       assert(thrown.getMessage.contains("Write is not supported for binary file data source"))
     }
+  }
+
+
+  test("filter") {
+    println("filter version: 6")
+    /*
+    val resultDF = spark.read.format("binaryFile")
+      .load(testDir)
+      .select(
+        col("status.path"),
+        col("status.modificationTime"),
+        col("status.length"),
+        col("content"),
+        col("year") // this is a partition column
+      ).filter(col("length") < 30000L
+              && col("modificationTime") <= new Timestamp(12345678L))
+    */
+
+    val resultDF = spark.read.format("binaryFile")
+      .load(testDir)
+      .filter(col("length") < 30000L
+              && col("modificationTime") <= new Timestamp(12345678L))
+
+
+    /*
+    val resultDF = spark.read.format("binaryFile")
+      .load(testDir)
+      .filter(col("content").isNotNull)
+      */
+    resultDF.collect()
+
   }
 
 }

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
+import java.sql.Timestamp
+
+import scala.collection.mutable
+
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, GlobFilter, Path}
@@ -28,7 +32,8 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
+import org.apache.spark.sql.sources.{And, DataSourceRegister, Filter, GreaterThan, GreaterThanOrEqual,
+  LessThan, LessThanOrEqual}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
@@ -93,6 +98,68 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
     val pathGlobPattern = binaryFileSourceOptions.pathGlobFilter
 
+    val modificationTimeFilters = new mutable.ListBuffer[Long => Boolean]
+    val lengthFilters = new mutable.ListBuffer[Long => Boolean]
+
+    def parseFilter(filter: Filter): Unit = {
+      filter match {
+        case andFilter: And =>
+          parseFilter(andFilter.left)
+          parseFilter(andFilter.right)
+        case lessThan: LessThan =>
+          if (lessThan.attribute == "length"
+            && lessThan.value.isInstanceOf[Long]) {
+            lengthFilters.append(
+              (x: Long) => x < lessThan.value.asInstanceOf[Long]
+            )
+          } else if (lessThan.attribute == "modificationTime"
+            && lessThan.value.isInstanceOf[Timestamp]) {
+            modificationTimeFilters.append(
+              (x: Long) => x < lessThan.value.asInstanceOf[Timestamp].getTime
+            )
+          }
+        case lessThanOrEq: LessThanOrEqual =>
+          if (lessThanOrEq.attribute == "length"
+            && lessThanOrEq.value.isInstanceOf[Long]) {
+            lengthFilters.append(
+              (x: Long) => x <= lessThanOrEq.value.asInstanceOf[Long]
+            )
+          } else if (lessThanOrEq.attribute == "modificationTime"
+            && lessThanOrEq.value.isInstanceOf[Timestamp]) {
+            modificationTimeFilters.append(
+              (x: Long) => x <= lessThanOrEq.value.asInstanceOf[Timestamp].getTime
+            )
+          }
+        case greaterThan: GreaterThan =>
+          if (greaterThan.attribute == "length"
+            && greaterThan.value.isInstanceOf[Long]) {
+            lengthFilters.append(
+              (x: Long) => x > greaterThan.value.asInstanceOf[Long]
+            )
+          } else if (greaterThan.attribute == "modificationTime"
+            && greaterThan.value.isInstanceOf[Timestamp]) {
+            modificationTimeFilters.append(
+              (x: Long) => x > greaterThan.value.asInstanceOf[Timestamp].getTime
+            )
+          }
+        case greaterThanOrEq: GreaterThanOrEqual =>
+          if (greaterThanOrEq.attribute == "length"
+            && greaterThanOrEq.value.isInstanceOf[Long]) {
+            lengthFilters.append(
+              (x: Long) => x >= greaterThanOrEq.value.asInstanceOf[Long]
+            )
+          } else if (greaterThanOrEq.attribute == "modificationTime"
+            && greaterThanOrEq.value.isInstanceOf[Timestamp]) {
+            modificationTimeFilters.append(
+              (x: Long) => x >= greaterThanOrEq.value.asInstanceOf[Timestamp].getTime
+            )
+          }
+        case _ => () // Do nothing
+      }
+    }
+
+    filters.foreach(parseFilter(_))
+
     (file: PartitionedFile) => {
       val path = file.filePath
       val fsPath = new Path(path)
@@ -104,35 +171,43 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
         val fileStatus = fs.getFileStatus(fsPath)
         val length = fileStatus.getLen()
         val modificationTime = fileStatus.getModificationTime()
-        val stream = fs.open(fsPath)
 
-        val content = try {
-          ByteStreams.toByteArray(stream)
-        } finally {
-          Closeables.close(stream, true)
-        }
+        if (
+          (modificationTimeFilters.size == 0
+            || modificationTimeFilters.map(_.apply(modificationTime)).reduce(_ && _))
+          &&
+            (lengthFilters.size == 0
+              || lengthFilters.map(_.apply(length)).reduce(_ && _))
+        ) {
+          val stream = fs.open(fsPath)
+          val content = try {
+            ByteStreams.toByteArray(stream)
+          } finally {
+            Closeables.close(stream, true)
+          }
 
-        val fullOutput = dataSchema.map { f =>
-          AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
-        }
-        val requiredOutput = fullOutput.filter { a =>
-          requiredSchema.fieldNames.contains(a.name)
-        }
+          val fullOutput = dataSchema.map { f =>
+            AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
+          }
+          val requiredOutput = fullOutput.filter { a =>
+            requiredSchema.fieldNames.contains(a.name)
+          }
 
-        // TODO: Add column pruning
-        // currently it still read the file content even if content column is not required.
-        val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
+          // TODO: Add column pruning
+          // currently it still read the file content even if content column is not required.
+          val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
-        val internalRow = InternalRow(
-          content,
-          InternalRow(
+          val internalRow = InternalRow(
             UTF8String.fromString(path),
             DateTimeUtils.fromMillis(modificationTime),
-            length
+            length,
+            content
           )
-        )
 
-        Iterator(requiredColumns(internalRow))
+          Iterator(requiredColumns(internalRow))
+        } else {
+          Iterator.empty
+        }
       } else {
         Iterator.empty
       }
@@ -160,8 +235,10 @@ object BinaryFileFormat {
    *    - length (LongType): The length of the file in bytes.
    */
   val schema = StructType(
-    StructField("content", BinaryType, true) ::
-      StructField("status", fileStatusSchema, false) :: Nil)
+    StructField("path", StringType, false) ::
+    StructField("modificationTime", TimestampType, false) ::
+    StructField("length", LongType, false) ::
+    StructField("content", BinaryType, true) :: Nil)
 }
 
 class BinaryFileSourceOptions(
