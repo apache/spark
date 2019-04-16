@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
-import java.sql.Timestamp
-
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, GlobFilter, Path}
@@ -36,7 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
 
-private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceRegister {
+class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
   override def inferSchema(
       sparkSession: SparkSession,
@@ -86,7 +84,7 @@ private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceReg
         val fs = fsPath.getFileSystem(broadcastedHadoopConf.value.value)
         val fileStatus = fs.getFileStatus(fsPath)
         val length = fileStatus.getLen()
-        val modificationTime = new Timestamp(fileStatus.getModificationTime())
+        val modificationTime = fileStatus.getModificationTime()
         val stream = fs.open(fsPath)
 
         val content = try {
@@ -102,13 +100,15 @@ private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceReg
           requiredSchema.fieldNames.contains(a.name)
         }
 
+        // TODO: Add column pruning
+        // currently it still read the file content even if content column is not required.
         val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
         val internalRow = InternalRow(
           content,
           InternalRow(
             UTF8String.fromString(path),
-            DateTimeUtils.fromJavaTimestamp(modificationTime),
+            DateTimeUtils.fromMillis(modificationTime),
             length
           )
         )
@@ -121,7 +121,7 @@ private[binaryfile] class BinaryFileFormat extends FileFormat with DataSourceReg
   }
 }
 
-private[binaryfile] class BinaryFileSourceOptions(
+class BinaryFileSourceOptions(
     @transient private val parameters: CaseInsensitiveMap[String]) extends Serializable {
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
@@ -129,8 +129,5 @@ private[binaryfile] class BinaryFileSourceOptions(
   /**
    * only include files with path matching the glob pattern.
    */
-  val pathGlobFilter: Option[String] = {
-    val filter = parameters.getOrElse("pathGlobFilter", null)
-    if (filter != null) Some(filter) else None
-  }
+  val pathGlobFilter: Option[String] = parameters.get("pathGlobFilter")
 }

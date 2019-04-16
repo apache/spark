@@ -48,12 +48,12 @@ import org.apache.spark.sql.types._
  * {{{
  *   // Scala
  *   val df = spark.read.format("binaryFile")
- *     .option("pathGlobFilter", "*.txt")
+ *     .option("pathGlobFilter", "*.png")
  *     .load("path/to/fileDir")
  *
  *   // Java
  *   Dataset<Row> df = spark.read().format("binaryFile")
- *     .option("pathGlobFilter", "*.txt")
+ *     .option("pathGlobFilter", "*.png")
  *     .load("path/to/fileDir");
  * }}}
  *
@@ -77,7 +77,7 @@ object BinaryFileDataSource {
    * See doc in `BinaryFileDataSource`
    */
   val binaryFileSchema = StructType(
-    StructField("content", BinaryType, false)::
+    StructField("content", BinaryType, true) ::
     StructField("status", fileStatusSchema, false) :: Nil)
 
 }
