@@ -770,13 +770,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val parquetDF = spark.read.parquet(parquetDir)
       assert(parquetDF.inputFiles.nonEmpty)
 
-      val jsonDir = new File(dir, "json").getCanonicalPath
-      df.write.json(jsonDir)
-      val jsonDF = spark.read.json(jsonDir)
-      assert(parquetDF.inputFiles.nonEmpty)
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      df.write.json(csvDir)
+      val csvDF = spark.read.json(csvDir)
+      assert(csvDF.inputFiles.nonEmpty)
 
-      val unioned = jsonDF.union(parquetDF).inputFiles.sorted
-      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
+      val unioned = csvDF.union(parquetDF).inputFiles.sorted
+      val allFiles = (csvDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
       assert(unioned === allFiles)
     }
   }
