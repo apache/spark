@@ -80,7 +80,7 @@ object SparkPlanGraph {
     planInfo.nodeName match {
       case "WholeStageCodegen" =>
         val metrics = planInfo.metrics.map { metric =>
-          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
+          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType, metric.stats)
         }
 
         val cluster = new SparkPlanGraphCluster(
@@ -114,7 +114,7 @@ object SparkPlanGraph {
         edges += SparkPlanGraphEdge(node.id, parent.id)
       case name =>
         val metrics = planInfo.metrics.map { metric =>
-          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
+          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType, metric.stats)
         }
         val node = new SparkPlanGraphNode(
           nodeIdGenerator.getAndIncrement(), planInfo.nodeName,

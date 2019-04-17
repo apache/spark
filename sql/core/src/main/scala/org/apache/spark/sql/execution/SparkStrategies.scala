@@ -241,7 +241,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               buildSide,
               condition,
               planLater(left),
-              planLater(right)))
+              planLater(right),
+              Option(plan.stats)))
           }
         }
 

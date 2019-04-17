@@ -15,17 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.metric
+package org.apache.spark.sql.execution.statsEstimation
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
- * :: DeveloperApi ::
- * Stores information about a SQL Metric.
+ * A trait to add statistics propagation to [[SparkPlan]].
  */
-@DeveloperApi
-class SQLMetricInfo(
-    val name: String,
-    val accumulatorId: Long,
-    val metricType: String,
-    val stats: Long = -1)
+trait SparkPlanStats { self: SparkPlan =>
+
+  def stats: Option[Statistics] = None
+
+  def rowCountStats: BigInt = {
+    if (stats.isDefined && stats.get.rowCount.isDefined) {
+      stats.get.rowCount.get
+    } else {
+      -1
+    }
+  }
+}

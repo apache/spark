@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
@@ -36,15 +35,16 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredic
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.statsEstimation.SparkPlanStats
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.ThreadUtils
 
 /**
  * The base class for physical operators.
  *
  * The naming convention is that physical operators end with "Exec" suffix, e.g. [[ProjectExec]].
  */
-abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
+abstract class SparkPlan extends QueryPlan[SparkPlan] with SparkPlanStats with Logging
+  with Serializable {
 
   /**
    * A handle to the SQL Context that was used to create this plan. Since many operators need

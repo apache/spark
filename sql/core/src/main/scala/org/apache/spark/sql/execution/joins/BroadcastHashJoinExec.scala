@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -43,11 +44,14 @@ case class BroadcastHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan,
+    override val stats: Option[Statistics] = None)
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  override lazy val metrics = {
+    Map("numOutputRows" ->
+      SQLMetrics.createMetric(sparkContext, "number of output rows", this.rowCountStats.toLong))
+  }
 
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = HashedRelationBroadcastMode(buildKeys)

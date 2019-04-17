@@ -33,7 +33,8 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
  * the executor side are automatically propagated and shown in the SQL UI through metrics. Updates
  * on the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
  */
-class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+class SQLMetric(val metricType: String, initValue: Long = 0L, val stats: Long = -1L) extends
+  AccumulatorV2[Long, Long] {
   // This is a workaround for SPARK-11013.
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1
@@ -42,7 +43,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   private var _zeroValue = initValue
 
   override def copy(): SQLMetric = {
-    val newAcc = new SQLMetric(metricType, _value)
+    val newAcc = new SQLMetric(metricType, _value, stats)
     newAcc._zeroValue = initValue
     newAcc
   }
@@ -96,8 +97,8 @@ object SQLMetrics {
     metric.set((v * baseForAvgMetric).toLong)
   }
 
-  def createMetric(sc: SparkContext, name: String): SQLMetric = {
-    val acc = new SQLMetric(SUM_METRIC)
+  def createMetric(sc: SparkContext, name: String, stats: Long = -1): SQLMetric = {
+    val acc = new SQLMetric(SUM_METRIC, stats = stats)
     acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
@@ -190,6 +191,14 @@ object SQLMetrics {
         metric.map(strFormat)
       }
       s"\n$sum ($min, $med, $max)"
+    }
+  }
+
+  def stringStats(value: Long): String = {
+    if (value < 0) {
+      ""
+    } else {
+      s" est: ${stringValue(SUM_METRIC, Seq(value))}"
     }
   }
 

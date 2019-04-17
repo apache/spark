@@ -1416,4 +1416,25 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assert(catalogStats.rowCount.isEmpty)
     }
   }
+
+  test("statistics for broadcastHashJoin numOutputRows statistic") {
+    withTempView("t1", "t2") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+        sql("CREATE TABLE t1 (key INT, a2 STRING, a3 DOUBLE)")
+        sql("INSERT INTO TABLE t1 SELECT 1, 'a', 10.0")
+        sql("INSERT INTO TABLE t1 SELECT 1, 'b', null")
+        sql("ANALYZE TABLE t1 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        sql("CREATE TABLE t2 (key INT, b2 STRING, b3 DOUBLE)")
+        sql("INSERT INTO TABLE t2 SELECT 1, 'a', 10.0")
+        sql("ANALYZE TABLE t2 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        val df = sql("SELECT * FROM t1 JOIN t2 ON t1.key = t2.key")
+        assert(df.queryExecution.sparkPlan.isInstanceOf[BroadcastHashJoinExec])
+        assert(df.queryExecution.sparkPlan.rowCountStats == 2)
+      }
+    }
+  }
 }

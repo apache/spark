@@ -142,4 +142,5 @@ class SparkPlanGraphNodeWrapper(
 case class SQLPlanMetric(
     name: String,
     accumulatorId: Long,
-    metricType: String)
+    metricType: String,
+    stats : Long = -1)
