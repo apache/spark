@@ -295,10 +295,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val answer = hiveResultString(df.queryExecution.executedPlan)
         .map(_.replaceAll("#\\d+", "#x")
         .replaceAll(
-          // scalastyle:off
-          "Location.*/sql/core/spark-warehouse/(SQLQueryTestSuite/)?",
+          "Location.*/sql/core/spark-warehouse/SQLQueryTestSuite/",
           s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
-        // scalastyle:on
         .replaceAll("Created By.*", s"Created By $notIncludedMsg")
         .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
         .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
