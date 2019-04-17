@@ -522,7 +522,7 @@ def main():
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         # TODO(sknapp):  s/-new// before merging
-        os.environ["PATH"] = "/home/anaconda/envs/py36-new/bin:" + os.environ.get("PATH")
+        os.environ["PATH"] = "/home/anaconda/envs/py3k-new/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
