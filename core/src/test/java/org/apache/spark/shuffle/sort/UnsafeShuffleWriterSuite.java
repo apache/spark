@@ -19,8 +19,11 @@ package org.apache.spark.shuffle.sort;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.util.*;
 
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents;
+import org.mockito.stubbing.Answer;
 import scala.Option;
 import scala.Product2;
 import scala.Tuple2;
@@ -39,6 +42,7 @@ import org.apache.spark.HashPartitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
+import org.apache.spark.TaskContext$;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.io.CompressionCodec$;
@@ -65,6 +69,7 @@ import static org.mockito.Mockito.*;
 
 public class UnsafeShuffleWriterSuite {
 
+  static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
   static final int NUM_PARTITITONS = 4;
   TestMemoryManager memoryManager;
   TaskMemoryManager taskMemoryManager;
@@ -85,6 +90,7 @@ public class UnsafeShuffleWriterSuite {
 
   @After
   public void tearDown() {
+    TaskContext$.MODULE$.unset();
     Utils.deleteRecursively(tempDir);
     final long leakedMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
     if (leakedMemory != 0) {
@@ -132,14 +138,28 @@ public class UnsafeShuffleWriterSuite {
       });
 
     when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
-    doAnswer(invocationOnMock -> {
+
+    Answer renameTempAnswer = invocationOnMock -> {
       partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
       File tmp = (File) invocationOnMock.getArguments()[3];
-      mergedOutputFile.delete();
-      tmp.renameTo(mergedOutputFile);
+      if (!mergedOutputFile.delete()) {
+        throw new RuntimeException("Failed to delete old merged output file.");
+      }
+      if (tmp != null) {
+        Files.move(tmp.toPath(), mergedOutputFile.toPath());
+      } else if (!mergedOutputFile.createNewFile()) {
+        throw new RuntimeException("Failed to create empty merged output file.");
+      }
       return null;
-    }).when(shuffleBlockResolver)
-      .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), any(File.class));
+    };
+
+    doAnswer(renameTempAnswer)
+        .when(shuffleBlockResolver)
+        .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), any(File.class));
+
+    doAnswer(renameTempAnswer)
+        .when(shuffleBlockResolver)
+        .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), eq(null));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
@@ -151,21 +171,22 @@ public class UnsafeShuffleWriterSuite {
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
     when(shuffleDep.serializer()).thenReturn(serializer);
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
+    when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
+
+    TaskContext$.MODULE$.setTaskContext(taskContext);
   }
 
-  private UnsafeShuffleWriter<Object, Object> createWriter(
-      boolean transferToEnabled) throws IOException {
+  private UnsafeShuffleWriter createWriter(boolean transferToEnabled) {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
-    return new UnsafeShuffleWriter<>(
+    return new UnsafeShuffleWriter(
       blockManager,
-      shuffleBlockResolver,
-      taskMemoryManager,
+        taskMemoryManager,
       new SerializedShuffleHandle<>(0, 1, shuffleDep),
       0, // map id
       taskContext,
       conf,
-      taskContext.taskMetrics().shuffleWriteMetrics()
-    );
+      taskContext.taskMetrics().shuffleWriteMetrics(),
+      new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
   }
 
   private void assertSpillFilesWereCleanedUp() {
@@ -444,10 +465,10 @@ public class UnsafeShuffleWriterSuite {
   }
 
   private void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
-    memoryManager.limit(UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE * 16);
+    memoryManager.limit(DEFAULT_INITIAL_SORT_BUFFER_SIZE * 16);
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
-    for (int i = 0; i < UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE + 1; i++) {
+    for (int i = 0; i < DEFAULT_INITIAL_SORT_BUFFER_SIZE + 1; i++) {
       dataToWrite.add(new Tuple2<>(i, i));
     }
     writer.write(dataToWrite.iterator());
@@ -516,16 +537,15 @@ public class UnsafeShuffleWriterSuite {
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
     taskMemoryManager = spy(taskMemoryManager);
     when(taskMemoryManager.pageSizeBytes()).thenReturn(pageSizeBytes);
-    final UnsafeShuffleWriter<Object, Object> writer =
-      new UnsafeShuffleWriter<>(
+    final UnsafeShuffleWriter writer = new UnsafeShuffleWriter(
         blockManager,
-        shuffleBlockResolver,
         taskMemoryManager,
         new SerializedShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,
         conf,
-        taskContext.taskMetrics().shuffleWriteMetrics());
+        taskContext.taskMetrics().shuffleWriteMetrics(),
+        new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.
