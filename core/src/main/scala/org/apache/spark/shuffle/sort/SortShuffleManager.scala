@@ -146,7 +146,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           mapId,
           context,
           env.conf,
-          metrics)
+          metrics,
+          shuffleExecutorComponents.writes())
       case bypassMergeSortHandle: BypassMergeSortShuffleHandle[K @unchecked, V @unchecked] =>
         new BypassMergeSortShuffleWriter(
           env.blockManager,
