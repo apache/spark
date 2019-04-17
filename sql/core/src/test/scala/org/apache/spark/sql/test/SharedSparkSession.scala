@@ -48,7 +48,7 @@ trait SharedSparkSession
       .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
     conf.set(
       StaticSQLConf.WAREHOUSE_PATH,
-      conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass().getSimpleName)
+      conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
   }
 
   /**
