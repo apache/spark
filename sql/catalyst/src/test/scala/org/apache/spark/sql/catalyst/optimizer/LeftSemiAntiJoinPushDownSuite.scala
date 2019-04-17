@@ -316,21 +316,23 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
-    Seq(Inner, LeftOuter, Cross, RightOuter).foreach { case innerJT =>
-      test(s"$outerJT pushdown with empty join condition join type $innerJT") {
-        val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, None)
-        val originalQuery = joinedRelation.join(testRelation, joinType = outerJT, None)
-        val optimized = Optimize.execute(originalQuery.analyze)
+  Seq(Some('d === 'e), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, LeftOuter, Cross, RightOuter).foreach { case innerJT =>
+        test(s"$outerJT pushdown empty join cond join type $innerJT join cond $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery = joinedRelation.join(testRelation, joinType = outerJT, None)
+          val optimized = Optimize.execute(originalQuery.analyze)
 
-        val correctAnswer = if (innerJT == RightOuter) {
-          val pushedDownJoin = testRelation2.join(testRelation, joinType = outerJT, None)
-          testRelation1.join(pushedDownJoin, joinType = innerJT, None)
-        } else {
-          val pushedDownJoin = testRelation1.join(testRelation, joinType = outerJT, None)
-          pushedDownJoin.join(testRelation2, joinType = innerJT, None)
+          val correctAnswer = if (innerJT == RightOuter) {
+            val pushedDownJoin = testRelation2.join(testRelation, joinType = outerJT, None)
+            testRelation1.join(pushedDownJoin, joinType = innerJT, innerJoinCond).analyze
+          } else {
+            val pushedDownJoin = testRelation1.join(testRelation, joinType = outerJT, None)
+            pushedDownJoin.join(testRelation2, joinType = innerJT, innerJoinCond).analyze
+          }
+          comparePlans(optimized, correctAnswer)
         }
-        comparePlans(optimized, correctAnswer)
       }
     }
   }

@@ -202,7 +202,6 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
     val rightOutput = rightChild.outputSet
 
     if (joinCond.nonEmpty) {
-      val noPushdown = PushdownDirection.NONE
       val conditions = splitConjunctivePredicates(joinCond.get)
       val (leftConditions, rest) =
         conditions.partition(_.references.subsetOf(left.outputSet ++ rightOutput))
@@ -212,13 +211,13 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
       if (rest.isEmpty && leftConditions.nonEmpty) {
         // When the join conditions can be computed based on the left leg of
         // leftsemi/anti join then push the leftsemi/anti join to the left side.
-        (PushdownDirection.TO_LEFT_BRANCH)
+        PushdownDirection.TO_LEFT_BRANCH
       } else if (leftConditions.isEmpty && rightConditions.nonEmpty && commonConditions.isEmpty) {
         // When the join conditions can be computed based on the attributes from right leg of
         // leftsemi/anti join then push the leftsemi/anti join to the right side.
-        (PushdownDirection.TO_RIGHT_BRANCH)
+        PushdownDirection.TO_RIGHT_BRANCH
       } else {
-        noPushdown
+        PushdownDirection.NONE
       }
     } else {
       /**
