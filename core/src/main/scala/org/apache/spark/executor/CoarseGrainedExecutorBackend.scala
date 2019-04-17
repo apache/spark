@@ -93,7 +93,8 @@ private[spark] class CoarseGrainedExecutorBackend(
           }
           val resType = typeAndValue(0)
           // format should be: count:unit:addr1,addr2,addr3
-          val singleResourceInfo = ResourceDiscoverer.parseResourceTypeString(resType, typeAndValue(1))
+          val singleResourceInfo =
+            ResourceDiscoverer.parseResourceTypeString(resType, typeAndValue(1))
           (resType, singleResourceInfo)
         }).toMap
         allResourceTypes
@@ -359,7 +360,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --executor-id <executorId>
       |   --hostname <hostname>
       |   --cores <cores>
-      |   --resourceAddrs <resourceType=count:unit:addr1,addr2,addr3;resourceType2=count:unit:r2addr1,r2addr2,...>
+      |   --resourceAddrs <rtype1=count:unit:addr1,addr2;rtype2=count:unit:r2addr1,r2addr2...>
       |   --app-id <appid>
       |   --worker-url <workerUrl>
       |   --user-class-path <url>
