@@ -378,7 +378,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     val startIndex = query.start.getStartIndex
     val endIndex = query.stop.getStopIndex
     val interval = new Interval(startIndex, endIndex)
-    DescribeQueryCommand(query.start.getInputStream.getText(interval))(visitQuery(ctx.query))
+    DescribeQueryCommand(query.start.getInputStream.getText(interval), visitQuery(ctx.query))
   }
 
   /**
