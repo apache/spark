@@ -31,6 +31,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -44,7 +45,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     hostname: String,
     cores: Int,
     userClassPath: Seq[URL],
-    env: SparkEnv)
+    env: SparkEnv,
+    resourceAddrs: Option[String])
   extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
 
   private[this] val stopping = new AtomicBoolean(false)
@@ -60,8 +62,9 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
+
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes))
+        extractAttributes, parseResources(resourceAddrs)))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
@@ -69,6 +72,45 @@ private[spark] class CoarseGrainedExecutorBackend(
       case Failure(e) =>
         exitExecutor(1, s"Cannot register with driver: $driverUrl", e, notifyDriver = false)
     }(ThreadUtils.sameThread)
+  }
+
+  // visible for testing
+  def parseResources(resourceAddrsArg: Option[String]): Map[String, ResourceInformation] = {
+    // only parse the resources if a task requires them
+    val taskConfPrefix = SPARK_TASK_RESOURCE_PREFIX
+    val resourceInfo = if (env.conf.getAllWithPrefix(taskConfPrefix).size > 0) {
+      val resources = resourceAddrsArg.map(resourceStr => {
+        // format here would be:
+        // resourceType=count:unit:addr1,addr2,addr3;resourceType2=count:unit:r2addr1,r2addr2,
+        // first separate out resource types
+        val allResourceTypes = resourceStr.split(';').map(_.trim()).map( eachResource => {
+          // format here should be: resourceType=count:unit:addr1,addr2,addr3
+          val typeAndValue = eachResource.split('=').map(_.trim)
+          if (typeAndValue.size < 2) {
+            throw new SparkException("Format of the resourceAddrs parameter is invalid," +
+              " please specify both resource type and the count:unit:addresses: " +
+              "--resourceAddrs <resourceType=count:unit:addr1,addr2,addr3;" +
+              "resourceType2=count:unit:r2addr1,r2addr2,...>")
+          }
+          val resType = typeAndValue(0)
+          // format should be: count:unit:addr1,addr2,addr3
+          val singleResourceInfo = ResourceDiscoverer.parseResourceTypeString(resType, typeAndValue(1))
+          (resType, singleResourceInfo)
+        }).toMap
+        allResourceTypes
+      }).getOrElse(ResourceDiscoverer.findResources(env.conf, false))
+
+      if (resources.size == 0) {
+        throw new SparkException(s"User specified resources per task via: $taskConfPrefix," +
+          s" but can't find any resources available on the executor.")
+      }
+      logInfo(s"Executor ${executorId} using resources: ${resources.values}")
+      // todo - add logDebug with full output?
+      resources
+    } else {
+      Map.empty[String, ResourceInformation]
+    }
+    resourceInfo
   }
 
   def extractLogUrls: Map[String, String] = {
@@ -188,13 +230,14 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       cores: Int,
       appId: String,
       workerUrl: Option[String],
-      userClassPath: mutable.ListBuffer[URL])
+      userClassPath: mutable.ListBuffer[URL],
+      resourceAddrs: Option[String])
 
   def main(args: Array[String]): Unit = {
     val createFn: (RpcEnv, Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.hostname, arguments.cores, arguments.userClassPath, env)
+        arguments.hostname, arguments.cores, arguments.userClassPath, env, arguments.resourceAddrs)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
     System.exit(0)
@@ -255,6 +298,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var executorId: String = null
     var hostname: String = null
     var cores: Int = 0
+    var resourceAddrs: Option[String] = None
     var appId: String = null
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
@@ -273,6 +317,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           argv = tail
         case ("--cores") :: value :: tail =>
           cores = value.toInt
+          argv = tail
+        case ("--resourceAddrs") :: value :: tail =>
+          resourceAddrs = Some(value)
           argv = tail
         case ("--app-id") :: value :: tail =>
           appId = value
@@ -299,7 +346,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
 
     Arguments(driverUrl, executorId, hostname, cores, appId, workerUrl,
-      userClassPath)
+      userClassPath, resourceAddrs)
   }
 
   private def printUsageAndExit(classNameForEntry: String): Unit = {
@@ -313,6 +360,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --executor-id <executorId>
       |   --hostname <hostname>
       |   --cores <cores>
+      |   --resourceAddrs <resourceType=count:unit:addr1,addr2,addr3;resourceType2=count:unit:r2addr1,r2addr2,...>
       |   --app-id <appid>
       |   --worker-url <workerUrl>
       |   --user-class-path <url>

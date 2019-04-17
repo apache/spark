@@ -30,6 +30,13 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_
 
 package object config {
 
+  private[spark] val SPARK_DRIVER_RESOURCE_PREFIX = "spark.driver.resource."
+  private[spark] val SPARK_EXECUTOR_RESOURCE_PREFIX = "spark.executor.resource."
+  private[spark] val SPARK_TASK_RESOURCE_PREFIX = "spark.task.resource."
+
+  private[spark] val SPARK_RESOURCE_COUNT_POSTFIX = ".count"
+  private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX = ".discoveryScript"
+
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -170,6 +177,7 @@ package object config {
 
   private[spark] val EXECUTOR_CORES = ConfigBuilder(SparkLauncher.EXECUTOR_CORES)
     .intConf
+    .checkValue(_ > 0, "Each executor must contain at least 1 cpu core.")
     .createWithDefault(1)
 
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
@@ -314,7 +322,11 @@ package object config {
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
-  private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").intConf.createWithDefault(1)
+  private[spark] val CPUS_PER_TASK =
+    ConfigBuilder("spark.task.cpus")
+      .intConf
+      .checkValue(_ > 0, "Each task must require at least 1 cpu core.")
+      .createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled").booleanConf.createWithDefault(false)
