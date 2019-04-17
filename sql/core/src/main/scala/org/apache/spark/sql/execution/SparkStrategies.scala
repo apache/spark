@@ -115,7 +115,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *       1) broadcasting the left side in a right outer join;
    *       2) broadcasting the right side in a left outer, left semi, left anti or existence join;
    *       3) broadcasting either side in an inner-like join.
-   *     For other cases, we need to scan the data multiple times, which can be pretty slow.
+   *     For other cases, we need to scan the data multiple times, which can be rather slow.
    *
    * - Shuffle-and-replicate nested loop join (a.k.a. cartesian product join):
    *     Supports both equi-joins and non-equi-joins.
@@ -327,6 +327,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         } else {
           // For perf reasons, `BroadcastNestedLoopJoinExec` prefers to broadcast left side if
           // it's a right join, and broadcast right side if it's a left join.
+          // TODO: revisit it. If left side is much smaller than the right side, it may be better
+          // to broadcast the left side even if it's a left join.
           if (canBuildLeft(joinType)) BuildLeft else BuildRight
         }
 
