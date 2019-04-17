@@ -192,6 +192,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
                 sparkSession))
 
           // fallback to v1
+          // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
           case _ => Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
         }
 

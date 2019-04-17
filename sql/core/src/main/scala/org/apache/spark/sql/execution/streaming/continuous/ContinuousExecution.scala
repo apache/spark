@@ -87,6 +87,7 @@ class ContinuousExecution(
     }
     uniqueSources = sources.distinct
 
+    // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     WriteToContinuousDataSource(
       createStreamingWrite(sink, extraOptions, _logicalPlan), _logicalPlan)
   }

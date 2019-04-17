@@ -22,7 +22,7 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{BaseStreamingSink, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
@@ -363,6 +363,17 @@ class StreamingDataSourceV2Suite extends StreamTest {
           }
         }
       }
+    }
+  }
+
+  Seq(Trigger.ProcessingTime(1000), Trigger.Continuous(1000)).foreach { trigger =>
+    test(s"union micro-batch only and continuous only relations with $trigger") {
+      val left = spark.readStream.format("fake-read-microbatch-only").load()
+      val right = spark.readStream.format("fake-read-continuous-only").load()
+      val e = intercept[AnalysisException] {
+        left.union(right).writeStream.format("fake-write-microbatch-continuous").start()
+      }
+      assert(e.message.contains("do not have a common supported execution mode"))
     }
   }
 

@@ -124,6 +124,7 @@ class MicroBatchExecution(
     }
     uniqueSources = sources.distinct
 
+    // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
       case s: SupportsWrite =>
         val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
