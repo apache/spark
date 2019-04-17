@@ -917,8 +917,24 @@ private[spark] class AppStatusListener(
     // Update the block entry in the RDD info, keeping track of the deltas above so that we
     // can update the executor information too.
     liveRDDs.get(block.rddId).foreach { rdd =>
+
       if (updatedStorageLevel.isDefined) {
-        rdd.setStorageLevel(updatedStorageLevel.get)
+        // Replicated block update events will have `storageLevel.replication=1`.
+        // To avoid overwriting the block replicated event in the store, we need to
+        // have a check for whether the event is block replication or not.
+        // Default value of  `storageInfo.replication = 1` and hence if
+        // `storeLevel.replication = 2`, the replicated events won't overwrite in the store.
+        val storageInfo = rdd.storageInfo
+        val isReplicatedBlockUpdateEvent = storageLevel.replication < storageInfo.replication &&
+          (storageInfo.useDisk == storageLevel.useDisk &&
+            storageInfo.useMemory == storageLevel.useMemory &&
+            storageInfo.deserialized == storageLevel.deserialized &&
+            storageInfo.useOffHeap == storageLevel.useOffHeap)
+
+        if (!isReplicatedBlockUpdateEvent) {
+          rdd.storageInfo = storageLevel
+          rdd.setStorageLevel(updatedStorageLevel.get)
+        }
       }
 
       val partition = rdd.partition(block.name)
