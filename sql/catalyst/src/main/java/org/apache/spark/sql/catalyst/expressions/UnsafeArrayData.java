@@ -25,6 +25,11 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -58,7 +63,7 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
 
-public final class UnsafeArrayData extends ArrayData implements Externalizable {
+public final class UnsafeArrayData extends ArrayData implements Externalizable, KryoSerializable {
 
   public static int calculateHeaderPortionInBytes(int numFields) {
     return (int)calculateHeaderPortionInBytes((long)numFields);
@@ -530,22 +535,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable {
     return fromPrimitiveArray(arr, Platform.DOUBLE_ARRAY_OFFSET, arr.length, 8);
   }
 
-
-  public byte[] getBytes() {
-    if (baseObject instanceof byte[]
-            && baseOffset == Platform.BYTE_ARRAY_OFFSET
-            && (((byte[]) baseObject).length == sizeInBytes)) {
-      return (byte[]) baseObject;
-    } else {
-      byte[] bytes = new byte[sizeInBytes];
-      Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
-      return bytes;
-    }
-  }
-
   @Override
   public void writeExternal(ObjectOutput out) throws IOException {
-    byte[] bytes = getBytes();
+    byte[] bytes = UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
     out.writeInt(bytes.length);
     out.writeInt(this.numElements);
     out.write(bytes);
@@ -559,5 +551,23 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable {
     this.elementOffset = baseOffset + calculateHeaderPortionInBytes(this.numElements);
     this.baseObject = new byte[sizeInBytes];
     in.readFully((byte[]) baseObject);
+  }
+
+  @Override
+  public void write(Kryo kryo, Output output) {
+    byte[] bytes = UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
+    output.writeInt(bytes.length);
+    output.writeInt(this.numElements);
+    output.write(bytes);
+  }
+
+  @Override
+  public void read(Kryo kryo, Input input) {
+    this.baseOffset = BYTE_ARRAY_OFFSET;
+    this.sizeInBytes = input.readInt();
+    this.numElements = input.readInt();
+    this.elementOffset = baseOffset + calculateHeaderPortionInBytes(this.numElements);
+    this.baseObject = new byte[sizeInBytes];
+    input.read((byte[]) baseObject);
   }
 }
