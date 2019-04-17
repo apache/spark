@@ -17,18 +17,16 @@
 
 #
 # This is an example script that can be used to discover GPUs. It only works on NVIDIA GPUs since it
-# uses the nvidia-smi command. This script will find all visible GPUs so if you aren't running
+# uses the nvidia-smi command. This script will find all visible GPUs, so if you aren't running
 # in an environment that can isolate GPUs to an executor and where multiple executors can run on a
 # single node you may not want to use this. See your cluster manager specific configs for other
 # options.
 #
 # It can be passed into Spark via the configs spark.executor.resource.gpu.discoveryScript and/or
 # spark.driver.resource.gpu.discoveryScript.
-# The script will return the format count:unit:comma-separated string of the GPU indices available where it was executed.
-# If used with the executors, Spark will assigned out the indices to tasks based on the config to
-# control the number of GPUs per task. The driver
+# The script will return a string in the format: count:unit:comma-separated list of the resource addresses
 #
-#
+
 ADDRS=`nvidia-smi --query-gpu=index --format=csv,noheader | sed 'N;s/\n/,/'`
 COUNT=`echo $ADDRS | tr -cd , | wc -c`
 ALLCOUNT=`expr $COUNT + 1`

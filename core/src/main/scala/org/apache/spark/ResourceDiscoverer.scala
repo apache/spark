@@ -47,8 +47,10 @@ private[spark] object ResourceDiscoverer extends Logging {
     }}.toMap
   }
 
-  private def getResourceAddrsForType(sparkconf: SparkConf,
-        prefix: String, resourceType: String): ResourceInformation = {
+  private def getResourceAddrsForType(
+      sparkconf: SparkConf,
+      prefix: String,
+      resourceType: String): ResourceInformation = {
     val discoveryConf = prefix + resourceType + SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX
     val script = sparkconf.getOption(discoveryConf)
     val result = if (script.nonEmpty) {
