@@ -191,7 +191,17 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = state.getConf
+  def conf: HiveConf = {
+    val hiveConf = state.getConf
+    // Hive changed the default of datanucleus.schema.autoCreateAll from true to false
+    // and hive.metastore.schema.verification from false to true since Hive 2.0.
+    // For details, see the JIRA HIVE-6113, HIVE-12463 and HIVE-1841
+    // We hard-code these configurations here to allow bin/spark-shell, bin/spark-sql
+    // and sbin/start-thriftserver.sh behaviors to be uniform.
+    hiveConf.setBoolean("hive.metastore.schema.verification", false)
+    hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
+    hiveConf
+  }
 
   private val userName = conf.getUser
 
