@@ -1,0 +1,26 @@
+{
+  "id" : 0,
+  "name" : "ParallelCollectionRDD",
+  "numPartitions" : 1,
+  "numCachedPartitions" : 1,
+  "storageLevel" : "Memory Deserialized 2x Replicated",
+  "memoryUsed" : 56,
+  "diskUsed" : 0,
+  "dataDistribution" : [ {
+    "address" : "vm1:39541",
+    "memoryUsed" : 56,
+    "memoryRemaining" : 384092096,
+    "diskUsed" : 0,
+    "onHeapMemoryUsed" : 56,
+    "offHeapMemoryUsed" : 0,
+    "onHeapMemoryRemaining" : 384092096,
+    "offHeapMemoryRemaining" : 0
+  } ],
+  "partitions" : [ {
+    "blockName" : "rdd_0_0",
+    "storageLevel" : "Memory Deserialized 2x Replicated",
+    "memoryUsed" : 56,
+    "diskUsed" : 0,
+    "executors" : [ "driver" ]
+  } ]
+}
