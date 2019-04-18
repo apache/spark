@@ -21,6 +21,7 @@ import java.util
 import java.util.Collections
 
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.catalog.v2.{Table, TableCapability}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger

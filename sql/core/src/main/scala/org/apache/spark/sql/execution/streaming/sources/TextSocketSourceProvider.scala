@@ -25,6 +25,7 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalog.v2.{Table, TableCapability}
 import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousStream
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._

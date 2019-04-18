@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.catalog.v2.{Table, TableCapability}
+import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite}
 
 object DataSourceV2Implicits {
   implicit class TableHelper(table: Table) {

@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.TableCapability._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
-import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.BooleanType
 
 object V2WriteSupportCheck extends (LogicalPlan => Unit) {

@@ -20,11 +20,11 @@ package test.org.apache.spark.sql.sources.v2;
 import java.io.IOException;
 import java.util.*;
 
+import org.apache.spark.sql.catalog.v2.Table;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
-import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.sources.v2.TableProvider;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;

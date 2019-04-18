@@ -22,6 +22,7 @@ import java.util.Collections
 
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalog.v2.{Table, TableCapability}
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._

@@ -18,13 +18,13 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalog.v2.Table;
+import org.apache.spark.sql.catalog.v2.TableCapability;
+import org.apache.spark.sql.sources.v2.SupportsContinuousRead;
+import org.apache.spark.sql.sources.v2.SupportsMicroBatchRead;
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousStream;
 import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.sources.v2.SupportsContinuousRead;
-import org.apache.spark.sql.sources.v2.SupportsMicroBatchRead;
-import org.apache.spark.sql.sources.v2.Table;
-import org.apache.spark.sql.sources.v2.TableCapability;
 
 /**
  * A logical representation of a data source scan. This interface is used to provide logical

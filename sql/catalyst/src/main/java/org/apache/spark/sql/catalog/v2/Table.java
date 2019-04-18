@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.catalog.v2;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;

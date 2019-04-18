@@ -22,11 +22,12 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.{Table, TableCapability}
+import org.apache.spark.sql.catalog.v2.TableCapability._
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LeafNode, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, V2WriteSupportCheck}
-import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 

@@ -19,9 +19,9 @@ package test.org.apache.spark.sql.sources.v2;
 
 import java.io.IOException;
 
+import org.apache.spark.sql.catalog.v2.Table;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
-import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.sources.v2.TableProvider;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.DataTypes;

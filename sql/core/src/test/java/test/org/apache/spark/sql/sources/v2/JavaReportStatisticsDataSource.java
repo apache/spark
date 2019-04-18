@@ -19,7 +19,7 @@ package test.org.apache.spark.sql.sources.v2;
 
 import java.util.OptionalLong;
 
-import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.catalog.v2.Table;
 import org.apache.spark.sql.sources.v2.TableProvider;
 import org.apache.spark.sql.sources.v2.reader.InputPartition;
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder;

@@ -22,6 +22,7 @@ import java.util.{Locale, Properties, UUID}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalog.v2.TableCapability._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
@@ -34,7 +35,6 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Data
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap

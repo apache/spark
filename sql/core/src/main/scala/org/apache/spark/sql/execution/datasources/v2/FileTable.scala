@@ -21,9 +21,10 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalog.v2.{Table, TableCapability}
+import org.apache.spark.sql.catalog.v2.TableCapability._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.sources.v2.TableCapability._
+import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils

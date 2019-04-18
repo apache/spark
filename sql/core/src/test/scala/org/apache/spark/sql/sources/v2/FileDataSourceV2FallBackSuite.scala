@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalog.v2.{Table, TableCapability}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2

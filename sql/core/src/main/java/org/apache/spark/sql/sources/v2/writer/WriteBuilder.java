@@ -18,8 +18,8 @@
 package org.apache.spark.sql.sources.v2.writer;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.Table;
-import org.apache.spark.sql.sources.v2.TableCapability;
+import org.apache.spark.sql.catalog.v2.Table;
+import org.apache.spark.sql.catalog.v2.TableCapability;
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite;
 import org.apache.spark.sql.types.StructType;
 
