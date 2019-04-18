@@ -463,6 +463,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.CastSuite",
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
+    "org.apache.spark.sql.hive.StatisticsSuite",
     "org.apache.spark.sql.hive.execution.HiveCompatibilitySuite",
     "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
