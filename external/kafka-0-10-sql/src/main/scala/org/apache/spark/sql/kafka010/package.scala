@@ -26,13 +26,13 @@ package object kafka010 {   // scalastyle:ignore
   // ^^ scalastyle:ignore is for ignoring warnings about digits in package name
   type PartitionOffsetMap = Map[TopicPartition, Long]
 
-  private[spark] val PRODUCER_CACHE_TIMEOUT =
+  private[kafka010] val PRODUCER_CACHE_TIMEOUT =
     ConfigBuilder("spark.kafka.producer.cache.timeout")
       .doc("The expire time to remove the unused producers.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(TimeUnit.MINUTES.toMillis(10))
+      .createWithDefaultString("10m")
 
-  private[spark] val CONSUMER_CACHE_CAPACITY =
+  private[kafka010] val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.sql.kafkaConsumerCache.capacity")
       .doc("The size of consumers cached.")
       .intConf
