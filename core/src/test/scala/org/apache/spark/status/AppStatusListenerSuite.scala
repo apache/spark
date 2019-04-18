@@ -1547,10 +1547,12 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       BlockUpdatedInfo(bm1, rddBlock.blockId, level, rddBlock.memSize, rddBlock.diskSize)))
     // Block update event, where replication = 1
     listener.onBlockUpdated(SparkListenerBlockUpdated(
-      BlockUpdatedInfo(bm2, rddBlock.blockId, levelBlockReplica, rddBlock.memSize, rddBlock.diskSize)))
+      BlockUpdatedInfo(bm2, rddBlock.blockId, levelBlockReplica, rddBlock.memSize,
+        rddBlock.diskSize)))
 
     check[RDDStorageInfoWrapper](rddBlock.rddId) { wrapper =>
-      val partitionInfo = wrapper.info.partitions.get.find(_.blockName === rddBlock.blockId.name).get
+      val partitionInfo = wrapper.info.partitions.get.find(_.blockName === rddBlock.blockId.name)
+        .get
       assert(partitionInfo.storageLevel === level.description)
       assert(partitionInfo.memoryUsed === 2 * rddBlock.memSize)
       assert(partitionInfo.diskUsed === 2 * rddBlock.diskSize)
