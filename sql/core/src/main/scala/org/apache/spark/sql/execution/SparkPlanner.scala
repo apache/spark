@@ -53,7 +53,7 @@ class SparkPlanner(
    */
   def extraPlanningStrategies: Seq[Strategy] = Nil
 
-  override protected def setPlanProperty(candidate: SparkPlan, plan: LogicalPlan): Unit = {
+  override protected def propagateProperty(candidate: SparkPlan, plan: LogicalPlan): Unit = {
     candidate.withStats(plan.stats)
   }
 
