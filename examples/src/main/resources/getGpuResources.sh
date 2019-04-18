@@ -24,10 +24,10 @@
 #
 # It can be passed into Spark via the configs spark.executor.resource.gpu.discoveryScript and/or
 # spark.driver.resource.gpu.discoveryScript.
-# The script will return a string in the format: count:unit:comma-separated list of the resource addresses
+# The script will return a JSON string in the format of the ResourceInformation class.
 #
 
-ADDRS=`nvidia-smi --query-gpu=index --format=csv,noheader | sed 'N;s/\n/,/'`
+ADDRS=`nvidia-smi --query-gpu=index --format=csv,noheader | sed 'N;s/\n/\",\"/'`
 COUNT=`echo $ADDRS | tr -cd , | wc -c`
 ALLCOUNT=`expr $COUNT + 1`
-echo $ALLCOUNT::$ADDRS
+echo {\"name\": \"gpu\", \"count\":$ALLCOUNT, \"units\":\"\", \"addresses\":[\"$ADDRS\"]}

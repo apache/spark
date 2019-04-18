@@ -42,7 +42,6 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("parsing no resources") {
     val conf = new SparkConf
     conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
-
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
 
@@ -55,14 +54,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val parsedResources = backend.parseResources(testResourceArgs)
     }.getMessage()
 
-    assert(error.contains("Format of the resourceAddrs parameter is invalid"))
-
-    testResourceArgs = Some("gpu=::")
-    error = intercept[SparkException] {
-      val parsedResources = backend.parseResources(testResourceArgs)
-    }.getMessage()
-
-    assert(error.contains("Format of the resourceAddrs parameter is invalid"))
+    assert(error.contains("Exception parsing the resources passed"))
   }
 
 
@@ -77,7 +69,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
 
-    val testResourceArgs = Some("gpu=2::0,1")
+    val testResourceArgs =
+      Some("""[{"name": "gpu", "count":2, "units":"", "addresses":["0","1"]}]""")
     val parsedResources = backend.parseResources(testResourceArgs)
 
     assert(parsedResources.size === 1)
@@ -99,7 +92,10 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
 
-    val testResourceArgs = Some("gpu=2::0,1;fpga=3:mb:f1,f2,f3")
+    val testResourceArgs =
+      Some(
+        """[{"name": "gpu", "count":2, "units":"", "addresses":["0","1"]},
+          |{"name": "fpga", "count":3, "units":"mb", "addresses":["f1","f2","f3"]}]""".stripMargin)
     val parsedResources = backend.parseResources(testResourceArgs)
 
     assert(parsedResources.size === 2)
@@ -123,7 +119,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
     withTempDir { dir =>
       val fpgaDiscovery = new File(dir, "resourceDiscoverScriptfpga")
-      Files.write("echo 3::f1,f2,f3", fpgaDiscovery, StandardCharsets.UTF_8)
+      Files.write("echo {\\\"name\\\":\\\"fpga\\\", \\\"count\\\":3, \\\"units\\\":\\\"\\\"," +
+        " \\\"addresses\\\":[\\\"f1\\\",\\\"f2\\\",\\\"f3\\\"]}",
+        fpgaDiscovery, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(fpgaDiscovery.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
       conf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" +

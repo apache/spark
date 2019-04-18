@@ -25,7 +25,6 @@ import java.util.EnumSet
 
 import com.google.common.io.Files
 
-import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -43,12 +42,13 @@ class ResourceDiscovererSuite extends SparkFunSuite
 
   test("Resource discoverer multiple gpus") {
     val sparkconf = new SparkConf
-
     assume(!(Utils.isWindows))
-
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript1")
-      Files.write("echo 2::0,1", file1, StandardCharsets.UTF_8)
+
+      // this is a bit ugly but do it the hardway to test out some formatting
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"," +
+        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(file1.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
@@ -66,12 +66,11 @@ class ResourceDiscovererSuite extends SparkFunSuite
 
   test("Resource discoverer no addresses") {
     val sparkconf = new SparkConf
-
     assume(!(Utils.isWindows))
-
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript1")
-      Files.write("echo 2::", file1, StandardCharsets.UTF_8)
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"}",
+        file1, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(file1.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
@@ -88,12 +87,11 @@ class ResourceDiscovererSuite extends SparkFunSuite
 
   test("Resource discoverer no count") {
     val sparkconf = new SparkConf
-
     assume(!(Utils.isWindows))
-
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript1")
-      Files.write("echo ::0,1", file1, StandardCharsets.UTF_8)
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"units\\\":\\\"\\\"," +
+        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(file1.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
@@ -106,20 +104,39 @@ class ResourceDiscovererSuite extends SparkFunSuite
     }
   }
 
+  test("Resource discoverer no count value") {
+    val sparkconf = new SparkConf
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val file1 = new File(dir, "resourceDiscoverScript1")
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":, \\\"units\\\":\\\"\\\"," +
+        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
+      JavaFiles.setPosixFilePermissions(file1.toPath(),
+        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+      sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
+      val error = intercept[SparkException] {
+        ResourceDiscoverer.findResources(sparkconf, false)
+      }.getMessage()
+
+      assert(error.contains("Error running the resource discovery"))
+    }
+  }
 
   test("Resource discoverer multiple resource types") {
     val sparkconf = new SparkConf
-
     assume(!(Utils.isWindows))
-
     withTempDir { dir =>
       val gpuDiscovery = new File(dir, "resourceDiscoverScriptgpu")
-      Files.write("echo 2::0,1", gpuDiscovery, StandardCharsets.UTF_8)
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"," +
+        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", gpuDiscovery, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(gpuDiscovery.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
 
       val fpgaDiscovery = new File(dir, "resourceDiscoverScriptfpga")
-      Files.write("echo 3:mb:f1,f2,f3", fpgaDiscovery, StandardCharsets.UTF_8)
+      Files.write("echo {\\\"name\\\":\\\"fpga\\\", \\\"count\\\":3, \\\"units\\\":\\\"mb\\\"," +
+        " \\\"addresses\\\":[\\\"f1\\\",\\\"f2\\\",\\\"f3\\\"]}",
+        fpgaDiscovery, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(fpgaDiscovery.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
 
@@ -150,12 +167,11 @@ class ResourceDiscovererSuite extends SparkFunSuite
 
   test("Resource discoverer multiple gpus on driver") {
     val sparkconf = new SparkConf
-
     assume(!(Utils.isWindows))
-
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript2")
-      Files.write("echo 2::0,1", file1, StandardCharsets.UTF_8)
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"," +
+        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(file1.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
       sparkconf.set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
@@ -178,10 +194,10 @@ class ResourceDiscovererSuite extends SparkFunSuite
   test("Resource discoverer script returns invalid format") {
     val sparkconf = new SparkConf
     assume(!(Utils.isWindows))
-
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript3")
-      Files.write("echo foo1", file1, StandardCharsets.UTF_8)
+      Files.write("echo {\\\"units\\\":\\\"\\\"," +
+        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(file1.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
@@ -197,7 +213,6 @@ class ResourceDiscovererSuite extends SparkFunSuite
 
   test("Resource discoverer script doesn't exist") {
     val sparkconf = new SparkConf
-
     val file1 = new File("/tmp/bogus")
     try {
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
@@ -215,7 +230,6 @@ class ResourceDiscovererSuite extends SparkFunSuite
 
   test("gpu's specified but not discovery script") {
     val sparkconf = new SparkConf
-
     val file1 = new File("/tmp/bogus")
     try {
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +

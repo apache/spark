@@ -26,6 +26,12 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.exc.MismatchedInputException
+import org.json4s.DefaultFormats
+import org.json4s.JsonAST.JArray
+import org.json4s.MappingException
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -79,25 +85,18 @@ private[spark] class CoarseGrainedExecutorBackend(
     val taskConfPrefix = SPARK_TASK_RESOURCE_PREFIX
     val resourceInfo = if (env.conf.getAllWithPrefix(taskConfPrefix).size > 0) {
       val resources = resourceAddrsArg.map(resourceStr => {
-        // format here would be:
-        // resourceType=count:unit:addr1,addr2,addr3;resourceType2=count:unit:r2addr1,r2addr2,
-        // first separate out resource types
-        val allResourceTypes = resourceStr.split(';').map(_.trim()).map( eachResource => {
-          // format here should be: resourceType=count:unit:addr1,addr2,addr3
-          val typeAndValue = eachResource.split('=').map(_.trim)
-          if (typeAndValue.size < 2) {
-            throw new SparkException("Format of the resourceAddrs parameter is invalid," +
-              " please specify both resource type and the count:unit:addresses: " +
-              "--resourceAddrs <resourceType=count:unit:addr1,addr2,addr3;" +
-              "resourceType2=count:unit:r2addr1,r2addr2,...>")
-          }
-          val resType = typeAndValue(0)
-          // format should be: count:unit:addr1,addr2,addr3
-          val singleResourceInfo =
-            ResourceDiscoverer.parseResourceTypeString(resType, typeAndValue(1))
-          (resType, singleResourceInfo)
-        }).toMap
-        allResourceTypes
+        implicit val formats = DefaultFormats
+        val resourceMap = try {
+          val parsedJson = parse(resourceStr).asInstanceOf[JArray].arr
+          val allResources = parsedJson.map(_.extract[ResourceInformation]).
+            map(x => (x.getName() -> x)).toMap
+          allResources
+        } catch {
+          case e @ (_: MappingException | _: MismatchedInputException) =>
+            throw new SparkException(
+              s"Exception parsing the resources passed in: $resourceAddrsArg", e)
+        }
+        resourceMap
       }).getOrElse(ResourceDiscoverer.findResources(env.conf, false))
 
       if (resources.size == 0) {
@@ -105,7 +104,6 @@ private[spark] class CoarseGrainedExecutorBackend(
           s" but can't find any resources available on the executor.")
       }
       logInfo(s"Executor ${executorId} using resources: ${resources.values}")
-      // todo - add logDebug with full output?
       resources
     } else {
       Map.empty[String, ResourceInformation]
@@ -231,13 +229,13 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       appId: String,
       workerUrl: Option[String],
       userClassPath: mutable.ListBuffer[URL],
-      resourceAddrs: Option[String])
+      resourcesFile: Option[String])
 
   def main(args: Array[String]): Unit = {
     val createFn: (RpcEnv, Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.hostname, arguments.cores, arguments.userClassPath, env, arguments.resourceAddrs)
+        arguments.hostname, arguments.cores, arguments.userClassPath, env, arguments.resourcesFile)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
     System.exit(0)
@@ -298,7 +296,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var executorId: String = null
     var hostname: String = null
     var cores: Int = 0
-    var resourceAddrs: Option[String] = None
+    var resourcesFile: Option[String] = None
     var appId: String = null
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
@@ -318,8 +316,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         case ("--cores") :: value :: tail =>
           cores = value.toInt
           argv = tail
-        case ("--resourceAddrs") :: value :: tail =>
-          resourceAddrs = Some(value)
+        case ("--resourcesFile") :: value :: tail =>
+          resourcesFile = Some(value)
           argv = tail
         case ("--app-id") :: value :: tail =>
           appId = value
@@ -346,7 +344,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
 
     Arguments(driverUrl, executorId, hostname, cores, appId, workerUrl,
-      userClassPath, resourceAddrs)
+      userClassPath, resourcesFile)
   }
 
   private def printUsageAndExit(classNameForEntry: String): Unit = {
@@ -360,7 +358,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --executor-id <executorId>
       |   --hostname <hostname>
       |   --cores <cores>
-      |   --resourceAddrs <rtype1=count:unit:addr1,addr2;rtype2=count:unit:r2addr1,r2addr2...>
+      |   --resourcesFile <fileWithJSONResourceInformation>
       |   --app-id <appid>
       |   --worker-url <workerUrl>
       |   --user-class-path <url>

@@ -692,7 +692,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
     val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
-      Map.empty)
+      Map.empty, Map.empty)
 
     backend.driverEndpoint.askSync[Boolean](message)
   }

@@ -19,6 +19,10 @@ package org.apache.spark
 
 import java.io.File
 
+import com.fasterxml.jackson.core.JsonParseException
+import org.json4s.{DefaultFormats, MappingException}
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils.executeAndGetOutput
@@ -27,9 +31,10 @@ import org.apache.spark.util.Utils.executeAndGetOutput
  * Discovers resources (GPUs/FPGAs/etc).
  * This class find resources by running and parses the output of the user specified script
  * from the config spark.{driver/executor}.{resourceType}.discoveryScript.
- * The output of the script it runs is expected to be a String that is in the format of
- * count:unit:comma-separated list of addresses, where the list of addresses is
- * specific for that resource type. The user is responsible for interpreting the address.
+ * The output of the script it runs is expected to be JSON in the format of the
+ * ResourceInformation class, with addresses being optional.
+ *
+ * For example:  {"name": "gpu","count":2, "units":"", "addresses": ["0","1"]
  */
 private[spark] object ResourceDiscoverer extends Logging {
 
@@ -59,9 +64,11 @@ private[spark] object ResourceDiscoverer extends Logging {
       if (scriptFile.exists()) {
         try {
           val output = executeAndGetOutput(Seq(script.get), new File("."))
-          parseResourceTypeString(resourceType, output)
+          val parsedJson = parse(output)
+          implicit val formats = DefaultFormats
+         parsedJson.extract[ResourceInformation]
         } catch {
-          case e @ (_: SparkException | _: NumberFormatException) =>
+          case e @ (_: SparkException | _: MappingException | _: JsonParseException) =>
             throw new SparkException(s"Error running the resource discovery script: $scriptFile" +
               s" for $resourceType", e)
         }
@@ -74,27 +81,5 @@ private[spark] object ResourceDiscoverer extends Logging {
         s"didn't specify a script via conf: $discoveryConf, to find them!")
     }
     result
-  }
-
-  // this parses a resource information string in the format:
-  // count:unit:comma-separated list of addresses
-  // The units and addresses are optional. The idea being if the user has something like
-  // memory you don't have addresses to assign out.
-  def parseResourceTypeString(rtype: String, rInfoStr: String): ResourceInformation = {
-    // format should be: count:unit:addr1,addr2,addr3
-    val singleResourceType = rInfoStr.split(':')
-    if (singleResourceType.size < 3) {
-      throw new SparkException("Format of the resourceAddrs parameter is invalid," +
-        " please specify all of count, unit, and addresses in the format:" +
-        " count:unit:addr1,addr2,addr3")
-    }
-    // format should be: addr1,addr2,addr3
-    val splitAddrs = singleResourceType(2).split(',').map(_.trim())
-    val retAddrs = if (splitAddrs.size == 1 && splitAddrs(0).isEmpty()) {
-      Array.empty[String]
-    } else {
-      splitAddrs
-    }
-    new ResourceInformation(rtype, singleResourceType(1), singleResourceType(0).toLong, retAddrs)
   }
 }
