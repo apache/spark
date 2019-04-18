@@ -893,7 +893,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           """
             |SELECT * FROM t1
             |WHERE
-            |NOT EXISTS (SELECT * FROM t1)
+            |NOT EXISTS (SELECT * FROM t1 AS t2 WHERE t2.i = t1.i)
           """.stripMargin
         val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
         val join = optimizedPlan.collectFirst { case j: Join => j }.get
@@ -1374,7 +1374,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-27440: Rewrite Uncorrelated Subquery") {
     withTempView("t1", "t2") {
-      sql("create temporary view t1 as select * from values ('b',null) as t1(t1a, t1b)")
+      sql("create temporary view t1 as select * from values ('b',null), (null, 1) as t1(t1a, t1b)")
       sql("create temporary view t2 as select * from values ('a',1), ('b',2) as t2(t2a, t2b)")
       // Exists
       val exists = sql(
@@ -1388,21 +1388,20 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       }.flatten
       assert(subqueries.length == 1)
       checkAnswer(exists, Seq(Row(1), Row(2)))
-      exists.explain(true)
 
       // InSubquery
       val in = sql(
         """
           |select t2b
           |from   t2
-          |where  "b" in (select t1a from t1)
+          |where  "a" in (select t1a from t1)
         """.stripMargin
       )
       val inSubqueries = in.queryExecution.executedPlan.collect {
         case p => p.subqueries
       }.flatten
       assert(inSubqueries.length == 1)
-      checkAnswer(in, Seq(Row(1), Row(2)))
+      checkAnswer(in, Nil)
     }
   }
 }

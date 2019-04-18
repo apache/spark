@@ -94,6 +94,21 @@ object SubqueryExpression {
   }
 
   /**
+   * Returns true when an expression contains a correlated IN or correlated EXISTS and
+   * false otherwise. An IN is non-correlated only if the left values are literals
+   * and the subquery has no outer references.
+   */
+  def hasCorrelatedInOrExists(e: Expression): Boolean = {
+    e.find {
+      case InSubquery(values, ListQuery(_, children, _, _)) =>
+        values.exists(!_.isInstanceOf[Literal]) || children.nonEmpty
+      case Exists(_, children, _) =>
+        children.nonEmpty
+      case _ => false
+    }.isDefined
+  }
+
+  /**
    * Returns true when an expression contains a subquery
    */
   def hasSubquery(e: Expression): Boolean = {
@@ -299,7 +314,7 @@ case class ListQuery(
     childOutputs.head.dataType
   }
   override lazy val resolved: Boolean = childrenResolved && plan.resolved && childOutputs.nonEmpty
-  override def nullable: Boolean = false
+  override def nullable: Boolean = plan.schema.fields.exists(_.nullable)
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def toString: String = s"list#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {

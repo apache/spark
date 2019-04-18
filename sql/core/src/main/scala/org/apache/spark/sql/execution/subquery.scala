@@ -93,6 +93,75 @@ case class Exists(
 }
 
 /**
+ * Evaluates to `true` if `values` are returned in the subquery's result set.
+ * If `values` are not found in the subquery's result set, and there are nulls in
+ * `values` or the result set, it should return UNKNOWN.
+ * This is the physical copy of Exists to be used inside SparkPlan.
+ */
+case class InSubquery(
+    values: Seq[Literal],
+    plan: BaseSubqueryExec,
+    exprId: ExprId)
+  extends ExecSubqueryExpression {
+  override def dataType: DataType = BooleanType
+  override def children: Seq[Expression] = Nil
+  override def nullable: Boolean = true
+  override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
+  override def withNewPlan(plan: BaseSubqueryExec): InSubquery = copy(plan = plan)
+
+  @volatile private var result: Boolean = _
+  @volatile private var isNull: Boolean = false
+  @volatile private var updated: Boolean = false
+
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
+    // The semantic of '(a,b) in ((x1, y1), (x2, y2), ...)' is
+    // '(a = x1 and b = y1) or (a = x2 and b = y2) or ...'
+    val expression = rows.map(row => {
+      values.zipWithIndex.map {
+        case (left, idx) =>
+          val rightType = plan.schema.fields(idx).dataType
+          val right = Literal.create(row.get(idx, rightType), rightType)
+          expressions.EqualTo(left, right)
+      }.reduceLeft(expressions.And)
+    }).reduceLeftOption(expressions.Or)
+
+    expression match {
+      case None =>
+        result = false
+        isNull = false
+      case Some(expr) =>
+        val value = expr.eval()
+        if (value == null) {
+          isNull = true
+        } else {
+          isNull = false
+          result = value.asInstanceOf[Boolean]
+        }
+    }
+    updated = true
+  }
+
+  override def eval(input: InternalRow): Any = {
+    require(updated, s"$this has not finished")
+    if (isNull) {
+      null
+    } else {
+      result
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    require(updated, s"$this has not finished")
+    if (isNull) {
+      Literal.create(null, BooleanType).doGenCode(ctx, ev)
+    } else {
+      Literal.create(result, BooleanType).doGenCode(ctx, ev)
+    }
+  }
+}
+
+/**
  * A subquery that will return only one row and one column.
  *
  * This is the physical copy of ScalarSubquery to be used inside SparkPlan.
@@ -159,6 +228,13 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
         Exists(
           SubqueryExec(s"exists${subquery.exprId.id}", executedPlan),
+          subquery.exprId
+        )
+      case expressions.InSubquery(values, subquery) =>
+        val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
+        InSubquery(
+          values.map(_.asInstanceOf[Literal]),
+          SubqueryExec(s"in${subquery.exprId.id}", executedPlan),
           subquery.exprId
         )
     }
