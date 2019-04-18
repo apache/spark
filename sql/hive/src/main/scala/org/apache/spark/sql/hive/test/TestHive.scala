@@ -487,7 +487,7 @@ private[hive] class TestHiveSparkSession(
   def getLoadedTables: collection.mutable.HashSet[String] = sharedState.loadedTables
 
   def loadTestTable(name: String) {
-    if (!(sharedState.loadedTables contains name)) {
+    if (!sharedState.loadedTables.contains(name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       sharedState.loadedTables += name
       logDebug(s"Loading test table $name")
