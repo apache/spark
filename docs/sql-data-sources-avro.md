@@ -240,6 +240,14 @@ Data source options of Avro can be set via:
     </td>
     <td>function <code>from_avro</code></td>
   </tr>
+  <tr>
+    <td><code>writerSchema</code></td>
+    <td>None</td>
+    <td>Optional Avro schema (in JSON format) that was used to serialize the data. This should be set if the schema provided
+      for deserialization is compatible with - but not the same as - the one used to originally convert the data to Avro.
+    </td>
+    <td>function <code>from_avro</code></td>
+  </tr>
 </table>
 
 ## Configuration

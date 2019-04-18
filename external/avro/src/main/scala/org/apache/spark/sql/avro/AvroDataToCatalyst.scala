@@ -51,9 +51,13 @@ case class AvroDataToCatalyst(
 
   override def nullable: Boolean = true
 
+  private lazy val avroOptions = AvroOptions(options)
+
   @transient private lazy val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
 
-  @transient private lazy val reader = new GenericDatumReader[Any](avroSchema)
+  @transient private lazy val reader = avroOptions.writerSchema
+    .map(writer => new GenericDatumReader[Any](new Schema.Parser().parse(writer), avroSchema))
+    .getOrElse(new GenericDatumReader[Any](avroSchema))
 
   @transient private lazy val deserializer = new AvroDeserializer(avroSchema, dataType)
 
@@ -62,7 +66,7 @@ case class AvroDataToCatalyst(
   @transient private var result: Any = _
 
   @transient private lazy val parseMode: ParseMode = {
-    val mode = AvroOptions(options).parseMode
+    val mode = avroOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw new AnalysisException(unacceptableModeMessage(mode.name))
     }

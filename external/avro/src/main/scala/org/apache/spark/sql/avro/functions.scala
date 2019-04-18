@@ -45,9 +45,10 @@ object functions {
   }
 
   /**
-   * Converts a binary column of avro format into its corresponding catalyst value. The specified
-   * schema must match the read data, otherwise the behavior is undefined: it may fail or return
-   * arbitrary result.
+   * Converts a binary column of avro format into its corresponding catalyst value. If a writer's
+   * schema is provided in the options, a different (but compatible) schema can be used for reading.
+   * If no writer's schema is provided, the specified schema must match the read data, otherwise the
+   * behavior is undefined: it may fail or return arbitrary result.
    *
    * @param data the binary column.
    * @param jsonFormatSchema the avro schema in JSON string format.
