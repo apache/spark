@@ -109,7 +109,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
   test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
     val sink = new MemorySink
-    val addBatch = addBatchFunc(sink, false) _
+    val addBatch = addBatchFunc(sink, true) _
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
