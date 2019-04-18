@@ -40,9 +40,8 @@ class HiveClientSuite(version: String)
   private val testPartitionCount = 3 * 5 * 4
 
   private def init(tryDirectSql: Boolean): HiveClient = {
-    val location = Some(Utils.createTempDir().toURI)
     val storageFormat = CatalogStorageFormat(
-      locationUri = location,
+      locationUri = None,
       inputFormat = None,
       outputFormat = None,
       serde = None,
@@ -51,16 +50,17 @@ class HiveClientSuite(version: String)
 
     val hadoopConf = new Configuration()
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
+    hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().toURI().toString())
     val client = buildClient(hadoopConf)
     val tableSchema =
       new StructType().add("value", "int").add("ds", "int").add("h", "int").add("chunk", "string")
     val table = CatalogTable(
       identifier = TableIdentifier("test", Some("default")),
-      tableType = CatalogTableType.EXTERNAL,
+      tableType = CatalogTableType.MANAGED,
       schema = tableSchema,
       partitionColumnNames = Seq("ds", "h", "chunk"),
       storage = CatalogStorageFormat(
-        locationUri = location,
+        locationUri = None,
         inputFormat = Some(classOf[TextInputFormat].getName),
         outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
         serde = Some(classOf[LazySimpleSerDe].getName()),
