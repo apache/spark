@@ -325,7 +325,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.12</version>
+        <version>4.13</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
