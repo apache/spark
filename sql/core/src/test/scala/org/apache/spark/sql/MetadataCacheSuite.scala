@@ -38,7 +38,8 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSQLContext {
     oneFile.foreach(_.delete())
   }
 
-  test("SPARK-16336 Suggest doing table refresh when encountering FileNotFoundException") {
+  test("SPARK-16336,SPARK-27504 Suggest doing table refresh " +
+    "when encountering FileNotFoundException") {
     withTempPath { (location: File) =>
       // Create a Parquet directory
       spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
@@ -60,7 +61,7 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-16337 temporary view refresh") {
+  test("SPARK-16337,SPARK-27504 temporary view refresh") {
     withTempView("view_refresh") { withTempPath { (location: File) =>
       // Create a Parquet directory
       spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
