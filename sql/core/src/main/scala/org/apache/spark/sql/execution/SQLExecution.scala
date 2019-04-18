@@ -21,9 +21,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
+
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.Utils
 
@@ -92,7 +94,8 @@ object SQLExecution {
             executionId = executionId,
             description = desc,
             details = callSite.longForm,
-            physicalPlanDescription = queryExecution.toString,
+            physicalPlanDescription = queryExecution.planString(
+              addStats = sc.conf.get(SQLConf.CBO_ENABLED)),
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),

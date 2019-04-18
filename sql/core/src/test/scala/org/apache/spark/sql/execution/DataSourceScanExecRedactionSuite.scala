@@ -57,7 +57,7 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
   private def isIncluded(queryExecution: QueryExecution, msg: String): Boolean = {
     queryExecution.toString.contains(msg) ||
     queryExecution.simpleString.contains(msg) ||
-    queryExecution.stringWithStats.contains(msg)
+    queryExecution.planString(addStats = true).contains(msg)
   }
 
   test("explain is redacted using SQLConf") {

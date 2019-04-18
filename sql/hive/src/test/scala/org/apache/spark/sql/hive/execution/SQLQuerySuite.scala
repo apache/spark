@@ -25,8 +25,8 @@ import java.util.{Locale, Set}
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.{SparkException, TestUtils}
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
@@ -2329,8 +2329,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("insert into all_null values (null, null)")
         sql("analyze table all_null compute statistics for columns attr1, attr2")
         // check if the stats can be calculated without Cast exception.
-        sql("select * from all_null where attr1 < 1").queryExecution.stringWithStats
-        sql("select * from all_null where attr1 < attr2").queryExecution.stringWithStats
+        sql("select * from all_null where attr1 < 1").queryExecution.planString(addStats = true)
+        sql("select * from all_null where attr1 < attr2").queryExecution.planString(addStats = true)
       }
     }
   }

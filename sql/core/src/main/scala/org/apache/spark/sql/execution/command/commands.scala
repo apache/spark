@@ -167,7 +167,7 @@ case class ExplainCommand(
       } else if (extended) {
         queryExecution.toString
       } else if (cost) {
-        queryExecution.stringWithStats
+        queryExecution.planString(addParsed = false, addAnalyzed = false, addStats = true)
       } else {
         queryExecution.simpleString
       }

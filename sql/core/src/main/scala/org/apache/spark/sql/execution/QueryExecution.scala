@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.StringUtils.{PlanStringConcat, StringConcat}
+import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
@@ -113,54 +113,68 @@ class QueryExecution(
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
 
+  override def toString: String = withRedaction {
+    planString()
+  }
+
   def simpleString: String = withRedaction {
+    planString(addParsed = false, addAnalyzed = false, addOptimized = false)
+  }
+
+  def planString(
+      addParsed: Boolean = true,
+      addAnalyzed: Boolean = true,
+      addOptimized: Boolean = true,
+      addStats: Boolean = false): String = withRedaction {
     val concat = new PlanStringConcat()
-    concat.append("== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
-    concat.append("\n")
+    writePlans(
+      concat.append,
+      SQLConf.get.maxToStringFields,
+      addParsed,
+      addAnalyzed,
+      addOptimized,
+      addStats)
     concat.toString
   }
 
-  private def writePlans(append: String => Unit, maxFields: Int): Unit = {
+  private def writePlans(
+      append: String => Unit,
+      maxFields: Int,
+      addParsed: Boolean = true,
+      addAnalyzed: Boolean = true,
+      addOptimized: Boolean = true,
+      addStats: Boolean = false): Unit = {
     val (verbose, addSuffix) = (true, false)
-    append("== Parsed Logical Plan ==\n")
-    QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
-    append("\n== Analyzed Logical Plan ==\n")
-    val analyzedOutput = try {
-      truncatedString(
-        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
-    } catch {
-      case e: AnalysisException => e.toString
+    if (addParsed) {
+      append("== Parsed Logical Plan ==\n")
+      QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
     }
-    append(analyzedOutput)
-    append("\n")
-    QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
-    append("\n== Optimized Logical Plan ==\n")
-    QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
+    if (addAnalyzed) {
+      append("\n== Analyzed Logical Plan ==\n")
+      val analyzedOutput = try {
+        truncatedString(
+          analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"),
+          ", ",
+          maxFields)
+      } catch {
+        case e: AnalysisException => e.toString
+      }
+      append(analyzedOutput)
+      append("\n")
+      QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
+    }
+    if (addOptimized) {
+      append("\n== Optimized Logical Plan ==\n")
+      if (addStats) {
+        // trigger to compute stats for logical plans
+        optimizedPlan.stats
+        QueryPlan.append(optimizedPlan, append, verbose, addSuffix = true, maxFields)
+      } else {
+        QueryPlan.append(optimizedPlan, append, verbose, addSuffix = false, maxFields)
+      }
+    }
     append("\n== Physical Plan ==\n")
     QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
-  }
-
-  override def toString: String = withRedaction {
-    val concat = new PlanStringConcat()
-    writePlans(concat.append, SQLConf.get.maxToStringFields)
-    concat.toString
-  }
-
-  def stringWithStats: String = withRedaction {
-    val concat = new PlanStringConcat()
-    val maxFields = SQLConf.get.maxToStringFields
-
-    // trigger to compute stats for logical plans
-    optimizedPlan.stats
-
-    // only show optimized logical plan and physical plan
-    concat.append("== Optimized Logical Plan ==\n")
-    QueryPlan.append(optimizedPlan, concat.append, verbose = true, addSuffix = true, maxFields)
-    concat.append("\n== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, concat.append, verbose = true, addSuffix = false, maxFields)
-    concat.append("\n")
-    concat.toString
   }
 
   /**
