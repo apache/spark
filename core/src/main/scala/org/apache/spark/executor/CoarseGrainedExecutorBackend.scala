@@ -110,7 +110,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (log.isDebugEnabled) {
         logDebug("===============================================================================")
         logDebug("Executor Resources:")
-        resources.foreach{case (k, v) =>
+        resources.foreach{ case (k, v) =>
           logDebug(s"$k -> [name: ${v.getName}, units: ${v.getUnits}, count: ${v.getCount}," +
             s" addresses: ${v.getAddresses().deep}]")}
         logDebug("===============================================================================")
