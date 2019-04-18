@@ -66,6 +66,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         PushPredicateThroughJoin,
         PushDownPredicate,
         PushDownLeftSemiAntiJoin,
+        PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
         ColumnPruning,
         InferFiltersFromConstraints,
