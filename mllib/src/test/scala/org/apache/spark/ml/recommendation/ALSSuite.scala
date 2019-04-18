@@ -701,7 +701,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
         }.getMessage.contains(msg))
         assert(intercept[StreamingQueryException] {
           testTransformer[A](dataFrame, model, "prediction") { _ => }
-        }.getMessage.contains(msg))
+        }.getCause.getCause.getMessage.contains(msg))
       }
       testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
         df("item")))

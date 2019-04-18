@@ -193,6 +193,20 @@ private[spark] object TestUtils {
   }
 
   /**
+   * Asserts if exception message doesn't contain the message. Please note this checks all
+   * exceptions in the tree.
+   */
+  def assertExceptionMsg(exception: Throwable, msg: String): Unit = {
+    var e = exception
+    var contains = e.getMessage.contains(msg)
+    while (e.getCause != null && contains == false) {
+      e = e.getCause
+      contains = e.getMessage.contains(msg)
+    }
+    assert(contains, s"Exception tree doesn't contain the expected message: $msg")
+  }
+
+  /**
    * Test if a command is available.
    */
   def testCommandAvailable(command: String): Boolean = {
