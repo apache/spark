@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
+import org.apache.spark.util.Utils
 
 // TODO: Refactor this to `HivePartitionFilteringSuite`
 class HiveClientSuite(version: String)
@@ -39,8 +40,9 @@ class HiveClientSuite(version: String)
   private val testPartitionCount = 3 * 5 * 4
 
   private def init(tryDirectSql: Boolean): HiveClient = {
+    val location = Some(Utils.createTempDir().toURI)
     val storageFormat = CatalogStorageFormat(
-      locationUri = None,
+      locationUri = location,
       inputFormat = None,
       outputFormat = None,
       serde = None,
@@ -54,11 +56,11 @@ class HiveClientSuite(version: String)
       new StructType().add("value", "int").add("ds", "int").add("h", "int").add("chunk", "string")
     val table = CatalogTable(
       identifier = TableIdentifier("test", Some("default")),
-      tableType = CatalogTableType.MANAGED,
+      tableType = CatalogTableType.EXTERNAL,
       schema = tableSchema,
       partitionColumnNames = Seq("ds", "h", "chunk"),
       storage = CatalogStorageFormat(
-        locationUri = None,
+        locationUri = location,
         inputFormat = Some(classOf[TextInputFormat].getName),
         outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
         serde = Some(classOf[LazySimpleSerDe].getName()),
