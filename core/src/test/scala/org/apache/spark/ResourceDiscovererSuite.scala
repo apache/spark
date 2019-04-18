@@ -28,7 +28,6 @@ import com.google.common.io.Files
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
-
 class ResourceDiscovererSuite extends SparkFunSuite
     with LocalSparkContext {
 
@@ -45,7 +44,6 @@ class ResourceDiscovererSuite extends SparkFunSuite
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript1")
-
       // this is a bit ugly but do it the hardway to test out some formatting
       Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"," +
         " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)

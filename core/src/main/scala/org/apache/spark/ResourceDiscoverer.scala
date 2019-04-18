@@ -34,9 +34,11 @@ import org.apache.spark.util.Utils.executeAndGetOutput
  * The output of the script it runs is expected to be JSON in the format of the
  * ResourceInformation class, with addresses being optional.
  *
- * For example:  {"name": "gpu","count":2, "units":"", "addresses": ["0","1"]
+ * For example:  {"name": "gpu","count":2, "units":"", "addresses": ["0","1"]}
  */
 private[spark] object ResourceDiscoverer extends Logging {
+
+  private implicit val formats = DefaultFormats
 
   def findResources(sparkconf: SparkConf, isDriver: Boolean): Map[String, ResourceInformation] = {
     val prefix = if (isDriver) {
@@ -65,10 +67,9 @@ private[spark] object ResourceDiscoverer extends Logging {
         try {
           val output = executeAndGetOutput(Seq(script.get), new File("."))
           val parsedJson = parse(output)
-          implicit val formats = DefaultFormats
-         parsedJson.extract[ResourceInformation]
+          parsedJson.extract[ResourceInformation]
         } catch {
-          case e @ (_: SparkException | _: MappingException | _: JsonParseException) =>
+          case e@(_: SparkException | _: MappingException | _: JsonParseException) =>
             throw new SparkException(s"Error running the resource discovery script: $scriptFile" +
               s" for $resourceType", e)
         }

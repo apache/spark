@@ -91,9 +91,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         val source = new BufferedInputStream(new FileInputStream(resourceFileStr))
         val resourceMap = try {
           val parsedJson = parse(source).asInstanceOf[JArray].arr
-          val allResources = parsedJson.map(_.extract[ResourceInformation]).
-            map(x => (x.getName() -> x)).toMap
-          allResources
+          parsedJson.map(_.extract[ResourceInformation]).map(x => (x.getName() -> x)).toMap
         } catch {
           case e @ (_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
             throw new SparkException(
@@ -108,7 +106,15 @@ private[spark] class CoarseGrainedExecutorBackend(
         throw new SparkException(s"User specified resources per task via: $taskConfPrefix," +
           s" but can't find any resources available on the executor.")
       }
-      logInfo(s"Executor ${executorId} using resources: ${resources.values}")
+      logInfo(s"Executor ${executorId} using resources: ${resources.keys}")
+      if (log.isDebugEnabled) {
+        logDebug("===============================================================================")
+        logDebug("Executor Resources:")
+        resources.foreach{case (k, v) =>
+          logDebug(s"$k -> [name: ${v.getName}, units: ${v.getUnits}, count: ${v.getCount}," +
+            s" addresses: ${v.getAddresses().deep}]")}
+        logDebug("===============================================================================")
+      }
       resources
     } else {
       Map.empty[String, ResourceInformation]

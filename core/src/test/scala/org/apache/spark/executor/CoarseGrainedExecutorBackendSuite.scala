@@ -42,7 +42,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
 
   // scalastyle:off println
-  private def writeFile(dir: File, strToWrite: JArray): String = {
+  private def writeFileWithJson(dir: File, strToWrite: JArray): String = {
     val f1 = File.createTempFile("test-resource-parser1", "", dir)
     val writer1 = new PrintWriter(f1)
     writer1.println(compact(render(strToWrite)))
@@ -63,7 +63,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     withTempDir { tmpDir =>
       val testResourceArgs: JObject = ("" -> "")
       val ja = JArray(List(testResourceArgs))
-      val f1 = writeFile(tmpDir, ja)
+      val f1 = writeFileWithJson(tmpDir, ja)
       var error = intercept[SparkException] {
         val parsedResources = backend.parseResources(Some(f1))
       }.getMessage()
@@ -75,10 +75,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("parsing one resources") {
     val conf = new SparkConf
     conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
-
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
-
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
@@ -89,7 +87,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         ("count" -> 2) ~
         ("addresses" -> JArray(Array("0", "1").map(JString(_)).toList))
       val ja = JArray(List(testResourceArgs))
-      val f1 = writeFile(tmpDir, ja)
+      val f1 = writeFileWithJson(tmpDir, ja)
       val parsedResources = backend.parseResources(Some(f1))
 
       assert(parsedResources.size === 1)
@@ -104,10 +102,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("parsing multiple resources") {
     val conf = new SparkConf
     conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
-
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
-
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
@@ -124,7 +120,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
           ("count" -> 3) ~
           ("addresses" -> JArray(Array("f1", "f2", "f3").map(JString(_)).toList))
       val ja = JArray(List(gpuArgs, fpgaArgs))
-      val f1 = writeFile(tmpDir, ja)
+      val f1 = writeFileWithJson(tmpDir, ja)
       val parsedResources = backend.parseResources(Some(f1))
 
       assert(parsedResources.size === 2)
@@ -144,9 +140,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
   test("use discoverer") {
     val conf = new SparkConf
     conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
-
     assume(!(Utils.isWindows))
-
     withTempDir { dir =>
       val fpgaDiscovery = new File(dir, "resourceDiscoverScriptfpga")
       Files.write("echo {\\\"name\\\":\\\"fpga\\\", \\\"count\\\":3, \\\"units\\\":\\\"\\\"," +

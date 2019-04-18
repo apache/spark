@@ -38,7 +38,7 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv,
-    resourceAddrs: Option[String])
+    resourcesFile: Option[String])
   extends CoarseGrainedExecutorBackend(
     rpcEnv,
     driverUrl,
@@ -47,7 +47,7 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
     cores,
     userClassPath,
     env,
-    resourceAddrs) with Logging {
+    resourcesFile) with Logging {
 
   private lazy val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(env.conf)
 
@@ -68,7 +68,7 @@ private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
     val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.hostname, arguments.cores, arguments.userClassPath, env, arguments.resourceAddrs)
+        arguments.hostname, arguments.cores, arguments.userClassPath, env, arguments.resourcesFile)
     }
     val backendArgs = CoarseGrainedExecutorBackend.parseArguments(args,
       this.getClass.getCanonicalName.stripSuffix("$"))
