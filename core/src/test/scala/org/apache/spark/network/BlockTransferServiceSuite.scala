@@ -93,10 +93,11 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
       }
     }
 
+    val blockTransferClientSync = new BlockTransferClientSync(blockTransferService)
     val e = intercept[SparkException] {
       failAfter(10.seconds) {
-        blockTransferService.fetchBlockSync(
-          "localhost-unused", 0, "exec-id-unused", "block-id-unused", null)
+        blockTransferClientSync.fetchBlockSync("localhost-unused", 0, "exec-id-unused",
+          "block-id-unused", null)
       }
     }
     assert(e.getCause.isInstanceOf[IllegalArgumentException])

@@ -23,7 +23,7 @@ import java.util.Collections;
 import com.codahale.metrics.MetricSet;
 
 /** Provides an interface for reading shuffle files, either from an Executor or external service. */
-public abstract class ShuffleClient implements Closeable {
+public abstract class ShuffleClient implements BlockTransferClient, Closeable {
 
   /**
    * Initializes the ShuffleClient, specifying this Executor's appId.

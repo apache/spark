@@ -179,6 +179,18 @@ public class ExternalShuffleBlockResolver {
     return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
   }
 
+  public ManagedBuffer getBlockData(
+      String appId,
+      String execId,
+      int rddId,
+      int splitIndex) {
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    if (executor == null) {
+      throw new RuntimeException(
+        String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
+    }
+    return getDiskPersistedRddBlockData(executor, rddId, splitIndex);
+  }
   /**
    * Removes our metadata of all executors registered for the given application, and optionally
    * also deletes the local directories associated with the executors of that application in a
@@ -296,6 +308,13 @@ public class ExternalShuffleBlockResolver {
     } catch (ExecutionException e) {
       throw new RuntimeException("Failed to open file: " + indexFile, e);
     }
+  }
+
+  public ManagedBuffer getDiskPersistedRddBlockData(
+      ExecutorShuffleInfo executor, int rddId, int splitIndex) {
+    File file = getFile(executor.localDirs, executor.subDirsPerLocalDir,
+      "rdd_" + rddId + "_" + splitIndex);
+    return new FileSegmentManagedBuffer(conf, file, 0, file.length());
   }
 
   /**

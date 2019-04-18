@@ -492,7 +492,7 @@ private[spark] class ExecutorAllocationManager(
     if (testing || executorsRemoved.nonEmpty) {
       executorsRemoved.foreach { removedExecutorId =>
         // If it is a cached block, it uses cachedExecutorIdleTimeoutS for timeout
-        val idleTimeout = if (blockManagerMaster.hasCachedBlocks(removedExecutorId)) {
+        val idleTimeout = if (blockManagerMaster.hasExclusiveCachedBlocks(removedExecutorId)) {
           cachedExecutorIdleTimeoutS
         } else {
           executorIdleTimeoutS
@@ -608,7 +608,7 @@ private[spark] class ExecutorAllocationManager(
         // Note that it is not necessary to query the executors since all the cached
         // blocks we are concerned with are reported to the driver. Note that this
         // does not include broadcast blocks.
-        val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(executorId)
+        val hasCachedBlocks = blockManagerMaster.hasExclusiveCachedBlocks(executorId)
         val now = clock.getTimeMillis()
         val timeout = {
           if (hasCachedBlocks) {

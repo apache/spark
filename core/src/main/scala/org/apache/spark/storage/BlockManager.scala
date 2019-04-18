@@ -138,6 +138,9 @@ private[spark] class BlockManager(
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
 
+  // Visible for testing
+  private[storage] var blockTransferClientSync = new BlockTransferClientSync(blockTransferService)
+
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
     val deleteFilesOnStop =
@@ -164,20 +167,7 @@ private[spark] class BlockManager(
   private val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
   private val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
-  // Port used by the external shuffle service. In Yarn mode, this may be already be
-  // set through the Hadoop configuration as the server is launched in the Yarn NM.
-  private val externalShuffleServicePort = {
-    val tmpPort = Utils.getSparkOrYarnConfig(conf, config.SHUFFLE_SERVICE_PORT.key,
-      config.SHUFFLE_SERVICE_PORT.defaultValueString).toInt
-    if (tmpPort == 0) {
-      // for testing, we set "spark.shuffle.service.port" to 0 in the yarn config, so yarn finds
-      // an open port.  But we still need to tell our spark apps the right port to use.  So
-      // only if the yarn config has the port set to 0, we prefer the value in the spark config
-      conf.get(config.SHUFFLE_SERVICE_PORT.key).toInt
-    } else {
-      tmpPort
-    }
-  }
+  private val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
 
   var blockManagerId: BlockManagerId = _
 
@@ -843,7 +833,7 @@ private[spark] class BlockManager(
    *
    * This does not acquire a lock on this block in this JVM.
    */
-  private def getRemoteValues[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
+  private[spark] def getRemoteValues[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
     val ct = implicitly[ClassTag[T]]
     getRemoteManagedBuffer(blockId).map { data =>
       val values =
@@ -852,21 +842,30 @@ private[spark] class BlockManager(
     }
   }
 
+  private def preferExecutors(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
+    val (executors, shuffleServers) = locations.partition(_.port != externalShuffleServicePort)
+    executors ++ shuffleServers
+  }
+
   /**
    * Return a list of locations for the given block, prioritizing the local machine since
    * multiple block managers can share the same host, followed by hosts on the same rack.
+   *
+   * Within each of the above listed groups (same host, same rack and others) executors are
+   * preferred over the external shuffle service.
    */
-  private def sortLocations(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
+  private[spark] def sortLocations(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
     val locs = Random.shuffle(locations)
-    val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
-    blockManagerId.topologyInfo match {
-      case None => preferredLocs ++ otherLocs
+    val (preferredLocs, otherLocs) = locs.partition(_.host == blockManagerId.host)
+    val orderedParts = blockManagerId.topologyInfo match {
+      case None => Seq(preferredLocs, otherLocs)
       case Some(_) =>
         val (sameRackLocs, differentRackLocs) = otherLocs.partition {
           loc => blockManagerId.topologyInfo == loc.topologyInfo
         }
-        preferredLocs ++ sameRackLocs ++ differentRackLocs
+        Seq(preferredLocs, sameRackLocs, differentRackLocs)
     }
+    orderedParts.map(preferExecutors).reduce(_ ++ _)
   }
 
   /**
@@ -902,8 +901,8 @@ private[spark] class BlockManager(
       val loc = locationIterator.next()
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
-        blockTransferService.fetchBlockSync(
-          loc.host, loc.port, loc.executorId, blockId.toString, tempFileManager)
+        blockTransferClientSync.fetchBlockSync(loc.host, loc.port, loc.executorId, blockId.toString,
+          tempFileManager)
       } catch {
         case NonFatal(e) =>
           runningFailureCount += 1
