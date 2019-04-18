@@ -510,7 +510,7 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
   var storageLevel: String = weakIntern(info.storageLevel.description)
   var memoryUsed = 0L
   var diskUsed = 0L
-  var storageInfo: StorageLevel = new StorageLevel()
+  var storageInfo: StorageLevel = info.storageLevel
 
   private val partitions = new HashMap[String, LiveRDDPartition]()
   private val partitionSeq = new RDDPartitionSeq()
