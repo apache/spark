@@ -18,7 +18,7 @@
 package org.apache.spark.executor
 
 
-import java.io.File
+import java.io.{File, PrintWriter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JavaFiles}
@@ -26,18 +26,30 @@ import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, O
 import java.util.EnumSet
 
 import com.google.common.io.Files
+import org.json4s.JsonAST.{JArray, JObject, JString}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 import org.mockito.Mockito.when
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
-
 
 class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
+
+  // scalastyle:off println
+  private def writeFile(dir: File, strToWrite: JArray): String = {
+    val f1 = File.createTempFile("test-resource-parser1", "", dir)
+    val writer1 = new PrintWriter(f1)
+    writer1.println(compact(render(strToWrite)))
+    writer1.close()
+    f1.getPath()
+  }
+  // scalastyle:on println
 
   test("parsing no resources") {
     val conf = new SparkConf
@@ -48,15 +60,17 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
+    withTempDir { tmpDir =>
+      val testResourceArgs: JObject = ("" -> "")
+      val ja = JArray(List(testResourceArgs))
+      val f1 = writeFile(tmpDir, ja)
+      var error = intercept[SparkException] {
+        val parsedResources = backend.parseResources(Some(f1))
+      }.getMessage()
 
-    var testResourceArgs = Some("")
-    var error = intercept[SparkException] {
-      val parsedResources = backend.parseResources(testResourceArgs)
-    }.getMessage()
-
-    assert(error.contains("Exception parsing the resources passed"))
+      assert(error.contains("Exception parsing the resources passed"))
+    }
   }
-
 
   test("parsing one resources") {
     val conf = new SparkConf
@@ -68,17 +82,23 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
+    withTempDir { tmpDir =>
+      val testResourceArgs =
+        ("name" -> "gpu") ~
+        ("units" -> "") ~
+        ("count" -> 2) ~
+        ("addresses" -> JArray(Array("0", "1").map(JString(_)).toList))
+      val ja = JArray(List(testResourceArgs))
+      val f1 = writeFile(tmpDir, ja)
+      val parsedResources = backend.parseResources(Some(f1))
 
-    val testResourceArgs =
-      Some("""[{"name": "gpu", "count":2, "units":"", "addresses":["0","1"]}]""")
-    val parsedResources = backend.parseResources(testResourceArgs)
-
-    assert(parsedResources.size === 1)
-    assert(parsedResources.get("gpu").nonEmpty)
-    assert(parsedResources.get("gpu").get.getName() === "gpu")
-    assert(parsedResources.get("gpu").get.getUnits() === "")
-    assert(parsedResources.get("gpu").get.getCount() === 2)
-    assert(parsedResources.get("gpu").get.getAddresses().deep === Array("0", "1").deep)
+      assert(parsedResources.size === 1)
+      assert(parsedResources.get("gpu").nonEmpty)
+      assert(parsedResources.get("gpu").get.getName() === "gpu")
+      assert(parsedResources.get("gpu").get.getUnits() === "")
+      assert(parsedResources.get("gpu").get.getCount() === 2)
+      assert(parsedResources.get("gpu").get.getAddresses().deep === Array("0", "1").deep)
+    }
   }
 
   test("parsing multiple resources") {
@@ -92,23 +112,33 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
       4, Seq.empty[URL], env, None)
 
-    val testResourceArgs =
-      Some(
-        """[{"name": "gpu", "count":2, "units":"", "addresses":["0","1"]},
-          |{"name": "fpga", "count":3, "units":"mb", "addresses":["f1","f2","f3"]}]""".stripMargin)
-    val parsedResources = backend.parseResources(testResourceArgs)
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "gpu") ~
+          ("units" -> "") ~
+          ("count" -> 2) ~
+          ("addresses" -> JArray(Array("0", "1").map(JString(_)).toList))
+      val fpgaArgs =
+        ("name" -> "fpga") ~
+          ("units" -> "mb") ~
+          ("count" -> 3) ~
+          ("addresses" -> JArray(Array("f1", "f2", "f3").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs, fpgaArgs))
+      val f1 = writeFile(tmpDir, ja)
+      val parsedResources = backend.parseResources(Some(f1))
 
-    assert(parsedResources.size === 2)
-    assert(parsedResources.get("gpu").nonEmpty)
-    assert(parsedResources.get("gpu").get.getName() === "gpu")
-    assert(parsedResources.get("gpu").get.getUnits() === "")
-    assert(parsedResources.get("gpu").get.getCount() === 2)
-    assert(parsedResources.get("gpu").get.getAddresses().deep === Array("0", "1").deep)
-    assert(parsedResources.get("fpga").nonEmpty)
-    assert(parsedResources.get("fpga").get.getName() === "fpga")
-    assert(parsedResources.get("fpga").get.getUnits() === "mb")
-    assert(parsedResources.get("fpga").get.getCount() === 3)
-    assert(parsedResources.get("fpga").get.getAddresses().deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.size === 2)
+      assert(parsedResources.get("gpu").nonEmpty)
+      assert(parsedResources.get("gpu").get.getName() === "gpu")
+      assert(parsedResources.get("gpu").get.getUnits() === "")
+      assert(parsedResources.get("gpu").get.getCount() === 2)
+      assert(parsedResources.get("gpu").get.getAddresses().deep === Array("0", "1").deep)
+      assert(parsedResources.get("fpga").nonEmpty)
+      assert(parsedResources.get("fpga").get.getName() === "fpga")
+      assert(parsedResources.get("fpga").get.getUnits() === "mb")
+      assert(parsedResources.get("fpga").get.getCount() === 3)
+      assert(parsedResources.get("fpga").get.getAddresses().deep === Array("f1", "f2", "f3").deep)
+    }
   }
 
   test("use discoverer") {

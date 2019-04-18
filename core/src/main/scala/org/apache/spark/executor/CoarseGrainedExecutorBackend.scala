@@ -17,6 +17,7 @@
 
 package org.apache.spark.executor
 
+import java.io.{BufferedInputStream, FileInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -52,8 +53,10 @@ private[spark] class CoarseGrainedExecutorBackend(
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv,
-    resourceAddrs: Option[String])
+    resourcesFile: Option[String])
   extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
+
+  private implicit val formats = DefaultFormats
 
   private[this] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
@@ -69,7 +72,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, parseResources(resourceAddrs)))
+        extractAttributes, parseResources(resourcesFile)))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
@@ -80,21 +83,23 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   // visible for testing
-  def parseResources(resourceAddrsArg: Option[String]): Map[String, ResourceInformation] = {
+  def parseResources(resourcesFile: Option[String]): Map[String, ResourceInformation] = {
     // only parse the resources if a task requires them
     val taskConfPrefix = SPARK_TASK_RESOURCE_PREFIX
     val resourceInfo = if (env.conf.getAllWithPrefix(taskConfPrefix).size > 0) {
-      val resources = resourceAddrsArg.map(resourceStr => {
-        implicit val formats = DefaultFormats
+      val resources = resourcesFile.map(resourceFileStr => {
+        val source = new BufferedInputStream(new FileInputStream(resourceFileStr))
         val resourceMap = try {
-          val parsedJson = parse(resourceStr).asInstanceOf[JArray].arr
+          val parsedJson = parse(source).asInstanceOf[JArray].arr
           val allResources = parsedJson.map(_.extract[ResourceInformation]).
             map(x => (x.getName() -> x)).toMap
           allResources
         } catch {
-          case e @ (_: MappingException | _: MismatchedInputException) =>
+          case e @ (_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
             throw new SparkException(
-              s"Exception parsing the resources passed in: $resourceAddrsArg", e)
+              s"Exception parsing the resources passed in: $resourcesFile", e)
+        } finally {
+          source.close()
         }
         resourceMap
       }).getOrElse(ResourceDiscoverer.findResources(env.conf, false))
