@@ -65,6 +65,8 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
     // The candidates may contain placeholders marked as [[planLater]],
     // so try to replace them by their child plans.
     val plans = candidates.flatMap { candidate =>
+      setPlanProperty(candidate, plan)
+
       val placeholders = collectPlaceholders(candidate)
 
       if (placeholders.isEmpty) {
@@ -92,6 +94,9 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
     val pruned = prunePlans(plans)
     assert(pruned.hasNext, s"No plan for $plan")
     pruned
+  }
+
+  protected def setPlanProperty(candidate: PhysicalPlan, plan: LogicalPlan): Unit = {
   }
 
   /**

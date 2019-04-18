@@ -53,6 +53,10 @@ class SparkPlanner(
    */
   def extraPlanningStrategies: Seq[Strategy] = Nil
 
+  override protected def setPlanProperty(candidate: SparkPlan, plan: LogicalPlan): Unit = {
+    candidate.withStats(plan.stats)
+  }
+
   override protected def collectPlaceholders(plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {
     plan.collect {
       case placeholder @ PlanLater(logicalPlan) => placeholder -> logicalPlan

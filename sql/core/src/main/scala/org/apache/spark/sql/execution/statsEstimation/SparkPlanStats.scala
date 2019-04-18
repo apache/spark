@@ -25,7 +25,14 @@ import org.apache.spark.sql.execution.SparkPlan
  */
 trait SparkPlanStats { self: SparkPlan =>
 
-  def stats: Option[Statistics] = None
+  private var _stats: Option[Statistics] = None
+
+  def stats: Option[Statistics] = _stats
+
+  def withStats(value: Statistics): SparkPlan = {
+    _stats = Option(value)
+    this
+  }
 
   def rowCountStats: BigInt = {
     if (stats.isDefined && stats.get.rowCount.isDefined) {

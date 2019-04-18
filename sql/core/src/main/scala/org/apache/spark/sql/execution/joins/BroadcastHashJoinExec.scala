@@ -44,8 +44,7 @@ case class BroadcastHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan,
-    override val stats: Option[Statistics] = None)
+    right: SparkPlan)
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
   override lazy val metrics = {

@@ -70,7 +70,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with SparkPlanStats with L
     if (sqlContext != null) {
       SparkSession.setActiveSession(sqlContext.sparkSession)
     }
-    super.makeCopy(newArgs)
+    val sparkPlan = super.makeCopy(newArgs)
+    if (this.stats.isDefined) {
+      sparkPlan.withStats(this.stats.get)
+    }
+    sparkPlan
   }
 
   /**
