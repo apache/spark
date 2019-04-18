@@ -286,6 +286,6 @@ if [ "$MAKE_TGZ" == "true" ]; then
   TARDIR="$SPARK_HOME/$TARDIR_NAME"
   rm -rf "$TARDIR"
   cp -r "$DISTDIR" "$TARDIR"
-  tar czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
+  tar czf "spark-$VERSION-bin-$NAME.tgz" --numeric-owner --owner=0 --group=0 -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
 fi
