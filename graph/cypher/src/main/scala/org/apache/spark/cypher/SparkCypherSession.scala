@@ -82,7 +82,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     createGraph(graphImporter.nodeFrames, graphImporter.relationshipFrames)
   }
 
-  override private[spark] def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit = {
+  def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit = {
     val relationalGraph = toRelationalGraph(graph)
     val graphDirectoryStructure = SparkGraphDirectoryStructure(path)
 

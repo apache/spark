@@ -113,6 +113,6 @@ trait CypherSession {
     */
   def load(path: String): PropertyGraph
 
-  private[spark] def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit
+  def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit
 
 }
