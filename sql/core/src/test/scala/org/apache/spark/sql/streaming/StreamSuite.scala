@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{File, IOException, InterruptedIOException, UncheckedIOException}
+import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit, TimeoutException}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 
 import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
