@@ -51,7 +51,7 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   private final IndexShuffleBlockResolver blockResolver;
   private final long[] partitionLengths;
   private final int bufferSize;
-  private int currPartitionId = 0;
+  private int lastPartitionId = -1;
   private long currChannelPosition;
   private final BlockManagerId shuffleServerId;
 
@@ -84,7 +84,11 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
-  public ShufflePartitionWriter getNextPartitionWriter() throws IOException {
+  public ShufflePartitionWriter getPartitionWriter(int partitionId) throws IOException {
+    if (partitionId <= lastPartitionId) {
+      throw new IllegalArgumentException("Partitions should be requested in increasing order.");
+    }
+    lastPartitionId = partitionId;
     if (outputTempFile == null) {
       outputTempFile = Utils.tempFileWith(outputFile);
     }
@@ -93,7 +97,7 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     } else {
       currChannelPosition = 0L;
     }
-    return new DefaultShufflePartitionWriter(currPartitionId++);
+    return new DefaultShufflePartitionWriter(partitionId);
   }
 
   @Override

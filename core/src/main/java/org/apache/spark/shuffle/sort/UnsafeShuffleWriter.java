@@ -291,18 +291,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     long[] partitionLengths = new long[numPartitions];
     try {
       if (spills.length == 0) {
-        // The contract we are working under states that we will open a partition writer for
-        // each partition, regardless of number of spills
-        for (int i = 0; i < numPartitions; i++) {
-          ShufflePartitionWriter writer = null;
-          try {
-            writer = mapWriter.getNextPartitionWriter();
-          } finally {
-            if (writer != null) {
-              writer.close();
-            }
-          }
-        }
         return partitionLengths;
       } else {
         // There are multiple spills to merge, so none of these spill files' lengths were counted
@@ -378,7 +366,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         boolean copyThrewExecption = true;
         ShufflePartitionWriter writer = null;
         try {
-          writer = mapWriter.getNextPartitionWriter();
+          writer = mapWriter.getPartitionWriter(partition);
           OutputStream partitionOutput = null;
           try {
             // Shield the underlying output stream from close() calls, so that we can close the
@@ -457,7 +445,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         boolean copyThrewExecption = true;
         ShufflePartitionWriter writer = null;
         try {
-          writer = mapWriter.getNextPartitionWriter();
+          writer = mapWriter.getPartitionWriter(partition);
           WritableByteChannel channel = writer.toChannel();
           for (int i = 0; i < spills.length; i++) {
             long partitionLengthInSpill = 0L;

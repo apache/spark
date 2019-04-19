@@ -216,7 +216,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         boolean copyThrewException = true;
         ShufflePartitionWriter writer = null;
         try {
-          writer = mapOutputWriter.getNextPartitionWriter();
+          writer = mapOutputWriter.getPartitionWriter(i);
           if (!file.exists()) {
             copyThrewException = false;
           } else {

@@ -30,7 +30,7 @@ import org.apache.spark.api.java.Optional;
  */
 @Experimental
 public interface ShuffleMapOutputWriter {
-  ShufflePartitionWriter getNextPartitionWriter() throws IOException;
+  ShufflePartitionWriter getPartitionWriter(int partitionId) throws IOException;
 
   Optional<MapShuffleLocations> commitAllPartitions() throws IOException;
 

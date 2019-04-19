@@ -140,7 +140,7 @@ class DefaultShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAft
 
   test("writing to an outputstream") {
     (0 until NUM_PARTITIONS).foreach{ p =>
-      val writer = mapOutputWriter.getNextPartitionWriter
+      val writer = mapOutputWriter.getPartitionWriter(p)
       val stream = writer.toStream()
       data(p).foreach { i => stream.write(i)}
       stream.close()
@@ -159,7 +159,7 @@ class DefaultShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAft
 
   test("writing to a channel") {
     (0 until NUM_PARTITIONS).foreach{ p =>
-      val writer = mapOutputWriter.getNextPartitionWriter
+      val writer = mapOutputWriter.getPartitionWriter(p)
       val channel = writer.toChannel()
       val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
       val intBuffer = byteBuffer.asIntBuffer()
@@ -179,7 +179,7 @@ class DefaultShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAft
 
   test("copyStreams with an outputstream") {
     (0 until NUM_PARTITIONS).foreach{ p =>
-      val writer = mapOutputWriter.getNextPartitionWriter
+      val writer = mapOutputWriter.getPartitionWriter(p)
       val stream = writer.toStream()
       val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
       val intBuffer = byteBuffer.asIntBuffer()
@@ -200,7 +200,7 @@ class DefaultShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAft
 
   test("copyStreamsWithNIO with a channel") {
     (0 until NUM_PARTITIONS).foreach{ p =>
-      val writer = mapOutputWriter.getNextPartitionWriter
+      val writer = mapOutputWriter.getPartitionWriter(p)
       val channel = writer.toChannel()
       val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
       val intBuffer = byteBuffer.asIntBuffer()
