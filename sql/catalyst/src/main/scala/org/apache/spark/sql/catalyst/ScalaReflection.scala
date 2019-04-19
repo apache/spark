@@ -1013,7 +1013,10 @@ trait ScalaReflection extends Logging {
     (for {
       a <- getters
       b <- setters
-      if propertyName(a._1) == propertyName(b._1) && a._2 =:= b._2
+      if a._2 =:= b._2 &&
+        propertyName(a._1) == propertyName(b._1) &&
+        ((a._1.indexOf("get") == 0 && b._1.indexOf("set") == 0) ||
+          (a._1.indexOf("get") != 0 && b._1.indexOf("set") != 0))
     } yield (propertyName(a._1), a._1, b._1, a._2))
       .toSeq
   }
