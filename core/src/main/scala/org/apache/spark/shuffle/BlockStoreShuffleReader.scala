@@ -20,7 +20,8 @@ package org.apache.spark.shuffle
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
+import org.apache.spark.shuffle.sort.DefaultMapShuffleLocations
+import org.apache.spark.storage.{BlockId, BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -47,7 +48,14 @@ private[spark] class BlockStoreShuffleReader[K, C](
       context,
       blockManager.shuffleClient,
       blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
+      mapOutputTracker.getMapSizesByShuffleLocation(handle.shuffleId, startPartition, endPartition)
+        .map {
+          case (loc: DefaultMapShuffleLocations, blocks: Seq[(BlockId, Long)]) =>
+            (loc.getBlockManagerId, blocks)
+          case _ =>
+            throw new UnsupportedOperationException("Not allowed to using non-default map shuffle" +
+              " locations yet.")
+        },
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.get(config.REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024,

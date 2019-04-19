@@ -23,6 +23,8 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
 
+import org.apache.spark.api.java.Optional;
+import org.apache.spark.api.shuffle.MapShuffleLocations;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -221,6 +223,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final ShuffleMapOutputWriter mapWriter = shuffleWriteSupport
       .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
     final long[] partitionLengths;
+    Optional<MapShuffleLocations> mapLocations;
     try {
       try {
         partitionLengths = mergeSpills(spills, mapWriter);
@@ -231,7 +234,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           }
         }
       }
-      mapWriter.commitAllPartitions();
+      mapLocations = mapWriter.commitAllPartitions();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);
@@ -240,7 +243,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       throw e;
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(
+        blockManager.shuffleServerId(),
+        mapLocations.orNull(),
+        partitionLengths);
   }
 
   @VisibleForTesting

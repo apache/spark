@@ -25,6 +25,8 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import javax.annotation.Nullable;
 
+import org.apache.spark.api.java.Optional;
+import org.apache.spark.api.shuffle.MapShuffleLocations;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -134,8 +136,11 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       if (!records.hasNext()) {
         partitionLengths = new long[numPartitions];
-        mapOutputWriter.commitAllPartitions();
-        mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+        Optional<MapShuffleLocations> blockLocs = mapOutputWriter.commitAllPartitions();
+        mapStatus = MapStatus$.MODULE$.apply(
+            blockManager.shuffleServerId(),
+            blockLocs.orNull(),
+            partitionLengths);
         return;
       }
       final SerializerInstance serInstance = serializer.newInstance();
@@ -168,8 +173,11 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
 
       partitionLengths = writePartitionedData(mapOutputWriter);
-      mapOutputWriter.commitAllPartitions();
-      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+      Optional<MapShuffleLocations> mapLocations = mapOutputWriter.commitAllPartitions();
+      mapStatus = MapStatus$.MODULE$.apply(
+          blockManager.shuffleServerId(),
+          mapLocations.orNull(),
+          partitionLengths);
     } catch (Exception e) {
       try {
         mapOutputWriter.abort(e);
@@ -178,6 +186,10 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       throw e;
     }
+    mapStatus = MapStatus$.MODULE$.apply(
+        blockManager.shuffleServerId(),
+        DefaultMapShuffleLocations.get(blockManager.shuffleServerId()),
+        partitionLengths);
   }
 
   @VisibleForTesting

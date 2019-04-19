@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
-import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
+import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
@@ -129,7 +129,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       metricsSystem = null,
       taskMetrics = taskMetrics))
 
-    writeSupport = new DefaultShuffleWriteSupport(conf, blockResolver)
+    writeSupport = new DefaultShuffleWriteSupport(
+      conf, blockResolver, BlockManagerId("0", "localhost", 7090))
   }
 
   override def afterEach(): Unit = {
@@ -192,7 +193,6 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     assert(taskMetrics.memoryBytesSpilled === 0)
   }
 
-  // TODO(ifilonenko): MAKE THIS PASS
   test("write with some empty partitions with transferTo") {
     def records: Iterator[(Int, Int)] =
       Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))

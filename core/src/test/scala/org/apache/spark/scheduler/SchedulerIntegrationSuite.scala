@@ -191,7 +191,8 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       shuffleId <- shuffleIds
       reduceIdx <- (0 until nParts)
     } {
-      val statuses = taskScheduler.mapOutputTracker.getMapSizesByExecutorId(shuffleId, reduceIdx)
+      val statuses = taskScheduler.mapOutputTracker.getMapSizesByShuffleLocation(
+        shuffleId, reduceIdx)
       // really we should have already thrown an exception rather than fail either of these
       // asserts, but just to be extra defensive let's double check the statuses are OK
       assert(statuses != null)

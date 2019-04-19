@@ -14,25 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.api.shuffle;
 
-import java.io.IOException;
-
 import org.apache.spark.annotation.Experimental;
-import org.apache.spark.api.java.Optional;
+
+import java.io.Serializable;
 
 /**
- * :: Experimental ::
- * An interface for creating and managing shuffle partition writers
- *
- * @since 3.0.0
+ * Represents metadata about where shuffle blocks were written in a single map task.
+ * <p>
+ * This is optionally returned by shuffle writers. The inner shuffle locations may
+ * be accessed by shuffle readers. Shuffle locations are only necessary when the
+ * location of shuffle blocks needs to be managed by the driver; shuffle plugins
+ * may choose to use an external database or other metadata management systems to
+ * track the locations of shuffle blocks instead.
  */
 @Experimental
-public interface ShuffleMapOutputWriter {
-  ShufflePartitionWriter getNextPartitionWriter() throws IOException;
+public interface MapShuffleLocations extends Serializable {
 
-  Optional<MapShuffleLocations> commitAllPartitions() throws IOException;
-
-  void abort(Throwable error) throws IOException;
+  /**
+   * Get the location for a given shuffle block written by this map task.
+   */
+  ShuffleLocation getLocationForBlock(int reduceId);
 }

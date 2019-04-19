@@ -17,22 +17,9 @@
 
 package org.apache.spark.api.shuffle;
 
-import java.io.IOException;
-
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.api.java.Optional;
-
 /**
- * :: Experimental ::
- * An interface for creating and managing shuffle partition writers
- *
- * @since 3.0.0
+ * Marker interface representing a location of a shuffle block. Implementations of shuffle readers
+ * and writers are expected to cast this down to an implementation-specific representation.
  */
-@Experimental
-public interface ShuffleMapOutputWriter {
-  ShufflePartitionWriter getNextPartitionWriter() throws IOException;
-
-  Optional<MapShuffleLocations> commitAllPartitions() throws IOException;
-
-  void abort(Throwable error) throws IOException;
+public interface ShuffleLocation {
 }
