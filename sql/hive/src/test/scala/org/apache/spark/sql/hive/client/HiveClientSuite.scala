@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
+import org.apache.spark.util.Utils
 
 // TODO: Refactor this to `HivePartitionFilteringSuite`
 class HiveClientSuite(version: String)
@@ -49,6 +50,7 @@ class HiveClientSuite(version: String)
 
     val hadoopConf = new Configuration()
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
+    hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().toURI().toString())
     val client = buildClient(hadoopConf)
     val tableSchema =
       new StructType().add("value", "int").add("ds", "int").add("h", "int").add("chunk", "string")
