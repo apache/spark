@@ -151,19 +151,25 @@ object JavaTypeInference {
    * the name of the getter function, and [set]PropertyName is the name of the setter function.
    */
   def getObjectProperties(beanClass: Class[_]): Array[(String, Method, Method)] = {
+    def propertyName(getterName: String, setterName: String): String = {
+      if (getterName == setterName) {
+        getterName
+      } else {
+        if (getterName.indexOf("get") == 0 && setterName.indexOf("set") == 0 &&
+          getterName.substring(3) == setterName.substring(3)) {
+          getterName.substring(3)
+        } else {
+          null
+        }
+      }
+    }
     for {
       a <- beanClass.getMethods.filter(method => method.getParameterCount == 0)
       b <- beanClass.getMethods.filter(method => method.getReturnType == Void.TYPE &&
         method.getParameterCount == 1)
-      if (a.getName == b.getName ||
-        (a.getName.indexOf("get") == 0 && b.getName.indexOf("set") == 0 &&
-          a.getName.substring(3) == b.getName.substring(3))) &&
-        a.getReturnType == b.getParameterTypes.head
-    } yield (if (a.getName.indexOf("get") == 0 && b.getName.indexOf("set") == 0) {
-      a.getName.substring(3)
-    } else {
-      a.getName
-    }, a, b)
+      if (propertyName(a.getName, b.getName) != null &&
+        a.getReturnType == b.getParameterTypes.head)
+    } yield (propertyName(a.getName, b.getName), a, b)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {

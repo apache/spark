@@ -433,7 +433,6 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
       val convertedBackRow = encoder.toRow(convertedBack)
       val isCorrect = row == convertedBackRow
-      
       if (!isCorrect) {
         val types = convertedBack match {
           case c: Product =>
