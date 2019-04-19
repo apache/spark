@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.sources.{And, DataSourceRegister, Filter, GreaterThan, GreaterThanOrEqual,
-  LessThan, LessThanOrEqual}
+import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan,
+  GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
@@ -98,7 +98,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
     val pathGlobPattern = binaryFileSourceOptions.pathGlobFilter
 
-    val filterFuncs = filters.flatMap(createFilterFunctions(_))
+    val filterFuncs = filters.map(filter => createFilterFunction(filter))
 
     (file: PartitionedFile) => {
       val path = file.filePath
@@ -168,27 +168,38 @@ object BinaryFileFormat {
     StructField("length", LongType, false) ::
     StructField("content", BinaryType, true) :: Nil)
 
-  private[binaryfile] def createFilterFunctions(filter: Filter): Seq[FileStatus => Boolean] = {
+  private[binaryfile] def createFilterFunction(filter: Filter): FileStatus => Boolean = {
     filter match {
-      case andFilter: And =>
-        createFilterFunctions(andFilter.left) ++ createFilterFunctions(andFilter.right)
+      case And(left, right) =>
+        s => createFilterFunction(left)(s) && createFilterFunction(right)(s)
+      case Or(left, right) =>
+        s => createFilterFunction(left)(s) || createFilterFunction(right)(s)
+      case Not(child) =>
+        s => !createFilterFunction(child)(s)
+
       case LessThan("length", value: Long) =>
-        Seq((status: FileStatus) => status.getLen < value)
-      case LessThan("modificationTime", value: Timestamp) =>
-        Seq((status: FileStatus) => status.getModificationTime < value.getTime)
+        _.getLen < value
       case LessThanOrEqual("length", value: Long) =>
-        Seq((status: FileStatus) => status.getLen <= value)
-      case LessThanOrEqual("modificationTime", value: Timestamp) =>
-        Seq((status: FileStatus) => status.getModificationTime <= value.getTime)
+        _.getLen <= value
       case GreaterThan("length", value: Long) =>
-        Seq((status: FileStatus) => status.getLen > value)
-      case GreaterThan("modificationTime", value: Timestamp) =>
-        Seq((status: FileStatus) => status.getModificationTime > value.getTime)
+        _.getLen > value
       case GreaterThanOrEqual("length", value: Long) =>
-        Seq((status: FileStatus) => status.getLen >= value)
+        _.getLen >= value
+      case EqualTo("length", value: Long) =>
+        _.getLen == value
+
+      case LessThan("modificationTime", value: Timestamp) =>
+        _.getModificationTime < value.getTime
+      case LessThanOrEqual("modificationTime", value: Timestamp) =>
+        _.getModificationTime <= value.getTime
+      case GreaterThan("modificationTime", value: Timestamp) =>
+        _.getModificationTime > value.getTime
       case GreaterThanOrEqual("modificationTime", value: Timestamp) =>
-        Seq((status: FileStatus) => status.getModificationTime >= value.getTime)
-      case _ => Seq.empty
+        _.getModificationTime >= value.getTime
+      case EqualTo("modificationTime", value: Timestamp) =>
+        _.getModificationTime == value.getTime
+
+      case _ => (_ => true)
     }
   }
 }
