@@ -890,23 +890,42 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         Row(ts)
       }
       val schema = new StructType().add("time", TimestampType)
+      val df1 = spark.createDataFrame(sparkContext.parallelize(data(0, 1)), schema)
+      val df2 = spark.createDataFrame(sparkContext.parallelize(data(2, 10)), schema)
+      val expected = df1.unionAll(df2)
+
       withTempPath { file =>
-        val df1 = spark.createDataFrame(sparkContext.parallelize(data(0, 1)), schema)
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fromTsType) {
           df1.write.parquet(file.getCanonicalPath)
         }
-        val df2 = spark.createDataFrame(sparkContext.parallelize(data(2, 10)), schema)
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> toTsType) {
           df2.write.mode(SaveMode.Append).parquet(file.getCanonicalPath)
         }
         Seq("true", "false").foreach { vectorized =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
             val readback = spark.read.parquet(file.getCanonicalPath)
-            checkAnswer(readback, df1.unionAll(df2))
+            checkAnswer(readback, expected)
+          }
+        }
+      }
+
+      val tableName = "parquet_timestamp_migration"
+      withTable(tableName) {
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fromTsType) {
+          df1.write.saveAsTable(tableName)
+        }
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> toTsType) {
+          df2.write.mode(SaveMode.Append).saveAsTable(tableName)
+        }
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            val readback = spark.table(tableName)
+            checkAnswer(readback, expected)
           }
         }
       }
     }
+
     testMigration(fromTsType = "INT96", toTsType = "TIMESTAMP_MICROS")
     testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
   }
