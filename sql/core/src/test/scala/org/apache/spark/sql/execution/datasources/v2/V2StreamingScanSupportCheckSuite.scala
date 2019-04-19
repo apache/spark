@@ -58,6 +58,13 @@ class V2StreamingScanSupportCheckSuite extends SparkFunSuite with SharedSparkSes
     V2StreamingScanSupportCheck(Union(plan3, plan4))
   }
 
+  test("table without scan capability") {
+    val e = intercept[AnalysisException] {
+      V2StreamingScanSupportCheck(createStreamingRelation(CapabilityTable(), None))
+    }
+    assert(e.message.contains("does not support either micro-batch or continuous scan"))
+  }
+
   test("mix micro-batch only and continuous only") {
     val plan1 = createStreamingRelation(CapabilityTable(MICRO_BATCH_READ), None)
     val plan2 = createStreamingRelation(CapabilityTable(CONTINUOUS_READ), None)

@@ -30,6 +30,13 @@ object V2StreamingScanSupportCheck extends (LogicalPlan => Unit) {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case r: StreamingRelationV2 if !r.table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
+        throw new AnalysisException(
+          s"Table ${r.table.name()} does not support either micro-batch or continuous scan.")
+      case _ =>
+    }
+
     val streamingSources = plan.collect {
       case r: StreamingRelationV2 => r.table
     }
