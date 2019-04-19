@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.parquet.hadoop.ParquetOutputFormat
@@ -881,6 +882,34 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  test("Migration from INT96 to TIMESTAMP_MICROS timestamp type") {
+    def testMigration(fromTsType: String, toTsType: String): Unit = {
+      def data(start: Int, end: Int): Seq[Row] = (start to end).map { i =>
+        val ts = new java.sql.Timestamp(TimeUnit.SECONDS.toMillis(i))
+        ts.setNanos(123456000)
+        Row(ts)
+      }
+      val schema = new StructType().add("time", TimestampType)
+      withTempPath { file =>
+        val df1 = spark.createDataFrame(sparkContext.parallelize(data(0, 1)), schema)
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fromTsType) {
+          df1.write.parquet(file.getCanonicalPath)
+        }
+        val df2 = spark.createDataFrame(sparkContext.parallelize(data(2, 10)), schema)
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> toTsType) {
+          df2.write.mode(SaveMode.Append).parquet(file.getCanonicalPath)
+        }
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            val readback = spark.read.parquet(file.getCanonicalPath)
+            checkAnswer(readback, df1.unionAll(df2))
+          }
+        }
+      }
+    }
+    testMigration(fromTsType = "INT96", toTsType = "TIMESTAMP_MICROS")
+    testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
+  }
 }
 
 object TestingUDT {
