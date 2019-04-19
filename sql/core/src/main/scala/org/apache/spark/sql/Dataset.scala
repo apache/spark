@@ -380,6 +380,37 @@ class Dataset[T] private[sql](
     sb.toString()
   }
 
+  /**
+   * Compose the string representing the query plan(s), or generated code. The
+   * arguments `extended`, `codegen` and `cost` are mutually exclusive: at
+   * most one can be true.
+   *
+   * @param extended Show extended output with plans
+   * @param codegen Show the generated code from whole-stage codegen
+   * @param cost Show the cost information of operators
+   * @return
+   */
+  private[sql] def explainString(extended: Boolean,
+                                 codegen: Boolean,
+                                 cost: Boolean): String = {
+    def b2i(b: Boolean) = if (b) 1 else 0
+    require(
+      b2i(extended) + b2i(codegen) + b2i(cost) <= 1,
+      s"`explain`ing with more than one true in: extended ($extended), " +
+        s"codegen ($codegen), cost ($cost)"
+    )
+
+    val explain =
+      ExplainCommand(queryExecution.logical, extended, codegen, cost)
+
+    sparkSession.sessionState
+      .executePlan(explain)
+      .executedPlan
+      .executeCollect()
+      .map(_.getString(0))
+      .mkString("\n")
+  }
+
   override def toString: String = {
     try {
       val builder = new StringBuilder
@@ -492,18 +523,32 @@ class Dataset[T] private[sql](
   // scalastyle:on println
 
   /**
+   * Prints the plan or the generated code to the console for debugging
+   * purposes. The arguments `extended`, `codegen` and `cost` are mutually
+   * exclusive: at most one can be true.
+   *
+   * @param extended Print extended output with plans
+   * @param codegen Print the generated code from whole-stage codegen
+   * @param cost Print the cost information of operators
+   * @group basic
+   * @since 3.0.0
+   */
+  def explain(extended: Boolean = false,
+              codegen: Boolean = false,
+              cost: Boolean = false): Unit = {
+    // scalastyle:off println
+    println(explainString(extended, codegen, cost))
+    // scalastyle:on println
+  }
+
+  /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
    *
    * @group basic
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended)
-    sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
-      // scalastyle:off println
-      r => println(r.getString(0))
-      // scalastyle:on println
-    }
+    explain(extended, false, false)
   }
 
   /**

@@ -250,16 +250,22 @@ class DataFrame(object):
         print(self._jdf.schema().treeString())
 
     @since(1.3)
-    def explain(self, extended=False):
-        """Prints the (logical and physical) plans to the console for debugging purpose.
+    def explain(self, extended=False, codegen=False, cost=False):
+        """Prints the plans to the console for debugging purpose.
 
-        :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+        With no (or, all False) options, this prints the physical
+        plan. The options are mutually exclusive: at most one can be
+        true.
+
+        :param extended: boolean, default ``False``. If ``True``, prints the logical plans as well as the physical plans.
+        :param codegen: boolean, default ``False``. If ``True``, prints the generated code for whole-stage codegen.
+        :param cost: boolean, default ``False``. If ``False``, prints the optimized logical plan with operator costs.
 
         >>> df.explain()
         == Physical Plan ==
         *(1) Scan ExistingRDD[age#0,name#1]
 
-        >>> df.explain(True)
+        >>> df.explain(extended = True)
         == Parsed Logical Plan ==
         ...
         == Analyzed Logical Plan ==
@@ -268,11 +274,25 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
+
+        >>> df.explain(codegen = True)
+        Found 1 WholeStageCodegen subtrees.
+        == Subtree 1 / 1 ==
+        *(1) Scan ExistingRDD[age#0,name#1]
+
+        Generated code:
+        /* 001 */ public Object generate(Object[] references) {
+        /* 002 */   return new GeneratedIteratorForCodegenStage1(references);
+        ...
+
+        >>> df.explain(cost = True)
+        == Optimized Logical Plan ==
+        LogicalRDD [age#0, name#1], false, Statistics(sizeInBytes=8.0 EiB)
+
+        == Physical Plan ==
+        ...
         """
-        if extended:
-            print(self._jdf.queryExecution().toString())
-        else:
-            print(self._jdf.queryExecution().simpleString())
+        print(self._jdf.explainString(extended, codegen, cost))
 
     @since(2.4)
     def exceptAll(self, other):

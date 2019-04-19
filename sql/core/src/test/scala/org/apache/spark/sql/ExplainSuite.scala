@@ -27,10 +27,15 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
   /**
    * Get the explain from a DataFrame and run the specified action on it.
    */
-  private def withNormalizedExplain(df: DataFrame, extended: Boolean)(f: String => Unit) = {
+  private def withNormalizedExplain(
+    df: DataFrame,
+    extended: Boolean = false,
+    codegen: Boolean = false,
+    cost: Boolean = false
+  )(f: String => Unit) = {
     val output = new java.io.ByteArrayOutputStream()
     Console.withOut(output) {
-      df.explain(extended = extended)
+      df.explain(extended = extended, codegen = codegen, cost = cost)
     }
     val normalizedOutput = output.toString.replaceAll("#\\d+", "#x")
     f(normalizedOutput)
@@ -200,6 +205,50 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-22044: explain with generated code") {
+    val df = spark.range(100).select('id + 12349876)
+    withNormalizedExplain(df, codegen = true) { normalizedOutput =>
+      assert(
+        normalizedOutput.contains("/* 001 */ public Object generate(Object[] references) {")
+      )
+    }
+  }
+
+  test("SPARK-22044: explain with costs") {
+    val df = spark.range(100).select('id + 12349876)
+    withNormalizedExplain(df, cost = true) { normalizedOutput =>
+      assert(normalizedOutput.contains("Statistics(sizeInBytes="))
+    }
+  }
+
+  test("SPARK-22044: explain with too many booleans") {
+    val df = spark.range(100).select('id + 12349876)
+
+    // zero or one `true`s are ok:
+    // capture the printing, because we don't care about it
+    val nullOut = new java.io.OutputStream {
+      override def write(b: Int): Unit = {}
+    }
+    Console.withOut(nullOut) {
+      df.explain(false, false, false)
+      df.explain(false, false, true)
+      df.explain(false, true, false)
+      df.explain(true, false, false)
+    }
+
+    // more than one is not
+    val failsRequire = (extended: Boolean, codegen: Boolean, cost: Boolean) => {
+      intercept[IllegalArgumentException] {
+        df.explain(extended, codegen, cost)
+      }
+    }
+    failsRequire(false, true, true)
+    failsRequire(true, false, true)
+    failsRequire(true, true, false)
+    failsRequire(true, true, true)
+  }
+
 }
 
 case class ExplainSingleData(id: Int)

@@ -136,7 +136,15 @@ setMethod("schema",
 
 #' Explain
 #'
-#' Print the logical and physical Catalyst plans to the console for debugging.
+#' Print the Catalyst plans to the console for debugging.
+#'
+#' With no (or, all FALSE) options, this prints the physical
+#' plan. The options are mutually exclusive: at most one can be
+#' true.
+#'
+#' @param extended print the logical plans as well as the physical plans
+#' @param codegen print the generated code for whole-stage codegen
+#' @param cost print the optimized logical plan with operator costs
 #'
 #' @family SparkDataFrame functions
 #' @aliases explain,SparkDataFrame-method
@@ -147,19 +155,16 @@ setMethod("schema",
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' explain(df, TRUE)
+#' explain(df)
+#' explain(df, extended = TRUE)
+#' explain(df, codegen = TRUE)
+#' explain(df, cost = TRUE)
 #'}
 #' @note explain since 1.4.0
 setMethod("explain",
           signature(x = "SparkDataFrame"),
-          function(x, extended = FALSE) {
-            queryExec <- callJMethod(x@sdf, "queryExecution")
-            if (extended) {
-              cat(callJMethod(queryExec, "toString"))
-            } else {
-              execPlan <- callJMethod(queryExec, "executedPlan")
-              cat(callJMethod(execPlan, "toString"))
-            }
+          function(x, extended = FALSE, codegen = FALSE, cost = FALSE) {
+            cat(callJMethod(x@sdf, "explainString", extended, codegen, cost))
           })
 
 #' isLocal
