@@ -179,7 +179,7 @@ if [[ "$1" == "package" ]]; then
     rm -r spark-$SPARK_VERSION/licenses-binary
   fi
 
-  tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
+  tar cvzf spark-$SPARK_VERSION.tgz --numeric-owner --owner=0 --group=0 spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
