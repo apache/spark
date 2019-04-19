@@ -985,14 +985,18 @@ trait ScalaReflection extends Logging {
    * the name of the getter function, and [set]PropertyName is the name of the setter function.
    */
   def getObjectProperties(tpe: `Type`): Seq[(String, String, String, Type)] = {
-    def propertyName(name: String): String = {
-      if (name.indexOf("get") == 0 || name.indexOf("set") == 0) {
-        name.substring(3)
+    def propertyName(getterName: String, setterName: String): String = {
+      if (getterName == setterName) {
+        getterName
       } else {
-        name
+        if (getterName.indexOf("get") == 0 && setterName.indexOf("set") == 0 &&
+          getterName.substring(3) == setterName.substring(3)) {
+          getterName.substring(3)
+        } else {
+          null
+        }
       }
     }
-
     val getters = tpe.members.filter(method => method.isMethod &&
       method.asMethod.paramLists.size == 1 &&
       method.asMethod.paramLists.head.size == 0)
@@ -1013,11 +1017,8 @@ trait ScalaReflection extends Logging {
     (for {
       a <- getters
       b <- setters
-      if a._2 =:= b._2 &&
-        propertyName(a._1) == propertyName(b._1) &&
-        ((a._1.indexOf("get") == 0 && b._1.indexOf("set") == 0) ||
-          (a._1.indexOf("get") != 0 && b._1.indexOf("set") != 0))
-    } yield (propertyName(a._1), a._1, b._1, a._2))
+      if a._2 =:= b._2 && propertyName(a._1, b._1) != null
+    } yield (propertyName(a._1, b._1), a._1, b._1, a._2))
       .toSeq
   }
 
