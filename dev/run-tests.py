@@ -546,7 +546,9 @@ def main():
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
-        os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
+        # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
+        # /home/jenkins/anaconda2/envs/py36/bin
+        os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
