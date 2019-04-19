@@ -138,4 +138,21 @@ class QueryExecutionSuite extends SharedSQLContext {
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
   }
+
+  test("test planString") {
+    val parsedKeywords = "Parsed Logical Plan"
+    val analyzedKeywords = "Analyzed Logical Plan"
+    val optimizedKeywords = "Optimized Logical Plan"
+    val statsKeywords = "Statistics"
+
+    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
+    val planString = qe.planString()
+    assert(
+      planString.contains(parsedKeywords) && planString.contains(analyzedKeywords) && planString
+        .contains(optimizedKeywords) && !planString.contains(statsKeywords))
+    assert(!qe.planString(addParsed = false).contains(parsedKeywords))
+    assert(!qe.planString(addAnalyzed = false).contains(analyzedKeywords))
+    assert(!qe.planString(addOptimized = false).contains(optimizedKeywords))
+    assert(qe.planString(addStats = true).contains(statsKeywords))
+  }
 }
