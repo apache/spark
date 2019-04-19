@@ -219,7 +219,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Parameters used for writing query to a table:
    *   (tableIdentifier, partitionKeys, exists).
    */
-  type InsertTableParams = (TableIdentifier, Option[Seq[String]], Map[String, Option[String]], Boolean)
+  type InsertTableParams =
+    (TableIdentifier, Option[Seq[String]], Map[String, Option[String]], Boolean)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -242,10 +243,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     ctx match {
       case table: InsertIntoTableContext =>
         val (tableIdent, insertedCols, partitionKeys, exists) = visitInsertIntoTable(table)
-        InsertIntoTable(UnresolvedRelation(tableIdent), insertedCols, partitionKeys, query, false, exists)
+        InsertIntoTable(
+          UnresolvedRelation(tableIdent), insertedCols, partitionKeys, query, false, exists)
       case table: InsertOverwriteTableContext =>
         val (tableIdent, insertedCols, partitionKeys, exists) = visitInsertOverwriteTable(table)
-        InsertIntoTable(UnresolvedRelation(tableIdent), insertedCols, partitionKeys, query, true, exists)
+        InsertIntoTable(
+          UnresolvedRelation(tableIdent), insertedCols, partitionKeys, query, true, exists)
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)

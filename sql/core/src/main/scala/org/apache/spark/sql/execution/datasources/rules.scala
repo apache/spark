@@ -355,7 +355,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
-        s"$tblName requires that the data to be inserted have the same number of columns as the " +
+        s"$tblName requires that the data to be inserted have the same number of columns as " +
           s"the number of columns selected in the target table: the number of columns selected has " +
           s"${expectedColumns.length} column(s) but the inserted data has " +
           s"${insert.query.output.length + staticPartCols.size} column(s), " +
@@ -367,8 +367,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     val filledQuery = if (insertedCols == None) {
       insert.query
     } else {
-      // Because `HiveFileFormat` writes data according to the index of columns which belongs target table,
-      // in order to align the data, we need to fill in some empty expressions.
+      // Because `HiveFileFormat` writes data according to the index of columns which belongs
+      // target table, in order to align the data, we need to fill in some empty expressions.
       val cols = insertedCols.get
       val project = insert.query.asInstanceOf[Project]
       val filledProjectList = ArrayBuffer.empty[NamedExpression]
