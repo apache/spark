@@ -374,9 +374,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[DescribeQueryCommand]] logical command.
    */
   override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
-    val query = ctx.query
-    val interval = new Interval(query.start.getStartIndex, query.stop.getStopIndex)
-    DescribeQueryCommand(query.start.getInputStream.getText(interval), visitQuery(query))
+    DescribeQueryCommand(source(ctx.query), visitQuery(ctx.query))
   }
 
   /**
