@@ -186,10 +186,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       throw e;
     }
-    mapStatus = MapStatus$.MODULE$.apply(
-        blockManager.shuffleServerId(),
-        DefaultMapShuffleLocations.get(blockManager.shuffleServerId()),
-        partitionLengths);
   }
 
   @VisibleForTesting
