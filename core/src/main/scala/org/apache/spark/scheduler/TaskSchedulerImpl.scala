@@ -301,8 +301,9 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
-    taskResultGetter.enqueuePartitionCompletionNotification(stageId, partitionId)
+  override def notifyPartitionCompletion(
+      stageId: Int, partitionId: Int, taskDuration: Long): Unit = {
+    taskResultGetter.enqueuePartitionCompletionNotification(stageId, partitionId, taskDuration)
   }
 
   /**
@@ -652,9 +653,10 @@ private[spark] class TaskSchedulerImpl(
    */
   private[scheduler] def handlePartitionCompleted(
       stageId: Int,
-      partitionId: Int) = synchronized {
+      partitionId: Int,
+      taskDuration: Long) = synchronized {
     taskSetsByStageIdAndAttempt.get(stageId).foreach(_.values.filter(!_.isZombie).foreach { tsm =>
-      tsm.markPartitionCompleted(partitionId)
+      tsm.markPartitionCompleted(partitionId, taskDuration)
     })
   }
 

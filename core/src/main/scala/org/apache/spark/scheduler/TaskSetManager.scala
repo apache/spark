@@ -816,12 +816,11 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
+  private[scheduler] def markPartitionCompleted(partitionId: Int, taskDuration: Long): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
         if (speculationEnabled && !isZombie) {
-          // The task is skipped, its duration should be 0.
-          successfulTaskDurations.insert(0)
+          successfulTaskDurations.insert(taskDuration)
         }
         tasksSuccessful += 1
         successful(index) = true

@@ -1394,7 +1394,8 @@ private[spark] class DAGScheduler(
         // finished. Here we notify the task scheduler to skip running tasks for the same partition,
         // to save resource.
         if (task.stageAttemptId < stage.latestInfo.attemptNumber()) {
-          taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
+          taskScheduler.notifyPartitionCompletion(
+            stageId, task.partitionId, event.taskInfo.duration)
         }
 
         task match {
