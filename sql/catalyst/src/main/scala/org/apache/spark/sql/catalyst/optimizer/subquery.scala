@@ -554,26 +554,39 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 }
 
 /**
- * This rule rewrites uncorrelated PredicateSubquery expressions such as Exists.
- * The uncorrelated Exists can be evaluated using a subplan instead of a semi-join.
- * Also, we can use `limit 1` and `select 1` after the subquery to reduce the result set.
+ * This rule rewrites uncorrelated PredicateSubquery expressions such as Exists, InSubquery.
+ * The uncorrelated Exists and InSubquery can be evaluated using a subplan instead of a semi-join.
+ *
+ * For uncorrelated Exists, we can use `limit 1` and `select 1` after the Exists subquery to
+ * reduce the result set.
  * Example:
  * exists(select b from t where t.a = 2) => exists(select 1 from t where t.a = 2 limit 1)
+ *
+ * For uncorrelated InSubquery, we can push the left values into the subquery to reduce the result
+ * set. Note that InSubquery may be nullable, so we can not eliminate nulls in the subquery.
+ * Example:
+ * 3 in(select b from t where a = 2) => 3 in(select b from t where a = 2 and (b = 3 or b is null))
  */
 object RewriteUncorrelatedSubquery extends Rule[LogicalPlan] {
-  /**
-   * Wrap the subquery with `limit 1` and `project 1`.
-   */
-  def buildSubquery(sub: LogicalPlan): LogicalPlan = {
-    Project(Seq(Alias(Literal.create(1, IntegerType), "1")()),
-      Limit(Literal.create(1, IntegerType), sub))
-  }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(condition, child) =>
       val newCondition = condition transform {
         case Exists(sub, children, _) if children.isEmpty =>
-          Exists(buildSubquery(sub))
+          // Wrap the subquery with `limit 1` and `project 1`
+          val newPlan =
+            Project(Seq(Alias(Literal.create(1, IntegerType), "1")()),
+              Limit(Literal.create(1, IntegerType), sub))
+          Exists(newPlan)
+        case InSubquery(values, ListQuery(sub, children, _, childOutputs))
+          if values.forall(_.isInstanceOf[Literal]) && children.isEmpty =>
+          // Push the values into the subquery
+          val inCondition = values.zip(sub.output).map {
+            case (outer, inner) =>
+              Or(EqualTo(outer, inner), IsNull(inner))
+          }.reduceLeft(And)
+          val newPlan = Filter(inCondition, sub)
+          InSubquery(values, ListQuery(newPlan, childOutputs = childOutputs))
       }
       Filter(newCondition, child)
   }
