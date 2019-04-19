@@ -218,4 +218,14 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-26437 Can not query decimal type when value is 0") {
+    assume(HiveUtils.isHive23, "bad test: This bug fixed by HIVE-13083(Hive 2.0.1)")
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+      withTable("spark_26437") {
+        sql("CREATE TABLE spark_26437 STORED AS ORCFILE AS SELECT 0.00 AS c1")
+        checkAnswer(spark.table("spark_26437"), Seq(Row(0.00)))
+      }
+    }
+  }
 }
