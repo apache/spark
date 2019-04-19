@@ -37,14 +37,20 @@ object V2StreamingScanSupportCheck extends (LogicalPlan => Unit) {
       case r: StreamingRelation => r
     }
 
-    if ((streamingSources ++ v1StreamingRelations).length > 1) {
+    if (streamingSources.length + v1StreamingRelations.length > 1) {
       val allSupportsMicroBatch = streamingSources.forall(_.supports(MICRO_BATCH_READ))
       // v1 streaming data source only supports micro-batch.
       val allSupportsContinuous = streamingSources.forall(_.supports(CONTINUOUS_READ)) &&
-        v1StreamingRelations.nonEmpty
+        v1StreamingRelations.isEmpty
       if (!allSupportsMicroBatch && !allSupportsContinuous) {
+        val microBatchSources =
+          streamingSources.filter(_.supports(MICRO_BATCH_READ)).map(_.name()) ++
+            v1StreamingRelations.map(_.sourceName)
+        val continuousSources = streamingSources.filter(_.supports(CONTINUOUS_READ)).map(_.name())
         throw new AnalysisException(
-          "The streaming sources in a query do not have a common supported execution mode.")
+          "The streaming sources in a query do not have a common supported execution mode.\n" +
+            "Sources support micro-batch: " + microBatchSources.mkString(", ") + "\n" +
+            "Sources support continuous: " + continuousSources.mkString(", "))
       }
     }
   }

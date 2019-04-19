@@ -366,17 +366,6 @@ class StreamingDataSourceV2Suite extends StreamTest {
     }
   }
 
-  Seq(Trigger.ProcessingTime(1000), Trigger.Continuous(1000)).foreach { trigger =>
-    test(s"union micro-batch only and continuous only relations with $trigger") {
-      val left = spark.readStream.format("fake-read-microbatch-only").load()
-      val right = spark.readStream.format("fake-read-continuous-only").load()
-      val e = intercept[AnalysisException] {
-        left.union(right).writeStream.format("fake-write-microbatch-continuous").start()
-      }
-      assert(e.message.contains("do not have a common supported execution mode"))
-    }
-  }
-
   // Get a list of (read, write, trigger) tuples for test cases.
   val cases = readFormats.flatMap { read =>
     writeFormats.flatMap { write =>
