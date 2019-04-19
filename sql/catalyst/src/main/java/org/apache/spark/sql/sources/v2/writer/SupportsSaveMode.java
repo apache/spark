@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql.sources.v2.writer;
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.SaveMode;
 
-trait NamedRelation extends LogicalPlan {
-  def name: String
-
-  // When false, the schema of input data must match the schema of this relation, during write.
-  def skipSchemaResolution: Boolean = false
+// A temporary mixin trait for `WriteBuilder` to support `SaveMode`. Will be removed before
+// Spark 3.0 when all the new write operators are finished. See SPARK-26356 for more details.
+public interface SupportsSaveMode extends WriteBuilder {
+  WriteBuilder mode(SaveMode mode);
 }
