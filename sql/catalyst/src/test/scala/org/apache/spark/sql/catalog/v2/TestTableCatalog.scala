@@ -23,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RemoveProperty, RenameColumn, SetProperty, UpdateColumn, UpdateColumnComment}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
@@ -67,7 +66,8 @@ class TestTableCatalog extends TableCatalog {
     }
 
     if (partitions.nonEmpty) {
-      throw new AnalysisException(s"Catalog $name: Partitioned tables are not supported")
+      throw new UnsupportedOperationException(
+        s"Catalog $name: Partitioned tables are not supported")
     }
 
     val table = InMemoryTable(ident.quoted, schema, properties)
@@ -88,14 +88,7 @@ class TestTableCatalog extends TableCatalog {
     newTable
   }
 
-  override def dropTable(ident: Identifier): Boolean = {
-    Option(tables.remove(ident)) match {
-      case Some(_) =>
-        true
-      case _ =>
-        false
-    }
-  }
+  override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
 }
 
 private object TestTableCatalog {
@@ -152,7 +145,7 @@ private object TestTableCatalog {
                   Some(StructField(parent.name, newParentType, parent.nullable, parent.metadata))
 
                 case _ =>
-                  throw new AnalysisException(s"Not a struct: ${names.init.last}")
+                  throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
           }
 
@@ -163,7 +156,8 @@ private object TestTableCatalog {
         case update: UpdateColumn =>
           replace(schema, update.fieldNames, field => {
             if (!update.isNullable && field.nullable) {
-              throw new AnalysisException(s"Cannot change optional column to required: $field.name")
+              throw new IllegalArgumentException(
+                s"Cannot change optional column to required: $field.name")
             }
             Some(StructField(field.name, update.newDataType, update.isNullable, field.metadata))
           })
@@ -188,7 +182,7 @@ private object TestTableCatalog {
       update: StructField => Option[StructField]): StructType = {
 
     val pos = struct.getFieldIndex(path.head)
-        .getOrElse(throw new AnalysisException(s"Cannot find field: ${path.head}"))
+        .getOrElse(throw new IllegalArgumentException(s"Cannot find field: ${path.head}"))
     val field = struct.fields(pos)
     val replacement: Option[StructField] = if (path.tail.isEmpty) {
       update(field)
@@ -198,7 +192,7 @@ private object TestTableCatalog {
           val updatedType: StructType = replace(nestedStruct, path.tail, update)
           Some(StructField(field.name, updatedType, field.nullable, field.metadata))
         case _ =>
-          throw new AnalysisException(s"Not a struct: ${path.head}")
+          throw new IllegalArgumentException(s"Not a struct: ${path.head}")
       }
     }
 

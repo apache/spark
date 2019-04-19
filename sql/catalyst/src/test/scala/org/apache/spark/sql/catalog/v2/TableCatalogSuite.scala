@@ -22,7 +22,6 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
@@ -325,12 +324,12 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[AnalysisException] {
+    val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent, TableChange.addColumn(Array("data", "ts"), TimestampType))
     }
 
-    assert(exc.message.contains("Not a struct"))
-    assert(exc.message.contains("data"))
+    assert(exc.getMessage.contains("Not a struct"))
+    assert(exc.getMessage.contains("data"))
 
     // the table has not changed
     assert(catalog.loadTable(testIdent).schema == schema)
@@ -343,13 +342,13 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[AnalysisException] {
+    val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent,
         TableChange.addColumn(Array("missing_col", "new_field"), StringType))
     }
 
-    assert(exc.message.contains("missing_col"))
-    assert(exc.message.contains("Cannot find"))
+    assert(exc.getMessage.contains("missing_col"))
+    assert(exc.getMessage.contains("Cannot find"))
   }
 
   test("alterTable: update column data type") {
@@ -389,12 +388,12 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[AnalysisException] {
+    val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent, TableChange.updateColumn(Array("id"), LongType, false))
     }
 
-    assert(exc.message.contains("Cannot change optional column to required"))
-    assert(exc.message.contains("id"))
+    assert(exc.getMessage.contains("Cannot change optional column to required"))
+    assert(exc.getMessage.contains("id"))
   }
 
   test("alterTable: update missing column fails") {
@@ -404,13 +403,13 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[AnalysisException] {
+    val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent,
         TableChange.updateColumn(Array("missing_col"), LongType))
     }
 
-    assert(exc.message.contains("missing_col"))
-    assert(exc.message.contains("Cannot find"))
+    assert(exc.getMessage.contains("missing_col"))
+    assert(exc.getMessage.contains("Cannot find"))
   }
 
   test("alterTable: add comment") {
@@ -455,13 +454,13 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[AnalysisException] {
+    val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent,
         TableChange.updateComment(Array("missing_col"), "comment"))
     }
 
-    assert(exc.message.contains("missing_col"))
-    assert(exc.message.contains("Cannot find"))
+    assert(exc.getMessage.contains("missing_col"))
+    assert(exc.getMessage.contains("Cannot find"))
   }
 
   test("alterTable: rename top-level column") {
@@ -504,13 +503,13 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[AnalysisException] {
+    val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent,
         TableChange.renameColumn(Array("missing_col"), "new_name"))
     }
 
-    assert(exc.message.contains("missing_col"))
-    assert(exc.message.contains("Cannot find"))
+    assert(exc.getMessage.contains("missing_col"))
+    assert(exc.getMessage.contains("Cannot find"))
   }
 
   test("alterTable: multiple changes") {
@@ -573,12 +572,12 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[AnalysisException] {
+    val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col")))
     }
 
-    assert(exc.message.contains("missing_col"))
-    assert(exc.message.contains("Cannot find"))
+    assert(exc.getMessage.contains("missing_col"))
+    assert(exc.getMessage.contains("Cannot find"))
   }
 
   test("alterTable: delete missing nested column fails") {
@@ -591,12 +590,12 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == tableSchema)
 
-    val exc = intercept[AnalysisException] {
+    val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z")))
     }
 
-    assert(exc.message.contains("z"))
-    assert(exc.message.contains("Cannot find"))
+    assert(exc.getMessage.contains("z"))
+    assert(exc.getMessage.contains("Cannot find"))
   }
 
   test("alterTable: table does not exist") {

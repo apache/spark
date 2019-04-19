@@ -36,6 +36,8 @@ public interface TableChange {
 
   /**
    * Create a TableChange for setting a table property.
+   * <p>
+   * If the property already exists, it will be replaced with the new value.
    *
    * @param property the property name
    * @param value the new property value
@@ -47,6 +49,8 @@ public interface TableChange {
 
   /**
    * Create a TableChange for removing a table property.
+   * <p>
+   * If the property does not exist, the change will succeed.
    *
    * @param property the property name
    * @return a TableChange for the addition
@@ -56,7 +60,11 @@ public interface TableChange {
   }
 
   /**
-   * Create a TableChange for adding an optional column to a table.
+   * Create a TableChange for adding an optional column.
+   * <p>
+   * If the field already exists, the change will result in an {@link IllegalArgumentException}.
+   * If the new field is nested and its parent does not exist or is not a struct, the change will
+   * result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the new column
    * @param dataType the new column's data type
@@ -67,7 +75,11 @@ public interface TableChange {
   }
 
   /**
-   * Create a TableChange for adding a column to a table.
+   * Create a TableChange for adding a column.
+   * <p>
+   * If the field already exists, the change will result in an {@link IllegalArgumentException}.
+   * If the new field is nested and its parent does not exist or is not a struct, the change will
+   * result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the new column
    * @param dataType the new column's data type
@@ -79,7 +91,11 @@ public interface TableChange {
   }
 
   /**
-   * Create a TableChange for adding a top-level column to a table.
+   * Create a TableChange for adding a column.
+   * <p>
+   * If the field already exists, the change will result in an {@link IllegalArgumentException}.
+   * If the new field is nested and its parent does not exist or is not a struct, the change will
+   * result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the new column
    * @param dataType the new column's data type
@@ -100,6 +116,8 @@ public interface TableChange {
    * <p>
    * The name is used to find the field to rename. The new name will replace the leaf field name.
    * For example, renameColumn("a.b.c", "x") should produce column a.b.x.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames the current field names
    * @param newName the new name
@@ -110,9 +128,11 @@ public interface TableChange {
   }
 
   /**
-   * Create a TableChange for updating the type of a field.
+   * Create a TableChange for updating the type of a field that is nullable.
    * <p>
    * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to update
    * @param newDataType the new data type
@@ -126,6 +146,8 @@ public interface TableChange {
    * Create a TableChange for updating the type of a field.
    * <p>
    * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to update
    * @param newDataType the new data type
@@ -139,6 +161,8 @@ public interface TableChange {
    * Create a TableChange for updating the comment of a field.
    * <p>
    * The name is used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to update
    * @param newComment the new comment
@@ -149,7 +173,9 @@ public interface TableChange {
   }
 
   /**
-   * Create a TableChange for deleting a field from a table.
+   * Create a TableChange for deleting a field.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to delete
    * @return a TableChange for the delete
@@ -158,6 +184,11 @@ public interface TableChange {
     return new DeleteColumn(fieldNames);
   }
 
+  /**
+   * A TableChange to set a table property.
+   * <p>
+   * If the property already exists, it must be replaced with the new value.
+   */
   final class SetProperty implements TableChange {
     private final String property;
     private final String value;
@@ -176,6 +207,11 @@ public interface TableChange {
     }
   }
 
+  /**
+   * A TableChange to remove a table property.
+   * <p>
+   * If the property does not exist, the change should succeed.
+   */
   final class RemoveProperty implements TableChange {
     private final String property;
 
@@ -188,6 +224,13 @@ public interface TableChange {
     }
   }
 
+  /**
+   * A TableChange to add a field.
+   * <p>
+   * If the field already exists, the change must result in an {@link IllegalArgumentException}.
+   * If the new field is nested and its parent does not exist or is not a struct, the change must
+   * result in an {@link IllegalArgumentException}.
+   */
   final class AddColumn implements TableChange {
     private final String[] fieldNames;
     private final DataType dataType;
@@ -218,6 +261,14 @@ public interface TableChange {
     }
   }
 
+  /**
+   * A TableChange to rename a field.
+   * <p>
+   * The name is used to find the field to rename. The new name will replace the leaf field name.
+   * For example, renameColumn("a.b.c", "x") should produce column a.b.x.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
   final class RenameColumn implements TableChange {
     private final String[] fieldNames;
     private final String newName;
@@ -236,6 +287,13 @@ public interface TableChange {
     }
   }
 
+  /**
+   * A TableChange to update the type of a field.
+   * <p>
+   * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
   final class UpdateColumn implements TableChange {
     private final String[] fieldNames;
     private final DataType newDataType;
@@ -260,6 +318,13 @@ public interface TableChange {
     }
   }
 
+  /**
+   * A TableChange to update the comment of a field.
+   * <p>
+   * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
   final class UpdateColumnComment implements TableChange {
     private final String[] fieldNames;
     private final String newComment;
@@ -278,6 +343,11 @@ public interface TableChange {
     }
   }
 
+  /**
+   * A TableChange to delete a field.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
   final class DeleteColumn implements TableChange {
     private final String[] fieldNames;
 

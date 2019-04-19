@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalog.v2;
 
 import org.apache.spark.sql.catalog.v2.expressions.Transform;
+import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.sources.v2.Table;
@@ -35,8 +36,9 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param namespace a multi-part namespace
    * @return an array of Identifiers for tables
+   * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    */
-  Identifier[] listTables(String[] namespace);
+  Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException;
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog.
@@ -83,8 +85,9 @@ public interface TableCatalog extends CatalogPlugin {
    * @return metadata for the new table
    * @throws TableAlreadyExistsException If a table already exists for the identifier
    */
-  default Table createTable(Identifier ident,
-                            StructType schema) throws TableAlreadyExistsException {
+  default Table createTable(
+      Identifier ident,
+      StructType schema) throws TableAlreadyExistsException {
     return createTable(ident, schema, new Transform[0], Collections.emptyMap());
   }
 
@@ -97,9 +100,10 @@ public interface TableCatalog extends CatalogPlugin {
    * @return metadata for the new table
    * @throws TableAlreadyExistsException If a table already exists for the identifier
    */
-  default Table createTable(Identifier ident,
-                            StructType schema,
-                            Map<String, String> properties) throws TableAlreadyExistsException {
+  default Table createTable(
+      Identifier ident,
+      StructType schema,
+      Map<String, String> properties) throws TableAlreadyExistsException {
     return createTable(ident, schema, new Transform[0], properties);
   }
 
@@ -114,10 +118,11 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws TableAlreadyExistsException If a table already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    */
-  Table createTable(Identifier ident,
-                    StructType schema,
-                    Transform[] partitions,
-                    Map<String, String> properties) throws TableAlreadyExistsException;
+  Table createTable(
+      Identifier ident,
+      StructType schema,
+      Transform[] partitions,
+      Map<String, String> properties) throws TableAlreadyExistsException;
 
   /**
    * Apply a set of {@link TableChange changes} to a table in the catalog.
@@ -131,8 +136,9 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist.
    * @throws IllegalArgumentException If any change is rejected by the implementation.
    */
-  Table alterTable(Identifier ident,
-                   TableChange... changes) throws NoSuchTableException;
+  Table alterTable(
+      Identifier ident,
+      TableChange... changes) throws NoSuchTableException;
 
   /**
    * Drop a table in the catalog.
