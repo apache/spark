@@ -200,7 +200,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       Seq(Or(LessThanOrEqual(LENGTH, 1L), GreaterThanOrEqual(LENGTH, 3L))),
       Seq((l1, true), (l2, false), (l3, true)))
 
-    // test filter applied on `length` column
+    // test filter applied on `modificationTime` column
     val t1 = mockFileStatus(0L, 1L)
     val t2 = mockFileStatus(0L, 2L)
     val t3 = mockFileStatus(0L, 3L)
