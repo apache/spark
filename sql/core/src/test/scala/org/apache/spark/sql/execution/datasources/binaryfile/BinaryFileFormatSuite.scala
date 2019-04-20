@@ -28,9 +28,11 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
@@ -41,6 +43,8 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
   private var fsTestDir: Path = _
 
   private var fs: FileSystem = _
+
+  private var file1Status: FileStatus = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -60,6 +64,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       Seq("2014-test").asJava,
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
+    file1Status = fs.getFileStatus(new Path(file1.getPath))
 
     val file2 = new File(year2014Dir, "data2.bin")
     Files.write(
@@ -81,6 +86,18 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       "2015-test".getBytes,
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
+  }
+
+  test("BinaryFileFormat methods") {
+    val format = new BinaryFileFormat
+    assert(format.shortName() === "binaryFile")
+    assert(format.isSplitable(spark, Map.empty, new Path("any")) === false)
+    assert(format.inferSchema(spark, Map.empty, Seq.empty) === Some(BinaryFileFormat.schema))
+    assert(BinaryFileFormat.schema === StructType(Seq(
+      StructField("path", StringType, false),
+      StructField("modificationTime", TimestampType, false),
+      StructField("length", LongType, false),
+      StructField("content", BinaryType, true))))
   }
 
   def testBinaryFileDataSource(pathGlobFilter: String): Unit = {
@@ -241,5 +258,32 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       // NOT (length > 2 OR modificationTime < 2)
       Seq(Not(Or(GreaterThan(LENGTH, 2L), LessThan(MODIFICATION_TIME, new Timestamp(2L))))),
       Seq((l1, false), (l2, false), (l3, false), (t1, false), (t2, true), (t3, true)))
+  }
+
+  test("buildReader") {
+    def testBuildReader(fileStatus: FileStatus, filters: Seq[Filter], expected: Boolean): Unit = {
+      val format = new BinaryFileFormat
+      val reader = format.buildReaderWithPartitionValues(
+        sparkSession = spark,
+        dataSchema = schema,
+        partitionSchema = StructType(Nil),
+        requiredSchema = schema,
+        filters = filters,
+        options = Map.empty,
+        hadoopConf = spark.sessionState.newHadoopConf())
+      val partitionedFile = mock(classOf[PartitionedFile])
+      when(partitionedFile.filePath).thenReturn(fileStatus.getPath.toString)
+      assert(reader(partitionedFile).nonEmpty === expected,
+        s"Filters $filters applied to $fileStatus should be $expected.")
+    }
+    testBuildReader(file1Status, Seq.empty, true)
+    testBuildReader(file1Status, Seq(LessThan(LENGTH, file1Status.getLen)), false)
+    testBuildReader(file1Status, Seq(
+      LessThan(MODIFICATION_TIME, new Timestamp(file1Status.getModificationTime))
+    ), false)
+    testBuildReader(file1Status, Seq(
+      EqualTo(LENGTH, file1Status.getLen),
+      EqualTo(MODIFICATION_TIME, file1Status.getModificationTime)
+    ), true)
   }
 }
