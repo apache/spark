@@ -43,12 +43,6 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
 
   private var fs: FileSystem = _
 
-  private var file1Status: FileStatus = _
-  private var file2Status: FileStatus = _
-  private var file3Status: FileStatus = _
-  private var file4Status: FileStatus = _
-  private var fileStatusSet: Set[FileStatus] = _
-
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -67,7 +61,6 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       Seq("2014-test").asJava, // file length = 10
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
-    file1Status = fs.getFileStatus(new Path(file1.getAbsolutePath))
 
     val file2 = new File(year2014Dir, "data2.bin")
     Files.write(
@@ -75,11 +68,6 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       "2014-test-bin".getBytes, // file length = 13
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
-    file2Status = fs.getFileStatus(new Path(file2.getAbsolutePath))
-
-    // sleep 1s to make the gen file modificationTime different,
-    // for unit-test for push down filters on modificationTime column.
-    Thread.sleep(1000)
 
     val file3 = new File(year2015Dir, "bool.csv")
     Files.write(
@@ -87,7 +75,6 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       Seq("bool", "True", "False", "true").asJava, // file length = 21
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
-    file3Status = fs.getFileStatus(new Path(file3.getAbsolutePath))
 
     val file4 = new File(year2015Dir, "data.bin")
     Files.write(
@@ -95,9 +82,6 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       "2015-test".getBytes, // file length = 9
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
-    file4Status = fs.getFileStatus(new Path(file4.getAbsolutePath))
-
-    fileStatusSet = Set(file1Status, file2Status, file3Status, file4Status)
   }
 
   def testBinaryFileDataSource(pathGlobFilter: String): Unit = {
@@ -168,92 +152,124 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     }
   }
 
-  def testBuildReaderWithFilters(filters: Seq[Filter], filterFunc: FileStatus => Boolean): Unit = {
-    val binaryFileFormat = new BinaryFileFormat
-
-    val reader = binaryFileFormat.buildReaderWithPartitionValues(
-      sparkSession = spark,
-      dataSchema = BinaryFileFormat.schema,
-      partitionSchema = StructType(Nil),
-      requiredSchema = BinaryFileFormat.schema,
-      filters = filters,
-      options = Map[String, String](),
-      hadoopConf = spark.sessionState.newHadoopConf()
+  def genTestFile(path: String, length: Long, modificationTime: Long): Unit = {
+    val file = new File(path)
+    val bytes = Array.fill[Byte](length.toInt)(0)
+    Files.write(
+      file.toPath,
+      bytes,
+      StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
+    file.setLastModified(modificationTime)
+  }
 
-    val filteredFileSet = fileStatusSet.map { s =>
-      new PartitionedFile(
-        partitionValues = InternalRow.empty,
-        filePath = s.getPath.toString,
-        start = 0L,
-        length = s.getLen
+  /**
+   * @param filters filters to be tested.
+   * @param testcases Each testcase is a Tuple (length, modificationTime, expectedPassFilter)
+   *                  expectedPassFilter is a boolean value represent whether the file length
+   *                  and modification satisfy the filters condition.
+   */
+  def testBuildReaderWithFilters(
+      filters: Seq[Filter],
+      testcases: Seq[(Long, Long, Boolean)]): Unit = {
+    withTempDir { tmpDir =>
+      val binaryFileFormat = new BinaryFileFormat
+
+      val reader = binaryFileFormat.buildReaderWithPartitionValues(
+        sparkSession = spark,
+        dataSchema = BinaryFileFormat.schema,
+        partitionSchema = StructType(Nil),
+        requiredSchema = BinaryFileFormat.schema,
+        filters = filters,
+        options = Map[String, String](),
+        hadoopConf = spark.sessionState.newHadoopConf()
       )
-    }.map { row =>
-      reader(row).map(_.getString(0))
-    }.flatMap(_.toIterator)
 
-    val expectedFilteredFileSet = fileStatusSet.filter(filterFunc(_))
-      .map(_.getPath.toString)
+      var i = 0
+      testcases.foreach { case (length, modTime, expectedPassFilter) =>
+        i += 1
+        val path = new File(tmpDir, i.toString).getAbsolutePath
+        genTestFile(path, length, modTime)
+        val partitionedFile = new PartitionedFile(
+          partitionValues = InternalRow.empty,
+          filePath = path,
+          start = 0L,
+          length = length
+        )
+        val passFilter = reader.apply(partitionedFile).size == 1
 
-    assert(filteredFileSet === expectedFilteredFileSet)
+        assert(passFilter === expectedPassFilter)
+      }
+    }
   }
 
   test ("test buildReader with filters") {
-    // file1 length = 10
-    // file2 length = 13
-    // file3 length = 21
-    // file4 length = 9
-    testBuildReaderWithFilters(Seq(LessThan("length", 13L)), _.getLen < 13L)
-    testBuildReaderWithFilters(Seq(LessThanOrEqual("length", 13L)), _.getLen <= 13L)
-    testBuildReaderWithFilters(Seq(GreaterThan("length", 10L)), _.getLen > 10L)
-    testBuildReaderWithFilters(Seq(GreaterThanOrEqual("length", 10L)), _.getLen >= 10L)
-    testBuildReaderWithFilters(Seq(EqualTo("length", 10L)), _.getLen == 10)
 
-    // file modificationTime: file1 < file2 < file3 < file4
-    testBuildReaderWithFilters(Seq(
-      LessThan("modificationTime", new Timestamp(file3Status.getModificationTime))),
-      _.getModificationTime < file3Status.getModificationTime)
-    testBuildReaderWithFilters(Seq(
-      LessThanOrEqual("modificationTime", new Timestamp(file3Status.getModificationTime))),
-      _.getModificationTime <= file3Status.getModificationTime)
-    testBuildReaderWithFilters(Seq(
-      GreaterThan("modificationTime", new Timestamp(file2Status.getModificationTime))),
-      _.getModificationTime > file2Status.getModificationTime)
-    testBuildReaderWithFilters(Seq(
-      GreaterThanOrEqual("modificationTime", new Timestamp(file2Status.getModificationTime))),
-      _.getModificationTime >= file2Status.getModificationTime)
-    testBuildReaderWithFilters(Seq(
-      EqualTo("modificationTime", new Timestamp(file2Status.getModificationTime))),
-      _.getModificationTime == file2Status.getModificationTime)
+    // test filter applied on `length` column
+    testBuildReaderWithFilters(Seq(LessThan("length", 13L)),
+      Seq((10L, 0L, true), (13L, 0L, false), (15L, 0L, false)))
+    testBuildReaderWithFilters(Seq(LessThanOrEqual("length", 13L)),
+      Seq((10L, 0L, true), (13L, 0L, true), (15L, 0L, false)))
+    testBuildReaderWithFilters(Seq(GreaterThan("length", 13L)),
+      Seq((10L, 0L, false), (13L, 0L, false), (15L, 0L, true)))
+    testBuildReaderWithFilters(Seq(GreaterThanOrEqual("length", 13L)),
+      Seq((10L, 0L, false), (13L, 0L, true), (15L, 0L, true)))
+    testBuildReaderWithFilters(Seq(EqualTo("length", 13L)),
+      Seq((10L, 0L, false), (13L, 0L, true), (15L, 0L, false)))
 
+    // test filter applied on `modificationTime` column
+    val t1 = 50000000L
+    val t2 = 60000000L
+    val t3 = 70000000L
+    testBuildReaderWithFilters(Seq(LessThan("modificationTime", new Timestamp(t2))),
+      Seq((0L, t1, true), (0L, t2, false), (0L, t3, false)))
+    testBuildReaderWithFilters(Seq(LessThanOrEqual("modificationTime", new Timestamp(t2))),
+      Seq((0L, t1, true), (0L, t2, true), (0L, t3, false)))
+    testBuildReaderWithFilters(Seq(GreaterThan("modificationTime", new Timestamp(t2))),
+      Seq((0L, t1, false), (0L, t2, false), (0L, t3, true)))
+    testBuildReaderWithFilters(Seq(GreaterThanOrEqual("modificationTime", new Timestamp(t2))),
+      Seq((0L, t1, false), (0L, t2, true), (0L, t3, true)))
+    testBuildReaderWithFilters(Seq(EqualTo("modificationTime", new Timestamp(t2))),
+      Seq((0L, t1, false), (0L, t2, true), (0L, t3, false)))
+
+    // test AND filter
     testBuildReaderWithFilters(Seq(
       And(
-        GreaterThan("length", 9L),
-        LessThan("length", 21L)
+        GreaterThan("length", 10L),
+        LessThan("length", 20L)
       )),
-      s => s.getLen > 9L && s.getLen < 21L
+      Seq((5L, 0L, false), (15L, 0L, true), (25L, 0L, false))
     )
-
+    // test OR filter
     testBuildReaderWithFilters(Seq(
       Or(
-        GreaterThan("length", 13L),
+        GreaterThan("length", 20L),
         LessThan("length", 10L)
       )),
-      s => s.getLen > 13L || s.getLen < 10L
+      Seq((5L, 0L, true), (15L, 0L, false), (25L, 0L, true))
     )
-
+    // test NOT filter
     testBuildReaderWithFilters(Seq(
-      Not(GreaterThan("length", 13L))),
-      s => s.getLen <= 13
+      Not(
+        EqualTo("length", 13L)
+      )),
+      Seq((10L, 0L, true), (13L, 0L, false), (15L, 0L, true)))
+    // test 2 layer nested filter
+    testBuildReaderWithFilters(Seq(
+      Not(
+        Or(
+          GreaterThan("length", 20L),
+          LessThan("length", 10L)
+        )
+      )),
+      Seq((5L, 0L, false), (15L, 0L, true), (25L, 0L, false))
     )
-
-    testBuildReaderWithFilters(
-      Seq(
-        GreaterThan("length", 9L),
-        LessThan("length", 21L)
+    // test multiple filters
+    testBuildReaderWithFilters(Seq(
+        EqualTo("length", 13L),
+        EqualTo("modificationTime", new Timestamp(t2))
       ),
-      s => s.getLen > 9L && s.getLen < 21L
+      Seq((13L, t2, true), (10L, t2, false), (13L, t1, false), (10L, t1, false))
     )
   }
-
 }
