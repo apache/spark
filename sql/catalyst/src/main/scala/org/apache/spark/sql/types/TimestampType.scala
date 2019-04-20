@@ -25,9 +25,10 @@ import org.apache.spark.annotation.Stable
 /**
  * The timestamp type represents a time instant in microsecond precision.
  * Valid range is [0001-01-01T00:00:00.000000Z, 9999-12-31T23:59:59.999999Z] where
- * the left-bound or right-bound are date and time of Proleptic Gregorian calendar in UTC+00:00.
+ * the left/right-bound is a date and time of the proleptic Gregorian
+ * calendar in UTC+00:00.
  *
- * Please use the singleton `DataTypes.TimestampType` to refer to the type.
+ * Please use the singleton `DataTypes.TimestampType` to refer the type.
  * @since 1.3.0
  */
 @Stable
