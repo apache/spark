@@ -89,7 +89,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String],
-      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -100,17 +100,16 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
     val filterFuncs = filters.map(filter => createFilterFunction(filter))
 
-    (file: PartitionedFile) => {
+    file: PartitionedFile => {
       val path = file.filePath
       val fsPath = new Path(path)
 
       // TODO: Improve performance here: each file will recompile the glob pattern here.
-      val globFilter = pathGlobPattern.map(new GlobFilter(_))
-      if (!globFilter.isDefined || globFilter.get.accept(fsPath)) {
+      if (pathGlobPattern.forall(new GlobFilter(_).accept(fsPath))) {
         val fs = fsPath.getFileSystem(broadcastedHadoopConf.value.value)
         val fileStatus = fs.getFileStatus(fsPath)
-        val length = fileStatus.getLen()
-        val modificationTime = fileStatus.getModificationTime()
+        val length = fileStatus.getLen
+        val modificationTime = fileStatus.getModificationTime
 
         if (filterFuncs.forall(_.apply(fileStatus))) {
           val stream = fs.open(fsPath)
@@ -151,6 +150,11 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
 object BinaryFileFormat {
 
+  private[binaryfile] val PATH = "path"
+  private[binaryfile] val MODIFICATION_TIME = "modificationTime"
+  private[binaryfile] val LENGTH = "length"
+  private[binaryfile] val CONTENT = "content"
+
   /**
    * Schema for the binary file data source.
    *
@@ -163,10 +167,10 @@ object BinaryFileFormat {
    *  - content (BinaryType): The content of the file.
    */
   val schema = StructType(
-    StructField("path", StringType, false) ::
-    StructField("modificationTime", TimestampType, false) ::
-    StructField("length", LongType, false) ::
-    StructField("content", BinaryType, true) :: Nil)
+    StructField(PATH, StringType, false) ::
+    StructField(MODIFICATION_TIME, TimestampType, false) ::
+    StructField(LENGTH, LongType, false) ::
+    StructField(CONTENT, BinaryType, true) :: Nil)
 
   private[binaryfile] def createFilterFunction(filter: Filter): FileStatus => Boolean = {
     filter match {
@@ -177,26 +181,26 @@ object BinaryFileFormat {
       case Not(child) =>
         s => !createFilterFunction(child)(s)
 
-      case LessThan("length", value: Long) =>
+      case LessThan(LENGTH, value: Long) =>
         _.getLen < value
-      case LessThanOrEqual("length", value: Long) =>
+      case LessThanOrEqual(LENGTH, value: Long) =>
         _.getLen <= value
-      case GreaterThan("length", value: Long) =>
+      case GreaterThan(LENGTH, value: Long) =>
         _.getLen > value
-      case GreaterThanOrEqual("length", value: Long) =>
+      case GreaterThanOrEqual(LENGTH, value: Long) =>
         _.getLen >= value
-      case EqualTo("length", value: Long) =>
+      case EqualTo(LENGTH, value: Long) =>
         _.getLen == value
 
-      case LessThan("modificationTime", value: Timestamp) =>
+      case LessThan(MODIFICATION_TIME, value: Timestamp) =>
         _.getModificationTime < value.getTime
-      case LessThanOrEqual("modificationTime", value: Timestamp) =>
+      case LessThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
         _.getModificationTime <= value.getTime
-      case GreaterThan("modificationTime", value: Timestamp) =>
+      case GreaterThan(MODIFICATION_TIME, value: Timestamp) =>
         _.getModificationTime > value.getTime
-      case GreaterThanOrEqual("modificationTime", value: Timestamp) =>
+      case GreaterThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
         _.getModificationTime >= value.getTime
-      case EqualTo("modificationTime", value: Timestamp) =>
+      case EqualTo(MODIFICATION_TIME, value: Timestamp) =>
         _.getModificationTime == value.getTime
 
       case _ => (_ => true)
