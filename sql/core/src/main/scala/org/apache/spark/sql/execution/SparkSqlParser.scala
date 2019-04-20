@@ -318,23 +318,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     val statement = plan(ctx.statement)
     if (statement == null) {
       null  // This is enough since ParseException will raise later.
-    } else if (isExplainableStatement(statement)) {
+    } else {
       ExplainCommand(
         logicalPlan = statement,
         extended = ctx.EXTENDED != null,
         codegen = ctx.CODEGEN != null,
         cost = ctx.COST != null)
-    } else {
-      ExplainCommand(OneRowRelation())
     }
-  }
-
-  /**
-   * Determine if a plan should be explained at all.
-   */
-  protected def isExplainableStatement(plan: LogicalPlan): Boolean = plan match {
-    case _: DescribeTableCommand => false
-    case _ => true
   }
 
   /**
