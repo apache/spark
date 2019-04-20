@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.security.PrivilegedAction
 import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
+
+import org.apache.commons.io.FilenameUtils
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
@@ -61,7 +65,23 @@ object JdbcUtils extends Logging {
         throw new IllegalStateException(
           s"Did not find registered driver with class $driverClass")
       }
-      val connection: Connection = driver.connect(options.url, options.asConnectionProperties)
+
+      val connection: Connection = {
+        if (options.keytab != null && options.principal != null) {
+          val keytabFileName = FilenameUtils.getName(options.keytab)
+          UserGroupInformation
+            .loginUserFromKeytabAndReturnUGI(options.principal, keytabFileName)
+            .doAs(new PrivilegedAction[Connection] {
+              override def run(): Connection = {
+                driver.connect(options.url, options.asConnectionProperties)
+              }
+            })
+        }
+        else {
+          driver.connect(options.url, options.asConnectionProperties)
+        }
+      }
+
       require(connection != null,
         s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
 

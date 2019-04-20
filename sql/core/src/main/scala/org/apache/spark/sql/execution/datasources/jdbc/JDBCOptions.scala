@@ -190,6 +190,15 @@ class JDBCOptions(
 
   // An option to allow/disallow pushing down predicate into JDBC data source
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
+
+  // ------------------------------------------------------------
+  // Optional parameters for Kerberos
+  // ------------------------------------------------------------
+  // The HDFS path of user's keytab file, which is assumed to be pre-uploaded to
+  // HDFS by user and distributed to executors by the --file option of spark-submit
+  val keytab = parameters.getOrElse(JDBC_KEYTAB, null)
+  // The principal name of user's keytab file
+  val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
 }
 
 class JdbcOptionsInWrite(
@@ -242,4 +251,6 @@ object JDBCOptions {
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
+  val JDBC_KEYTAB = newOption("keytab")
+  val JDBC_PRINCIPAL = newOption("principal")
 }
