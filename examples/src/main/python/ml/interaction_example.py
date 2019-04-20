@@ -37,7 +37,7 @@ if __name__ == "__main__":
          (5, 9, 2, 7, 10, 7, 3),
          (6, 1, 1, 4, 2, 8, 4)],
         ["id1", "id2", "id3", "id4", "id5", "id6", "id7"])
-    
+
     assembler1 = VectorAssembler(inputCols=["id2", "id3", "id4"], outputCol="vec1")
 
     assembled1 = assembler1.transform(df)
