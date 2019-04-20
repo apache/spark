@@ -34,3 +34,5 @@ approval_rules:
           - "^gradle.properties$"
           - "^settings.gradle$"
           - "^versions.props$"
+      targets_branch:
+        pattern: "^(master|release/2.5.x)$"
