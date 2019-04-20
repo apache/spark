@@ -906,13 +906,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         }
       }
 
-      withTempPath { file =>
-        checkAppend(_.parquet(file.getCanonicalPath), spark.read.parquet(file.getCanonicalPath))
-      }
+      Seq(false, true).foreach { mergeSchema =>
+        withTempPath { file =>
+          checkAppend(_.parquet(file.getCanonicalPath),
+            spark.read.option("mergeSchema", mergeSchema).parquet(file.getCanonicalPath))
+        }
 
-      val tableName = "parquet_timestamp_migration"
-      withTable(tableName) {
-        checkAppend(_.saveAsTable(tableName), spark.table(tableName))
+        withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> mergeSchema.toString) {
+          val tableName = "parquet_timestamp_migration"
+          withTable(tableName) {
+            checkAppend(_.saveAsTable(tableName), spark.table(tableName))
+          }
+        }
       }
     }
 
