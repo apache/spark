@@ -236,12 +236,6 @@
         <orc.deps.scope>provided</orc.deps.scope>
       </properties>
     </profile>
-    <profile>
-      <id>parquet-provided</id>
-      <properties>
-        <parquet.deps.scope>provided</parquet.deps.scope>
-      </properties>
-    </profile>
 
     <!--
      Pull in spark-hadoop-cloud and its associated JARs,
