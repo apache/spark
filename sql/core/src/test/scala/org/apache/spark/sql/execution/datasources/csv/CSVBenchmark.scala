@@ -54,7 +54,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val ds = spark.read.option("header", true).schema(schema).csv(path.getAbsolutePath)
 
       benchmark.addCase(s"One quoted string", numIters) { _ =>
-        ds.filter((_: Row) => true).count()
+        ds.write.format("noop").save()
       }
 
       benchmark.run()
@@ -79,14 +79,17 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
 
       benchmark.addCase(s"Select $colsNum columns", 3) { _ =>
-        ds.select("*").filter((row: Row) => true).count()
+        ds.select("*")
+          .write.format("noop").save()
       }
       val cols100 = columnNames.take(100).map(Column(_))
       benchmark.addCase(s"Select 100 columns", 3) { _ =>
-        ds.select(cols100: _*).filter((row: Row) => true).count()
+        ds.select(cols100: _*)
+          .write.format("noop").save()
       }
       benchmark.addCase(s"Select one column", 3) { _ =>
-        ds.select($"col1").filter((row: Row) => true).count()
+        ds.select($"col1")
+          .write.format("noop").save()
       }
       benchmark.addCase(s"count()", 3) { _ =>
         ds.count()
@@ -96,7 +99,8 @@ object CSVBenchmark extends SqlBasedBenchmark {
         (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
       val dsErr1 = spark.read.schema(schemaErr1).csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, one bad input field", 3) { _ =>
-        dsErr1.select(cols100: _*).filter((row: Row) => true).count()
+        dsErr1.select(cols100: _*)
+          .write.format("noop").save()
       }
 
       val badRecColName = "badRecord"
@@ -105,7 +109,8 @@ object CSVBenchmark extends SqlBasedBenchmark {
         .option("columnNameOfCorruptRecord", badRecColName)
         .csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, corrupt record field", 3) { _ =>
-        dsErr2.select((Column(badRecColName) +: cols100): _*).filter((row: Row) => true).count()
+        dsErr2.select((Column(badRecColName) +: cols100): _*)
+          .write.format("noop").save()
       }
 
       benchmark.run()
