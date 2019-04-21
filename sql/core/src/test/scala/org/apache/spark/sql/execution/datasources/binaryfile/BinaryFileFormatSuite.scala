@@ -24,20 +24,27 @@ import java.sql.Timestamp
 import scala.collection.JavaConverters._
 
 import com.google.common.io.{ByteStreams, Closeables}
-import org.apache.hadoop.fs.{FileSystem, GlobFilter, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
+import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+  import BinaryFileFormat._
 
   private var testDir: String = _
 
   private var fsTestDir: Path = _
 
   private var fs: FileSystem = _
+
+  private var file1Status: FileStatus = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -51,44 +58,64 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     val year2015Dir = new File(testDir, "year=2015")
     year2015Dir.mkdir()
 
+    val file1 = new File(year2014Dir, "data.txt")
     Files.write(
-      new File(year2014Dir, "data.txt").toPath,
+      file1.toPath,
       Seq("2014-test").asJava,
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
+    file1Status = fs.getFileStatus(new Path(file1.getPath))
+
+    val file2 = new File(year2014Dir, "data2.bin")
     Files.write(
-      new File(year2014Dir, "data2.bin").toPath,
+      file2.toPath,
       "2014-test-bin".getBytes,
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
 
+    val file3 = new File(year2015Dir, "bool.csv")
     Files.write(
-      new File(year2015Dir, "bool.csv").toPath,
+      file3.toPath,
       Seq("bool", "True", "False", "true").asJava,
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
+
+    val file4 = new File(year2015Dir, "data.bin")
     Files.write(
-      new File(year2015Dir, "data.txt").toPath,
+      file4.toPath,
       "2015-test".getBytes,
       StandardOpenOption.CREATE, StandardOpenOption.WRITE
     )
   }
 
+  test("BinaryFileFormat methods") {
+    val format = new BinaryFileFormat
+    assert(format.shortName() === "binaryFile")
+    assert(format.isSplitable(spark, Map.empty, new Path("any")) === false)
+    assert(format.inferSchema(spark, Map.empty, Seq.empty) === Some(BinaryFileFormat.schema))
+    assert(BinaryFileFormat.schema === StructType(Seq(
+      StructField("path", StringType, false),
+      StructField("modificationTime", TimestampType, false),
+      StructField("length", LongType, false),
+      StructField("content", BinaryType, true))))
+  }
+
   def testBinaryFileDataSource(pathGlobFilter: String): Unit = {
-    val resultDF = spark.read.format("binaryFile")
-      .option("pathGlobFilter", pathGlobFilter)
-      .load(testDir)
-      .select(
-        col("status.path"),
-        col("status.modificationTime"),
-        col("status.length"),
-        col("content"),
+    val dfReader = spark.read.format("binaryFile")
+    if (pathGlobFilter != null) {
+      dfReader.option("pathGlobFilter", pathGlobFilter)
+    }
+    val resultDF = dfReader.load(testDir).select(
+        col(PATH),
+        col(MODIFICATION_TIME),
+        col(LENGTH),
+        col(CONTENT),
         col("year") // this is a partition column
       )
 
     val expectedRowSet = new collection.mutable.HashSet[Row]()
 
-    val globFilter = new GlobFilter(pathGlobFilter)
+    val globFilter = if (pathGlobFilter == null) null else new GlobFilter(pathGlobFilter)
     for (partitionDirStatus <- fs.listStatus(fsTestDir)) {
       val dirPath = partitionDirStatus.getPath
 
@@ -96,7 +123,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       val year = partitionName.toInt // partition column "year" value which is `Int` type
 
       for (fileStatus <- fs.listStatus(dirPath)) {
-        if (globFilter.accept(fileStatus.getPath)) {
+        if (globFilter == null || globFilter.accept(fileStatus.getPath)) {
           val fpath = fileStatus.getPath.toString.replace("file:/", "file:///")
           val flen = fileStatus.getLen
           val modificationTime = new Timestamp(fileStatus.getModificationTime)
@@ -121,14 +148,15 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
   }
 
   test("binary file data source test") {
-    testBinaryFileDataSource(pathGlobFilter = "*.*")
-    testBinaryFileDataSource(pathGlobFilter = "*.bin")
-    testBinaryFileDataSource(pathGlobFilter = "*.txt")
-    testBinaryFileDataSource(pathGlobFilter = "*.{txt,csv}")
-    testBinaryFileDataSource(pathGlobFilter = "*.json")
+    testBinaryFileDataSource(null)
+    testBinaryFileDataSource("*.*")
+    testBinaryFileDataSource("*.bin")
+    testBinaryFileDataSource("*.txt")
+    testBinaryFileDataSource("*.{txt,csv}")
+    testBinaryFileDataSource("*.json")
   }
 
-  test ("binary file data source do not support write operation") {
+  test("binary file data source do not support write operation") {
     val df = spark.read.format("binaryFile").load(testDir)
     withTempDir { tmpDir =>
       val thrown = intercept[UnsupportedOperationException] {
@@ -140,4 +168,122 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     }
   }
 
+  def mockFileStatus(length: Long, modificationTime: Long): FileStatus = {
+    val status = mock(classOf[FileStatus])
+    when(status.getLen).thenReturn(length)
+    when(status.getModificationTime).thenReturn(modificationTime)
+    when(status.toString).thenReturn(
+      s"FileStatus($LENGTH=$length, $MODIFICATION_TIME=$modificationTime)")
+    status
+  }
+
+  def testCreateFilterFunction(
+      filters: Seq[Filter],
+      testCases: Seq[(FileStatus, Boolean)]): Unit = {
+    val funcs = filters.map(BinaryFileFormat.createFilterFunction)
+    testCases.foreach { case (status, expected) =>
+      assert(funcs.forall(f => f(status)) === expected,
+        s"$filters applied to $status should be $expected.")
+    }
+  }
+
+  test("createFilterFunction") {
+    // test filter applied on `length` column
+    val l1 = mockFileStatus(1L, 0L)
+    val l2 = mockFileStatus(2L, 0L)
+    val l3 = mockFileStatus(3L, 0L)
+    testCreateFilterFunction(
+      Seq(LessThan(LENGTH, 2L)),
+      Seq((l1, true), (l2, false), (l3, false)))
+    testCreateFilterFunction(
+      Seq(LessThanOrEqual(LENGTH, 2L)),
+      Seq((l1, true), (l2, true), (l3, false)))
+    testCreateFilterFunction(
+      Seq(GreaterThan(LENGTH, 2L)),
+      Seq((l1, false), (l2, false), (l3, true)))
+    testCreateFilterFunction(
+      Seq(GreaterThanOrEqual(LENGTH, 2L)),
+      Seq((l1, false), (l2, true), (l3, true)))
+    testCreateFilterFunction(
+      Seq(EqualTo(LENGTH, 2L)),
+      Seq((l1, false), (l2, true), (l3, false)))
+    testCreateFilterFunction(
+      Seq(Not(EqualTo(LENGTH, 2L))),
+      Seq((l1, true), (l2, false), (l3, true)))
+    testCreateFilterFunction(
+      Seq(And(GreaterThan(LENGTH, 1L), LessThan(LENGTH, 3L))),
+      Seq((l1, false), (l2, true), (l3, false)))
+    testCreateFilterFunction(
+      Seq(Or(LessThanOrEqual(LENGTH, 1L), GreaterThanOrEqual(LENGTH, 3L))),
+      Seq((l1, true), (l2, false), (l3, true)))
+
+    // test filter applied on `modificationTime` column
+    val t1 = mockFileStatus(0L, 1L)
+    val t2 = mockFileStatus(0L, 2L)
+    val t3 = mockFileStatus(0L, 3L)
+    testCreateFilterFunction(
+      Seq(LessThan(MODIFICATION_TIME, new Timestamp(2L))),
+      Seq((t1, true), (t2, false), (t3, false)))
+    testCreateFilterFunction(
+      Seq(LessThanOrEqual(MODIFICATION_TIME, new Timestamp(2L))),
+      Seq((t1, true), (t2, true), (t3, false)))
+    testCreateFilterFunction(
+      Seq(GreaterThan(MODIFICATION_TIME, new Timestamp(2L))),
+      Seq((t1, false), (t2, false), (t3, true)))
+    testCreateFilterFunction(
+      Seq(GreaterThanOrEqual(MODIFICATION_TIME, new Timestamp(2L))),
+      Seq((t1, false), (t2, true), (t3, true)))
+    testCreateFilterFunction(
+      Seq(EqualTo(MODIFICATION_TIME, new Timestamp(2L))),
+      Seq((t1, false), (t2, true), (t3, false)))
+    testCreateFilterFunction(
+      Seq(Not(EqualTo(MODIFICATION_TIME, new Timestamp(2L)))),
+      Seq((t1, true), (t2, false), (t3, true)))
+    testCreateFilterFunction(
+      Seq(And(GreaterThan(MODIFICATION_TIME, new Timestamp(1L)),
+        LessThan(MODIFICATION_TIME, new Timestamp(3L)))),
+      Seq((t1, false), (t2, true), (t3, false)))
+    testCreateFilterFunction(
+      Seq(Or(LessThanOrEqual(MODIFICATION_TIME, new Timestamp(1L)),
+        GreaterThanOrEqual(MODIFICATION_TIME, new Timestamp(3L)))),
+      Seq((t1, true), (t2, false), (t3, true)))
+
+    // test filters applied on both columns
+    testCreateFilterFunction(
+      Seq(And(GreaterThan(LENGTH, 2L), LessThan(MODIFICATION_TIME, new Timestamp(2L)))),
+      Seq((l1, false), (l2, false), (l3, true), (t1, false), (t2, false), (t3, false)))
+
+    // test nested filters
+    testCreateFilterFunction(
+      // NOT (length > 2 OR modificationTime < 2)
+      Seq(Not(Or(GreaterThan(LENGTH, 2L), LessThan(MODIFICATION_TIME, new Timestamp(2L))))),
+      Seq((l1, false), (l2, false), (l3, false), (t1, false), (t2, true), (t3, true)))
+  }
+
+  test("buildReader") {
+    def testBuildReader(fileStatus: FileStatus, filters: Seq[Filter], expected: Boolean): Unit = {
+      val format = new BinaryFileFormat
+      val reader = format.buildReaderWithPartitionValues(
+        sparkSession = spark,
+        dataSchema = schema,
+        partitionSchema = StructType(Nil),
+        requiredSchema = schema,
+        filters = filters,
+        options = Map.empty,
+        hadoopConf = spark.sessionState.newHadoopConf())
+      val partitionedFile = mock(classOf[PartitionedFile])
+      when(partitionedFile.filePath).thenReturn(fileStatus.getPath.toString)
+      assert(reader(partitionedFile).nonEmpty === expected,
+        s"Filters $filters applied to $fileStatus should be $expected.")
+    }
+    testBuildReader(file1Status, Seq.empty, true)
+    testBuildReader(file1Status, Seq(LessThan(LENGTH, file1Status.getLen)), false)
+    testBuildReader(file1Status, Seq(
+      LessThan(MODIFICATION_TIME, new Timestamp(file1Status.getModificationTime))
+    ), false)
+    testBuildReader(file1Status, Seq(
+      EqualTo(LENGTH, file1Status.getLen),
+      EqualTo(MODIFICATION_TIME, file1Status.getModificationTime)
+    ), true)
+  }
 }
