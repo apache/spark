@@ -72,12 +72,13 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
+      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-      JSON schema inferring:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             38902 / 39282          2.6         389.0       1.0X
-      UTF-8 is set                            56959 / 57261          1.8         569.6       0.7X
+      JSON schema inferring:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                              45908 / 46480          2.2         459.1       1.0X
+      UTF-8 is set                             68469 / 69762          1.5         684.7       0.7X
       */
       benchmark.run()
     }
@@ -113,12 +114,13 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
+      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-      JSON per-line parsing:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             25947 / 26188          3.9         259.5       1.0X
-      UTF-8 is set                            46319 / 46417          2.2         463.2       0.6X
+      JSON per-line parsing:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                               9982 / 10237         10.0          99.8       1.0X
+      UTF-8 is set                             16373 / 16806          6.1         163.7       0.6X
       */
       benchmark.run()
     }
@@ -161,12 +163,13 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
+      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-      JSON parsing of wide lines:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             45543 / 45660          0.2        4554.3       1.0X
-      UTF-8 is set                            65737 / 65957          0.2        6573.7       0.7X
+      JSON parsing of wide lines:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                              26038 / 26386          0.4        2603.8       1.0X
+      UTF-8 is set                             28343 / 28557          0.4        2834.3       0.9X
       */
       benchmark.run()
     }
