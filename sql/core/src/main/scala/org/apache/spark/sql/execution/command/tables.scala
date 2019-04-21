@@ -639,12 +639,14 @@ case class DescribeTableCommand(
  *    select * from (from a select * select *)
  * 7. Common table expressions (CTEs)
  */
-case class DescribeQueryCommand(query: LogicalPlan)
+case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
   extends DescribeCommandBase {
+
+  override def simpleString(maxFields: Int): String = s"$nodeName $queryText".trim
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val queryExecution = sparkSession.sessionState.executePlan(query)
+    val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result
   }
