@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.io.File
+import java.time.{Instant, LocalDate}
+
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
@@ -147,11 +150,162 @@ object CSVBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  def datetimeBenchmark(rowsNum: Int): Unit = {
+    def timestamps = {
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map(Instant.ofEpochSecond(_))
+      }.select($"value".as("timestamp"))
+    }
+
+    def dates = {
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map(d => LocalDate.ofEpochDay(d % (100 * 365)))
+      }.select($"value".as("date"))
+    }
+
+    def toNoop(ds: Dataset[_]): Unit = ds.write.format("noop").save()
+
+    withTempPath { path =>
+
+      val timestampDir = new File(path, "timestamp").getAbsolutePath
+      val dateDir = new File(path, "date").getAbsolutePath
+
+      val writeBench = new Benchmark("Write dates and timestamps", rowsNum, output = output)
+      writeBench.addCase(s"Create a dataset of timestamps", 3) { _ =>
+        toNoop(timestamps)
+      }
+
+      writeBench.addCase("to_csv(timestamp)", 3) { _ =>
+        toNoop(timestamps.select(to_csv(struct($"timestamp"))))
+      }
+
+      writeBench.addCase("write timestamps to files", 3) { _ =>
+        timestamps.write.option("header", true).mode("overwrite").csv(timestampDir)
+      }
+
+      writeBench.addCase("Create a dataset of dates", 3) { _ =>
+        toNoop(dates)
+      }
+
+      writeBench.addCase("to_csv(date)", 3) { _ =>
+        toNoop(dates.select(to_csv(struct($"date"))))
+      }
+
+      writeBench.addCase("write dates to files", 3) { _ =>
+        dates.write.option("header", true).mode("overwrite").csv(dateDir)
+      }
+
+      writeBench.run()
+
+      val readBench = new Benchmark("Read dates and timestamps", rowsNum, output = output)
+      val tsSchema = new StructType().add("timestamp", TimestampType)
+
+      readBench.addCase("read timestamp text from files", 3) { _ =>
+        toNoop(spark.read.text(timestampDir))
+      }
+
+      readBench.addCase("read timestamps from files", 3) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .schema(tsSchema)
+          .csv(timestampDir)
+        toNoop(ds)
+      }
+
+      readBench.addCase("infer timestamps from files", 3) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .option("inferSchema", true)
+          .csv(timestampDir)
+        toNoop(ds)
+      }
+
+      val dateSchema = new StructType().add("date", DateType)
+
+      readBench.addCase("read date text from files", 3) { _ =>
+        toNoop(spark.read.text(dateDir))
+      }
+
+      readBench.addCase("read date from files", 3) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .schema(dateSchema)
+          .csv(dateDir)
+        toNoop(ds)
+      }
+
+      readBench.addCase("infer date from files", 3) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .option("inferSchema", true)
+          .csv(dateDir)
+        toNoop(ds)
+      }
+
+      def timestampStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map(i => s"1970-01-01T01:02:03.${100 + i % 100}Z")
+        }.select($"value".as("timestamp")).as[String]
+      }
+
+      readBench.addCase("timestamp strings", 3) { _ =>
+        toNoop(timestampStr)
+      }
+
+      readBench.addCase("parse timestamps from Dataset[String]", 3) { _ =>
+        val ds = spark.read
+          .option("header", false)
+          .schema(tsSchema)
+          .csv(timestampStr)
+        toNoop(ds)
+      }
+
+      readBench.addCase("infer timestamps from Dataset[String]", 3) { _ =>
+        val ds = spark.read
+          .option("header", false)
+          .option("inferSchema", true)
+          .csv(timestampStr)
+        toNoop(ds)
+      }
+
+      def dateStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map(i => LocalDate.ofEpochDay(i % 1000 * 365).toString)
+        }.select($"value".as("date")).as[String]
+      }
+
+      readBench.addCase("date strings", 3) { _ =>
+        toNoop(dateStr)
+      }
+
+      readBench.addCase("parse dates from Dataset[String]", 3) { _ =>
+        val ds = spark.read
+          .option("header", false)
+          .schema(dateSchema)
+          .csv(dateStr)
+        toNoop(ds)
+      }
+
+      readBench.addCase("from_csv(timestamp)", 3) { _ =>
+        val ds = timestampStr.select(from_csv($"timestamp", tsSchema, Map.empty[String, String]))
+        toNoop(ds)
+      }
+
+      readBench.addCase("from_csv(date)", 3) { _ =>
+        val ds = dateStr.select(from_csv($"date", dateSchema, Map.empty[String, String]))
+        toNoop(ds)
+      }
+
+      readBench.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Benchmark to measure CSV read/write performance") {
       quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
       multiColumnsBenchmark(rowsNum = 1000 * 1000)
       countBenchmark(10 * 1000 * 1000)
+      datetimeBenchmark(10 * 1000 * 1000)
     }
   }
 }
