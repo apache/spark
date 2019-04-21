@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.bytecode.TypedOperations
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -96,6 +97,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
+        RewriteTypedOperations,
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveNoopOperators,
@@ -1717,5 +1719,45 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+/**
+ * Rewrites typed operations that contain user-defined closures into equivalent untyped operations
+ * that rely on Catalyst expressions.
+ */
+object RewriteTypedOperations extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.bytecodeAnalysisEnabled) {
+      plan transformUp {
+        case TypedMap(s, m, d) if isFirstTypedNode(d) || isLastTypedNode(plan, s) =>
+          TypedOperations.convertMapElements(s, m, d).getOrElse(s)
+        case f: TypedFilter if isFirstTypedNode(f) || isLastTypedNode(plan, f) =>
+          TypedOperations.convertFilter(f).getOrElse(f)
+      }
+    } else {
+      plan
+    }
+  }
+
+  // checks if the node starts a sequence of typed operations
+  private def isFirstTypedNode(node: UnaryNode): Boolean =
+    !node.child.isInstanceOf[ObjectConsumer] && !node.child.isInstanceOf[TypedFilter]
+
+  // checks if the node ends a sequence of typed operations
+  private def isLastTypedNode(plan: LogicalPlan, node: UnaryNode): Boolean = {
+    val parent = plan.collectFirst { case n if n.children.contains(node) => n }
+    !parent.exists(p => p.isInstanceOf[ObjectProducer] || p.isInstanceOf[TypedFilter])
+  }
+
+  object TypedMap {
+    def unapply(p: LogicalPlan): Option[(SerializeFromObject, MapElements, DeserializeToObject)] =
+      p match {
+        case s @ SerializeFromObject(_, m @ MapElements(_, _, _, _, d: DeserializeToObject)) =>
+          Some((s, m, d))
+        case _ =>
+          None
+    }
   }
 }

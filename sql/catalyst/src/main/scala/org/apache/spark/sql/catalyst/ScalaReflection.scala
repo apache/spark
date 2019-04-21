@@ -620,6 +620,9 @@ object ScalaReflection extends ScalaReflection {
       throw new UnsupportedOperationException(s"Attributes for type $others is not supported")
   }
 
+  /** Returns a catalyst DataType and its nullability for the given Scala class using reflection. */
+  def schemaFor[T](clazz: Class[T]): Schema = schemaFor(getTypeFromClass(clazz))
+
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor[T: TypeTag]: Schema = schemaFor(localTypeOf[T])
 
@@ -699,6 +702,12 @@ object ScalaReflection extends ScalaReflection {
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
+  }
+
+  private def getTypeFromClass[T](clazz: Class[T]): Type = {
+    val m = runtimeMirror(clazz.getClassLoader)
+    val classSymbol = m.classSymbol(clazz)
+    classSymbol.toType
   }
 
   /**

@@ -18,7 +18,6 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
-import java.lang.invoke.SerializedLambda
 
 import scala.collection.mutable.{Map, Set, Stack}
 
@@ -27,6 +26,7 @@ import org.apache.xbean.asm7.Opcodes._
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils.getSerializedLambda
 
 /**
  * A cleaner that renders closures serializable if they can be done so safely.
@@ -157,39 +157,6 @@ private[spark] object ClosureCleaner extends Logging {
       checkSerializable: Boolean = true,
       cleanTransitively: Boolean = true): Unit = {
     clean(closure, checkSerializable, cleanTransitively, Map.empty)
-  }
-
-  /**
-   * Try to get a serialized Lambda from the closure.
-   *
-   * @param closure the closure to check.
-   */
-  private def getSerializedLambda(closure: AnyRef): Option[SerializedLambda] = {
-    val isClosureCandidate =
-      closure.getClass.isSynthetic &&
-        closure
-          .getClass
-          .getInterfaces.exists(_.getName == "scala.Serializable")
-
-    if (isClosureCandidate) {
-      try {
-        Option(inspect(closure))
-      } catch {
-        case e: Exception =>
-          // no need to check if debug is enabled here the Spark
-          // logging api covers this.
-          logDebug("Closure is not a serialized lambda.", e)
-          None
-      }
-    } else {
-      None
-    }
-  }
-
-  private def inspect(closure: AnyRef): SerializedLambda = {
-    val writeReplace = closure.getClass.getDeclaredMethod("writeReplace")
-    writeReplace.setAccessible(true)
-    writeReplace.invoke(closure).asInstanceOf[java.lang.invoke.SerializedLambda]
   }
 
   /**

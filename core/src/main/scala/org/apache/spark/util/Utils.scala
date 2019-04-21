@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
+import java.lang.invoke.SerializedLambda
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
@@ -2885,6 +2886,34 @@ private[spark] object Utils extends Logging {
   /** Returns whether the URI is a "local:" URI. */
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
+  }
+
+  /**
+   * Try to get a serialized Lambda from the closure.
+   *
+   * @param closure the closure to check.
+   */
+  def getSerializedLambda(closure: AnyRef): Option[SerializedLambda] = {
+    def getLambda(closure: AnyRef): SerializedLambda = {
+      val writeReplace = closure.getClass.getDeclaredMethod("writeReplace")
+      writeReplace.setAccessible(true)
+      writeReplace.invoke(closure).asInstanceOf[java.lang.invoke.SerializedLambda]
+    }
+
+    val clazz = closure.getClass
+    if (clazz.isSynthetic && clazz.getInterfaces.exists(_.getName == "scala.Serializable")) {
+      try {
+        Option(getLambda(closure))
+      } catch {
+        case e: Exception =>
+          // no need to check if debug is enabled here the Spark
+          // logging api covers this.
+          logDebug("Closure is not a serialized lambda.", e)
+          None
+      }
+    } else {
+      None
+    }
   }
 }
 
