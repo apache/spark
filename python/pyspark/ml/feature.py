@@ -1251,7 +1251,7 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
     +---+---+-----+
     ...
 
-    .. versionadded:: 1.6.0
+    .. versionadded:: 3.0.0
     """
 
     @keyword_only
@@ -1266,7 +1266,7 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
         self.setParams(**kwargs)
 
     @keyword_only
-    @since("1.6.0")
+    @since("3.0.0")
     def setParams(self, inputCols=None, outputCol=None):
         """
         setParams(self, inputCols=None, outputCol=None)
