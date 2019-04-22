@@ -347,7 +347,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       val tableCols = insert.table.output.map(_.name)
       val noexistsCols = insertedCols.get.filterNot(col => tableCols.contains(col))
       if (noexistsCols.size > 0) {
-        throw new AnalysisException(s"Target table $tblName dose not exists these columns: $noexistsCols.")
+        throw new AnalysisException(s"Table $tblName does not exists these columns: $noexistsCols.")
       }
       insert.table.output.filter(a => insertedCols.get.contains(a.name))
     }
@@ -356,8 +356,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
         s"$tblName requires that the data to be inserted have the same number of columns as " +
-          s"the number of columns selected in the target table: the number of columns selected has " +
-          s"${expectedColumns.length} column(s) but the inserted data has " +
+          s"the number of columns selected in the target table: the number of columns " +
+          s"selected has ${expectedColumns.length} column(s) but the inserted data has " +
           s"${insert.query.output.length + staticPartCols.size} column(s), " +
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
@@ -410,7 +410,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
-          preprocess(i, metadata.identifier.quotedString, insertedCols, metadata.partitionColumnNames)
+          preprocess(
+            i, metadata.identifier.quotedString, insertedCols, metadata.partitionColumnNames)
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, None, h.partitionSchema.map(_.name))
