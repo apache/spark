@@ -148,7 +148,7 @@ private[spark] object UIUtils extends Logging {
   def formatBytes(bytes: Long): String = {
     if (bytes == 0) {
       return "0.0 B"
-  }
+    }
     val factor = 1024
     val sizes = Array("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
     val num = (Math.floor(Math.log(bytes.toDouble) / Math.log(factor.toDouble))).toInt
