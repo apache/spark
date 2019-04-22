@@ -228,8 +228,8 @@ class SparkSqlParserSuite extends AnalysisTest {
 
   test("describe query") {
     val query = "SELECT * FROM t"
-    assertEqual("DESCRIBE QUERY " + query, DescribeQueryCommand(parser.parsePlan(query)))
-    assertEqual("DESCRIBE " + query, DescribeQueryCommand(parser.parsePlan(query)))
+    assertEqual("DESCRIBE QUERY " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
+    assertEqual("DESCRIBE " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
   }
 
   test("describe table column") {
