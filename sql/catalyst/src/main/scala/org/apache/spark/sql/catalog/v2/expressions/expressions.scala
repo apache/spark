@@ -149,7 +149,7 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
 }
 
 private[sql] final case class FieldReference(parts: Seq[String]) extends NamedReference {
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.MultipartIdentifierHelper
   override def fieldNames: Array[String] = parts.toArray
   override def describe: String = parts.quoted
   override def toString: String = describe

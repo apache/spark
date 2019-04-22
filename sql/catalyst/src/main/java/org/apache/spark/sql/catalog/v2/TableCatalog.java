@@ -84,10 +84,11 @@ public interface TableCatalog extends CatalogPlugin {
    * @param schema the schema of the new table, as a struct type
    * @return metadata for the new table
    * @throws TableAlreadyExistsException If a table already exists for the identifier
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default Table createTable(
       Identifier ident,
-      StructType schema) throws TableAlreadyExistsException {
+      StructType schema) throws TableAlreadyExistsException, NoSuchNamespaceException {
     return createTable(ident, schema, new Transform[0], Collections.emptyMap());
   }
 
@@ -99,11 +100,12 @@ public interface TableCatalog extends CatalogPlugin {
    * @param properties a string map of table properties
    * @return metadata for the new table
    * @throws TableAlreadyExistsException If a table already exists for the identifier
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default Table createTable(
       Identifier ident,
       StructType schema,
-      Map<String, String> properties) throws TableAlreadyExistsException {
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
     return createTable(ident, schema, new Transform[0], properties);
   }
 
@@ -117,12 +119,13 @@ public interface TableCatalog extends CatalogPlugin {
    * @return metadata for the new table
    * @throws TableAlreadyExistsException If a table already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   Table createTable(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException;
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
 
   /**
    * Apply a set of {@link TableChange changes} to a table in the catalog.
