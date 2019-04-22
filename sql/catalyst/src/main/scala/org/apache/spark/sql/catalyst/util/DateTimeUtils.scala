@@ -120,29 +120,14 @@ object DateTimeUtils {
    * Returns a java.sql.Timestamp from number of micros since epoch.
    */
   def toJavaTimestamp(us: SQLTimestamp): Timestamp = {
-    // setNanos() will overwrite the millisecond part, so the milliseconds should be
-    // cut off at seconds
-    var seconds = us / MICROS_PER_SECOND
-    var micros = us % MICROS_PER_SECOND
-    // setNanos() can not accept negative value
-    if (micros < 0) {
-      micros += MICROS_PER_SECOND
-      seconds -= 1
-    }
-    val t = new Timestamp(SECONDS.toMillis(seconds))
-    t.setNanos(MICROSECONDS.toNanos(micros).toInt)
-    t
+    Timestamp.from(microsToInstant(us))
   }
 
   /**
    * Returns the number of micros since epoch from java.sql.Timestamp.
    */
   def fromJavaTimestamp(t: Timestamp): SQLTimestamp = {
-    if (t != null) {
-      MILLISECONDS.toMicros(t.getTime()) + NANOSECONDS.toMicros(t.getNanos()) % NANOS_PER_MICROS
-    } else {
-      0L
-    }
+    instantToMicros(t.toInstant)
   }
 
   /**
@@ -183,6 +168,17 @@ object DateTimeUtils {
    */
   def fromMillis(millis: Long): SQLTimestamp = {
     MILLISECONDS.toMicros(millis)
+  }
+
+  def microsToEpochDays(epochMicros: SQLTimestamp, zoneId: ZoneId): SQLDate = {
+    localDateToDays(microsToInstant(epochMicros).atZone(zoneId).toLocalDate)
+  }
+
+  def epochDaysToMicros(epochDays: SQLDate, zoneId: ZoneId): SQLTimestamp = {
+    val localDate = LocalDate.ofEpochDay(epochDays)
+    val zeroLocalTime = LocalTime.MIDNIGHT
+    val localDateTime = LocalDateTime.of(localDate, zeroLocalTime)
+    instantToMicros(localDateTime.atZone(zoneId).toInstant)
   }
 
   /**
@@ -359,7 +355,9 @@ object DateTimeUtils {
     days.toInt
   }
 
-  def localDateToDays(localDate: LocalDate): Int = localDate.toEpochDay.toInt
+  def localDateToDays(localDate: LocalDate): Int = {
+    Math.toIntExact(localDate.toEpochDay)
+  }
 
   def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
 
@@ -411,8 +409,7 @@ object DateTimeUtils {
     segments(i) = currentSegmentValue
     try {
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-      val instant = localDate.atStartOfDay(ZoneOffset.UTC).toInstant
-      Some(instantToDays(instant))
+      Some(localDateToDays(localDate))
     } catch {
       case NonFatal(_) => None
     }

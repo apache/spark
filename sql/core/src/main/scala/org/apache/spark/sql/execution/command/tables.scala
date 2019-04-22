@@ -635,14 +635,18 @@ case class DescribeTableCommand(
  * 3. VALUES statement.
  * 4. TABLE statement. Example : TABLE table_name
  * 5. statements of the form 'FROM table SELECT *'
- * 6. Common table expressions (CTEs)
+ * 6. Multi select statements of the following form:
+ *    select * from (from a select * select *)
+ * 7. Common table expressions (CTEs)
  */
-case class DescribeQueryCommand(query: LogicalPlan)
+case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
   extends DescribeCommandBase {
+
+  override def simpleString(maxFields: Int): String = s"$nodeName $queryText".trim
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val queryExecution = sparkSession.sessionState.executePlan(query)
+    val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result
   }

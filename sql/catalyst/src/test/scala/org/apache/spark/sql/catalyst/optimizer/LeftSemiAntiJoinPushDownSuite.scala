@@ -37,13 +37,14 @@ class LeftSemiPushdownSuite extends PlanTest {
         CombineFilters,
         PushDownPredicate,
         PushDownLeftSemiAntiJoin,
+        PushLeftSemiLeftAntiThroughJoin,
         BooleanSimplification,
         CollapseProject) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-
   val testRelation1 = LocalRelation('d.int)
+  val testRelation2 = LocalRelation('e.int)
 
   test("Project: LeftSemiAnti join pushdown") {
     val originalQuery = testRelation
@@ -314,4 +315,118 @@ class LeftSemiPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
   }
+
+  Seq(Some('d === 'e), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, LeftOuter, Cross, RightOuter).foreach { case innerJT =>
+        test(s"$outerJT pushdown empty join cond join type $innerJT join cond $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery = joinedRelation.join(testRelation, joinType = outerJT, None)
+          val optimized = Optimize.execute(originalQuery.analyze)
+
+          val correctAnswer = if (innerJT == RightOuter) {
+            val pushedDownJoin = testRelation2.join(testRelation, joinType = outerJT, None)
+            testRelation1.join(pushedDownJoin, joinType = innerJT, innerJoinCond).analyze
+          } else {
+            val pushedDownJoin = testRelation1.join(testRelation, joinType = outerJT, None)
+            pushedDownJoin.join(testRelation2, joinType = innerJT, innerJoinCond).analyze
+          }
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
+  }
+
+  Seq(Some('d === 'e), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, LeftOuter, Cross).foreach { case innerJT =>
+        test(s"$outerJT pushdown to left of join type: $innerJT join condition $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery =
+            joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
+          val optimized = Optimize.execute(originalQuery.analyze)
+
+          val pushedDownJoin =
+            testRelation1.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
+          val correctAnswer =
+            pushedDownJoin.join(testRelation2, joinType = innerJT, innerJoinCond).analyze
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
+  }
+
+  Seq(Some('e === 'd), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, RightOuter, Cross).foreach { case innerJT =>
+        test(s"$outerJT pushdown to right of join type: $innerJT join condition $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery =
+            joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
+          val optimized = Optimize.execute(originalQuery.analyze)
+
+          val pushedDownJoin =
+            testRelation2.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
+          val correctAnswer =
+            testRelation1.join(pushedDownJoin, joinType = innerJT, innerJoinCond).analyze
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case jt =>
+    test(s"$jt no pushdown - join condition refers left leg - join type for RightOuter") {
+      val joinedRelation = testRelation1.join(testRelation2, joinType = RightOuter, None)
+      val originalQuery =
+        joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'd))
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case jt =>
+    test(s"$jt no pushdown - join condition refers right leg - join type for LeftOuter") {
+      val joinedRelation = testRelation1.join(testRelation2, joinType = LeftOuter, None)
+      val originalQuery =
+        joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'e))
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+    Seq(Inner, LeftOuter, RightOuter, Cross).foreach { case innerJT =>
+      test(s"$outerJT no pushdown - join condition refers both leg - join type $innerJT") {
+        val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, None)
+        val originalQuery = joinedRelation
+          .join(testRelation, joinType = outerJT, condition = Some('a === 'd && 'a === 'e))
+        val optimized = Optimize.execute(originalQuery.analyze)
+        comparePlans(optimized, originalQuery.analyze)
+      }
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+    Seq(Inner, LeftOuter, RightOuter, Cross).foreach { case innerJT =>
+      test(s"$outerJT no pushdown - join condition refers none of the leg - join type $innerJT") {
+        val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, None)
+        val originalQuery = joinedRelation
+          .join(testRelation, joinType = outerJT, condition = Some('d + 'e === 'a))
+        val optimized = Optimize.execute(originalQuery.analyze)
+        comparePlans(optimized, originalQuery.analyze)
+      }
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case jt =>
+    test(s"$jt no pushdown when child join type is FullOuter") {
+      val joinedRelation = testRelation1.join(testRelation2, joinType = FullOuter, None)
+      val originalQuery =
+        joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'e))
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
 }

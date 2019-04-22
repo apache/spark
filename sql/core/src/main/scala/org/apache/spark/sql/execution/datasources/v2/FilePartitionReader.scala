@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.io.{FileNotFoundException, IOException}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.PartitionReader
 
@@ -33,26 +34,27 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
   override def next(): Boolean = {
     if (currentReader == null) {
       if (readers.hasNext) {
-        if (ignoreMissingFiles || ignoreCorruptFiles) {
-          try {
-            currentReader = readers.next()
-            logInfo(s"Reading file $currentReader")
-          } catch {
-            case e: FileNotFoundException if ignoreMissingFiles =>
-              logWarning(s"Skipped missing file: $currentReader", e)
-              currentReader = null
-              return false
-            // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-            case e: FileNotFoundException if !ignoreMissingFiles => throw e
-            case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-              logWarning(
-                s"Skipped the rest of the content in the corrupted file: $currentReader", e)
-              currentReader = null
-              return false
-          }
-        } else {
-          currentReader = readers.next()
-          logInfo(s"Reading file $currentReader")
+        try {
+          currentReader = getNextReader()
+        } catch {
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning(s"Skipped missing file: $currentReader", e)
+            currentReader = null
+            return false
+          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+          case e: FileNotFoundException if !ignoreMissingFiles =>
+            throw new FileNotFoundException(
+              e.getMessage + "\n" +
+                "It is possible the underlying files have been updated. " +
+                "You can explicitly invalidate the cache in Spark by " +
+                "running 'REFRESH TABLE tableName' command in SQL or " +
+                "by recreating the Dataset/DataFrame involved.")
+          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+            logWarning(
+              s"Skipped the rest of the content in the corrupted file: $currentReader", e)
+            currentReader = null
+            InputFileBlockHolder.unset()
+            return false
         }
       } else {
         return false
@@ -84,5 +86,15 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
     if (currentReader != null) {
       currentReader.close()
     }
+    InputFileBlockHolder.unset()
+  }
+
+  private def getNextReader(): PartitionedFileReader[T] = {
+    val reader = readers.next()
+    logInfo(s"Reading file $reader")
+    // Sets InputFileBlockHolder for the file block's information
+    val file = reader.file
+    InputFileBlockHolder.set(file.filePath, file.start, file.length)
+    reader
   }
 }

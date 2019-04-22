@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -512,5 +513,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val interpreted = InterpretedPredicate.create(LessThan(Rand(7), Literal(1.0)))
     interpreted.initialize(0)
     assert(interpreted.eval(new UnsafeRow()))
+  }
+
+  test("SPARK-24872: Replace taking the $symbol with $sqlOperator in BinaryOperator's" +
+    " toString method") {
+    val expression = CatalystSqlParser.parseExpression("id=1 or id=2").toString()
+    val expected = "(('id = 1) OR ('id = 2))"
+    assert(expression == expected)
   }
 }

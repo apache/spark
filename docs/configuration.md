@@ -472,7 +472,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.redaction.regex</code></td>
-  <td>(?i)secret|password</td>
+  <td>(?i)secret|password|token</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
     executor environments contain sensitive information. When this regex matches a property key or
@@ -872,6 +872,14 @@ Apart from these, the following properties are also available, and may be useful
     How often to update live entities. -1 means "never update" when replaying applications,
     meaning only the last write will happen. For live applications, this avoids a few
     operations that we can live without when rapidly processing incoming task events.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.liveUpdate.minFlushPeriod</code></td>
+  <td>1s</td>
+  <td>
+    Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
+    task events are not fired frequently.
   </td>
 </tr>
 <tr>
