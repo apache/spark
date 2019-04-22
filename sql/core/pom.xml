@@ -217,36 +217,6 @@
           </execution>
         </executions>
       </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <shadedArtifactAttached>false</shadedArtifactAttached>
-          <artifactSet>
-            <includes>
-              <include>org.apache.parquet:*</include>
-            </includes>
-          </artifactSet>
-          <relocations>
-            <relocation>
-              <pattern>org.apache.parquet</pattern>
-              <shadedPattern>${spark.shade.packageName}.parquet</shadedPattern>
-              <includes>
-                <include>org.apache.parquet.**</include>
-              </includes>
-            </relocation>
-          </relocations>
-        </configuration>
-        <executions>
-          <execution>
-            <id>create-sql-shade</id>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
     </plugins>
   </build>
 </project>
