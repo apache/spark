@@ -17,10 +17,7 @@
 
 from __future__ import print_function
 
-import os
-import sys
-
-from py4j.java_gateway import java_import, JavaObject
+from py4j.java_gateway import java_import
 
 from pyspark import RDD, SparkConf
 from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
@@ -261,6 +258,7 @@ class StreamingContext(object):
         for new files and reads them as text files. Files must be wrriten to the
         monitored directory by "moving" them from another location within the same
         file system. File names starting with . are ignored.
+        The text files must be encoded as UTF-8.
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
 

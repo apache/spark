@@ -229,10 +229,25 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     }
   }
 
+  def duplicateResolved: Boolean = {
+    children.map(_.outputSet.size).sum ==
+      AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
+  }
+
   // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] =
-    children.map(_.output).transpose.map(attrs =>
-      attrs.head.withNullability(attrs.exists(_.nullable)))
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -288,7 +303,8 @@ case class Join(
     left: LogicalPlan,
     right: LogicalPlan,
     joinType: JoinType,
-    condition: Option[Expression])
+    condition: Option[Expression],
+    hint: JoinHint)
   extends BinaryNode with PredicateHelper {
 
   override def output: Seq[Attribute] = {
@@ -350,19 +366,31 @@ case class Join(
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
+
+  // Ignore hint for canonicalization
+  protected override def doCanonicalize(): LogicalPlan =
+    super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
+
+  // Do not include an empty join hint in string description
+  protected override def stringArgs: Iterator[Any] = super.stringArgs.filter { e =>
+    (!e.isInstanceOf[JoinHint]
+      || e.asInstanceOf[JoinHint].leftHint.isDefined
+      || e.asInstanceOf[JoinHint].rightHint.isDefined)
+  }
 }
 
 /**
- * Append data to an existing table.
+ * Base trait for DataSourceV2 write commands
  */
-case class AppendData(
-    table: NamedRelation,
-    query: LogicalPlan,
-    isByName: Boolean) extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Seq(query)
-  override def output: Seq[Attribute] = Seq.empty
+trait V2WriteCommand extends Command {
+  def table: NamedRelation
+  def query: LogicalPlan
 
-  override lazy val resolved: Boolean = {
+  override def children: Seq[LogicalPlan] = Seq(query)
+
+  override lazy val resolved: Boolean = outputResolved
+
+  def outputResolved: Boolean = {
     table.resolved && query.resolved && query.output.size == table.output.size &&
         query.output.zip(table.output).forall {
           case (inAttr, outAttr) =>
@@ -374,15 +402,65 @@ case class AppendData(
   }
 }
 
+/**
+ * Append data to an existing table.
+ */
+case class AppendData(
+    table: NamedRelation,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand
+
 object AppendData {
   def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
-    new AppendData(table, df, true)
+    new AppendData(table, df, isByName = true)
   }
 
   def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
-    new AppendData(table, query, false)
+    new AppendData(table, query, isByName = false)
   }
 }
+
+/**
+ * Overwrite data matching a filter in an existing table.
+ */
+case class OverwriteByExpression(
+    table: NamedRelation,
+    deleteExpr: Expression,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand {
+  override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
+}
+
+object OverwriteByExpression {
+  def byName(
+      table: NamedRelation, df: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, df, isByName = true)
+  }
+
+  def byPosition(
+      table: NamedRelation, query: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, query, isByName = false)
+  }
+}
+
+/**
+ * Dynamically overwrite partitions in an existing table.
+ */
+case class OverwritePartitionsDynamic(
+    table: NamedRelation,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand
+
+object OverwritePartitionsDynamic {
+  def byName(table: NamedRelation, df: LogicalPlan): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, df, isByName = true)
+  }
+
+  def byPosition(table: NamedRelation, query: LogicalPlan): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, query, isByName = false)
+  }
+}
+
 
 /**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
@@ -468,7 +546,7 @@ case class View(
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
 }
@@ -484,8 +562,8 @@ case class View(
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def simpleString: String = {
-    val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+  override def simpleString(maxFields: Int): String = {
+    val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]", maxFields)
     s"CTE $cteAliases"
   }
 
@@ -557,7 +635,7 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Int): String = {
     s"Range ($start, $end, step=$step, splits=$numSlices)"
   }
 

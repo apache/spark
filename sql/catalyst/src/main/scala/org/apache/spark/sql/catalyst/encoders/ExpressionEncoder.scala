@@ -21,13 +21,14 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection, WalkedTypePath}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -79,7 +80,11 @@ object ExpressionEncoder {
    * name/positional binding is preserved.
    */
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
-    // TODO: check if encoders length is more than 22 and throw exception for it.
+    if (encoders.length > 22) {
+      throw new UnsupportedOperationException("Due to Scala's limited support of tuple, " +
+        "tuple with more than 22 elements are not supported.")
+    }
+
     encoders.foreach(_.assertUnresolved())
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
@@ -241,7 +246,7 @@ case class ExpressionEncoder[T](
   }
 
   // The schema after converting `T` to a Spark SQL row. This schema is dependent on the given
-  // serialier.
+  // serializer.
   val schema: StructType = StructType(serializer.map { s =>
     StructField(s.name, s.dataType, s.nullable)
   })
@@ -323,8 +328,8 @@ case class ExpressionEncoder[T](
     extractProjection(inputRow)
   } catch {
     case e: Exception =>
-      throw new RuntimeException(
-        s"Error while encoding: $e\n${serializer.map(_.simpleString).mkString("\n")}", e)
+      throw new RuntimeException(s"Error while encoding: $e\n" +
+          s"${serializer.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
   }
 
   /**
@@ -336,7 +341,8 @@ case class ExpressionEncoder[T](
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
   } catch {
     case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.simpleString}", e)
+      throw new RuntimeException(s"Error while decoding: $e\n" +
+        s"${deserializer.simpleString(SQLConf.get.maxToStringFields)}", e)
   }
 
   /**

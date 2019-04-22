@@ -24,9 +24,8 @@ import com.amazonaws.services.kinesis.clientlibrary.exceptions._
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
-import org.mockito.Matchers._
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{anyList, anyString, eq => meq}
+import org.mockito.Mockito.{never, times, verify, when}
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mockito.MockitoSugar
 
@@ -96,7 +95,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     recordProcessor.processRecords(batch, checkpointerMock)
 
     verify(receiverMock, times(1)).isStopped()
-    verify(receiverMock, never).addRecords(anyString, anyListOf(classOf[Record]))
+    verify(receiverMock, never).addRecords(anyString, anyList())
     verify(receiverMock, never).setCheckpointer(anyString, meq(checkpointerMock))
   }
 
@@ -104,7 +103,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     when(receiverMock.isStopped()).thenReturn(false)
     when(receiverMock.getCurrentLimit).thenReturn(Int.MaxValue)
     when(
-      receiverMock.addRecords(anyString, anyListOf(classOf[Record]))
+      receiverMock.addRecords(anyString, anyList())
     ).thenThrow(new RuntimeException())
 
     intercept[RuntimeException] {

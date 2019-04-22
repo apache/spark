@@ -19,6 +19,11 @@ import shutil
 import sys
 import tempfile
 import unittest
+try:
+    from importlib import reload  # Python 3.4+ only.
+except ImportError:
+    # Otherwise, we will stick to Python 2's built-in reload.
+    pass
 
 import py4j
 
@@ -216,12 +221,9 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
         self.assertEquals(date(2017, 1, 22), parse_result['to_date(`dateCol`)'])
 
-    @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):
-        from unittest.mock import patch
         from pyspark.sql import functions as F
         from pyspark.sql import window
-        import importlib
 
         df = self.spark.range(0, 3)
 
@@ -235,22 +237,18 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
                 F.count("*").over(window.Window.rangeBetween(-sys.maxsize, sys.maxsize))
             ).columns[0]
 
-        with patch("sys.maxsize", 2 ** 31 - 1):
-            importlib.reload(window)
-            self.assertTrue(rows_frame_match())
-            self.assertTrue(range_frame_match())
+        for new_maxsize in [2 ** 31 - 1, 2 ** 63 - 1, 2 ** 127 - 1]:
+            old_maxsize = sys.maxsize
+            sys.maxsize = new_maxsize
+            try:
+                # Manually reload window module to use monkey-patched sys.maxsize.
+                reload(window)
+                self.assertTrue(rows_frame_match())
+                self.assertTrue(range_frame_match())
+            finally:
+                sys.maxsize = old_maxsize
 
-        with patch("sys.maxsize", 2 ** 63 - 1):
-            importlib.reload(window)
-            self.assertTrue(rows_frame_match())
-            self.assertTrue(range_frame_match())
-
-        with patch("sys.maxsize", 2 ** 127 - 1):
-            importlib.reload(window)
-            self.assertTrue(rows_frame_match())
-            self.assertTrue(range_frame_match())
-
-        importlib.reload(window)
+        reload(window)
 
 
 if __name__ == "__main__":

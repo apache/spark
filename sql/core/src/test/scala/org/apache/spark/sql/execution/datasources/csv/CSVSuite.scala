@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, EOFException, File, FileOutputStream}
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.zip.GZIPOutputStream
 
 import scala.collection.JavaConverters._
 import scala.util.Properties
@@ -63,6 +64,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
+  private val badAfterGoodFile = "test-data/bad_after_good.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -1170,6 +1172,40 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
   }
 
+  test("Enabling/disabling ignoreCorruptFiles") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.csv(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
+      }
+    } finally {
+      inputFile.delete()
+    }
+  }
+
   test("SPARK-19610: Parse normal multi-line CSV files") {
     val primitiveFieldAndType = Seq(
       """"
@@ -1342,15 +1378,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .collect()
     }.getMessage
     assert(msg.contains("only include the internal corrupt record column"))
-    intercept[org.apache.spark.sql.catalyst.errors.TreeNodeException[_]] {
-      spark
-        .read
-        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .schema(schema)
-        .csv(testFile(valueMalformedFile))
-        .filter($"_corrupt_record".isNotNull)
-        .count()
-    }
+
     // workaround
     val df = spark
       .read
@@ -1696,21 +1724,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
 
     val testAppender1 = new TestAppender
-    LogManager.getRootLogger.addAppender(testAppender1)
-    try {
+    withLogAppender(testAppender1) {
       val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
       val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
 
       spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
-    } finally {
-      LogManager.getRootLogger.removeAppender(testAppender1)
     }
     assert(testAppender1.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
 
     val testAppender2 = new TestAppender
-    LogManager.getRootLogger.addAppender(testAppender2)
-    try {
+    withLogAppender(testAppender2) {
       withTempPath { path =>
         val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
         val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
@@ -1723,8 +1747,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
           .csv(path.getCanonicalPath)
           .collect()
       }
-    } finally {
-      LogManager.getRootLogger.removeAppender(testAppender2)
     }
     assert(testAppender2.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
@@ -2011,5 +2033,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       val files = new File(path).listFiles()
       assert(!files.exists(_.getName.endsWith("csv")))
     }
+  }
+
+  test("Do not reuse last good value for bad input field") {
+    val schema = StructType(
+      StructField("col1", StringType) ::
+      StructField("col2", DateType) ::
+      Nil
+    )
+    val rows = spark.read
+      .schema(schema)
+      .format("csv")
+      .load(testFile(badAfterGoodFile))
+
+    val expectedRows = Seq(
+      Row("good record", java.sql.Date.valueOf("1999-08-01")),
+      Row("bad record", null))
+
+    checkAnswer(rows, expectedRows)
   }
 }

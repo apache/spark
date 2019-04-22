@@ -97,7 +97,7 @@ class ClusteringSummary(JavaWrapper):
         return self._call_java("numIter")
 
 
-class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by GaussianMixture.
 
@@ -126,22 +126,13 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
     @property
     @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model
-        instance.
-        """
-        return self._call_java("hasSummary")
-
-    @property
-    @since("2.1.0")
     def summary(self):
         """
         Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return GaussianMixtureSummary(self._call_java("summary"))
+            return GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -323,7 +314,7 @@ class KMeansSummary(ClusteringSummary):
         return self._call_java("trainingCost")
 
 
-class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by KMeans.
 
@@ -337,21 +328,13 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
     @property
     @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model instance.
-        """
-        return self._call_java("hasSummary")
-
-    @property
-    @since("2.1.0")
     def summary(self):
         """
         Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return KMeansSummary(self._call_java("summary"))
+            return KMeansSummary(super(KMeansModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -507,7 +490,7 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
         return self.getOrDefault(self.distanceMeasure)
 
 
-class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by BisectingKMeans.
 
@@ -536,21 +519,13 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
     @property
     @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model instance.
-        """
-        return self._call_java("hasSummary")
-
-    @property
-    @since("2.1.0")
     def summary(self):
         """
         Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return BisectingKMeansSummary(self._call_java("summary"))
+            return BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -587,6 +562,8 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
     2
     >>> summary.clusterSizes
     [2, 2]
+    >>> summary.trainingCost
+    2.000...
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[0].prediction == rows[1].prediction
@@ -700,7 +677,15 @@ class BisectingKMeansSummary(ClusteringSummary):
 
     .. versionadded:: 2.1.0
     """
-    pass
+
+    @property
+    @since("3.0.0")
+    def trainingCost(self):
+        """
+        Sum of squared distances to the nearest centroid for all points in the training dataset.
+        This is equivalent to sklearn's inertia.
+        """
+        return self._call_java("trainingCost")
 
 
 @inherit_doc
@@ -1193,8 +1178,8 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     .. note:: Experimental
 
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
-    `Lin and Cohen <http://www.icml2010.org/papers/387.pdf>`_. From the abstract:
-    PIC finds a very low-dimensional embedding of a dataset using truncated power
+    `Lin and Cohen <http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>`_. From the
+    abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
     iteration on a normalized pair-wise similarity matrix of the data.
 
     This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
@@ -1208,19 +1193,19 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     ...         (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9),
     ...         (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1),
     ...         (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
-    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight")
+    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight").repartition(1)
     >>> pic = PowerIterationClustering(k=2, maxIter=40, weightCol="weight")
     >>> assignments = pic.assignClusters(df)
     >>> assignments.sort(assignments.id).show(truncate=False)
     +---+-------+
     |id |cluster|
     +---+-------+
-    |0  |1      |
-    |1  |1      |
-    |2  |1      |
-    |3  |1      |
-    |4  |1      |
-    |5  |0      |
+    |0  |0      |
+    |1  |0      |
+    |2  |0      |
+    |3  |0      |
+    |4  |0      |
+    |5  |1      |
     +---+-------+
     ...
     >>> pic_path = temp_path + "/pic"

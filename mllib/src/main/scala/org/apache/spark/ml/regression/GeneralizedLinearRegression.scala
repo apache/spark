@@ -1001,7 +1001,8 @@ class GeneralizedLinearRegressionModel private[ml] (
     @Since("2.0.0") val coefficients: Vector,
     @Since("2.0.0") val intercept: Double)
   extends RegressionModel[Vector, GeneralizedLinearRegressionModel]
-  with GeneralizedLinearRegressionBase with MLWritable {
+  with GeneralizedLinearRegressionBase with MLWritable
+  with HasTrainingSummary[GeneralizedLinearRegressionTrainingSummary] {
 
   /**
    * Sets the link prediction (linear predictor) column name.
@@ -1054,29 +1055,12 @@ class GeneralizedLinearRegressionModel private[ml] (
     output.toDF()
   }
 
-  private var trainingSummary: Option[GeneralizedLinearRegressionTrainingSummary] = None
-
   /**
    * Gets R-like summary of model on training set. An exception is
    * thrown if there is no summary available.
    */
   @Since("2.0.0")
-  def summary: GeneralizedLinearRegressionTrainingSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      "No training summary available for this GeneralizedLinearRegressionModel")
-  }
-
-  /**
-   * Indicates if [[summary]] is available.
-   */
-  @Since("2.0.0")
-  def hasSummary: Boolean = trainingSummary.nonEmpty
-
-  private[regression]
-  def setSummary(summary: Option[GeneralizedLinearRegressionTrainingSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
+  override def summary: GeneralizedLinearRegressionTrainingSummary = super.summary
 
   /**
    * Evaluate the model on the given dataset, returning a summary of the results.

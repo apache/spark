@@ -27,10 +27,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -41,6 +40,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.memory.TestMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
@@ -169,7 +169,7 @@ class ExecutorSuite extends SparkFunSuite
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("executor thread test")
-      .set("spark.ui.enabled", "false")
+      .set(UI_ENABLED.key, "false")
     sc = new SparkContext(conf)
     val executorThread = sc.parallelize(Seq(1), 1).map { _ =>
       Thread.currentThread.getClass.getName
@@ -278,13 +278,10 @@ class ExecutorSuite extends SparkFunSuite
     val heartbeats = ArrayBuffer[Heartbeat]()
     val mockReceiver = mock[RpcEndpointRef]
     when(mockReceiver.askSync(any[Heartbeat], any[RpcTimeout])(any))
-      .thenAnswer(new Answer[HeartbeatResponse] {
-        override def answer(invocation: InvocationOnMock): HeartbeatResponse = {
-          val args = invocation.getArguments()
-          val mock = invocation.getMock
-          heartbeats += args(0).asInstanceOf[Heartbeat]
-          HeartbeatResponse(false)
-        }
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val args = invocation.getArguments()
+        heartbeats += args(0).asInstanceOf[Heartbeat]
+        HeartbeatResponse(false)
       })
     val receiverRef = executorClass.getDeclaredField("heartbeatReceiverRef")
     receiverRef.setAccessible(true)

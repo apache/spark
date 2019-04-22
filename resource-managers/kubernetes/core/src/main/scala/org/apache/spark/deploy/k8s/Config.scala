@@ -24,6 +24,18 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
 
+  val KUBERNETES_CONTEXT =
+    ConfigBuilder("spark.kubernetes.context")
+      .doc("The desired context from your K8S config file used to configure the K8S " +
+        "client for interacting with the cluster.  Useful if your config file has " +
+        "multiple clusters or user identities defined.  The client library used " +
+        "locates the config file via the KUBECONFIG environment variable or by defaulting " +
+        "to .kube/config under your home directory.  If not specified then your current " +
+        "context is used.  You can always override specific aspects of the config file " +
+        "provided configuration using other Spark on K8S configuration options.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
@@ -73,6 +85,30 @@ private[spark] object Config extends Logging {
   val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
   val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
+
+  val SUBMISSION_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.submission.requestTimeout")
+      .doc("request timeout to be used in milliseconds for starting the driver")
+      .intConf
+      .createWithDefault(10000)
+
+  val SUBMISSION_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.submission.connectionTimeout")
+      .doc("connection timeout to be used in milliseconds for starting the driver")
+      .intConf
+      .createWithDefault(10000)
+
+  val DRIVER_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.driver.requestTimeout")
+      .doc("request timeout to be used in milliseconds for driver to request executors")
+      .intConf
+      .createWithDefault(10000)
+
+  val DRIVER_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.driver.connectionTimeout")
+      .doc("connection timeout to be used in milliseconds for driver to request executors")
+      .intConf
+      .createWithDefault(10000)
 
   val KUBERNETES_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")
@@ -288,6 +324,13 @@ private[spark] object Config extends Logging {
         "of failure or normal termination.")
       .booleanConf
       .createWithDefault(true)
+
+  val KUBERNETES_SUBMIT_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.appKillPodDeletionGracePeriod")
+      .doc("Time to wait for graceful deletion of Spark pods when spark-submit" +
+        " is used for killing an application.")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

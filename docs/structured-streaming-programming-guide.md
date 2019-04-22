@@ -2,6 +2,21 @@
 layout: global
 displayTitle: Structured Streaming Programming Guide
 title: Structured Streaming Programming Guide
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -922,7 +937,7 @@ late data for that aggregate any more. To enable this, in Spark 2.1, we have int
 **watermarking**, which lets the engine automatically track the current event time in the data
 and attempt to clean up old state accordingly. You can define the watermark of a query by 
 specifying the event time column and the threshold on how late the data is expected to be in terms of 
-event time. For a specific window starting at time `T`, the engine will maintain state and allow late
+event time. For a specific window ending at time `T`, the engine will maintain state and allow late
 data to update the state until `(max event time seen by the engine - late threshold > T)`. 
 In other words, late data within the threshold will be aggregated, 
 but data later than the threshold will start getting dropped
@@ -3112,6 +3127,16 @@ See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections f
 - There are currently no automatic retries of failed tasks. Any failure will lead to the query being stopped and it needs to be manually restarted from the checkpoint.
 
 # Additional Information
+
+**Notes**
+
+- Several configurations are not modifiable after the query has run. To change them, discard the checkpoint and start a new query. These configurations include:
+  - `spark.sql.shuffle.partitions`
+    - This is due to the physical partitioning of state: state is partitioned via applying hash function to key, hence the number of partitions for state should be unchanged.
+    - If you want to run fewer tasks for stateful operations, `coalesce` would help with avoiding unnecessary repartitioning.
+      - After `coalesce`, the number of (reduced) tasks will be kept unless another shuffle happens.
+  - `spark.sql.streaming.stateStore.providerClass`: To read the previous state of the query properly, the class of state store provider should be unchanged.
+  - `spark.sql.streaming.multipleWatermarkPolicy`: Modification of this would lead inconsistent watermark value when query contains multiple watermarks, hence the policy should be unchanged.
 
 **Further Reading**
 

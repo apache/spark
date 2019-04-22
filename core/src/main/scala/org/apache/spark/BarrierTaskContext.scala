@@ -20,7 +20,6 @@ package org.apache.spark
 import java.util.{Properties, Timer, TimerTask}
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
@@ -109,8 +108,8 @@ class BarrierTaskContext private[spark] (
       override def run(): Unit = {
         logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) waiting " +
           s"under the global sync since $startTime, has been waiting for " +
-          s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch " +
-          s"is $barrierEpoch.")
+          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+          s"current barrier epoch is $barrierEpoch.")
       }
     }
     // Log the update of global sync every 60 seconds.
@@ -122,18 +121,18 @@ class BarrierTaskContext private[spark] (
           barrierEpoch),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
-        timeout = new RpcTimeout(31536000 /* = 3600 * 24 * 365 */ seconds, "barrierTimeout"))
+        timeout = new RpcTimeout(365.days, "barrierTimeout"))
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
         "global sync successfully, waited for " +
-        s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch is " +
-        s"$barrierEpoch.")
+        s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+        s"current barrier epoch is $barrierEpoch.")
     } catch {
       case e: SparkException =>
         logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) failed " +
           "to perform global sync, waited for " +
-          s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch " +
-          s"is $barrierEpoch.")
+          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+          s"current barrier epoch is $barrierEpoch.")
         throw e
     } finally {
       timerTask.cancel()

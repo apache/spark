@@ -35,12 +35,8 @@ package object util extends Logging {
     val origErr = System.err
     val origOut = System.out
     try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
+      System.setErr(new PrintStream((_: Int) => {}))
+      System.setOut(new PrintStream((_: Int) => {}))
 
       f
     } finally {
@@ -125,18 +121,6 @@ package object util extends Logging {
     new String(out.toByteArray, StandardCharsets.UTF_8)
   }
 
-  def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
-
-  def benchmark[A](f: => A): A = {
-    val startTime = System.nanoTime()
-    val ret = f
-    val endTime = System.nanoTime()
-    // scalastyle:off println
-    println(s"${(endTime - startTime).toDouble / 1000000}ms")
-    // scalastyle:on println
-    ret
-  }
-
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
   // generated column names don't contain back-ticks or double-quotes.
   def usePrettyExpression(e: Expression): Expression = e transform {
@@ -157,7 +141,6 @@ package object util extends Logging {
   }
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
-
 
   def escapeSingleQuotedString(str: String): String = {
     val builder = StringBuilder.newBuilder
@@ -184,14 +167,14 @@ package object util extends Logging {
       start: String,
       sep: String,
       end: String,
-      maxNumFields: Int = SQLConf.get.maxToStringFields): String = {
-    if (seq.length > maxNumFields) {
+      maxFields: Int): String = {
+    if (seq.length > maxFields) {
       if (truncationWarningPrinted.compareAndSet(false, true)) {
         logWarning(
           "Truncated the string representation of a plan since it was too large. This " +
             s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
       }
-      val numFields = math.max(0, maxNumFields - 1)
+      val numFields = math.max(0, maxFields - 1)
       seq.take(numFields).mkString(
         start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
     } else {
@@ -200,12 +183,7 @@ package object util extends Logging {
   }
 
   /** Shorthand for calling truncatedString() without start or end strings. */
-  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
-
-  /* FIX ME
-  implicit class debugLogging(a: Any) {
-    def debugLogging() {
-      org.apache.log4j.Logger.getLogger(a.getClass.getName).setLevel(org.apache.log4j.Level.DEBUG)
-    }
-  } */
+  def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
+    truncatedString(seq, "", sep, "", maxFields)
+  }
 }

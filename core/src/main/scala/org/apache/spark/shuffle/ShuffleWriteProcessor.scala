@@ -41,7 +41,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
    * get from [[ShuffleManager]] and triggers rdd compute, finally return the [[MapStatus]] for
    * this task.
    */
-  def writeProcess(
+  def write(
       rdd: RDD[_],
       dep: ShuffleDependency[_, _, _],
       partitionId: Int,

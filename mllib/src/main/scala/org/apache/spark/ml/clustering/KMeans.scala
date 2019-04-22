@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.linalg.Vector
@@ -32,8 +31,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -107,7 +105,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private[clustering] val parentModel: MLlibKMeansModel)
-  extends Model[KMeansModel] with KMeansParams with GeneralMLWritable {
+  extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
+    with HasTrainingSummary[KMeansSummary] {
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
@@ -138,7 +137,8 @@ class KMeansModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
+  @Since("3.0.0")
+  def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
@@ -153,28 +153,12 @@ class KMeansModel private[ml] (
   @Since("1.6.0")
   override def write: GeneralMLWriter = new GeneralMLWriter(this)
 
-  private var trainingSummary: Option[KMeansSummary] = None
-
-  private[clustering] def setSummary(summary: Option[KMeansSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
-
-  /**
-   * Return true if there exists summary of model.
-   */
-  @Since("2.0.0")
-  def hasSummary: Boolean = trainingSummary.nonEmpty
-
   /**
    * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * thrown if `hasSummary` is false.
    */
   @Since("2.0.0")
-  def summary: KMeansSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      s"No training summary available for the ${this.getClass.getSimpleName}")
-  }
+  override def summary: KMeansSummary = super.summary
 }
 
 /** Helper class for storing model data */

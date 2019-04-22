@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{CharArrayWriter, DataOutputStream}
+import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -31,6 +31,7 @@ import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
+import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
@@ -178,7 +179,7 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
-    encoder: Encoder[T])
+    @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
 
   queryExecution.assertAnalyzed()
@@ -477,8 +478,16 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
+  def printSchema(): Unit = printSchema(Int.MaxValue)
+
   // scalastyle:off println
-  def printSchema(): Unit = println(schema.treeString)
+  /**
+   * Prints the schema up to the given level to the console in a nice tree format.
+   *
+   * @group basic
+   * @since 3.0.0
+   */
+  def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
 
   /**
@@ -619,40 +628,41 @@ class Dataset[T] private[sql](
    *                           the caching subsystem
    */
   private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
-    val internalRdd = queryExecution.toRdd.map(_.copy())
-    if (reliableCheckpoint) {
-      internalRdd.checkpoint()
-    } else {
-      internalRdd.localCheckpoint()
-    }
-
-    if (eager) {
-      internalRdd.count()
-    }
-
-    val physicalPlan = queryExecution.executedPlan
-
-    // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-    // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-    // joins.
-    def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
-      partitioning match {
-        case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
-        case p => p
+    val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
+    withAction(actionName, queryExecution) { physicalPlan =>
+      val internalRdd = physicalPlan.execute().map(_.copy())
+      if (reliableCheckpoint) {
+        internalRdd.checkpoint()
+      } else {
+        internalRdd.localCheckpoint()
       }
+
+      if (eager) {
+        internalRdd.count()
+      }
+
+      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
+      // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
+      // joins.
+      def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
+        partitioning match {
+          case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
+          case p => p
+        }
+      }
+
+      val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
+
+      Dataset.ofRows(
+        sparkSession,
+        LogicalRDD(
+          logicalPlan.output,
+          internalRdd,
+          outputPartitioning,
+          physicalPlan.outputOrdering,
+          isStreaming
+        )(sparkSession)).as[T]
     }
-
-    val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(
-        logicalPlan.output,
-        internalRdd,
-        outputPartitioning,
-        physicalPlan.outputOrdering,
-        isStreaming
-      )(sparkSession)).as[T]
   }
 
   /**
@@ -862,7 +872,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
+    Join(logicalPlan, right.logicalPlan, joinType = Inner, None, JoinHint.NONE)
   }
 
   /**
@@ -926,8 +936,9 @@ class Dataset[T] private[sql](
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
-   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
-   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
+   *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
+   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
+   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
    *
    * @note If you perform a self-join using this function without aliasing the input
    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
@@ -940,7 +951,7 @@ class Dataset[T] private[sql](
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sparkSession.sessionState.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
+      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None, JoinHint.NONE))
       .analyzed.asInstanceOf[Join]
 
     withPlan {
@@ -948,7 +959,8 @@ class Dataset[T] private[sql](
         joined.left,
         joined.right,
         UsingJoin(JoinType(joinType), usingColumns),
-        None)
+        None,
+        JoinHint.NONE)
     }
   }
 
@@ -983,8 +995,9 @@ class Dataset[T] private[sql](
    * @param right Right side of the join.
    * @param joinExprs Join expression.
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
-   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
-   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
+   *                 `inner`, `cross`, `outer`, `full`, `fullouter`, `full_outer`, `left`,
+   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`,
+   *                 `semi`, `leftsemi`, `left_semi`, `anti`, `leftanti`, left_anti`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -1001,7 +1014,7 @@ class Dataset[T] private[sql](
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
     val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr)))
+      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr), JoinHint.NONE))
       .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
@@ -1048,7 +1061,7 @@ class Dataset[T] private[sql](
    * @since 2.1.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
+    Join(logicalPlan, right.logicalPlan, joinType = Cross, None, JoinHint.NONE)
   }
 
   /**
@@ -1067,8 +1080,8 @@ class Dataset[T] private[sql](
    * @param other Right side of the join.
    * @param condition Join expression.
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
-   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
-   *                 `right`, `right_outer`.
+   *                 `inner`, `cross`, `outer`, `full`, `fullouter`,`full_outer`, `left`,
+   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`.
    *
    * @group typedrel
    * @since 1.6.0
@@ -1083,7 +1096,8 @@ class Dataset[T] private[sql](
         this.logicalPlan,
         other.logicalPlan,
         JoinType(joinType),
-        Some(condition.expr))).analyzed.asInstanceOf[Join]
+        Some(condition.expr),
+        JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
       throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
@@ -1135,7 +1149,7 @@ class Dataset[T] private[sql](
     implicit val tuple2Encoder: Encoder[(T, U)] =
       ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
 
-    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr)))
+    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE))
   }
 
   /**
@@ -2137,6 +2151,11 @@ class Dataset[T] private[sql](
    * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
    * error to add a column that refers to some other Dataset.
    *
+   * @note this method introduces a projection internally. Therefore, calling it multiple times,
+   * for instance, via loops in order to add multiple columns can generate big plans which
+   * can cause performance issues and even `StackOverflowException`. To avoid this,
+   * use `select` with the multiple columns at once.
+   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -2942,7 +2961,8 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(this, cascade = false, blocking)
+    sparkSession.sharedState.cacheManager.uncacheQuery(
+      sparkSession, logicalPlan, cascade = false, blocking)
     this
   }
 
@@ -3195,9 +3215,66 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Collect a Dataset as Arrow batches and serve stream to PySpark.
+   * Collect a Dataset as Arrow batches and serve stream to SparkR. It sends
+   * arrow batches in an ordered manner with buffering. This is inevitable
+   * due to missing R API that reads batches from socket directly. See ARROW-4512.
+   * Eventually, this code should be deduplicated by `collectAsArrowToPython`.
    */
-  private[sql] def collectAsArrowToPython(): Array[Any] = {
+  private[sql] def collectAsArrowToR(): Array[Any] = {
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+
+    withAction("collectAsArrowToR", queryExecution) { plan =>
+      RRDD.serveToStream("serve-Arrow") { outputStream =>
+        val buffer = new ByteArrayOutputStream()
+        val out = new DataOutputStream(outputStream)
+        val batchWriter = new ArrowBatchStreamWriter(schema, buffer, timeZoneId)
+        val arrowBatchRdd = toArrowBatchRdd(plan)
+        val numPartitions = arrowBatchRdd.partitions.length
+
+        // Store collection results for worst case of 1 to N-1 partitions
+        val results = new Array[Array[Array[Byte]]](numPartitions - 1)
+        var lastIndex = -1  // index of last partition written
+
+        // Handler to eagerly write partitions to Python in order
+        def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
+          // If result is from next partition in order
+          if (index - 1 == lastIndex) {
+            batchWriter.writeBatches(arrowBatches.iterator)
+            lastIndex += 1
+            // Write stored partitions that come next in order
+            while (lastIndex < results.length && results(lastIndex) != null) {
+              batchWriter.writeBatches(results(lastIndex).iterator)
+              results(lastIndex) = null
+              lastIndex += 1
+            }
+            // After last batch, end the stream
+            if (lastIndex == results.length) {
+              batchWriter.end()
+              val batches = buffer.toByteArray
+              out.writeInt(batches.length)
+              out.write(batches)
+            }
+          } else {
+            // Store partitions received out of order
+            results(index - 1) = arrowBatches
+          }
+        }
+
+        sparkSession.sparkContext.runJob(
+          arrowBatchRdd,
+          (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
+          0 until numPartitions,
+          handlePartitionBatches)
+      }
+    }
+  }
+
+  /**
+   * Collect a Dataset as Arrow batches and serve stream to PySpark. It sends
+   * arrow batches in an un-ordered manner without buffering, and then batch order
+   * information at the end. The batches should be reordered at Python side.
+   */
+  private[sql] def collectAsArrowToPython: Array[Any] = {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
     withAction("collectAsArrowToPython", queryExecution) { plan =>
@@ -3208,7 +3285,7 @@ class Dataset[T] private[sql](
         val numPartitions = arrowBatchRdd.partitions.length
 
         // Batches ordered by (index of partition, batch index in that partition) tuple
-        val batchOrder = new ArrayBuffer[(Int, Int)]()
+        val batchOrder = ArrayBuffer.empty[(Int, Int)]
         var partitionCount = 0
 
         // Handler to eagerly write batches to Python as they arrive, un-ordered
@@ -3217,7 +3294,7 @@ class Dataset[T] private[sql](
             // Write all batches (can be more than 1) in the partition, store the batch order tuple
             batchWriter.writeBatches(arrowBatches.iterator)
             arrowBatches.indices.foreach {
-              partition_batch_index => batchOrder.append((index, partition_batch_index))
+              partitionBatchIndex => batchOrder.append((index, partitionBatchIndex))
             }
           }
           partitionCount += 1
@@ -3229,8 +3306,8 @@ class Dataset[T] private[sql](
             // Sort by (index of partition, batch index in that partition) tuple to get the
             // overall_batch_index from 0 to N-1 batches, which can be used to put the
             // transferred batches in the correct order
-            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overall_batch_index) =>
-              out.writeInt(overall_batch_index)
+            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+              out.writeInt(overallBatchIndex)
             }
             out.flush()
           }

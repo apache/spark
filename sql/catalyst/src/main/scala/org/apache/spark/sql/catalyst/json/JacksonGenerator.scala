@@ -23,7 +23,7 @@ import com.fasterxml.jackson.core._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 
 /**
@@ -77,6 +77,12 @@ private[sql] class JacksonGenerator(
 
   private val lineSeparator: String = options.lineSeparatorInWrite
 
+  private val timestampFormatter = TimestampFormatter(
+    options.timestampFormat,
+    options.zoneId,
+    options.locale)
+  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
       (row: SpecializedGetters, ordinal: Int) =>
@@ -116,14 +122,12 @@ private[sql] class JacksonGenerator(
 
     case TimestampType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        val timestampString =
-          options.timestampFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+        val timestampString = timestampFormatter.format(row.getLong(ordinal))
         gen.writeString(timestampString)
 
     case DateType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        val dateString =
-          options.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
+        val dateString = dateFormatter.format(row.getInt(ordinal))
         gen.writeString(dateString)
 
     case BinaryType =>

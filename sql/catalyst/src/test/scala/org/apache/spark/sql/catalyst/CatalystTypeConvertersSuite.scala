@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.time.{Instant, LocalDate}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class CatalystTypeConvertersSuite extends SparkFunSuite {
+class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   private val simpleTypes: Seq[DataType] = Seq(
     StringType,
@@ -146,5 +150,70 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
     val expected = UTF8String.fromString("X")
     assert(converter(chr) === expected)
+  }
+
+  test("converting java.time.Instant to TimestampType") {
+    Seq(
+      "0101-02-16T10:11:32Z",
+      "1582-10-02T01:02:03.04Z",
+      "1582-12-31T23:59:59.999999Z",
+      "1970-01-01T00:00:01.123Z",
+      "1972-12-31T23:59:59.123456Z",
+      "2019-02-16T18:12:30Z",
+      "2119-03-16T19:13:31Z").foreach { timestamp =>
+      val input = Instant.parse(timestamp)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.instantToMicros(input)
+      assert(result === expected)
+    }
+  }
+
+  test("converting TimestampType to java.time.Instant") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      Seq(
+        -9463427405253013L,
+        -244000001L,
+        0L,
+        99628200102030L,
+        1543749753123456L).foreach { us =>
+        val instant = DateTimeUtils.microsToInstant(us)
+        assert(CatalystTypeConverters.createToScalaConverter(TimestampType)(us) === instant)
+      }
+    }
+  }
+
+  test("converting java.time.LocalDate to DateType") {
+    Seq(
+      "0101-02-16",
+      "1582-10-02",
+      "1582-12-31",
+      "1970-01-01",
+      "1972-12-31",
+      "2019-02-16",
+      "2119-03-16").foreach { timestamp =>
+      val input = LocalDate.parse(timestamp)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.localDateToDays(input)
+      assert(result === expected)
+    }
+  }
+
+  test("converting DateType to java.time.LocalDate") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      Seq(
+        -701265,
+        -371419,
+        -199722,
+        -1,
+        0,
+        967,
+        2094,
+        17877,
+        24837,
+        1110657).foreach { days =>
+        val localDate = DateTimeUtils.daysToLocalDate(days)
+        assert(CatalystTypeConverters.createToScalaConverter(DateType)(days) === localDate)
+      }
+    }
   }
 }

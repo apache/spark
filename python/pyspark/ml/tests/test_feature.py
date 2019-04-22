@@ -67,6 +67,8 @@ class FeatureTests(SparkSessionTestCase):
                          "Model should inherit the UID from its parent estimator.")
         output = idf0m.transform(dataset)
         self.assertIsNotNone(output.head().idf)
+        self.assertIsNotNone(idf0m.docFreq)
+        self.assertEqual(idf0m.numDocs, 3)
         # Test that parameters transferred to Python Model
         check_params(self, idf0m)
 

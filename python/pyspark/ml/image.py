@@ -28,6 +28,7 @@ import sys
 import warnings
 
 import numpy as np
+from distutils.version import LooseVersion
 
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
@@ -190,7 +191,11 @@ class _ImageSchema(object):
         # Running `bytearray(numpy.array([1]))` fails in specific Python versions
         # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
         # Here, it avoids it by converting it to bytes.
-        data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        if LooseVersion(np.__version__) >= LooseVersion('1.9'):
+            data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        else:
+            # Numpy prior to 1.9 don't have `tobytes` method.
+            data = bytearray(array.astype(dtype=np.uint8).ravel())
 
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order

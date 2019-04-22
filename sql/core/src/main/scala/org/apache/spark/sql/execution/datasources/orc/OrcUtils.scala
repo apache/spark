@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types._
 
 object OrcUtils extends Logging {
@@ -120,24 +121,27 @@ object OrcUtils extends Logging {
         })
       } else {
         if (isCaseSensitive) {
-          Some(requiredSchema.fieldNames.map { name =>
-            orcFieldNames.indexWhere(caseSensitiveResolution(_, name))
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
+            if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
+              idx
+            } else {
+              -1
+            }
           })
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
-          val caseInsensitiveOrcFieldMap =
-            orcFieldNames.zipWithIndex.groupBy(_._1.toLowerCase(Locale.ROOT))
-          Some(requiredSchema.fieldNames.map { requiredFieldName =>
+          val caseInsensitiveOrcFieldMap = orcFieldNames.groupBy(_.toLowerCase(Locale.ROOT))
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
             caseInsensitiveOrcFieldMap
               .get(requiredFieldName.toLowerCase(Locale.ROOT))
               .map { matchedOrcFields =>
                 if (matchedOrcFields.size > 1) {
                   // Need to fail if there is ambiguity, i.e. more than one field is matched.
-                  val matchedOrcFieldsString = matchedOrcFields.map(_._1).mkString("[", ", ", "]")
+                  val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
                   throw new RuntimeException(s"""Found duplicate field(s) "$requiredFieldName": """
                     + s"$matchedOrcFieldsString in case-insensitive mode")
                 } else {
-                  matchedOrcFields.head._2
+                  idx
                 }
               }.getOrElse(-1)
           })
@@ -151,5 +155,22 @@ object OrcUtils extends Logging {
    */
   def addSparkVersionMetadata(writer: Writer): Unit = {
     writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
+  }
+
+  /**
+   * Given a `StructType` object, this methods converts it to corresponding string representation
+   * in ORC.
+   */
+  def orcTypeDescriptionString(dt: DataType): String = dt match {
+    case s: StructType =>
+      val fieldTypes = s.fields.map { f =>
+        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+      }
+      s"struct<${fieldTypes.mkString(",")}>"
+    case a: ArrayType =>
+      s"array<${orcTypeDescriptionString(a.elementType)}>"
+    case m: MapType =>
+      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case _ => dt.catalogString
   }
 }

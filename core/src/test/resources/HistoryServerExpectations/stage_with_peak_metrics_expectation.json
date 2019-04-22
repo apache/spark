@@ -116,7 +116,11 @@
         "ProcessTreePythonVMemory" : 626200576,
         "ProcessTreePythonRSSMemory" : 69218304,
         "ProcessTreeOtherVMemory" : 0,
-        "ProcessTreeOtherRSSMemory" : 0
+        "ProcessTreeOtherRSSMemory" : 0,
+        "MinorGCCount" : 0,
+        "MinorGCTime" : 0,
+        "MajorGCCount" : 0,
+        "MajorGCTime" : 0
       }
     },
     "driver" : {
@@ -151,7 +155,11 @@
         "ProcessTreePythonVMemory" : 408375296,
         "ProcessTreePythonRSSMemory" : 40284160,
         "ProcessTreeOtherVMemory" : 0,
-        "ProcessTreeOtherRSSMemory" : 0
+        "ProcessTreeOtherRSSMemory" : 0,
+        "MinorGCCount" : 0,
+        "MinorGCTime" : 0,
+        "MajorGCCount" : 0,
+        "MajorGCTime" : 0
       }
     }
   },
@@ -172,6 +180,10 @@
     "ProcessTreePythonVMemory" : 626200576,
     "ProcessTreePythonRSSMemory" : 69218304,
     "ProcessTreeOtherVMemory" : 0,
-    "ProcessTreeOtherRSSMemory" : 0
+    "ProcessTreeOtherRSSMemory" : 0,
+    "MinorGCCount" : 0,
+    "MinorGCTime" : 0,
+    "MajorGCCount" : 0,
+    "MajorGCTime" : 0
   }
 }

@@ -19,15 +19,15 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
-import org.mockito.{ArgumentMatcher, Matchers, Mock, MockitoAnnotations}
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.{Mock, MockitoAnnotations}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
@@ -80,8 +80,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(driverPodName)).thenReturn(driverPodOperations)
     when(driverPodOperations.get).thenReturn(driverPod)
-    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr)))
-      .thenAnswer(executorPodAnswer())
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      meq(kubernetesClient))).thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     waitForExecutorPodsClock = new ManualClock(0L)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
@@ -153,12 +153,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podOperations).create(podWithAttachedContainerForId(2))
   }
 
-  private def executorPodAnswer(): Answer[SparkPod] = {
-    new Answer[SparkPod] {
-      override def answer(invocation: InvocationOnMock): SparkPod = {
-        val k8sConf = invocation.getArgumentAt(0, classOf[KubernetesExecutorConf])
-        executorPodWithId(k8sConf.executorId.toInt)
-      }
-    }
+  private def executorPodAnswer(): Answer[SparkPod] =
+    (invocation: InvocationOnMock) => {
+      val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+      executorPodWithId(k8sConf.executorId.toInt)
   }
 }

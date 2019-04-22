@@ -158,19 +158,16 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean): Seq[Node] = {
 
-    // stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
-      UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
-    }
-    val parameterOtherTable = allParameters.filterNot(_._1.startsWith(executionTag))
-      .map(para => para._1 + "=" + para._2(0))
+    val parameterOtherTable = request.getParameterMap().asScala
+      .filterNot(_._1.startsWith(executionTag))
+      .map { case (name, vals) =>
+        name + "=" + vals(0)
+      }
 
-    val parameterExecutionPage = UIUtils.stripXSS(request.getParameter(s"$executionTag.page"))
-    val parameterExecutionSortColumn = UIUtils.stripXSS(request
-      .getParameter(s"$executionTag.sort"))
-    val parameterExecutionSortDesc = UIUtils.stripXSS(request.getParameter(s"$executionTag.desc"))
-    val parameterExecutionPageSize = UIUtils.stripXSS(request
-      .getParameter(s"$executionTag.pageSize"))
+    val parameterExecutionPage = request.getParameter(s"$executionTag.page")
+    val parameterExecutionSortColumn = request.getParameter(s"$executionTag.sort")
+    val parameterExecutionSortDesc = request.getParameter(s"$executionTag.desc")
+    val parameterExecutionPageSize = request.getParameter(s"$executionTag.pageSize")
 
     val executionPage = Option(parameterExecutionPage).map(_.toInt).getOrElse(1)
     val executionSortColumn = Option(parameterExecutionSortColumn).map { sortColumn =>
@@ -391,14 +388,15 @@ private[ui] class ExecutionPagedTable(
         +details
       </span> ++
       <div class="stage-details collapsed">
-        <pre>{execution.details}</pre>
+        <pre>{execution.description}<br></br>{execution.details}</pre>
       </div>
     } else {
       Nil
     }
 
     val desc = if (execution.description != null && execution.description.nonEmpty) {
-      <a href={executionURL(execution.executionId)}>{execution.description}</a>
+      <a href={executionURL(execution.executionId)} class="description-input">
+        {execution.description}</a>
     } else {
       <a href={executionURL(execution.executionId)}>{execution.executionId}</a>
     }

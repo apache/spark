@@ -34,6 +34,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark._
 import org.apache.spark.TaskState._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SCHEDULER_REVIVE_INTERVAL
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
@@ -169,7 +170,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       // and notifies the job waiter before our original thread in the task scheduler finishes
       // handling the event and marks the taskset as complete.  So its ok if we need to wait a
       // *little* bit longer for the original taskscheduler thread to finish up to deal w/ the race.
-      eventually(timeout(1 second), interval(10 millis)) {
+      eventually(timeout(1.second), interval(10.milliseconds)) {
         assert(taskScheduler.runningTaskSets.isEmpty)
       }
       assert(!backend.hasTasks)
@@ -290,7 +291,7 @@ private[spark] abstract class MockBackend(
   // Periodically revive offers to allow delay scheduling to work
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
-  private val reviveIntervalMs = conf.getTimeAsMs("spark.scheduler.revive.interval", "10ms")
+  private val reviveIntervalMs = conf.get(SCHEDULER_REVIVE_INTERVAL).getOrElse(10L)
 
   /**
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
@@ -355,13 +356,9 @@ private[spark] abstract class MockBackend(
     assignedTasksWaitingToRun.nonEmpty
   }
 
-  override def start(): Unit = {
-    reviveThread.scheduleAtFixedRate(new Runnable {
-      override def run(): Unit = Utils.tryLogNonFatalError {
-        reviveOffers()
-      }
-    }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
-  }
+  override def start(): Unit =
+    reviveThread.scheduleAtFixedRate(() => Utils.tryLogNonFatalError { reviveOffers() },
+      0, reviveIntervalMs, TimeUnit.MILLISECONDS)
 
   override def stop(): Unit = {
     reviveThread.shutdown()

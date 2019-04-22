@@ -18,9 +18,13 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousStream;
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.sources.v2.SupportsBatchRead;
+import org.apache.spark.sql.sources.v2.SupportsContinuousRead;
+import org.apache.spark.sql.sources.v2.SupportsMicroBatchRead;
 import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.sources.v2.TableCapability;
 
 /**
  * A logical representation of a data source scan. This interface is used to provide logical
@@ -29,8 +33,8 @@ import org.apache.spark.sql.sources.v2.Table;
  * This logical representation is shared between batch scan, micro-batch streaming scan and
  * continuous streaming scan. Data sources must implement the corresponding methods in this
  * interface, to match what the table promises to support. For example, {@link #toBatch()} must be
- * implemented, if the {@link Table} that creates this {@link Scan} implements
- * {@link SupportsBatchRead}.
+ * implemented, if the {@link Table} that creates this {@link Scan} returns
+ * {@link TableCapability#BATCH_READ} support in its {@link Table#capabilities()}.
  * </p>
  */
 @Evolving
@@ -58,11 +62,44 @@ public interface Scan {
   /**
    * Returns the physical representation of this scan for batch query. By default this method throws
    * exception, data sources must overwrite this method to provide an implementation, if the
-   * {@link Table} that creates this scan implements {@link SupportsBatchRead}.
+   * {@link Table} that creates this scan returns {@link TableCapability#BATCH_READ} support in its
+   * {@link Table#capabilities()}.
    *
    * @throws UnsupportedOperationException
    */
   default Batch toBatch() {
-    throw new UnsupportedOperationException("Batch scans are not supported");
+    throw new UnsupportedOperationException(description() + ": Batch scan are not supported");
+  }
+
+  /**
+   * Returns the physical representation of this scan for streaming query with micro-batch mode. By
+   * default this method throws exception, data sources must overwrite this method to provide an
+   * implementation, if the {@link Table} that creates this scan implements
+   * {@link SupportsMicroBatchRead}.
+   *
+   * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
+   *                           recovery. Data streams for the same logical source in the same query
+   *                           will be given the same checkpointLocation.
+   *
+   * @throws UnsupportedOperationException
+   */
+  default MicroBatchStream toMicroBatchStream(String checkpointLocation) {
+    throw new UnsupportedOperationException(description() + ": Micro-batch scan are not supported");
+  }
+
+  /**
+   * Returns the physical representation of this scan for streaming query with continuous mode. By
+   * default this method throws exception, data sources must overwrite this method to provide an
+   * implementation, if the {@link Table} that creates this scan implements
+   * {@link SupportsContinuousRead}.
+   *
+   * @param checkpointLocation a path to Hadoop FS scratch space that can be used for failure
+   *                           recovery. Data streams for the same logical source in the same query
+   *                           will be given the same checkpointLocation.
+   *
+   * @throws UnsupportedOperationException
+   */
+  default ContinuousStream toContinuousStream(String checkpointLocation) {
+    throw new UnsupportedOperationException(description() + ": Continuous scan are not supported");
   }
 }

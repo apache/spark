@@ -137,6 +137,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       structDf.select(hash($"a", $"record.*")))
   }
 
+  test("Star Expansion - xxhash64") {
+    val structDf = testData2.select("a", "b").as("record")
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(min(xxhash64($"a", $"*"))),
+      structDf.groupBy($"a", $"b").agg(min(xxhash64($"a", $"a", $"b"))))
+
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(xxhash64($"a", $"*")),
+      structDf.groupBy($"a", $"b").agg(xxhash64($"a", $"a", $"b")))
+
+    checkAnswer(
+      structDf.select(xxhash64($"*")),
+      structDf.select(xxhash64($"record.*")))
+
+    checkAnswer(
+      structDf.select(xxhash64($"a", $"*")),
+      structDf.select(xxhash64($"a", $"record.*")))
+  }
+
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
     val e = intercept[AnalysisException] {
@@ -1398,11 +1417,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
-    val input = spark.read.json((1 to 10).map(i => s"""{"id": $i}""").toDS())
+    withTempDir { dir =>
+      (1 to 10).toDF("id").write.mode(SaveMode.Overwrite).json(dir.getCanonicalPath)
+      val input = spark.read.json(dir.getCanonicalPath)
 
-    val df = input.select($"id", rand(0).as('r))
-    df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
-      assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
+      val df = input.select($"id", rand(0).as('r))
+      df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
+        assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
+      }
     }
   }
 
@@ -1550,8 +1572,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
       val df = spark.createDataFrame(
         rdd,
-        new StructType().add("f1", IntegerType).add("f2", IntegerType),
-        needsConversion = false).select($"F1", $"f2".as("f2"))
+        new StructType().add("f1", IntegerType).add("f2", IntegerType))
+        .select($"F1", $"f2".as("f2"))
       val df1 = df.as("a")
       val df2 = df.as("b")
       checkAnswer(df1.join(df2, $"a.f2" === $"b.f2"), Row(1, 3, 1, 3) :: Row(2, 1, 2, 1) :: Nil)
@@ -1752,7 +1774,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val size = 201L
     val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
     val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
-    val df = spark.createDataFrame(rdd, StructType(schemas), false)
+    val df = spark.createDataFrame(rdd, StructType(schemas))
     assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 
@@ -1904,7 +1926,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val e = intercept[SparkException] {
         df.filter(filter).count()
       }.getMessage
-      assert(e.contains("grows beyond 64 KB"))
+      assert(e.contains("grows beyond 64 KiB"))
     }
   }
 

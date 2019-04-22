@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.io.Writer
 import java.util.Locale
-import java.util.function.Supplier
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -87,7 +86,7 @@ trait CodegenSupport extends SparkPlan {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
     s"""
-       |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
+       |${ctx.registerComment(s"PRODUCE: ${this.simpleString(SQLConf.get.maxToStringFields)}")}
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -143,14 +142,11 @@ trait CodegenSupport extends SparkPlan {
    * Note that `outputVars` and `row` can't both be null.
    */
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
-    val inputVars =
+    val inputVarsCandidate =
       if (outputVars != null) {
         assert(outputVars.length == output.length)
         // outputVars will be used to generate the code for UnsafeRow, so we should copy them
-        outputVars.map(_.copy()) match {
-          case stream: Stream[ExprCode] => stream.force
-          case other => other
-        }
+        outputVars.map(_.copy())
       } else {
         assert(row != null, "outputVars and row cannot both be null.")
         ctx.currentVars = null
@@ -159,6 +155,11 @@ trait CodegenSupport extends SparkPlan {
           BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
         }
       }
+
+    val inputVars = inputVarsCandidate match {
+      case stream: Stream[ExprCode] => stream.force
+      case other => other
+    }
 
     val rowVar = prepareRowVar(ctx, row, outputVars)
 
@@ -188,7 +189,7 @@ trait CodegenSupport extends SparkPlan {
       parent.doConsume(ctx, inputVars, rowVar)
     }
     s"""
-       |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString(SQLConf.get.maxToStringFields)}")}
        |$evaluated
        |$consumeFunc
      """.stripMargin
@@ -289,6 +290,18 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
+   * Returns source code to evaluate the variables for non-deterministic expressions, and clear the
+   * code of evaluated variables, to prevent them to be evaluated twice.
+   */
+  protected def evaluateNondeterministicVariables(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode],
+      expressions: Seq[NamedExpression]): String = {
+    val nondeterministicAttrs = expressions.filterNot(_.deterministic).map(_.toAttribute)
+    evaluateRequiredVariables(attributes, variables, AttributeSet(nondeterministicAttrs))
+  }
+
+  /**
    * The subset of inputSet those should be evaluated before this plan.
    *
    * We will use this to insert some code to access those columns that are actually used by current
@@ -369,13 +382,16 @@ trait CodegenSupport extends SparkPlan {
   def limitNotReachedChecks: Seq[String] = parent.limitNotReachedChecks
 
   /**
+   * Check if the node is supposed to produce limit not reached checks.
+   */
+  protected def canCheckLimitNotReached: Boolean = children.isEmpty
+
+  /**
    * A helper method to generate the data producing loop condition according to the
    * limit-not-reached checks.
    */
   final def limitNotReachedCond: String = {
-    // InputAdapter is also a leaf node.
-    val isLeafNode = children.isEmpty || this.isInstanceOf[InputAdapter]
-    if (!isLeafNode && !this.isInstanceOf[BlockingOperatorWithCodegen]) {
+    if (!canCheckLimitNotReached) {
       val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
         "in its data producing loop."
       if (Utils.isTesting) {
@@ -413,6 +429,9 @@ trait BlockingOperatorWithCodegen extends CodegenSupport {
   // that upstream operators will not generate useless conditions (which are always evaluated to
   // false) for the Limit operators after this blocking operator.
   override def limitNotReachedChecks: Seq[String] = Nil
+
+  // This is a blocking node so the node can produce these checks
+  override protected def canCheckLimitNotReached: Boolean = true
 }
 
 /**
@@ -487,17 +506,28 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
 
   override def inputRDD: RDD[InternalRow] = child.execute()
 
+  // This is a leaf node so the node can produce limit not reached checks.
+  override protected def canCheckLimitNotReached: Boolean = true
+
   // InputAdapter does not need UnsafeProjection.
   protected val createUnsafeProjection: Boolean = false
 
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      writer: Writer,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): Unit = {
-    child.generateTreeString(depth, lastChildren, writer, verbose, prefix = "", addSuffix = false)
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      prefix = "",
+      addSuffix = false,
+      maxFields)
   }
 
   override def needCopyResult: Boolean = false
@@ -557,9 +587,7 @@ object WholeStageCodegenId {
   // is created, e.g. for special fallback handling when an existing WholeStageCodegenExec
   // failed to generate/compile code.
 
-  private val codegenStageCounter = ThreadLocal.withInitial(new Supplier[Integer] {
-    override def get() = 1  // TODO: change to Scala lambda syntax when upgraded to Scala 2.12+
-  })
+  private val codegenStageCounter: ThreadLocal[Integer] = ThreadLocal.withInitial(() => 1)
 
   def resetPerQuery(): Unit = codegenStageCounter.set(1)
 
@@ -769,11 +797,19 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      writer: Writer,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): Unit = {
-    child.generateTreeString(depth, lastChildren, writer, verbose, s"*($codegenStageId) ", false)
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      s"*($codegenStageId) ",
+      false,
+      maxFields)
   }
 
   override def needStopCheck: Boolean = true

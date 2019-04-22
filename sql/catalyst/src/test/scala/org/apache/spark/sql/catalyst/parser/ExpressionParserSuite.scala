@@ -17,12 +17,15 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -36,7 +39,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * CheckAnalysis classes.
  */
 class ExpressionParserSuite extends PlanTest {
-  import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
@@ -54,6 +56,13 @@ class ExpressionParserSuite extends PlanTest {
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
+  }
+
+  def assertEval(
+      sqlCommand: String,
+      expect: Any,
+      parser: ParserInterface = defaultParser): Unit = {
+    assert(parser.parseExpression(sqlCommand).eval() === expect)
   }
 
   test("star expressions") {
@@ -246,9 +255,11 @@ class ExpressionParserSuite extends PlanTest {
     intercept("foo(a x)", "extraneous input 'x'")
   }
 
+  private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
+
   test("lambda functions") {
-    assertEqual("x -> x + 1", LambdaFunction('x + 1, Seq('x.attr)))
-    assertEqual("(x, y) -> x + y", LambdaFunction('x + 'y, Seq('x.attr, 'y.attr)))
+    assertEqual("x -> x + 1", LambdaFunction(lv('x) + 1, Seq(lv('x))))
+    assertEqual("(x, y) -> x + y", LambdaFunction(lv('x) + lv('y), Seq(lv('x), lv('y))))
   }
 
   test("window function expressions") {
@@ -573,49 +584,60 @@ class ExpressionParserSuite extends PlanTest {
     }
   }
 
+  val intervalUnits = Seq(
+    "year",
+    "month",
+    "week",
+    "day",
+    "hour",
+    "minute",
+    "second",
+    "millisecond",
+    "microsecond")
+
+  def intervalLiteral(u: String, s: String): Literal = {
+    Literal(CalendarInterval.fromSingleUnitString(u, s))
+  }
+
   test("intervals") {
-    def intervalLiteral(u: String, s: String): Literal = {
-      Literal(CalendarInterval.fromSingleUnitString(u, s))
+    def checkIntervals(intervalValue: String, expected: Literal): Unit = {
+      assertEqual(s"interval $intervalValue", expected)
+
+      // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
+      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+        assertEqual(intervalValue, expected)
+      }
     }
 
     // Empty interval statement
     intercept("interval", "at least one time unit should be given for interval literal")
 
     // Single Intervals.
-    val units = Seq(
-      "year",
-      "month",
-      "week",
-      "day",
-      "hour",
-      "minute",
-      "second",
-      "millisecond",
-      "microsecond")
     val forms = Seq("", "s")
     val values = Seq("0", "10", "-7", "21")
-    units.foreach { unit =>
+    intervalUnits.foreach { unit =>
       forms.foreach { form =>
          values.foreach { value =>
            val expected = intervalLiteral(unit, value)
-           assertEqual(s"interval $value $unit$form", expected)
-           assertEqual(s"interval '$value' $unit$form", expected)
+           checkIntervals(s"$value $unit$form", expected)
+           checkIntervals(s"'$value' $unit$form", expected)
          }
       }
     }
 
     // Hive nanosecond notation.
-    assertEqual("interval 13.123456789 seconds", intervalLiteral("second", "13.123456789"))
-    assertEqual("interval -13.123456789 second", intervalLiteral("second", "-13.123456789"))
+    checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
+    checkIntervals("-13.123456789 second", intervalLiteral("second", "-13.123456789"))
 
     // Non Existing unit
-    intercept("interval 10 nanoseconds", "No interval can be constructed")
+    intercept("interval 10 nanoseconds",
+      "no viable alternative at input 'interval 10 nanoseconds'")
 
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
     yearMonthValues.foreach { value =>
       val result = Literal(CalendarInterval.fromYearMonthString(value))
-      assertEqual(s"interval '$value' year to month", result)
+      checkIntervals(s"'$value' year to month", result)
     }
 
     // Day-Time intervals.
@@ -628,20 +650,49 @@ class ExpressionParserSuite extends PlanTest {
       "1 0:0:1")
     datTimeValues.foreach { value =>
       val result = Literal(CalendarInterval.fromDayTimeString(value))
-      assertEqual(s"interval '$value' day to second", result)
+      checkIntervals(s"'$value' day to second", result)
     }
 
     // Unknown FROM TO intervals
-    intercept("interval 10 month to second", "Intervals FROM month TO second are not supported.")
+    intercept("interval 10 month to second",
+      "Intervals FROM month TO second are not supported.")
 
     // Composed intervals.
-    assertEqual(
-      "interval 3 months 22 seconds 1 millisecond",
+    checkIntervals(
+      "3 months 22 seconds 1 millisecond",
       Literal(new CalendarInterval(3, 22001000L)))
-    assertEqual(
-      "interval 3 years '-1-10' year to month 3 weeks '1 0:0:2' day to second",
+    checkIntervals(
+      "3 years '-1-10' year to month 3 weeks '1 0:0:2' day to second",
       Literal(new CalendarInterval(14,
         22 * CalendarInterval.MICROS_PER_DAY + 2 * CalendarInterval.MICROS_PER_SECOND)))
+  }
+
+  test("SPARK-23264 Interval Compatibility tests") {
+    def checkIntervals(intervalValue: String, expected: Literal): Unit = {
+      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+        assertEqual(intervalValue, expected)
+      }
+
+      // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
+      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "false") {
+        val aliases = defaultParser.parseExpression(intervalValue).collect {
+          case a @ Alias(_: Literal, name)
+            if intervalUnits.exists { unit => name.startsWith(unit) } => a
+        }
+        assert(aliases.size === 1)
+      }
+    }
+    val forms = Seq("", "s")
+    val values = Seq("5", "1", "-11", "8")
+    intervalUnits.foreach { unit =>
+      forms.foreach { form =>
+         values.foreach { value =>
+           val expected = intervalLiteral(unit, value)
+           checkIntervals(s"$value $unit$form", expected)
+           checkIntervals(s"'$value' $unit$form", expected)
+         }
+      }
+    }
   }
 
   test("composed expressions") {
@@ -677,5 +728,49 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
+  }
+
+  test("timestamp literals") {
+    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone.getID) {
+        def toMicros(time: LocalDateTime): Long = {
+          val seconds = time.atZone(timeZone.toZoneId).toInstant.getEpochSecond
+          TimeUnit.SECONDS.toMicros(seconds)
+        }
+        assertEval(
+          sqlCommand = "TIMESTAMP '2019-01-14 20:54:00.000'",
+          expect = toMicros(LocalDateTime.of(2019, 1, 14, 20, 54)))
+        assertEval(
+          sqlCommand = "Timestamp '2000-01-01T00:55:00'",
+          expect = toMicros(LocalDateTime.of(2000, 1, 1, 0, 55)))
+        // Parsing of the string does not depend on the SQL config because the string contains
+        // time zone offset already.
+        assertEval(
+          sqlCommand = "TIMESTAMP '2019-01-16 20:50:00.567000+01:00'",
+          expect = 1547668200567000L)
+      }
+    }
+  }
+
+  test("date literals") {
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        assertEval("DATE '2019-01-14'", 17910)
+        assertEval("DATE '2019-01'", 17897)
+        assertEval("DATE '2019'", 17897)
+      }
+    }
+  }
+
+  test("current date/timestamp braceless expressions") {
+    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+      assertEqual("current_date", CurrentDate())
+      assertEqual("current_timestamp", CurrentTimestamp())
+    }
+
+    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "false") {
+      assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
+      assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
+    }
   }
 }

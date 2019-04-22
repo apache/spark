@@ -25,7 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -548,7 +548,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal.create(" ", StringType), gmtId),
-      InternalRow(null)
+      null
     )
   }
 
@@ -694,11 +694,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val mapType2 = MapType(IntegerType, CalendarIntervalType)
     val schema2 = StructType(StructField("a", mapType2) :: Nil)
     val struct2 = Literal.create(null, schema2)
-    intercept[TreeNodeException[_]] {
-      checkEvaluation(
-        StructsToJson(Map.empty, struct2, gmtId),
-        null
-      )
+    StructsToJson(Map.empty, struct2, gmtId).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Unable to convert column a of type calendarinterval to JSON"))
+      case _ => fail("from_json should not work on interval map value type.")
     }
   }
 

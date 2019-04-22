@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
@@ -37,7 +38,8 @@ import org.apache.spark.util.collection.MedianHeap
  * each task, retries tasks if they fail (up to a limited number of times), and
  * handles locality-aware scheduling for this TaskSet via delay scheduling. The main interfaces
  * to it are resourceOffer, which asks the TaskSet whether it wants to run a task on one node,
- * and statusUpdate, which tells it that one of its tasks changed state (e.g. finished).
+ * and handleSuccessfulTask/handleFailedTask, which tells it that one of its tasks changed state
+ *  (e.g. finished/failed).
  *
  * THREADING: This class is designed to only be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
@@ -61,12 +63,12 @@ private[spark] class TaskSetManager(
   private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
 
   // Quantile of tasks at which to start speculation
-  val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
-  val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
+  val speculationQuantile = conf.get(SPECULATION_QUANTILE)
+  val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
 
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
 
-  val speculationEnabled = conf.getBoolean("spark.speculation", false)
+  val speculationEnabled = conf.get(SPECULATION_ENABLED)
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -184,8 +186,24 @@ private[spark] class TaskSetManager(
 
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
-  for (i <- (0 until numTasks).reverse) {
-    addPendingTask(i)
+  addPendingTasks()
+
+  private def addPendingTasks(): Unit = {
+    val (_, duration) = Utils.timeTakenMs {
+      for (i <- (0 until numTasks).reverse) {
+        addPendingTask(i, resolveRacks = false)
+      }
+      // Resolve the rack for each host. This can be slow, so de-dupe the list of hosts,
+      // and assign the rack to all relevant task indices.
+      val (hosts, indicesForHosts) = pendingTasksForHost.toSeq.unzip
+      val racks = sched.getRacksForHosts(hosts)
+      racks.zip(indicesForHosts).foreach {
+        case (Some(rack), indices) =>
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) ++= indices
+        case (None, _) => // no rack, nothing to do
+      }
+    }
+    logDebug(s"Adding pending tasks took $duration ms")
   }
 
   /**
@@ -212,7 +230,9 @@ private[spark] class TaskSetManager(
   private[scheduler] var emittedTaskSizeWarning = false
 
   /** Add a task to all the pending-task lists that it should be on. */
-  private[spark] def addPendingTask(index: Int) {
+  private[spark] def addPendingTask(
+      index: Int,
+      resolveRacks: Boolean = true): Unit = {
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -232,8 +252,11 @@ private[spark] class TaskSetManager(
         case _ =>
       }
       pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
-      for (rack <- sched.getRackForHost(loc.host)) {
-        pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+
+      if (resolveRacks) {
+        sched.getRackForHost(loc.host).foreach { rack =>
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+        }
       }
     }
 
@@ -329,7 +352,7 @@ private[spark] class TaskSetManager(
         val executors = prefs.flatMap(_ match {
           case e: ExecutorCacheTaskLocation => Some(e.executorId)
           case _ => None
-        });
+        })
         if (executors.contains(execId)) {
           speculatableTasks -= index
           return Some((index, TaskLocality.PROCESS_LOCAL))
@@ -493,12 +516,12 @@ private[spark] class TaskSetManager(
             abort(s"$msg Exception during serialization: $e")
             throw new TaskNotSerializableException(e)
         }
-        if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+        if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
           !emittedTaskSizeWarning) {
           emittedTaskSizeWarning = true
           logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-            s"(${serializedTask.limit() / 1024} KB). The maximum recommended task size is " +
-            s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+            s"(${serializedTask.limit() / 1024} KiB). The maximum recommended task size is " +
+            s"${TaskSetManager.TASK_SIZE_TO_WARN_KIB} KiB.")
         }
         addRunningTask(taskId)
 
@@ -717,7 +740,7 @@ private[spark] class TaskSetManager(
     calculatedTasks += 1
     if (maxResultSize > 0 && totalResultSize > maxResultSize) {
       val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
-        s"(${Utils.bytesToString(totalResultSize)}) is bigger than spark.driver.maxResultSize " +
+        s"(${Utils.bytesToString(totalResultSize)}) is bigger than ${config.MAX_RESULT_SIZE.key} " +
         s"(${Utils.bytesToString(maxResultSize)})"
       logError(msg)
       abort(msg)
@@ -1015,13 +1038,13 @@ private[spark] class TaskSetManager(
       return false
     }
     var foundTasks = false
-    val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
+    val minFinishedForSpeculation = (speculationQuantile * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
 
     if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
       val time = clock.getTimeMillis()
       val medianDuration = successfulTaskDurations.median
-      val threshold = max(SPECULATION_MULTIPLIER * medianDuration, minTimeToSpeculation)
+      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
@@ -1043,16 +1066,15 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get(config.LOCALITY_WAIT)
-    val localityWaitKey = level match {
-      case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
-      case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
-      case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
+    val localityWait = level match {
+      case TaskLocality.PROCESS_LOCAL => config.LOCALITY_WAIT_PROCESS
+      case TaskLocality.NODE_LOCAL => config.LOCALITY_WAIT_NODE
+      case TaskLocality.RACK_LOCAL => config.LOCALITY_WAIT_RACK
       case _ => null
     }
 
-    if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait.toString)
+    if (localityWait != null) {
+      conf.get(localityWait)
     } else {
       0L
     }
@@ -1101,5 +1123,5 @@ private[spark] class TaskSetManager(
 private[spark] object TaskSetManager {
   // The user will be warned if any stages contain a task that has a serialized size greater than
   // this.
-  val TASK_SIZE_TO_WARN_KB = 100
+  val TASK_SIZE_TO_WARN_KIB = 1000
 }

@@ -24,10 +24,9 @@ import scala.collection.mutable
 
 import com.codahale.metrics.Counter
 import org.eclipse.jetty.servlet.ServletContextHandler
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.Matchers
 import org.scalatest.mockito.MockitoSugar
 
@@ -374,11 +373,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     when(request.getRequestURI()).thenReturn("http://localhost:18080/history/local-123/jobs/job/")
     when(request.getQueryString()).thenReturn("id=2")
     val resp = mock[HttpServletResponse]
-    when(resp.encodeRedirectURL(any())).thenAnswer(new Answer[String]() {
-      override def answer(invocationOnMock: InvocationOnMock): String = {
-        invocationOnMock.getArguments()(0).asInstanceOf[String]
-      }
-    })
+    when(resp.encodeRedirectURL(any())).thenAnswer { (invocationOnMock: InvocationOnMock) =>
+      invocationOnMock.getArguments()(0).asInstanceOf[String]
+    }
     filter.doFilter(request, resp, null)
     verify(resp).sendRedirect("http://localhost:18080/history/local-123/jobs/job/?id=2")
   }

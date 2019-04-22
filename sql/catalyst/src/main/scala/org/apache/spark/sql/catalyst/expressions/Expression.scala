@@ -259,12 +259,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
   // overridden by concrete classes.
-  final override def verboseString: String = simpleString
+  final override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
-  override def simpleString: String = toString
+  override def simpleString(maxFields: Int): String = toString
 
   override def toString: String = prettyName + truncatedString(
-    flatArguments.toSeq, "(", ", ", ")")
+    flatArguments.toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
@@ -627,7 +627,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   def sqlOperator: String = symbol
 
-  override def toString: String = s"($left $symbol $right)"
+  override def toString: String = s"($left $sqlOperator $right)"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 

@@ -19,12 +19,16 @@ package org.apache.spark.sql.hive.client
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.mapred.TextInputFormat
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
 
 // TODO: Refactor this to `HivePartitionFilteringSuite`
 class HiveClientSuite(version: String)
@@ -46,7 +50,22 @@ class HiveClientSuite(version: String)
     val hadoopConf = new Configuration()
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
     val client = buildClient(hadoopConf)
-    client.runSqlHive("CREATE TABLE test (value INT) PARTITIONED BY (ds INT, h INT, chunk STRING)")
+    val tableSchema =
+      new StructType().add("value", "int").add("ds", "int").add("h", "int").add("chunk", "string")
+    val table = CatalogTable(
+      identifier = TableIdentifier("test", Some("default")),
+      tableType = CatalogTableType.MANAGED,
+      schema = tableSchema,
+      partitionColumnNames = Seq("ds", "h", "chunk"),
+      storage = CatalogStorageFormat(
+        locationUri = None,
+        inputFormat = Some(classOf[TextInputFormat].getName),
+        outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+        serde = Some(classOf[LazySimpleSerDe].getName()),
+        compressed = false,
+        properties = Map.empty
+      ))
+    client.createTable(table, ignoreIfExists = false)
 
     val partitions =
       for {

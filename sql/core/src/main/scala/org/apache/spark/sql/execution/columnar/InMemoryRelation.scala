@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
@@ -48,10 +48,12 @@ case class CachedRDDBuilder(
     batchSize: Int,
     storageLevel: StorageLevel,
     @transient cachedPlan: SparkPlan,
-    tableName: Option[String])(
-    @transient private var _cachedColumnBuffers: RDD[CachedBatch] = null) {
+    tableName: Option[String]) {
+
+  @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
 
   val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
+  val rowCountStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
@@ -64,7 +66,7 @@ case class CachedRDDBuilder(
     _cachedColumnBuffers
   }
 
-  def clearCache(blocking: Boolean = true): Unit = {
+  def clearCache(blocking: Boolean = false): Unit = {
     if (_cachedColumnBuffers != null) {
       synchronized {
         if (_cachedColumnBuffers != null) {
@@ -75,14 +77,8 @@ case class CachedRDDBuilder(
     }
   }
 
-  def withCachedPlan(cachedPlan: SparkPlan): CachedRDDBuilder = {
-    new CachedRDDBuilder(
-      useCompression,
-      batchSize,
-      storageLevel,
-      cachedPlan = cachedPlan,
-      tableName
-    )(_cachedColumnBuffers)
+  def isCachedColumnBuffersLoaded: Boolean = {
+    _cachedColumnBuffers != null
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
@@ -121,6 +117,7 @@ case class CachedRDDBuilder(
           }
 
           sizeInBytesStats.add(totalSize)
+          rowCountStats.add(rowCount)
 
           val stats = InternalRow.fromSeq(
             columnBuilders.flatMap(_.columnStats.collectedStatistics))
@@ -149,31 +146,44 @@ object InMemoryRelation {
       child: SparkPlan,
       tableName: Option[String],
       logicalPlan: LogicalPlan): InMemoryRelation = {
-    val cacheBuilder = CachedRDDBuilder(useCompression, batchSize, storageLevel, child, tableName)()
-    new InMemoryRelation(child.output, cacheBuilder, logicalPlan.outputOrdering)(
-      statsOfPlanToCache = logicalPlan.stats)
+    val cacheBuilder = CachedRDDBuilder(useCompression, batchSize, storageLevel, child, tableName)
+    val relation = new InMemoryRelation(child.output, cacheBuilder, logicalPlan.outputOrdering)
+    relation.statsOfPlanToCache = logicalPlan.stats
+    relation
   }
 
   def apply(cacheBuilder: CachedRDDBuilder, logicalPlan: LogicalPlan): InMemoryRelation = {
-    new InMemoryRelation(cacheBuilder.cachedPlan.output, cacheBuilder, logicalPlan.outputOrdering)(
-      statsOfPlanToCache = logicalPlan.stats)
+    val relation = new InMemoryRelation(
+      cacheBuilder.cachedPlan.output, cacheBuilder, logicalPlan.outputOrdering)
+    relation.statsOfPlanToCache = logicalPlan.stats
+    relation
+  }
+
+  def apply(
+      output: Seq[Attribute],
+      cacheBuilder: CachedRDDBuilder,
+      outputOrdering: Seq[SortOrder],
+      statsOfPlanToCache: Statistics): InMemoryRelation = {
+    val relation = InMemoryRelation(output, cacheBuilder, outputOrdering)
+    relation.statsOfPlanToCache = statsOfPlanToCache
+    relation
   }
 }
 
 case class InMemoryRelation(
     output: Seq[Attribute],
     @transient cacheBuilder: CachedRDDBuilder,
-    override val outputOrdering: Seq[SortOrder])(
-    statsOfPlanToCache: Statistics)
+    override val outputOrdering: Seq[SortOrder])
   extends logical.LeafNode with MultiInstanceRelation {
+
+  @volatile var statsOfPlanToCache: Statistics = null
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
     copy(output = output.map(QueryPlan.normalizeExprId(_, cachedPlan.output)),
       cacheBuilder,
-      outputOrdering)(
-      statsOfPlanToCache)
+      outputOrdering)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -181,34 +191,39 @@ case class InMemoryRelation(
 
   def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
 
+  private[sql] def updateStats(
+      rowCount: Long,
+      newColStats: Map[Attribute, ColumnStat]): Unit = this.synchronized {
+    val newStats = statsOfPlanToCache.copy(
+      rowCount = Some(rowCount),
+      attributeStats = AttributeMap((statsOfPlanToCache.attributeStats ++ newColStats).toSeq)
+    )
+    statsOfPlanToCache = newStats
+  }
+
   override def computeStats(): Statistics = {
-    if (cacheBuilder.sizeInBytesStats.value == 0L) {
+    if (!cacheBuilder.isCachedColumnBuffersLoaded) {
       // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache.
-      // Note that we should drop the hint info here. We may cache a plan whose root node is a hint
-      // node. When we lookup the cache with a semantically same plan without hint info, the plan
-      // returned by cache lookup should not have hint info. If we lookup the cache with a
-      // semantically same plan with a different hint info, `CacheManager.useCachedData` will take
-      // care of it and retain the hint info in the lookup input plan.
-      statsOfPlanToCache.copy(hints = HintInfo())
+      statsOfPlanToCache
     } else {
-      Statistics(sizeInBytes = cacheBuilder.sizeInBytesStats.value.longValue)
+      statsOfPlanToCache.copy(
+        sizeInBytes = cacheBuilder.sizeInBytesStats.value.longValue,
+        rowCount = Some(cacheBuilder.rowCountStats.value.longValue)
+      )
     }
   }
 
-  def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
-    InMemoryRelation(newOutput, cacheBuilder, outputOrdering)(statsOfPlanToCache)
-  }
+  def withOutput(newOutput: Seq[Attribute]): InMemoryRelation =
+    InMemoryRelation(newOutput, cacheBuilder, outputOrdering, statsOfPlanToCache)
 
   override def newInstance(): this.type = {
-    new InMemoryRelation(
+    InMemoryRelation(
       output.map(_.newInstance()),
       cacheBuilder,
-      outputOrdering)(
-        statsOfPlanToCache).asInstanceOf[this.type]
+      outputOrdering,
+      statsOfPlanToCache).asInstanceOf[this.type]
   }
 
-  override protected def otherCopyArgs: Seq[AnyRef] = Seq(statsOfPlanToCache)
-
-  override def simpleString: String =
-    s"InMemoryRelation [${truncatedString(output, ", ")}], ${cacheBuilder.storageLevel}"
+  override def simpleString(maxFields: Int): String =
+    s"InMemoryRelation [${truncatedString(output, ", ", maxFields)}], ${cacheBuilder.storageLevel}"
 }

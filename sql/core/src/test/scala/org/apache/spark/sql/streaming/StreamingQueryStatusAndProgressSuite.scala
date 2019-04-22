@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.JavaConverters._
-import scala.language.postfixOps
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -73,7 +72,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |    "inputRowsPerSecond" : 10.0
         |  } ],
         |  "sink" : {
-        |    "description" : "sink"
+        |    "description" : "sink",
+        |    "numOutputRows" : -1
         |  }
         |}
       """.stripMargin.trim)
@@ -105,7 +105,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |    "numInputRows" : 678
          |  } ],
          |  "sink" : {
-         |    "description" : "sink"
+         |    "description" : "sink",
+         |    "numOutputRows" : -1
          |  }
          |}
       """.stripMargin.trim)
@@ -201,7 +202,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         val progress = query.lastProgress
         assert(progress.stateOperators.length > 0)
         // Should emit new progresses every 10 ms, but we could be facing a slow Jenkins
-        eventually(timeout(1 minute)) {
+        eventually(timeout(1.minute)) {
           val nextProgress = query.lastProgress
           assert(nextProgress.timestamp !== progress.timestamp)
           assert(nextProgress.numInputRows === 0)
@@ -250,7 +251,7 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
       )
     ),
-    sink = new SinkProgress("sink")
+    sink = SinkProgress("sink", None)
   )
 
   val testProgress2 = new StreamingQueryProgress(
@@ -274,7 +275,7 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = Double.NegativeInfinity // should not be present in the json
       )
     ),
-    sink = new SinkProgress("sink")
+    sink = SinkProgress("sink", None)
   )
 
   val testStatus = new StreamingQueryStatus("active", true, false)

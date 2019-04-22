@@ -106,11 +106,21 @@ class QueryExecutionSuite extends SharedSQLContext {
     }
   }
 
+  test("check maximum fields restriction") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath + "/plans.txt"
+      val ds = spark.createDataset(Seq(QueryExecutionTestRecord(
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
+      ds.queryExecution.debug.toFile(path)
+      val localRelations = Source.fromFile(path).getLines().filter(_.contains("LocalRelation"))
+
+      assert(!localRelations.exists(_.contains("more fields")))
+    }
+  }
+
   test("toString() exception/error handling") {
-    spark.experimental.extraStrategies = Seq(
-        new SparkStrategy {
-          override def apply(plan: LogicalPlan): Seq[SparkPlan] = Nil
-        })
+    spark.experimental.extraStrategies = Seq[SparkStrategy]((_: LogicalPlan) => Nil)
 
     def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
 
@@ -118,19 +128,13 @@ class QueryExecutionSuite extends SharedSQLContext {
     assert(qe.toString.contains("OneRowRelation"))
 
     // Throw an AnalysisException - this should be captured.
-    spark.experimental.extraStrategies = Seq(
-      new SparkStrategy {
-        override def apply(plan: LogicalPlan): Seq[SparkPlan] =
-          throw new AnalysisException("exception")
-      })
+    spark.experimental.extraStrategies = Seq[SparkStrategy](
+      (_: LogicalPlan) => throw new AnalysisException("exception"))
     assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
 
     // Throw an Error - this should not be captured.
-    spark.experimental.extraStrategies = Seq(
-      new SparkStrategy {
-        override def apply(plan: LogicalPlan): Seq[SparkPlan] =
-          throw new Error("error")
-      })
+    spark.experimental.extraStrategies = Seq[SparkStrategy](
+      (_: LogicalPlan) => throw new Error("error"))
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
   }

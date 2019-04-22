@@ -118,7 +118,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       throw new AnalysisException(
         "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
           "referenced columns only include the internal corrupt record column\n" +
-          s"(named _corrupt_record by default). For example:\n" +
+          "(named _corrupt_record by default). For example:\n" +
           "spark.read.schema(schema).csv(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
           "and spark.read.schema(schema).csv(file).select(\"_corrupt_record\").show().\n" +
           "Instead, you can cache or save the parsed results and then send the same query.\n" +
@@ -153,41 +153,13 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
-  override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = dataType match {
+  override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true
 
-    case udt: UserDefinedType[_] => supportDataType(udt.sqlType, isReadPath)
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
   }
 
 }
 
-private[csv] class CsvOutputWriter(
-    path: String,
-    dataSchema: StructType,
-    context: TaskAttemptContext,
-    params: CSVOptions) extends OutputWriter with Logging {
-
-  private var univocityGenerator: Option[UnivocityGenerator] = None
-
-  if (params.headerFlag) {
-    val gen = getGen()
-    gen.writeHeaders()
-  }
-
-  private def getGen(): UnivocityGenerator = univocityGenerator.getOrElse {
-    val charset = Charset.forName(params.charset)
-    val os = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
-    val newGen = new UnivocityGenerator(dataSchema, os, params)
-    univocityGenerator = Some(newGen)
-    newGen
-  }
-
-  override def write(row: InternalRow): Unit = {
-    val gen = getGen()
-    gen.write(row)
-  }
-
-  override def close(): Unit = univocityGenerator.map(_.close())
-}

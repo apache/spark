@@ -133,6 +133,8 @@ object ArrowUtils {
     }
     val pandasColsByName = Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key ->
       conf.pandasGroupedMapAssignColumnsByName.toString)
-    Map(timeZoneConf ++ pandasColsByName: _*)
+    val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
+      conf.arrowSafeTypeConversion.toString)
+    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
   }
 }

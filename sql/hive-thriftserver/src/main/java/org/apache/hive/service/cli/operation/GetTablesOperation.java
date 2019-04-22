@@ -46,7 +46,7 @@ public class GetTablesOperation extends MetadataOperation {
   private final String schemaName;
   private final String tableName;
   private final List<String> tableTypes = new ArrayList<String>();
-  private final RowSet rowSet;
+  protected final RowSet rowSet;
   private final TableTypeMapping tableTypeMapping;
 
 

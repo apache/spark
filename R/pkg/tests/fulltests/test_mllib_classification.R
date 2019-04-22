@@ -299,7 +299,7 @@ test_that("spark.mlp", {
   df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                 source = "libsvm")
   model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 5, 4, 3),
-                     solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
+                     solver = "l-bfgs", maxIter = 100, tol = 0.00001, stepSize = 1, seed = 1)
 
   # Test summary method
   summary <- summary(model)
@@ -307,13 +307,13 @@ test_that("spark.mlp", {
   expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 5, 4, 3))
   expect_equal(length(summary$weights), 64)
-  expect_equal(head(summary$weights, 5), list(-0.878743, 0.2154151, -1.16304, -0.6583214, 1.009825),
+  expect_equal(head(summary$weights, 5), list(-24.28415, 107.8701, 16.86376, 1.103736, 9.244488),
                tolerance = 1e-6)
 
   # Test predict method
   mlpTestDF <- df
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "0.0", "0.0", "0.0", "0.0", "0.0"))
+  expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0"))
 
   # Test model save/load
   if (windows_with_hadoop()) {
@@ -348,12 +348,12 @@ test_that("spark.mlp", {
 
   # Test random seed
   # default seed
-  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 10)
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 100)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
                c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
   # seed equals 10
-  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 100, seed = 10)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
                c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))

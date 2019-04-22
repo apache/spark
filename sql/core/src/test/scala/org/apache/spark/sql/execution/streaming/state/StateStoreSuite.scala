@@ -35,6 +35,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.internal.config.Network.RPC_NUM_RETRIES
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -393,7 +394,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       .set(StateStore.MAINTENANCE_INTERVAL_CONFIG, "10ms")
       // Make sure that when SparkContext stops, the StateStore maintenance thread 'quickly'
       // fails to talk to the StateStoreCoordinator and unloads all the StateStores
-      .set("spark.rpc.numRetries", "1")
+      .set(RPC_NUM_RETRIES, 1)
     val opId = 0
     val dir = newDir()
     val storeProviderId = StateStoreProviderId(StateStoreId(dir, opId, 0), UUID.randomUUID)
@@ -415,7 +416,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
     }
 
-    val timeoutDuration = 60 seconds
+    val timeoutDuration = 1.minute
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>

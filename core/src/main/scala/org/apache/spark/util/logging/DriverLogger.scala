@@ -39,7 +39,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n"
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
-  private var localLogFile: String = FileUtils.getFile(
+  private val localLogFile: String = FileUtils.getFile(
     Utils.getLocalDir(conf),
     DriverLogger.DRIVER_LOG_DIR,
     DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
@@ -163,9 +163,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
     def closeWriter(): Unit = {
       try {
-        threadpool.execute(new Runnable() {
-          override def run(): Unit = DfsAsyncWriter.this.close()
-        })
+        threadpool.execute(() => DfsAsyncWriter.this.close())
         threadpool.shutdown()
         threadpool.awaitTermination(1, TimeUnit.MINUTES)
       } catch {

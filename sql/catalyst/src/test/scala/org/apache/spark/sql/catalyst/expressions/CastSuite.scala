@@ -18,17 +18,17 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.util.{Calendar, Locale, TimeZone}
-
-import scala.util.Random
+import java.util.{Calendar, TimeZone}
+import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -293,16 +293,16 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cast from string") {
     assert(cast("abcdef", StringType).nullable === false)
     assert(cast("abcdef", BinaryType).nullable === false)
-    assert(cast("abcdef", BooleanType).nullable === true)
-    assert(cast("abcdef", TimestampType).nullable === true)
-    assert(cast("abcdef", LongType).nullable === true)
-    assert(cast("abcdef", IntegerType).nullable === true)
-    assert(cast("abcdef", ShortType).nullable === true)
-    assert(cast("abcdef", ByteType).nullable === true)
-    assert(cast("abcdef", DecimalType.USER_DEFAULT).nullable === true)
-    assert(cast("abcdef", DecimalType(4, 2)).nullable === true)
-    assert(cast("abcdef", DoubleType).nullable === true)
-    assert(cast("abcdef", FloatType).nullable === true)
+    assert(cast("abcdef", BooleanType).nullable)
+    assert(cast("abcdef", TimestampType).nullable)
+    assert(cast("abcdef", LongType).nullable)
+    assert(cast("abcdef", IntegerType).nullable)
+    assert(cast("abcdef", ShortType).nullable)
+    assert(cast("abcdef", ByteType).nullable)
+    assert(cast("abcdef", DecimalType.USER_DEFAULT).nullable)
+    assert(cast("abcdef", DecimalType(4, 2)).nullable)
+    assert(cast("abcdef", DoubleType).nullable)
+    assert(cast("abcdef", FloatType).nullable)
   }
 
   test("data type casting") {
@@ -320,13 +320,13 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        c.getTimeInMillis * 1000)
+        MILLISECONDS.toMicros(c.getTimeInMillis))
       c = Calendar.getInstance(TimeZoneGMT)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
-        c.getTimeInMillis * 1000)
+        MILLISECONDS.toMicros(c.getTimeInMillis))
     }
 
     val gmtId = Option("GMT")
@@ -402,33 +402,33 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("casting to fixed-precision decimals") {
     assert(cast(123, DecimalType.USER_DEFAULT).nullable === false)
-    assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable === true)
-    assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable === true)
+    assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable)
+    assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable)
     assert(cast(Decimal(10.03), DecimalType.SYSTEM_DEFAULT).nullable === false)
 
-    assert(cast(123, DecimalType(2, 1)).nullable === true)
-    assert(cast(10.03f, DecimalType(2, 1)).nullable === true)
-    assert(cast(10.03, DecimalType(2, 1)).nullable === true)
-    assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable === true)
+    assert(cast(123, DecimalType(2, 1)).nullable)
+    assert(cast(10.03f, DecimalType(2, 1)).nullable)
+    assert(cast(10.03, DecimalType(2, 1)).nullable)
+    assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable)
 
     assert(cast(123, DecimalType.IntDecimal).nullable === false)
-    assert(cast(10.03f, DecimalType.FloatDecimal).nullable === true)
-    assert(cast(10.03, DecimalType.DoubleDecimal).nullable === true)
+    assert(cast(10.03f, DecimalType.FloatDecimal).nullable)
+    assert(cast(10.03, DecimalType.DoubleDecimal).nullable)
     assert(cast(Decimal(10.03), DecimalType(4, 2)).nullable === false)
     assert(cast(Decimal(10.03), DecimalType(5, 3)).nullable === false)
 
-    assert(cast(Decimal(10.03), DecimalType(3, 1)).nullable === true)
+    assert(cast(Decimal(10.03), DecimalType(3, 1)).nullable)
     assert(cast(Decimal(10.03), DecimalType(4, 1)).nullable === false)
-    assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable === true)
+    assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable)
     assert(cast(Decimal(9.95), DecimalType(3, 1)).nullable === false)
 
-    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable === true)
+    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable)
     assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
-    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable === true)
+    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable)
     assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
 
     assert(cast(true, DecimalType.SYSTEM_DEFAULT).nullable === false)
-    assert(cast(true, DecimalType(1, 1)).nullable === true)
+    assert(cast(true, DecimalType(1, 1)).nullable)
 
 
     checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
@@ -521,17 +521,17 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(ts, FloatType), 15.003f)
     checkEvaluation(cast(ts, DoubleType), 15.003)
     checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * 1000)
+      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
     checkEvaluation(
-      cast(cast(millis.toFloat / 1000, TimestampType), FloatType),
-      millis.toFloat / 1000)
+      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
+      millis.toFloat / MILLIS_PER_SECOND)
     checkEvaluation(
-      cast(cast(millis.toDouble / 1000, TimestampType), DoubleType),
-      millis.toDouble / 1000)
+      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
+      millis.toDouble / MILLIS_PER_SECOND)
     checkEvaluation(
       cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
       Decimal(1))
@@ -555,7 +555,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(array, ArrayType(IntegerType, containsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Seq(123, null, null, null))
     }
     {
@@ -564,7 +564,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(array, ArrayType(BooleanType, containsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false, null))
     }
     {
@@ -574,7 +574,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(array_notNull, ArrayType(IntegerType, containsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Seq(123, null, null))
     }
     {
@@ -583,7 +583,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false))
     }
     {
@@ -609,7 +609,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null, "d" -> null))
     }
     {
@@ -618,7 +618,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
     }
     {
@@ -632,7 +632,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null))
     }
     {
@@ -641,7 +641,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
     }
     {
@@ -695,7 +695,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = true),
         StructField("d", IntegerType, nullable = true))))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, InternalRow(123, null, null, null))
     }
     {
@@ -712,7 +712,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true),
         StructField("d", BooleanType, nullable = true))))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false, null))
     }
     {
@@ -729,7 +729,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", IntegerType, nullable = true),
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = true))))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, InternalRow(123, null, null))
     }
     {
@@ -744,7 +744,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true))))
-      assert(ret.resolved === true)
+      assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false))
     }
     {
@@ -954,5 +954,40 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ret5, "[[1, 2, 3], a, 0.1]")
     val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
     checkEvaluation(ret6, "[1, [1 -> a, 2 -> b, 3 -> c]]")
+  }
+
+  test("SPARK-26706: Fix Cast.mayTruncate for bytes") {
+    assert(!Cast.mayTruncate(ByteType, ByteType))
+    assert(!Cast.mayTruncate(DecimalType.ByteDecimal, ByteType))
+    assert(Cast.mayTruncate(ShortType, ByteType))
+    assert(Cast.mayTruncate(IntegerType, ByteType))
+    assert(Cast.mayTruncate(LongType, ByteType))
+    assert(Cast.mayTruncate(FloatType, ByteType))
+    assert(Cast.mayTruncate(DoubleType, ByteType))
+    assert(Cast.mayTruncate(DecimalType.IntDecimal, ByteType))
+  }
+
+  test("canSafeCast and mayTruncate must be consistent for numeric types") {
+    import DataTypeTestUtils._
+
+    def isCastSafe(from: NumericType, to: NumericType): Boolean = (from, to) match {
+      case (_, dt: DecimalType) => dt.isWiderThan(from)
+      case (dt: DecimalType, _) => dt.isTighterThan(to)
+      case _ => numericPrecedence.indexOf(from) <= numericPrecedence.indexOf(to)
+    }
+
+    numericTypes.foreach { from =>
+      val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
+
+      safeTargetTypes.foreach { to =>
+        assert(Cast.canSafeCast(from, to), s"It should be possible to safely cast $from to $to")
+        assert(!Cast.mayTruncate(from, to), s"No truncation is expected when casting $from to $to")
+      }
+
+      unsafeTargetTypes.foreach { to =>
+        assert(!Cast.canSafeCast(from, to), s"It shouldn't be possible to safely cast $from to $to")
+        assert(Cast.mayTruncate(from, to), s"Truncation is expected when casting $from to $to")
+      }
+    }
   }
 }

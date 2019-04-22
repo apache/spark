@@ -162,12 +162,12 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
 
       val outputStream = getTestOutputStream[V](ssc.graph.getOutputStreams())
 
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         ssc.awaitTerminationOrTimeout(10)
         assert(batchCounter.getLastCompletedBatchTime === targetBatchTime)
       }
 
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         val checkpointFilesOfLatestTime = Checkpoint.getCheckpointFiles(checkpointDir).filter {
           _.getName.contains(clock.getTimeMillis.toString)
         }
@@ -912,8 +912,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       }
     ssc.start()
     batchCounter.waitUntilBatchesCompleted(1, 10000)
-    assert(shouldCheckpointAllMarkedRDDs === true)
-    assert(rddsCheckpointed === true)
+    assert(shouldCheckpointAllMarkedRDDs)
+    assert(rddsCheckpointed)
   }
 
   /**

@@ -216,11 +216,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
 
   errorTest(
-    "bad casts",
-    testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
-  "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
-
-  errorTest(
     "sorting by unsupported column types",
     mapRelation.orderBy('map.asc),
     "sort" :: "type" :: "map<int,int>" :: Nil)
@@ -443,7 +438,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("error test for self-join") {
-    val join = Join(testRelation, testRelation, Cross, None)
+    val join = Join(testRelation, testRelation, Cross, None, JoinHint.NONE)
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
@@ -565,7 +560,8 @@ class AnalysisErrorSuite extends AnalysisTest {
           LocalRelation(b),
           Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)),
           LeftOuter,
-          Option(EqualTo(b, c)))),
+          Option(EqualTo(b, c)),
+          JoinHint.NONE)),
       LocalRelation(a))
     assertAnalysisError(plan1, "Accessing outer query column is not allowed in" :: Nil)
 
@@ -575,7 +571,8 @@ class AnalysisErrorSuite extends AnalysisTest {
           Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)),
           LocalRelation(b),
           RightOuter,
-          Option(EqualTo(b, c)))),
+          Option(EqualTo(b, c)),
+          JoinHint.NONE)),
       LocalRelation(a))
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
@@ -601,5 +598,13 @@ class AnalysisErrorSuite extends AnalysisTest {
       LocalRelation(a))
     assertAnalysisError(plan5,
                         "Accessing outer query column is not allowed in" :: Nil)
+  }
+
+  test("Error on filter condition containing aggregate expressions") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val plan = Filter('a === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    assertAnalysisError(plan,
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
   }
 }

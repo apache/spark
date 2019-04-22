@@ -59,11 +59,11 @@ public class UnsafeExternalSorterSuite {
 
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(conf.clone().set("spark.memory.offHeap.enabled", "false"));
+    new TestMemoryManager(conf.clone().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final SerializerManager serializerManager = new SerializerManager(
     new JavaSerializer(conf),
-    conf.clone().set("spark.shuffle.spill.compress", "false"));
+    conf.clone().set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = PrefixComparators.LONG;
   // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
@@ -88,7 +88,8 @@ public class UnsafeExternalSorterSuite {
 
   protected boolean shouldUseRadixSort() { return false; }
 
-  private final long pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "4m");
+  private final long pageSizeBytes = conf.getSizeAsBytes(
+          package$.MODULE$.BUFFER_PAGESIZE().key(), "4m");
 
   private final int spillThreshold =
     (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());

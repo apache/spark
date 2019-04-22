@@ -175,8 +175,8 @@ object Window {
    * directly.
    *
    * A range-based boundary is based on the actual value of the ORDER BY
-   * expression(s). An offset is used to alter the value of the ORDER BY expression, for
-   * instance if the current order by expression has a value of 10 and the lower bound offset
+   * expression(s). An offset is used to alter the value of the ORDER BY expression,
+   * for instance if the current ORDER BY expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
    * expression must have a numerical data type. An exception can be made when the offset is
