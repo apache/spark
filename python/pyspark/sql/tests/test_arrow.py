@@ -46,7 +46,6 @@ class ArrowTests(ReusedSQLTestCase):
     def setUpClass(cls):
         from datetime import date, datetime
         from decimal import Decimal
-        from distutils.version import LooseVersion
         super(ArrowTests, cls).setUpClass()
         cls.warnings_lock = threading.Lock()
 
@@ -68,23 +67,16 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("5_double_t", DoubleType(), True),
             StructField("6_decimal_t", DecimalType(38, 18), True),
             StructField("7_date_t", DateType(), True),
-            StructField("8_timestamp_t", TimestampType(), True)])
+            StructField("8_timestamp_t", TimestampType(), True),
+            StructField("9_binary_t", BinaryType(), True)])
         cls.data = [(u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
-                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1), bytearray(b"a")),
                     (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
-                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2), bytearray(b"bb")),
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
-                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3)),
+                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3), bytearray(b"ccc")),
                     (u"d", 4, 40, 1.0, 8.0, Decimal("8.0"),
-                     date(2262, 4, 12), datetime(2262, 3, 3, 3, 3, 3))]
-
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
-            cls.schema.add(StructField("9_binary_t", BinaryType(), True))
-            cls.data[0] = cls.data[0] + (bytearray(b"a"),)
-            cls.data[1] = cls.data[1] + (bytearray(b"bb"),)
-            cls.data[2] = cls.data[2] + (bytearray(b"ccc"),)
-            cls.data[3] = cls.data[3] + (bytearray(b"dddd"),)
+                     date(2262, 4, 12), datetime(2262, 3, 3, 3, 3, 3), bytearray(b"dddd"))]
 
     @classmethod
     def tearDownClass(cls):
@@ -123,21 +115,11 @@ class ArrowTests(ReusedSQLTestCase):
                         assert_frame_equal(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
-        from distutils.version import LooseVersion
-
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
                 with self.assertRaisesRegexp(Exception, 'Unsupported type'):
-                    df.toPandas()
-
-        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            schema = StructType([StructField("binary", BinaryType(), True)])
-            df = self.spark.createDataFrame([(None,)], schema=schema)
-            with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, 'Unsupported type.*BinaryType'):
                     df.toPandas()
 
     def test_null_conversion(self):
@@ -348,19 +330,10 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertEqual(df.collect(), [Row(a={u'a': 1})])
 
     def test_createDataFrame_fallback_disabled(self):
-        from distutils.version import LooseVersion
-
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
-
-        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            with QuietTest(self.sc):
-                with self.assertRaisesRegexp(TypeError, 'Unsupported type.*BinaryType'):
-                    self.spark.createDataFrame(
-                        pd.DataFrame([[{'a': b'aaa'}]]), "a: binary")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
