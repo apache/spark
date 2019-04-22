@@ -7,6 +7,14 @@ displayTitle: Spark SQL Upgrading Guide
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 2.4 to 2.4.1
+
+  - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was
+    inconsistently interpreted as both seconds and milliseconds in Spark 2.4.0 in different parts of the code.
+    Unitless values are now consistently interpreted as milliseconds. Applications that set values like "30"
+    need to specify a value with units like "30s" now, to avoid being interpreted as milliseconds; otherwise,
+    the extremely short interval that results will likely cause applications to fail.
+
 ## Upgrading From Spark SQL 2.3 to 2.4
 
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.
