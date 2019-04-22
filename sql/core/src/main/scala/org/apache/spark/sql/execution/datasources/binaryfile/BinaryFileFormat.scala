@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
+import java.sql.Timestamp
+
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, GlobFilter, Path}
@@ -28,7 +30,8 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
+import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan,
+  GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
@@ -55,10 +58,12 @@ import org.apache.spark.util.SerializableConfiguration
  */
 class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
+  import BinaryFileFormat._
+
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = Some(BinaryFileFormat.schema)
+      files: Seq[FileStatus]): Option[StructType] = Some(schema)
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -84,7 +89,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String],
-      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -93,46 +98,49 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
     val pathGlobPattern = binaryFileSourceOptions.pathGlobFilter
 
-    (file: PartitionedFile) => {
+    val filterFuncs = filters.map(filter => createFilterFunction(filter))
+
+    file: PartitionedFile => {
       val path = file.filePath
       val fsPath = new Path(path)
 
       // TODO: Improve performance here: each file will recompile the glob pattern here.
-      val globFilter = pathGlobPattern.map(new GlobFilter(_))
-      if (!globFilter.isDefined || globFilter.get.accept(fsPath)) {
+      if (pathGlobPattern.forall(new GlobFilter(_).accept(fsPath))) {
         val fs = fsPath.getFileSystem(broadcastedHadoopConf.value.value)
         val fileStatus = fs.getFileStatus(fsPath)
-        val length = fileStatus.getLen()
-        val modificationTime = fileStatus.getModificationTime()
-        val stream = fs.open(fsPath)
+        val length = fileStatus.getLen
+        val modificationTime = fileStatus.getModificationTime
 
-        val content = try {
-          ByteStreams.toByteArray(stream)
-        } finally {
-          Closeables.close(stream, true)
-        }
+        if (filterFuncs.forall(_.apply(fileStatus))) {
+          val stream = fs.open(fsPath)
+          val content = try {
+            ByteStreams.toByteArray(stream)
+          } finally {
+            Closeables.close(stream, true)
+          }
 
-        val fullOutput = dataSchema.map { f =>
-          AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
-        }
-        val requiredOutput = fullOutput.filter { a =>
-          requiredSchema.fieldNames.contains(a.name)
-        }
+          val fullOutput = dataSchema.map { f =>
+            AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
+          }
+          val requiredOutput = fullOutput.filter { a =>
+            requiredSchema.fieldNames.contains(a.name)
+          }
 
-        // TODO: Add column pruning
-        // currently it still read the file content even if content column is not required.
-        val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
+          // TODO: Add column pruning
+          // currently it still read the file content even if content column is not required.
+          val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
-        val internalRow = InternalRow(
-          content,
-          InternalRow(
+          val internalRow = InternalRow(
             UTF8String.fromString(path),
             DateTimeUtils.fromMillis(modificationTime),
-            length
+            length,
+            content
           )
-        )
 
-        Iterator(requiredColumns(internalRow))
+          Iterator(requiredColumns(internalRow))
+        } else {
+          Iterator.empty
+        }
       } else {
         Iterator.empty
       }
@@ -142,26 +150,62 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
 object BinaryFileFormat {
 
-  private val fileStatusSchema = StructType(
-    StructField("path", StringType, false) ::
-      StructField("modificationTime", TimestampType, false) ::
-      StructField("length", LongType, false) :: Nil)
+  private[binaryfile] val PATH = "path"
+  private[binaryfile] val MODIFICATION_TIME = "modificationTime"
+  private[binaryfile] val LENGTH = "length"
+  private[binaryfile] val CONTENT = "content"
 
   /**
    * Schema for the binary file data source.
    *
    * Schema:
+   *  - path (StringType): The path of the file.
+   *  - modificationTime (TimestampType): The modification time of the file.
+   *    In some Hadoop FileSystem implementation, this might be unavailable and fallback to some
+   *    default value.
+   *  - length (LongType): The length of the file in bytes.
    *  - content (BinaryType): The content of the file.
-   *  - status (StructType): The status of the file.
-   *    - path (StringType): The path of the file.
-   *    - modificationTime (TimestampType): The modification time of the file.
-   *      In some Hadoop FileSystem implementation, this might be unavailable and fallback to some
-   *      default value.
-   *    - length (LongType): The length of the file in bytes.
    */
   val schema = StructType(
-    StructField("content", BinaryType, true) ::
-      StructField("status", fileStatusSchema, false) :: Nil)
+    StructField(PATH, StringType, false) ::
+    StructField(MODIFICATION_TIME, TimestampType, false) ::
+    StructField(LENGTH, LongType, false) ::
+    StructField(CONTENT, BinaryType, true) :: Nil)
+
+  private[binaryfile] def createFilterFunction(filter: Filter): FileStatus => Boolean = {
+    filter match {
+      case And(left, right) =>
+        s => createFilterFunction(left)(s) && createFilterFunction(right)(s)
+      case Or(left, right) =>
+        s => createFilterFunction(left)(s) || createFilterFunction(right)(s)
+      case Not(child) =>
+        s => !createFilterFunction(child)(s)
+
+      case LessThan(LENGTH, value: Long) =>
+        _.getLen < value
+      case LessThanOrEqual(LENGTH, value: Long) =>
+        _.getLen <= value
+      case GreaterThan(LENGTH, value: Long) =>
+        _.getLen > value
+      case GreaterThanOrEqual(LENGTH, value: Long) =>
+        _.getLen >= value
+      case EqualTo(LENGTH, value: Long) =>
+        _.getLen == value
+
+      case LessThan(MODIFICATION_TIME, value: Timestamp) =>
+        _.getModificationTime < value.getTime
+      case LessThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
+        _.getModificationTime <= value.getTime
+      case GreaterThan(MODIFICATION_TIME, value: Timestamp) =>
+        _.getModificationTime > value.getTime
+      case GreaterThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
+        _.getModificationTime >= value.getTime
+      case EqualTo(MODIFICATION_TIME, value: Timestamp) =>
+        _.getModificationTime == value.getTime
+
+      case _ => (_ => true)
+    }
+  }
 }
 
 class BinaryFileSourceOptions(
