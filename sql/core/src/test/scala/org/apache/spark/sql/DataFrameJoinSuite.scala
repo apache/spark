@@ -117,6 +117,57 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         .collect().toSeq)
   }
 
+  test("join - self join without manual alias") {
+    val df1 = spark.range(3)
+    val df2 = df1.filter($"id" > 0)
+
+    withSQLConf(
+      SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE.key -> "false",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      // `df1("id") > df2("id")` is always false.
+      checkAnswer(df1.join(df2, df1("id") > df2("id")), Nil)
+
+      // `df2("id")` actually points to the column of `df1`.
+      checkAnswer(df1.join(df2).select(df2("id")), Seq(0, 0, 1, 1, 2, 2).map(Row(_)))
+
+      val df3 = df1.filter($"id" <= 2)
+      // `df2("id") < df3("id")` is always false
+      checkAnswer(df1.join(df2).join(df3, df2("id") < df3("id")), Nil)
+    }
+
+    withSQLConf(
+      SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE.key -> "true",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(df1.join(df2, df1("id") > df2("id")), Row(2, 1))
+
+      checkAnswer(df1.join(df2).select(df2("id")), Seq(1, 2, 1, 2, 1, 2).map(Row(_)))
+
+      val df3 = df1.filter($"id" <= 2)
+      checkAnswer(
+        df1.join(df2).join(df3, df2("id") < df3("id")),
+        Row(0, 1, 2) :: Row(1, 1, 2) :: Row(2, 1, 2) :: Nil)
+
+      checkAnswer(
+        df3.join(df1.join(df2), df2("id") < df3("id")),
+        Row(2, 0, 1) :: Row(2, 1, 1) :: Row(2, 2, 1) :: Nil)
+
+      // `df1("id")` is ambiguous here.
+      // Current behavior is: it points to the column of the first `df1`.
+      checkAnswer(
+        df1.join(df2).join(df1, df1("id") > df2("id")),
+        Row(2, 1, 0) :: Row(2, 1, 1) :: Row(2, 1, 2) :: Nil)
+
+      // `df2("id")` is not ambiguous.
+      checkAnswer(
+        df1.join(df2).join(df1, df2("id") === 2),
+        Seq(0, 1, 2).flatMap { i =>
+          Seq(0, 1, 2).map { j =>
+            Row(i, 2, j)
+          }
+        })
+    }
+  }
+
   test("join - cross join") {
     val df1 = Seq((1, "1"), (3, "3")).toDF("int", "str")
     val df2 = Seq((2, "2"), (4, "4")).toDF("int", "str")

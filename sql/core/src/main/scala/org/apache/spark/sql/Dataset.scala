@@ -53,6 +53,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -62,6 +63,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
+  val curId = new java.util.concurrent.atomic.AtomicLong()
+
+  val ID_PREFIX = "__dataset_id"
+  val COL_POS_PREFIX = "__col_position"
+
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
     // Eagerly bind the encoder so we verify that the encoder matches the underlying
@@ -182,6 +188,9 @@ class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
+
+  // A globally unique id for this Dataset.
+  private val id = Dataset.curId.getAndIncrement()
 
   queryExecution.assertAnalyzed()
 
@@ -873,7 +882,30 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner, None, JoinHint.NONE)
+    val (joinLeft, joinRight) = prepareJoinPlan(this, right)
+    Join(joinLeft, joinRight, joinType = Inner, None, JoinHint.NONE)
+  }
+
+  // Called by `Dataset#join`, to attach the Dataset id to the logical plan, so that we
+  // can resolve column reference correctly later. See `ResolveDatasetColumnReference`.
+  private def createPlanWithDatasetId(): LogicalPlan = {
+    if (!sparkSession.sessionState.conf.getConf(SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE)) {
+      return logicalPlan
+    }
+
+    // The alias should start with `SubqueryAlias.HIDDEN_ALIAS_PREFIX`, so that `SubqueryAlias` can
+    // recognize it and keep the output qualifiers unchanged.
+    SubqueryAlias(s"${SubqueryAlias.HIDDEN_ALIAS_PREFIX}${Dataset.ID_PREFIX}_$id", logicalPlan)
+  }
+
+  private def prepareJoinPlan(left: Dataset[_], right: Dataset[_]): (LogicalPlan, LogicalPlan) = {
+    // If there is no conflicting attributes, then it's not a self-join and we don't need to attach
+    // the dataset id.
+    if (left.logicalPlan.outputSet.intersect(right.logicalPlan.outputSet).isEmpty) {
+      (left.logicalPlan, right.logicalPlan)
+    } else {
+      (left.createPlanWithDatasetId(), right.createPlanWithDatasetId())
+    }
   }
 
   /**
@@ -949,10 +981,11 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame = {
+    val (joinLeft, joinRight) = prepareJoinPlan(this, right)
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sparkSession.sessionState.executePlan(
-      Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None, JoinHint.NONE))
+      Join(joinLeft, joinRight, joinType = JoinType(joinType), None, JoinHint.NONE))
       .analyzed.asInstanceOf[Join]
 
     withPlan {
@@ -1014,8 +1047,9 @@ class Dataset[T] private[sql](
 
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
+    val (joinLeft, joinRight) = prepareJoinPlan(this, right)
     val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr), JoinHint.NONE))
+      Join(joinLeft, joinRight, JoinType(joinType), Some(joinExprs.expr), JoinHint.NONE))
       .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
@@ -1024,9 +1058,7 @@ class Dataset[T] private[sql](
     }
 
     // If left/right have no output set intersection, return the plan.
-    val lanalyzed = withPlan(this.logicalPlan).queryExecution.analyzed
-    val ranalyzed = withPlan(right.logicalPlan).queryExecution.analyzed
-    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
+    if (this.logicalPlan.outputSet.intersect(right.logicalPlan.outputSet).isEmpty) {
       return withPlan(plan)
     }
 
@@ -1289,8 +1321,22 @@ class Dataset[T] private[sql](
         colRegex(colName)
       } else {
         val expr = resolve(colName)
-        Column(expr)
+        Column(addDataFrameIdToCol(expr))
       }
+  }
+
+  // Attach the dataset id and column position to the column reference, so that we can resolve it
+  // correctly in case of self-join. See `ResolveDatasetColumnReference`.
+  private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = expr match {
+    case a: AttributeReference
+        if sparkSession.sessionState.conf.getConf(SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE) =>
+      val metadata = new MetadataBuilder()
+        .withMetadata(a.metadata)
+        .putLong(Dataset.ID_PREFIX, id)
+        .putLong(Dataset.COL_POS_PREFIX, logicalPlan.output.indexOf(a))
+        .build()
+      a.withMetadata(metadata)
+    case _ => expr
   }
 
   /**
@@ -2297,11 +2343,16 @@ class Dataset[T] private[sql](
           u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
     }
-    val attrs = this.logicalPlan.output
-    val colsAfterDrop = attrs.filter { attr =>
-      attr != expression
-    }.map(attr => Column(attr))
-    select(colsAfterDrop : _*)
+    expression match {
+      case a: Attribute =>
+        val attrs = this.logicalPlan.output
+        val colsAfterDrop = attrs.filter { attr =>
+          !attr.semanticEquals(a)
+        }.map(attr => Column(attr))
+        select(colsAfterDrop : _*)
+
+      case _ => toDF()
+    }
   }
 
   /**

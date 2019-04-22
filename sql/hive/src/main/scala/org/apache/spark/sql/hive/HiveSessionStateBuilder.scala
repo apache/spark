@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
+import org.apache.spark.sql.execution.analysis.ResolveDatasetColumnReference
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -77,7 +78,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      new DetermineTableStats(session) +:
+      new ResolveDatasetColumnReference(conf) +:
+        new DetermineTableStats(session) +:
         RelationConversions(conf, catalog) +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:

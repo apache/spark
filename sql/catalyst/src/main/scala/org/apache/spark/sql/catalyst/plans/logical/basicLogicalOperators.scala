@@ -951,13 +951,19 @@ case class SubqueryAlias(
   def alias: String = name.identifier
 
   override def output: Seq[Attribute] = {
-    val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
-    child.output.map(_.withQualifier(qualifierList))
+    if (name.database.isEmpty && name.identifier.startsWith(SubqueryAlias.HIDDEN_ALIAS_PREFIX)) {
+      child.output
+    } else {
+      val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
+      child.output.map(_.withQualifier(qualifierList))
+    }
   }
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
 object SubqueryAlias {
+  val HIDDEN_ALIAS_PREFIX = "__hidden_alias"
+
   def apply(
       identifier: String,
       child: LogicalPlan): SubqueryAlias = {

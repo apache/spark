@@ -759,6 +759,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val RESOLVE_DATASET_COLUMN_REFERENCE =
+    buildConf("spark.sql.analyzer.resolveDatasetColumnReference")
+      .doc("When true, resolve Dataset column reference in case of self-join.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .internal()
