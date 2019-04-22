@@ -24,11 +24,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReader, PartitionOffset}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ThreadUtils
 
 /**
  * A wrapper for a continuous processing data reader, including a reading queue and epoch markers.
@@ -38,13 +38,15 @@ import org.apache.spark.util.ThreadUtils
  * offsets across epochs. Each compute() should call the next() method here until null is returned.
  */
 class ContinuousQueuedDataReader(
+    rddId: Int,
     partitionIndex: Int,
     reader: ContinuousPartitionReader[InternalRow],
     schema: StructType,
     context: TaskContext,
-    dataQueueSize: Int) extends Closeable {
+    dataQueueSize: Int) extends ThreadSafeRpcEndpoint with Closeable with Logging {
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset = reader.getOffset
+  private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   /**
    * The record types in the read buffer.
@@ -56,20 +58,15 @@ class ContinuousQueuedDataReader(
   private val queue = new ArrayBlockingQueue[ContinuousRecord](dataQueueSize)
 
   private val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
-  private val epochCoordEndpoint = EpochCoordinatorRef.get(
-    context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
-  private val epochIntervalMs =
-    context.getLocalProperty(ContinuousExecution.EPOCH_INTERVAL_KEY).toLong
-
-  private val epochMarkerExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
-    s"epoch-poll--$coordinatorId--${context.partitionId()}")
-  private val epochMarkerGenerator = new EpochMarkerGenerator
-  epochMarkerExecutor.scheduleWithFixedDelay(
-    epochMarkerGenerator, 0, epochIntervalMs, TimeUnit.MILLISECONDS)
+  private val epochCoordEndpoint = EpochCoordinatorRef.get(coordinatorId, SparkEnv.get)
 
   private val dataReaderThread = new DataReaderThread(schema)
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
+
+  val endpointName = s"ContinuousDataSourceRDD--$rddId--$partitionIndex"
+  val rpcRef = SparkEnv.get.rpcEnv.setupEndpoint(endpointName, this)
+  epochCoordEndpoint.send(ReportRpcAddress(rddId, partitionIndex, endpointName))
 
   context.addTaskCompletionListener[Unit](_ => {
     this.close()
@@ -77,6 +74,15 @@ class ContinuousQueuedDataReader(
 
   private def shouldStop() = {
     context.isInterrupted() || context.isCompleted()
+  }
+
+  override def receive: PartialFunction[Any, Unit] = {
+    case UpdateCurrentEpoch(curEpoch) =>
+      for (i <- currentEpoch to curEpoch - 1) {
+        queue.put(EpochMarker)
+        logDebug(s"Sent marker to start epoch ${i + 1}")
+      }
+      currentEpoch = curEpoch
   }
 
   /**
@@ -102,11 +108,6 @@ class ContinuousQueuedDataReader(
         if (dataReaderThread.failureReason != null) {
           throw new SparkException("Data read failed", dataReaderThread.failureReason)
         }
-        if (epochMarkerGenerator.failureReason != null) {
-          throw new SparkException(
-            "Epoch marker generation failed",
-            epochMarkerGenerator.failureReason)
-        }
         currentEntry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
     }
@@ -124,7 +125,6 @@ class ContinuousQueuedDataReader(
 
   override def close(): Unit = {
     dataReaderThread.interrupt()
-    epochMarkerExecutor.shutdown()
   }
 
   /**
@@ -175,35 +175,11 @@ class ContinuousQueuedDataReader(
   }
 
   /**
-   * The epoch marker component of [[ContinuousQueuedDataReader]]. Populates the queue with
-   * EpochMarker when a new epoch marker arrives.
+   * The [[RpcEnv]] that this [[org.apache.spark.rpc.RpcEndpoint]] is registered to.
    */
-  class EpochMarkerGenerator extends Runnable with Logging {
-    @volatile private[continuous] var failureReason: Throwable = _
+  override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
 
-    private val epochCoordEndpoint = EpochCoordinatorRef.get(
-      context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
-    // Note that this is *not* the same as the currentEpoch in [[ContinuousWriteRDD]]! That
-    // field represents the epoch wrt the data being processed. The currentEpoch here is just a
-    // counter to ensure we send the appropriate number of markers if we fall behind the driver.
-    private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
-
-    override def run(): Unit = {
-      try {
-        val newEpoch = epochCoordEndpoint.askSync[Long](GetCurrentEpoch)
-        // It's possible to fall more than 1 epoch behind if a GetCurrentEpoch RPC ends up taking
-        // a while. We catch up by injecting enough epoch markers immediately to catch up. This will
-        // result in some epochs being empty for this partition, but that's fine.
-        for (i <- currentEpoch to newEpoch - 1) {
-          queue.put(EpochMarker)
-          logDebug(s"Sent marker to start epoch ${i + 1}")
-        }
-        currentEpoch = newEpoch
-      } catch {
-        case t: Throwable =>
-          failureReason = t
-          throw t
-      }
-    }
+  private[sql] def stopRpcEndpointRef(): Unit = {
+    SparkEnv.get.rpcEnv.stop(rpcRef)
   }
 }

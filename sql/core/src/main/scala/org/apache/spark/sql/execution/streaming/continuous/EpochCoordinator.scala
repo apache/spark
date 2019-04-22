@@ -53,6 +53,19 @@ private[sql] case object StopContinuousExecutionWrites extends EpochCoordinatorM
 private[sql] case class SetReaderPartitions(numPartitions: Int) extends EpochCoordinatorMessage
 case class SetWriterPartitions(numPartitions: Int) extends EpochCoordinatorMessage
 
+/**
+ * Report that a continuous reader has registered a rpc endpoint at the specific address.
+ */
+private[sql] case class ReportRpcAddress(
+    rdd: Int,
+    partition: Int,
+    name: String) extends EpochCoordinatorMessage
+
+/**
+ * Update the current epoch in each continuous reader.
+ */
+private[sql] case class UpdateCurrentEpoch(curEpoch: Long) extends EpochCoordinatorMessage
+
 // Partition task messages
 /**
  * Get the current epoch.
@@ -125,6 +138,8 @@ private[continuous] class EpochCoordinator(
 
   private val epochBacklogQueueSize =
     session.sqlContext.conf.continuousStreamingEpochBacklogQueueSize
+
+  private val rpcEndpoints = new mutable.HashMap[(Int, Int), RpcEndpointRef]()
 
   private var queryWritesStopped: Boolean = false
 
@@ -228,6 +243,10 @@ private[continuous] class EpochCoordinator(
         resolveCommitsAtEpoch(epoch)
       }
       checkProcessingQueueBoundaries()
+
+    case ReportRpcAddress(rdd, partition, id) =>
+      val rpcEndpoint = RpcUtils.makeDriverRef(id, SparkEnv.get.conf, SparkEnv.get.rpcEnv)
+      rpcEndpoints.put((rdd, partition), rpcEndpoint)
   }
 
   private def checkProcessingQueueBoundaries() = {
@@ -253,7 +272,13 @@ private[continuous] class EpochCoordinator(
 
     case IncrementAndGetEpoch =>
       currentDriverEpoch += 1
-      context.reply(currentDriverEpoch)
+      try {
+        rpcEndpoints.foreach{ case (_, endpoint) =>
+          endpoint.send(UpdateCurrentEpoch(currentDriverEpoch))
+        }
+      } finally {
+        context.reply(currentDriverEpoch)
+      }
 
     case SetReaderPartitions(numPartitions) =>
       numReaderPartitions = numPartitions

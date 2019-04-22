@@ -41,6 +41,9 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
 
   var epochEndpoint: RpcEndpointRef = _
 
+  var input: BlockingQueue[UnsafeRow] = null
+  var reader: ContinuousQueuedDataReader = null
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     epochEndpoint = EpochCoordinatorRef.create(
@@ -52,11 +55,20 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
       spark,
       SparkEnv.get)
     EpochTracker.initializeCurrentEpoch(0)
+    setup()
   }
 
   override def afterEach(): Unit = {
     SparkEnv.get.rpcEnv.stop(epochEndpoint)
     epochEndpoint = null
+    if (input != null) {
+      input = null
+    }
+
+    if (reader != null) {
+      reader.stopRpcEndpointRef()
+      reader = null
+    }
     super.afterEach()
   }
 
@@ -73,14 +85,14 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
    * Set up a ContinuousQueuedDataReader for testing. The blocking queue can be used to send
    * rows to the wrapped data reader.
    */
-  private def setup(): (BlockingQueue[UnsafeRow], ContinuousQueuedDataReader) = {
-    val queue = new ArrayBlockingQueue[UnsafeRow](1024)
+  private def setup(): Unit = {
+    input = new ArrayBlockingQueue[UnsafeRow](1024)
     val partitionReader = new ContinuousPartitionReader[InternalRow] {
       var index = -1
       var curr: UnsafeRow = _
 
       override def next() = {
-        curr = queue.take()
+        curr = input.take()
         index += 1
         true
       }
@@ -91,14 +103,13 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
 
       override def close() = {}
     }
-    val reader = new ContinuousQueuedDataReader(
+    reader = new ContinuousQueuedDataReader(
+      0,
       0,
       partitionReader,
       new StructType().add("i", "int"),
       mockContext,
       dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize)
-
-    (queue, reader)
   }
 
   private def unsafeRow(value: Int) = {
@@ -107,22 +118,16 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
   }
 
   test("basic data read") {
-    val (input, reader) = setup()
-
     input.add(unsafeRow(12345))
     assert(reader.next().getInt(0) == 12345)
   }
 
   test("basic epoch marker") {
-    val (input, reader) = setup()
-
     epochEndpoint.askSync[Long](IncrementAndGetEpoch)
     assert(reader.next() == null)
   }
 
   test("new rows after markers") {
-    val (input, reader) = setup()
-
     epochEndpoint.askSync[Long](IncrementAndGetEpoch)
     epochEndpoint.askSync[Long](IncrementAndGetEpoch)
     epochEndpoint.askSync[Long](IncrementAndGetEpoch)
@@ -136,8 +141,6 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
   }
 
   test("new markers after rows") {
-    val (input, reader) = setup()
-
     input.add(unsafeRow(11111))
     input.add(unsafeRow(22222))
     assert(reader.next().getInt(0) == 11111)
@@ -151,8 +154,6 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
   }
 
   test("alternating markers and rows") {
-    val (input, reader) = setup()
-
     input.add(unsafeRow(11111))
     assert(reader.next().getInt(0) == 11111)
     input.add(unsafeRow(22222))
