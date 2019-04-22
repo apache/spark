@@ -105,7 +105,8 @@ package object client {
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    val allSupportedHiveVersions = Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_1)
+    val allSupportedHiveVersions =
+      Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_1)
   }
   // scalastyle:on
 
