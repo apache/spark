@@ -42,7 +42,7 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
     attr("key32") -> ColumnStat(distinctCount = Some(0), min = None, max = None,
       nullCount = Some(4), avgLen = Some(4), maxLen = Some(4)),
     attr("key33") -> ColumnStat(distinctCount = Some(2), min = None, max = None,
-      nullCount = Some(2), avgLen = Some(4), maxLen = Some(4)),
+      nullCount = Some(2), avgLen = Some(4), maxLen = Some(4))
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
