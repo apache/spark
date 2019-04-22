@@ -100,10 +100,12 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
    * Put the event into the event queue. The event thread will process it later.
    */
   def post(event: E): Unit = {
-    if (eventThread.isAlive && !stopped.get) {
-      eventQueue.put(event)
-    } else if (!stopped.get) {
-      onError(new IllegalStateException(s"$name has already been stopped accidentally."))
+    if (!stopped.get) {
+      if (eventThread.isAlive) {
+        eventQueue.put(event)
+      } else {
+        onError(new IllegalStateException(s"$name has already been stopped accidentally."))
+      }
     }
   }
 
