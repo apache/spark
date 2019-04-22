@@ -16,8 +16,6 @@
  */
 package org.apache.spark.mllib.fpm
 
-import scala.language.existentials
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils
@@ -420,7 +418,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val path = tempDir.toURI.toString
     try {
       model.save(sc, path)
-      val newModel = PrefixSpanModel.load(sc, path)
+      val newModel = PrefixSpanModel.load(sc, path).asInstanceOf[PrefixSpanModel[Int]]
       val originalSet = model.freqSequences.collect().map { x =>
         (x.sequence.map(_.toSet).toSeq, x.freq)
       }.toSet

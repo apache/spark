@@ -24,7 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.DataFrame
 
 
 class ClusteringEvaluatorSuite
@@ -32,10 +32,10 @@ class ClusteringEvaluatorSuite
 
   import testImplicits._
 
-  @transient var irisDataset: Dataset[_] = _
-  @transient var newIrisDataset: Dataset[_] = _
-  @transient var newIrisDatasetD: Dataset[_] = _
-  @transient var newIrisDatasetF: Dataset[_] = _
+  @transient var irisDataset: DataFrame = _
+  @transient var newIrisDataset: DataFrame = _
+  @transient var newIrisDatasetD: DataFrame = _
+  @transient var newIrisDatasetF: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

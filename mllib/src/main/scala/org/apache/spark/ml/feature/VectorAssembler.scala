@@ -20,7 +20,6 @@ package org.apache.spark.ml.feature
 import java.util.NoSuchElementException
 
 import scala.collection.mutable
-import scala.language.existentials
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
@@ -131,14 +130,14 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           throw new SparkException(s"VectorAssembler does not support the $otherType type")
       }
     }
-    val featureAttributes = featureAttributesMap.flatten[Attribute].toArray
-    val lengths = featureAttributesMap.map(a => a.length).toArray
+    val featureAttributes = featureAttributesMap.flatten[Attribute]
+    val lengths = featureAttributesMap.map(a => a.length)
     val metadata = new AttributeGroup($(outputCol), featureAttributes).toMetadata()
-    val (filteredDataset, keepInvalid) = $(handleInvalid) match {
-      case VectorAssembler.SKIP_INVALID => (dataset.na.drop($(inputCols)), false)
-      case VectorAssembler.KEEP_INVALID => (dataset, true)
-      case VectorAssembler.ERROR_INVALID => (dataset, false)
+    val filteredDataset = $(handleInvalid) match {
+      case VectorAssembler.SKIP_INVALID => dataset.na.drop($(inputCols))
+      case VectorAssembler.KEEP_INVALID | VectorAssembler.ERROR_INVALID => dataset
     }
+    val keepInvalid = $(handleInvalid) == VectorAssembler.KEEP_INVALID
     // Data transformation.
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)

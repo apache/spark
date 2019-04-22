@@ -23,7 +23,6 @@ import java.util.Random
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
-import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.commons.io.FileUtils
