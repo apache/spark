@@ -289,6 +289,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def hadoopConfiguration: Configuration = _hadoopConfiguration
 
+  def setHadoopConf(name: String, value: String): Unit = {}
+
   private[spark] def executorMemory: Int = _executorMemory
 
   // Environment variables to pass to our executors.
@@ -2510,6 +2512,20 @@ object SparkContext extends Logging {
         setActiveContext(new SparkContext())
       }
       activeContext.get()
+    }
+  }
+
+  def withHadoopConf[T](map: Map[String, String])(body: => T): T = {
+    // type: ThreadLocal[Configuration]
+    val originalConf = SparkHadoopConf.get().get
+    // return new HadoopConf with user's conf, wich can be used in current thread
+    val curConf = SparkHadoopConf.newHadoopConf(map, originalConf)
+    SparkHadoopConf.get().set(curConf)
+    try {
+      body
+    } finally {
+      // revert to original HadoopConf
+      SparkHadoopConf.get().set(originalConf)
     }
   }
 
