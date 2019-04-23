@@ -246,17 +246,39 @@ class PlanParserSuite extends AnalysisTest {
 
     // Multi insert
     val multiQueryPlan1 = table("t").where('x > 5).select('a4, 'b4)
-    assertEqual("from t insert into s(a1, b1) select a2, b2 limit 1 insert into u(a3, b3) select a4, b4 where x > 5",
+    assertEqual("from t insert into s(a1, b1) select a2, b2 limit 1 " +
+      "insert into u(a3, b3) select a4, b4 where x > 5",
       InsertIntoTable(
-        table("s"), Option(Seq("a1", "b1")), Map.empty, queryPlan2.limit(1), false, ifPartitionNotExists = false).union(
-        InsertIntoTable(
-          table("u"), Option(Seq("a3", "b3")), Map.empty, multiQueryPlan1, false, ifPartitionNotExists = false)))
+        table("s"),
+        Option(Seq("a1", "b1")),
+        Map.empty,
+        queryPlan2.limit(1),
+        false,
+        ifPartitionNotExists = false).union(
+          InsertIntoTable(
+            table("u"),
+            Option(Seq("a3", "b3")),
+            Map.empty,
+            multiQueryPlan1,
+            false,
+            ifPartitionNotExists = false)))
     val multiQueryPlan2 = table("t").where('x > 5).select('A4, 'B4)
-    assertEqual("from t insert into s(A1, B1) select A2, B2 limit 1 insert into u(A3, B3) select A4, B4 where x > 5",
+    assertEqual("from t insert into s(A1, B1) select A2, B2 limit 1 " +
+      "insert into u(A3, B3) select A4, B4 where x > 5",
       InsertIntoTable(
-        table("s"), Option(Seq("A1", "B1")), Map.empty, queryPlan4.limit(1), false, ifPartitionNotExists = false).union(
-        InsertIntoTable(
-          table("u"), Option(Seq("A3", "B3")), Map.empty, multiQueryPlan2, false, ifPartitionNotExists = false)))
+        table("s"),
+        Option(Seq("A1", "B1")),
+        Map.empty,
+        queryPlan4.limit(1),
+        false,
+        ifPartitionNotExists = false).union(
+          InsertIntoTable(
+            table("u"),
+            Option(Seq("A3", "B3")),
+            Map.empty,
+            multiQueryPlan2,
+            false,
+            ifPartitionNotExists = false)))
   }
 
   test ("insert with if not exists") {
