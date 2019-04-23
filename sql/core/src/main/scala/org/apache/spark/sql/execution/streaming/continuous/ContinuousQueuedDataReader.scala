@@ -64,8 +64,8 @@ class ContinuousQueuedDataReader(
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
 
-  val endpointName = s"ContinuousDataSourceRDD--$rddId--$partitionIndex"
-  val rpcRef = SparkEnv.get.rpcEnv.setupEndpoint(endpointName, this)
+  val endpointName = s"ContinuousQueuedDataReader--$rddId--$partitionIndex"
+  var rpcRef = SparkEnv.get.rpcEnv.setupEndpoint(endpointName, this)
   epochCoordEndpoint.send(ReportRpcAddress(rddId, partitionIndex, endpointName))
 
   context.addTaskCompletionListener[Unit](_ => {
@@ -184,5 +184,6 @@ class ContinuousQueuedDataReader(
 
   private[sql] def stopRpcEndpointRef(): Unit = {
     SparkEnv.get.rpcEnv.stop(rpcRef)
+    rpcRef = null
   }
 }
