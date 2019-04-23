@@ -1250,6 +1250,11 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
     |2.0|3.0|[6.0]|
     +---+---+-----+
     ...
+    >>> interactionPath = temp_path + "/interaction"
+    >>> interaction.save(interactionPath)
+    >>> loadedInteraction = Interaction.load(interactionPath)
+    >>> loadedInteraction.transform(df).head().ab == interaction.transform(df).head().ab
+    True
 
     .. versionadded:: 3.0.0
     """
