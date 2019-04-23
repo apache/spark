@@ -733,6 +733,20 @@ class RDDTests(ReusedPySparkTestCase):
         global_func = lambda: "Yeah"
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Yeah")
 
+    def test_to_local_iterator_collects_single_partition(self):
+
+        def fail_last(x):
+            if x == 9:
+                raise RuntimeError("This should not be hit")
+            return x
+
+        rdd = self.sc.parallelize(range(10), numSlices=2).map(fail_last)
+        it = rdd.toLocalIterator()
+
+        # Only consume 3 elements in first partition, this should not trigger an error
+        for i in range(3):
+            self.assertEqual(i, next(it))
+
 
 if __name__ == "__main__":
     import unittest
