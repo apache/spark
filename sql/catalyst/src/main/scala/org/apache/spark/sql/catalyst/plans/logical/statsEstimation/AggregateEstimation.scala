@@ -42,8 +42,8 @@ object AggregateEstimation {
         (res, expr) => {
           val columnStat = childStats.attributeStats(expr.asInstanceOf[Attribute])
           val distinctCount = columnStat.distinctCount.get
-          val distinctValue: BigInt = if (distinctCount == 0 && columnStat.nullCount.get > 0) {
-            1
+          val distinctValue: BigInt = if (columnStat.nullCount.get > 0) {
+            distinctCount + 1
           } else {
             distinctCount
           }
