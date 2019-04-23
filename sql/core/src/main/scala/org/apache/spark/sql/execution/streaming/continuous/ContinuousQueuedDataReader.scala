@@ -78,6 +78,9 @@ class ContinuousQueuedDataReader(
 
   override def receive: PartialFunction[Any, Unit] = {
     case UpdateCurrentEpoch(curEpoch) =>
+      // It's possible to fall more than 1 epoch behind if UpdateCurrentEpoch RPC ends up failing
+      // for some times. We catch up by injecting enough epoch markers immediately to catch up.
+      // This will result in some epochs being empty for this partition, but that's fine.
       for (i <- currentEpoch to curEpoch - 1) {
         queue.put(EpochMarker)
         logDebug(s"Sent marker to start epoch ${i + 1}")
