@@ -19,7 +19,6 @@ package org.apache.spark.sql.internal
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
@@ -31,6 +30,8 @@ import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+
+import scala.util.Try
 
 
 /**
@@ -442,7 +443,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def uncacheTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val cascade = !sessionCatalog.isTemporaryTable(tableIdent)
-    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade)
+    val wasCached = Try(sparkSession.catalog.isCached(tableIdent.unquotedString)).getOrElse(false)
+    if (wasCached) {
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableIdent), cascade)
+      sparkSession.sessionState.catalog.dropTempView(tableIdent.table)
+    }
   }
 
   /**
