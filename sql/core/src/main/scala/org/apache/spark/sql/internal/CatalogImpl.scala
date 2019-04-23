@@ -19,6 +19,8 @@ package org.apache.spark.sql.internal
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
+import scala.util.Try
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
@@ -30,9 +32,6 @@ import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
-
-import scala.util.Try
-
 
 /**
  * Internal implementation of the user-facing `Catalog`.
