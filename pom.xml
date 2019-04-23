@@ -475,6 +475,12 @@
         <version>1.9.3</version>
       </dependency>
       <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <!-- Hive uses commons-logging 1.1.3 from 0.13 to 1.2 -->
+        <version>1.1.3</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.ivy</groupId>
         <artifactId>ivy</artifactId>
         <version>${ivy.version}</version>
@@ -1603,10 +1609,6 @@
         <artifactId>hive-jdbc</artifactId>
         <version>${hive.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-common</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-common</artifactId>
