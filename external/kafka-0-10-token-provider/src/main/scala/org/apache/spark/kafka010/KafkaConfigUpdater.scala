@@ -21,6 +21,7 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
 
 import org.apache.spark.SparkEnv
@@ -47,7 +48,7 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
     this
   }
 
-  def setAuthenticationConfigIfNeeded(tokenClusterId: Option[String]): this.type = {
+  def setAuthenticationConfigIfNeeded(): this.type = {
     // There are multiple possibilities to log in and applied in the following order:
     // - JVM global security provided -> try to log in with JVM global security configuration
     //   which can be configured for example with 'java.security.auth.login.config'.
@@ -56,17 +57,17 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
     //   configuration.
     if (KafkaTokenUtil.isGlobalJaasConfigurationProvided) {
       logDebug("JVM global security configuration detected, using it for login.")
-    } else if (tokenClusterId.isDefined) {
-      val kafkaTokenClusterConf = new KafkaTokenSparkConf(SparkEnv.get.conf).getClusterConfig(
-        tokenClusterId.get)
-      require(KafkaTokenUtil.isTokenAvailable(kafkaTokenClusterConf),
-        "Delegation token cluster identifier configured but no valid token found.")
-      logDebug("Delegation token detected, using it for login.")
-      val jaasParams = KafkaTokenUtil.getTokenJaasParams(SparkEnv.get.conf, kafkaTokenClusterConf)
-      set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
-      require(kafkaTokenClusterConf.tokenMechanism.startsWith("SCRAM"),
-        "Delegation token works only with SCRAM mechanism.")
-      set(SaslConfigs.SASL_MECHANISM, kafkaTokenClusterConf.tokenMechanism)
+    } else {
+      val clusterConfig = KafkaTokenUtil.findMatchingToken(SparkEnv.get.conf,
+        map.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
+      clusterConfig.foreach { clusterConf =>
+        logDebug("Delegation token detected, using it for login.")
+        val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
+        set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
+        require(clusterConf.tokenMechanism.startsWith("SCRAM"),
+          "Delegation token works only with SCRAM mechanism.")
+        set(SaslConfigs.SASL_MECHANISM, clusterConf.tokenMechanism)
+      }
     }
     this
   }

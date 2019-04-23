@@ -27,7 +27,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE, TOKEN_CLUSTER_ID_OPTION_KEY}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
 
@@ -54,7 +54,6 @@ class KafkaContinuousStream(
   extends ContinuousStream with Logging {
 
   private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
-  private val tokenClusterId = sourceOptions.get(TOKEN_CLUSTER_ID_OPTION_KEY).map(_.trim)
 
   // Initialized when creating reader factories. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
@@ -101,7 +100,7 @@ class KafkaContinuousStream(
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
         KafkaContinuousInputPartition(
-          topicPartition, start, kafkaParams, tokenClusterId, pollTimeoutMs, failOnDataLoss)
+          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
     }.toArray
   }
 
@@ -149,8 +148,6 @@ class KafkaContinuousStream(
  * @param topicPartition The (topic, partition) pair this task is responsible for.
  * @param startOffset The offset to start reading from within the partition.
  * @param kafkaParams Kafka consumer params to use.
- * @param tokenClusterId The cluster identifier from where delegation token has to be used. If None,
- *                       no delegation token will be used.
  * @param pollTimeoutMs The timeout for Kafka consumer polling.
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
@@ -159,7 +156,6 @@ case class KafkaContinuousInputPartition(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
-    tokenClusterId: Option[String],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends InputPartition
 
@@ -167,7 +163,7 @@ object KafkaContinuousReaderFactory extends ContinuousPartitionReaderFactory {
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaContinuousInputPartition]
     new KafkaContinuousPartitionReader(p.topicPartition, p.startOffset, p.kafkaParams,
-      p.tokenClusterId, p.pollTimeoutMs, p.failOnDataLoss)
+      p.pollTimeoutMs, p.failOnDataLoss)
   }
 }
 
@@ -177,8 +173,6 @@ object KafkaContinuousReaderFactory extends ContinuousPartitionReaderFactory {
  * @param topicPartition The (topic, partition) pair this data reader is responsible for.
  * @param startOffset The offset to start reading from within the partition.
  * @param kafkaParams Kafka consumer params to use.
- * @param tokenClusterId The cluster identifier from where delegation token has to be used. If None,
- *                       no delegation token will be used.
  * @param pollTimeoutMs The timeout for Kafka consumer polling.
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
@@ -187,11 +181,9 @@ class KafkaContinuousPartitionReader(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
-    tokenClusterId: Option[String],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends ContinuousPartitionReader[InternalRow] {
-  private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams, tokenClusterId,
-    useCache = false)
+  private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams, useCache = false)
   private val converter = new KafkaRecordToUnsafeRowConverter
 
   private var nextKafkaOffset = startOffset

@@ -75,11 +75,10 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * exist, a new KafkaProducer will be created. KafkaProducer is thread safe, it is best to keep
    * one instance per specified kafkaParams.
    */
-  private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object],
-      tokenClusterId: Option[String]): Producer = {
+  private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object]): Producer = {
     val updatedKafkaProducerConfiguration =
       KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
-        .setAuthenticationConfigIfNeeded(tokenClusterId)
+        .setAuthenticationConfigIfNeeded()
         .build()
     val paramsSeq: Seq[(String, Object)] = paramsToSeq(updatedKafkaProducerConfiguration)
     try {

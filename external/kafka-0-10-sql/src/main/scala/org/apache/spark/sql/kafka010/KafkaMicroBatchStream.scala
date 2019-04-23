@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
 import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchStream
-import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE, TOKEN_CLUSTER_ID_OPTION_KEY}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -67,8 +67,6 @@ private[kafka010] class KafkaMicroBatchStream(
     SparkEnv.get.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L)
 
   private val maxOffsetsPerTrigger = Option(options.get("maxOffsetsPerTrigger")).map(_.toLong)
-
-  private val tokenClusterId = Option(options.get(TOKEN_CLUSTER_ID_OPTION_KEY)).map(_.trim)
 
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
 
@@ -156,8 +154,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
     // Generate factories based on the offset ranges
     offsetRanges.map { range =>
-      KafkaMicroBatchInputPartition(range, executorKafkaParams, tokenClusterId, pollTimeoutMs,
-        failOnDataLoss, reuseKafkaConsumer)
+      KafkaMicroBatchInputPartition(range, executorKafkaParams, pollTimeoutMs, failOnDataLoss,
+        reuseKafkaConsumer)
     }.toArray
   }
 
@@ -317,7 +315,6 @@ private[kafka010] class KafkaMicroBatchStream(
 private[kafka010] case class KafkaMicroBatchInputPartition(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
-    tokenClusterId: Option[String],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
     reuseKafkaConsumer: Boolean) extends InputPartition
@@ -325,8 +322,8 @@ private[kafka010] case class KafkaMicroBatchInputPartition(
 private[kafka010] object KafkaMicroBatchReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaMicroBatchInputPartition]
-    KafkaMicroBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.tokenClusterId,
-      p.pollTimeoutMs, p.failOnDataLoss, p.reuseKafkaConsumer)
+    KafkaMicroBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
+      p.failOnDataLoss, p.reuseKafkaConsumer)
   }
 }
 
@@ -334,13 +331,12 @@ private[kafka010] object KafkaMicroBatchReaderFactory extends PartitionReaderFac
 private[kafka010] case class KafkaMicroBatchPartitionReader(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
-    tokenClusterId: Option[String],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
     reuseKafkaConsumer: Boolean) extends PartitionReader[InternalRow] with Logging {
 
   private val consumer = KafkaDataConsumer.acquire(
-    offsetRange.topicPartition, executorKafkaParams, tokenClusterId, reuseKafkaConsumer)
+    offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
 
   private val rangeToRead = resolveRange(offsetRange)
   private val converter = new KafkaRecordToUnsafeRowConverter

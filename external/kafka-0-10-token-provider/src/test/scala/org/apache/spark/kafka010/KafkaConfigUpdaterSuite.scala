@@ -17,6 +17,7 @@
 
 package org.apache.spark.kafka010
 
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
 
 import org.apache.spark.SparkFunSuite
@@ -27,6 +28,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
   private val testKey = "testKey"
   private val testValue = "testValue"
   private val otherTestValue = "otherTestValue"
+  private val bootStrapServers = "127.0.0.1:0"
 
   test("set should always set value") {
     val params = Map.empty[String, String]
@@ -66,49 +68,41 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     setGlobalKafkaClientConfig()
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
-      .setAuthenticationConfigIfNeeded(None)
+      .setAuthenticationConfigIfNeeded()
       .build()
 
     assert(updatedParams.size() === 0)
   }
 
-  test("setAuthenticationConfigIfNeeded with invalid tokenClusterId should throw exception") {
-    val params = Map.empty[String, String]
-    setSparkEnv(Map.empty)
-
-    val e = intercept[NoSuchElementException] {
-      KafkaConfigUpdater(testModule, params)
-        .setAuthenticationConfigIfNeeded(Some("intentionally_invalid"))
-        .build()
-    }
-
-    assert(e.getMessage.contains("intentionally_invalid"))
-  }
-
   test("setAuthenticationConfigIfNeeded with token should set values") {
-    val params = Map.empty[String, String]
+    val params = Map(
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
+    )
     setSparkEnv(
       Map(
-        s"spark.kafka.clusters.$identifier.bootstrap.servers" -> "127.0.0.1:0"
+        s"spark.kafka.clusters.$identifier.bootstrap.servers" -> bootStrapServers
       )
     )
     addTokenToUGI(identifier)
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
-      .setAuthenticationConfigIfNeeded(Some(identifier))
+      .setAuthenticationConfigIfNeeded()
       .build()
 
-    assert(updatedParams.size() === 2)
+    assert(updatedParams.size() === 3)
+    assert(updatedParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG) === bootStrapServers)
     assert(updatedParams.containsKey(SaslConfigs.SASL_JAAS_CONFIG))
     assert(updatedParams.get(SaslConfigs.SASL_MECHANISM) ===
       KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
   }
 
   test("setAuthenticationConfigIfNeeded with invalid mechanism should throw exception") {
-    val params = Map.empty[String, String]
+    val params = Map(
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
+    )
     setSparkEnv(
       Map(
-        s"spark.kafka.clusters.$identifier.bootstrap.servers" -> "127.0.0.1:0",
+        s"spark.kafka.clusters.$identifier.bootstrap.servers" -> bootStrapServers,
         s"spark.kafka.clusters.$identifier.sasl.token.mechanism" -> "intentionally_invalid"
       )
     )
@@ -116,7 +110,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
 
     val e = intercept[IllegalArgumentException] {
       KafkaConfigUpdater(testModule, params)
-        .setAuthenticationConfigIfNeeded(Some(identifier))
+        .setAuthenticationConfigIfNeeded()
         .build()
     }
 
@@ -124,12 +118,16 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
   }
 
   test("setAuthenticationConfigIfNeeded without security should not set values") {
-    val params = Map.empty[String, String]
+    val params = Map(
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
+    )
+    setSparkEnv(Map.empty)
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
-      .setAuthenticationConfigIfNeeded(None)
+      .setAuthenticationConfigIfNeeded()
       .build()
 
-    assert(updatedParams.size() === 0)
+    assert(updatedParams.size() === 1)
+    assert(updatedParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG) === bootStrapServers)
   }
 }

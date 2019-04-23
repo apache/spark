@@ -35,15 +35,12 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
 /**
  * A [[StreamingWrite]] for Kafka writing. Responsible for generating the writer factory.
  *
- * @param tokenClusterId The cluster identifier from where delegation token has to be used. If None,
- *                       no delegation token will be used.
  * @param topic The topic this writer is responsible for. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
 class KafkaStreamingWrite(
-    tokenClusterId: Option[String],
     topic: Option[String],
     producerParams: ju.Map[String, Object],
     schema: StructType)
@@ -52,7 +49,7 @@ class KafkaStreamingWrite(
   validateQuery(schema.toAttributes, producerParams, topic)
 
   override def createStreamingWriterFactory(): KafkaStreamWriterFactory =
-    KafkaStreamWriterFactory(tokenClusterId, topic, producerParams, schema)
+    KafkaStreamWriterFactory(topic, producerParams, schema)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
@@ -61,15 +58,12 @@ class KafkaStreamingWrite(
 /**
  * A [[StreamingDataWriterFactory]] for Kafka writing. Will be serialized and sent to executors to
  * generate the per-task data writers.
- * @param tokenClusterId The cluster identifier from where delegation token has to be used. If None,
- *                       no delegation token will be used.
  * @param topic The topic that should be written to. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
 case class KafkaStreamWriterFactory(
-    tokenClusterId: Option[String],
     topic: Option[String],
     producerParams: ju.Map[String, Object],
     schema: StructType)
@@ -79,7 +73,7 @@ case class KafkaStreamWriterFactory(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
-    new KafkaStreamDataWriter(tokenClusterId, topic, producerParams, schema.toAttributes)
+    new KafkaStreamDataWriter(topic, producerParams, schema.toAttributes)
   }
 }
 
@@ -87,21 +81,18 @@ case class KafkaStreamWriterFactory(
  * A [[DataWriter]] for Kafka writing. One data writer will be created in each partition to
  * process incoming rows.
  *
- * @param tokenClusterId The cluster identifier from where delegation token has to be used. If None,
- *                       no delegation token will be used.
  * @param targetTopic The topic that this data writer is targeting. If None, topic will be inferred
  *                    from a `topic` field in the incoming data.
  * @param producerParams Parameters to use for the Kafka producer.
  * @param inputSchema The attributes in the input data.
  */
 class KafkaStreamDataWriter(
-    tokenClusterId: Option[String],
     targetTopic: Option[String],
     producerParams: ju.Map[String, Object],
     inputSchema: Seq[Attribute])
   extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
 
-  private lazy val producer = CachedKafkaProducer.getOrCreate(producerParams, tokenClusterId)
+  private lazy val producer = CachedKafkaProducer.getOrCreate(producerParams)
 
   def write(row: InternalRow): Unit = {
     checkForErrors()

@@ -39,7 +39,7 @@ private[spark] class KafkaDelegationTokenProvider
       creds: Credentials): Option[Long] = {
     try {
       var lowestNextRenewalDate: Option[Long] = None
-      new KafkaTokenSparkConf(sparkConf).getAllClusterConfigs().foreach { clusterConf =>
+      KafkaTokenSparkConf.getAllClusterConfigs(sparkConf).foreach { clusterConf =>
         if (delegationTokensRequired(clusterConf)) {
           try {
             logDebug(
@@ -71,7 +71,7 @@ private[spark] class KafkaDelegationTokenProvider
       sparkConf: SparkConf,
       hadoopConf: Configuration): Boolean = {
     try {
-      new KafkaTokenSparkConf(sparkConf).getAllClusterConfigs().exists(delegationTokensRequired(_))
+      KafkaTokenSparkConf.getAllClusterConfigs(sparkConf).exists(delegationTokensRequired(_))
     } catch {
       case NonFatal(e) =>
         logWarning(s"Failed to get token cluster configuration", e)

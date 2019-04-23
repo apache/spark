@@ -62,7 +62,7 @@ abstract class ConsumerStrategy[K, V] {
    */
   protected def setAuthenticationConfigIfNeeded(kafkaParams: ju.Map[String, Object]) =
     KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
-      .setAuthenticationConfigIfNeeded(None)
+      .setAuthenticationConfigIfNeeded()
       .build()
 }
 

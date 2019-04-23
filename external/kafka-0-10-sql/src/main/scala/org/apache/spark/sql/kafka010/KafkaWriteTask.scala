@@ -33,7 +33,6 @@ import org.apache.spark.sql.types.{BinaryType, StringType}
 private[kafka010] class KafkaWriteTask(
     producerConfiguration: ju.Map[String, Object],
     inputSchema: Seq[Attribute],
-    tokenClusterId: Option[String],
     topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
   private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
@@ -42,7 +41,7 @@ private[kafka010] class KafkaWriteTask(
    * Writes key value data out to topics.
    */
   def execute(iterator: Iterator[InternalRow]): Unit = {
-    producer = CachedKafkaProducer.getOrCreate(producerConfiguration, tokenClusterId)
+    producer = CachedKafkaProducer.getOrCreate(producerConfiguration)
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
       sendRow(currentRow, producer)

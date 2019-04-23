@@ -20,6 +20,7 @@ package org.apache.spark.kafka010
 import java.{util => ju}
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
 import org.mockito.Mockito.mock
@@ -70,12 +71,16 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
     Configuration.setConfiguration(new KafkaJaasConfiguration)
   }
 
-  protected def addTokenToUGI(identifier: String): Unit = {
+  protected def addTokenToUGI(identifier: String, tokenService: Option[String] = None): Unit = {
     val token = new Token[KafkaDelegationTokenIdentifier](
       tokenId.getBytes,
       tokenPassword.getBytes,
       KafkaTokenUtil.TOKEN_KIND,
-      KafkaTokenUtil.getTokenService(identifier)
+      if (tokenService.isEmpty) {
+        KafkaTokenUtil.getTokenService(identifier)
+      } else {
+        new Text(tokenService.get)
+      }
     )
     val creds = new Credentials()
     creds.addToken(token.getService, token)

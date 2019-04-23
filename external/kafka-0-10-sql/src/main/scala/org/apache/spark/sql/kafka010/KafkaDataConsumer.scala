@@ -88,8 +88,7 @@ private[kafka010] sealed trait KafkaDataConsumer {
  */
 private[kafka010] case class InternalKafkaConsumer(
     topicPartition: TopicPartition,
-    kafkaParams: ju.Map[String, Object],
-    tokenClusterId: Option[String]) extends Logging {
+    kafkaParams: ju.Map[String, Object]) extends Logging {
   import InternalKafkaConsumer._
 
   /**
@@ -200,7 +199,7 @@ private[kafka010] case class InternalKafkaConsumer(
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer: KafkaConsumer[Array[Byte], Array[Byte]] = {
     val updatedKafkaParams = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
-      .setAuthenticationConfigIfNeeded(tokenClusterId)
+      .setAuthenticationConfigIfNeeded()
       .build()
     val c = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     val tps = new ju.ArrayList[TopicPartition]()
@@ -513,12 +512,9 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     override def release(): Unit = { internalConsumer.close() }
   }
 
-  private case class CacheKey(groupId: String, topicPartition: TopicPartition,
-      tokenClusterId: Option[String]) {
-    def this(topicPartition: TopicPartition, kafkaParams: ju.Map[String, Object],
-        tokenClusterId: Option[String]) =
-      this(kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String], topicPartition,
-        tokenClusterId)
+  private case class CacheKey(groupId: String, topicPartition: TopicPartition) {
+    def this(topicPartition: TopicPartition, kafkaParams: ju.Map[String, Object]) =
+      this(kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String], topicPartition)
   }
 
   // This cache has the following important properties.
@@ -571,13 +567,11 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   def acquire(
       topicPartition: TopicPartition,
       kafkaParams: ju.Map[String, Object],
-      tokenClusterId: Option[String],
       useCache: Boolean): KafkaDataConsumer = synchronized {
-    val key = new CacheKey(topicPartition, kafkaParams, tokenClusterId)
+    val key = new CacheKey(topicPartition, kafkaParams)
     val existingInternalConsumer = cache.get(key)
 
-    lazy val newInternalConsumer = new InternalKafkaConsumer(topicPartition, kafkaParams,
-      tokenClusterId)
+    lazy val newInternalConsumer = new InternalKafkaConsumer(topicPartition, kafkaParams)
 
     if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
       // If this is reattempt at running the task, then invalidate cached consumer if any and
@@ -618,8 +612,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     synchronized {
 
       // Clear the consumer from the cache if this is indeed the consumer present in the cache
-      val key = new CacheKey(intConsumer.topicPartition, intConsumer.kafkaParams,
-        intConsumer.tokenClusterId)
+      val key = new CacheKey(intConsumer.topicPartition, intConsumer.kafkaParams)
       val cachedIntConsumer = cache.get(key)
       if (intConsumer.eq(cachedIntConsumer)) {
         // The released consumer is the same object as the cached one.

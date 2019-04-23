@@ -19,7 +19,9 @@ package org.apache.spark.kafka010
 
 import java.{util => ju}
 import java.text.SimpleDateFormat
+import java.util.regex.Pattern
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.io.Text
@@ -43,7 +45,10 @@ private[spark] object KafkaTokenUtil extends Logging {
   val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
   private val TOKEN_SERVICE_PREFIX = "kafka.server.delegation.token"
 
-  def getTokenService(identifier: String): Text = new Text(s"$TOKEN_SERVICE_PREFIX.$identifier")
+  private[kafka010] def getTokenService(identifier: String): Text =
+    new Text(s"$TOKEN_SERVICE_PREFIX.$identifier")
+  private def getClusterIdentifier(service: Text): String =
+    service.toString().replace(s"$TOKEN_SERVICE_PREFIX.", "")
 
   private[spark] class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
     override def getKind: Text = TOKEN_KIND
@@ -225,12 +230,23 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  def isTokenAvailable(clusterConf: KafkaTokenClusterConf): Boolean = {
-    UserGroupInformation.getCurrentUser().getCredentials.getToken(
-      getTokenService(clusterConf.identifier)) != null
+  def findMatchingToken(sparkConf: SparkConf,
+      bootStrapServers: String): Option[KafkaTokenClusterConf] = {
+    val tokens = UserGroupInformation.getCurrentUser().getCredentials.getAllTokens.asScala
+    val clusterConfigs = tokens
+      .filter(_.getService().toString().startsWith(TOKEN_SERVICE_PREFIX))
+      .map { token =>
+        KafkaTokenSparkConf.getClusterConfig(sparkConf, getClusterIdentifier(token.getService()))
+      }
+      .filter { clusterConfig =>
+        Pattern.compile(clusterConfig.targetServersRegex).matcher(bootStrapServers).matches()
+      }
+    require(clusterConfigs.size <= 1, "More than one delegation token matches to be used with the" +
+      s"following bootstrap servers: $bootStrapServers.")
+    clusterConfigs.headOption
   }
 
-  def getTokenJaasParams(sparkConf: SparkConf, clusterConf: KafkaTokenClusterConf): String = {
+  def getTokenJaasParams(clusterConf: KafkaTokenClusterConf): String = {
     val token = UserGroupInformation.getCurrentUser().getCredentials.getToken(
       getTokenService(clusterConf.identifier))
     val username = new String(token.getIdentifier)

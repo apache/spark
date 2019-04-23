@@ -28,8 +28,11 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 
 class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
-  private val identifier = "cluster1"
+  private val identifier1 = "cluster1"
+  private val identifier2 = "cluster2"
   private val bootStrapServers = "127.0.0.1:0"
+  private val matchingTargetServersRegex = "127.0.0.*:0"
+  private val nonMatchingTargetServersRegex = "127.0.1.*:0"
   private val trustStoreLocation = "/path/to/trustStore"
   private val trustStorePassword = "trustStoreSecret"
   private val keyStoreLocation = "/path/to/keyStore"
@@ -174,23 +177,55 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(KafkaTokenUtil.isGlobalJaasConfigurationProvided)
   }
 
-  test("isTokenAvailable without token should return false") {
-    val clusterConf = createClusterConf(SASL_SSL.name)
-    assert(!KafkaTokenUtil.isTokenAvailable(clusterConf))
+  test("findMatchingToken without token should return None") {
+    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
   }
 
-  test("isTokenAvailable with token should return true") {
-    addTokenToUGI(identifier)
-    val clusterConf = createClusterConf(SASL_SSL.name)
+  test("findMatchingToken with non-matching tokens should return None") {
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
+      nonMatchingTargetServersRegex)
+    sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
+      matchingTargetServersRegex)
+    addTokenToUGI(identifier1)
+    addTokenToUGI(identifier2, Some("intentionally_garbage"))
 
-    assert(KafkaTokenUtil.isTokenAvailable(clusterConf))
+    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
+  }
+
+  test("findMatchingToken with one matching token should return cluster configuration") {
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
+      matchingTargetServersRegex)
+    addTokenToUGI(identifier1)
+
+    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) ===
+      Some(KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)))
+  }
+
+  test("findMatchingToken with multiple matching tokens should throw exception") {
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
+      matchingTargetServersRegex)
+    sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
+      matchingTargetServersRegex)
+    addTokenToUGI(identifier1)
+    addTokenToUGI(identifier2)
+
+    val thrown = intercept[IllegalArgumentException] {
+      KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers)
+    }
+    assert(thrown.getMessage contains
+      "More than one delegation token matches")
   }
 
   test("getTokenJaasParams with token should return scram module") {
-    addTokenToUGI(identifier)
+    addTokenToUGI(identifier1)
     val clusterConf = createClusterConf(SASL_SSL.name)
 
-    val jaasParams = KafkaTokenUtil.getTokenJaasParams(new SparkConf(), clusterConf)
+    val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
 
     assert(jaasParams.contains("ScramLoginModule required"))
     assert(jaasParams.contains("tokenauth=true"))
@@ -200,8 +235,9 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
 
   private def createClusterConf(securityProtocol: String): KafkaTokenClusterConf = {
     KafkaTokenClusterConf(
-      identifier,
+      identifier1,
       bootStrapServers,
+      KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX,
       securityProtocol,
       KafkaTokenSparkConf.DEFAULT_SASL_KERBEROS_SERVICE_NAME,
       Some(trustStoreLocation),

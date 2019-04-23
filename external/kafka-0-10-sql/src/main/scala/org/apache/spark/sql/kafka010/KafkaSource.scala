@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
-import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE, TOKEN_CLUSTER_ID_OPTION_KEY}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -90,8 +90,6 @@ private[kafka010] class KafkaSource(
 
   private val maxOffsetsPerTrigger =
     sourceOptions.get("maxOffsetsPerTrigger").map(_.toLong)
-
-  private val tokenClusterId = sourceOptions.get(TOKEN_CLUSTER_ID_OPTION_KEY).map(_.trim)
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -299,7 +297,7 @@ private[kafka010] class KafkaSource(
 
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
-      sc, executorKafkaParams, tokenClusterId, offsetRanges, pollTimeoutMs, failOnDataLoss,
+      sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss,
       reuseKafkaConsumer = true).map { cr =>
       InternalRow(
         cr.key,

@@ -56,14 +56,11 @@ private[kafka010] case class KafkaSourceRDDPartition(
  *
  * @param sc the [[SparkContext]]
  * @param executorKafkaParams Kafka configuration for creating KafkaConsumer on the executors
- * @param tokenClusterId The cluster identifier from where delegation token has to be used. If None,
- *                       no delegation token will be used.
  * @param offsetRanges Offset ranges that define the Kafka data belonging to this RDD
  */
 private[kafka010] class KafkaSourceRDD(
     sc: SparkContext,
     executorKafkaParams: ju.Map[String, Object],
-    tokenClusterId: Option[String],
     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
@@ -90,8 +87,7 @@ private[kafka010] class KafkaSourceRDD(
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
     val sourcePartition = thePart.asInstanceOf[KafkaSourceRDDPartition]
     val consumer = KafkaDataConsumer.acquire(
-      sourcePartition.offsetRange.topicPartition, executorKafkaParams, tokenClusterId,
-      reuseKafkaConsumer)
+      sourcePartition.offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
 
     val range = resolveRange(consumer, sourcePartition.offsetRange)
     assert(
