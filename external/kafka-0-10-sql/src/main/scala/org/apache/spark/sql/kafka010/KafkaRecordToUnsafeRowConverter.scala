@@ -36,7 +36,7 @@ private[kafka010] class KafkaRecordToUnsafeRowConverter {
     } else {
       rowWriter.write(0, record.key)
     }
-    if (record.value() == null) {
+    if (record.value == null) {
       rowWriter.setNullAt(1)
     } else {
       rowWriter.write(1, record.value)
