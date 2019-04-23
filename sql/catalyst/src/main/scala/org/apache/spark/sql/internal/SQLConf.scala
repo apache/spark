@@ -1458,13 +1458,6 @@ object SQLConf {
       .intConf
       .createWithDefault(100)
 
-  val CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE =
-    buildConf("spark.sql.streaming.continuous.epochBacklogQueueSize")
-      .doc("The max number of entries to be stored in queue to wait for late epochs. " +
-        "If this parameter is exceeded by the size of the queue, stream will stop with an error.")
-      .intConf
-      .createWithDefault(10000)
-
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
     .internal()
@@ -2119,9 +2112,6 @@ class SQLConf extends Serializable with Logging {
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
-
-  def continuousStreamingEpochBacklogQueueSize: Int =
-    getConf(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE)
 
   def continuousStreamingLateEpochThreshold: Int =
     getConf(CONTINUOUS_STREAMING_LATE_EPOCH_THRESHOLD)

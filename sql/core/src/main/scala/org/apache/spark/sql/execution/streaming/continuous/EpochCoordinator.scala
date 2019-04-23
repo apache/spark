@@ -123,9 +123,6 @@ private[continuous] class EpochCoordinator(
     override val rpcEnv: RpcEnv)
   extends ThreadSafeRpcEndpoint with Logging {
 
-  private val epochBacklogQueueSize =
-    session.sqlContext.conf.continuousStreamingEpochBacklogQueueSize
-
   private val lateEpochsThreshold =
     session.sqlContext.conf.continuousStreamingLateEpochThreshold
 
@@ -218,7 +215,7 @@ private[continuous] class EpochCoordinator(
       if (!partitionCommits.isDefinedAt((epoch, partitionId))) {
         partitionCommits.put((epoch, partitionId), message)
         resolveCommitsAtEpoch(epoch)
-        checkProcessingQueueBoundaries()
+        checkLateEpochsBoundaries()
       }
 
     case ReportPartitionOffset(partitionId, epoch, offset) =>
@@ -230,18 +227,10 @@ private[continuous] class EpochCoordinator(
         query.addOffset(epoch, stream, thisEpochOffsets.toSeq)
         resolveCommitsAtEpoch(epoch)
       }
-      checkProcessingQueueBoundaries()
+      checkLateEpochsBoundaries()
   }
 
-  private def checkProcessingQueueBoundaries() = {
-    if (partitionOffsets.size > epochBacklogQueueSize) {
-      query.stopInNewThread(new IllegalStateException("Size of the partition offset queue has " +
-        "exceeded its maximum"))
-    }
-    if (partitionCommits.size > epochBacklogQueueSize) {
-      query.stopInNewThread(new IllegalStateException("Size of the partition commit queue has " +
-        "exceeded its maximum"))
-    }
+  private def checkLateEpochsBoundaries() = {
     if (epochsWaitingToBeCommitted.size > lateEpochsThreshold) {
       query.stopInNewThread(new IllegalStateException(s"Epoch ${lastCommittedEpoch + 1} " +
         s"is late for more than ${epochsWaitingToBeCommitted.max - lastCommittedEpoch} epochs."))
