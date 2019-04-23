@@ -77,7 +77,7 @@ private[spark] trait UIRoot {
   /**
    * Runs some code with the current SparkUI instance for the app / attempt.
    *
-   * @throws NoSuchElementException If the app / attempt pair does not exist.
+   * @throws java.util.NoSuchElementException If the app / attempt pair does not exist.
    */
   def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T
 
