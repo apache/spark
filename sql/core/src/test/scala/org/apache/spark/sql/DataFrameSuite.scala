@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
@@ -2131,6 +2131,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           |  LEFT OUTER JOIN v ON v.id = a.id
         """.stripMargin)
       checkAnswer(res, Row("1-1", 6, 6))
+    }
+  }
+
+  test("SPARK-27439: Explain result should match collected result after view change") {
+    withTempView("test", "test2", "tmp") {
+      spark.range(10).createOrReplaceTempView("test")
+      spark.range(5).createOrReplaceTempView("test2")
+      spark.sql("select * from test").createOrReplaceTempView("tmp")
+      val df = spark.sql("select * from tmp")
+      spark.sql("select * from test2").createOrReplaceTempView("tmp")
+
+      val captured = new ByteArrayOutputStream()
+      Console.withOut(captured) {
+        df.explain()
+      }
+      checkAnswer(df, spark.range(10).toDF)
+      assert(captured.toString().contains("Range (0, 10, step=1, splits=2)"))
     }
   }
 }

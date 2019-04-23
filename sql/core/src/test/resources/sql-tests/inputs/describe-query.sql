@@ -22,6 +22,10 @@ DESCRIBE
      insert into desc_temp1 select *
      insert into desc_temp2 select *;
 
+-- Explain
+EXPLAIN DESC QUERY SELECT * FROM desc_temp2 WHERE key > 0;
+EXPLAIN EXTENDED DESC WITH s AS (SELECT 'hello' as col1) SELECT * FROM s;
+
 -- cleanup
 DROP TABLE desc_temp1;
 DROP TABLE desc_temp2;
