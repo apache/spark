@@ -93,7 +93,7 @@ abstract class SparkFunSuite
   }
 
   /**
-   * Note: this method doesn't support [[BeforeAndAfter]]. You must use [[BeforeAndAfterEach]] to
+   * Note: this method doesn't support `BeforeAndAfter`. You must use `BeforeAndAfterEach` to
    * set up and tear down resources.
    */
   def testRetry(s: String, n: Int = 2)(body: => Unit): Unit = {
@@ -105,7 +105,7 @@ abstract class SparkFunSuite
   }
 
   /**
-   * Note: this method doesn't support [[BeforeAndAfter]]. You must use [[BeforeAndAfterEach]] to
+   * Note: this method doesn't support `BeforeAndAfter`. You must use `BeforeAndAfterEach` to
    * set up and tear down resources.
    */
   def retry[T](n: Int)(body: => T): T = {
