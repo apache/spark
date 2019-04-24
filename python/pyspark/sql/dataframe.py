@@ -257,9 +257,12 @@ class DataFrame(object):
         plan. The options are mutually exclusive: at most one can be
         true.
 
-        :param extended: boolean, default ``False``. If ``True``, prints the logical plans as well as the physical plans.
-        :param codegen: boolean, default ``False``. If ``True``, prints the generated code for whole-stage codegen.
-        :param cost: boolean, default ``False``. If ``False``, prints the optimized logical plan with operator costs.
+        :param extended: boolean, default ``False``. If ``True``, prints the logical plans as well
+            as the physical plans.
+        :param codegen: boolean, default ``False``. If ``True``, prints the generated code for
+            whole-stage codegen.
+        :param cost: boolean, default ``False``. If ``False``, prints the optimized logical plan
+            with operator costs.
 
         >>> df.explain()
         == Physical Plan ==
