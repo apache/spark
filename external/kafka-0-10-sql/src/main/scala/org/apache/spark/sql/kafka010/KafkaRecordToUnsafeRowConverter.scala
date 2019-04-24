@@ -30,6 +30,8 @@ private[kafka010] class KafkaRecordToUnsafeRowConverter {
 
   def toUnsafeRow(record: ConsumerRecord[Array[Byte], Array[Byte]]): UnsafeRow = {
     rowWriter.reset()
+    rowWriter.unsetNullAt(0)
+    rowWriter.unsetNullAt(1)
 
     if (record.key == null) {
       rowWriter.setNullAt(0)

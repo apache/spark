@@ -350,6 +350,17 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     props
   }
 
+  /** Call `f` with a `KafkaProducer`. */
+  def withProducer(f: KafkaProducer[String, String] => Unit): Unit = {
+    val props = producerConfiguration
+    val producer = new KafkaProducer[String, String](props)
+    try {
+      f(producer)
+    } finally {
+      producer.close()
+    }
+  }
+
   /** Call `f` with a `KafkaProducer` that has initialized transactions. */
   def withTranscationalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
     val props = producerConfiguration
