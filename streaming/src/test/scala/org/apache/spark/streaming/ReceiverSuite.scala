@@ -121,7 +121,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     }
 
     // Verify that stopping actually stops the thread
-    failAfter(100 millis) {
+    failAfter(1.second) {
       receiver.stop("test")
       assert(receiver.isStopped)
       assert(!receiver.otherThread.isAlive)
