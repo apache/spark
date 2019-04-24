@@ -426,8 +426,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 2, 3).toDS().as("a")
     val ds2 = Seq(1, 2).toDS().as("b")
 
+    val joined = ds1.joinWith(ds2, $"a.value" === $"b.value", "inner")
+
+    val expectedSchema = StructType(Seq(
+      StructField("_1", IntegerType, nullable = false),
+      StructField("_2", IntegerType, nullable = false)
+    ))
+
+    assert(joined.schema === expectedSchema)
+
     checkDataset(
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "inner"),
+      joined,
       (1, 1), (2, 2))
   }
 
@@ -435,8 +444,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 1, 2).toDS()
     val ds2 = Seq(("a", 1), ("b", 2)).toDS()
 
+    val joined = ds1.joinWith(ds2, $"value" === $"_2")
+
+    // This is an inner join, so both fields are non-nullable
+    val expectedSchema = StructType(Seq(
+      StructField("_1", IntegerType, nullable = false),
+      StructField("_2",
+        StructType(Seq(
+          StructField("_1", StringType),
+          StructField("_2", IntegerType, nullable = false)
+        )), nullable = false)
+    ))
+    assert(joined.schema === expectedSchema)
+
     checkDataset(
-      ds1.joinWith(ds2, $"value" === $"_2"),
+      joined,
       (1, ("a", 1)), (1, ("a", 1)), (2, ("b", 2)))
   }
 
@@ -483,6 +505,28 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds1.joinWith(ds2, $"a.value" === $"b.value", "anti")
     }.getMessage
     assert(e4.contains("Invalid join type in joinWith: " + LeftAnti.sql))
+  }
+
+  test("joinWith left_outer") {
+    val ds1 = Seq(1, 1, 2).toDS()
+    val ds2 = Seq(("a", 1), ("b", 3)).toDS()
+
+    val joined = ds1.joinWith(ds2, $"value" === $"_2", "left_outer")
+
+    val expectedSchema = StructType(Seq(
+      StructField("_1", IntegerType, nullable = false),
+      // This is a left join, so the right output is nullable:
+      StructField("_2",
+        StructType(Seq(
+          StructField("_1", StringType),
+          StructField("_2", IntegerType, nullable = false)
+        )))
+    ))
+    assert(joined.schema === expectedSchema)
+
+    checkDataset(
+      joined,
+      (1, ("a", 1)), (1, ("a", 1)), (2, null))
   }
 
   test("groupBy function, keys") {
