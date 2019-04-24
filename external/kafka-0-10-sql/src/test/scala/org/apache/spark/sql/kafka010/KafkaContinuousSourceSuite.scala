@@ -170,52 +170,8 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
     }
   }
 
-  test("read kafka record containing null key/values") {
-    val table = "kafka_null_key_value_source_test"
-     withTable(table) {
-      val topic = newTopic()
-      testUtils.createTopic(topic)
-      testUtils.withProducer { producer =>
-        val df = spark
-          .readStream
-          .format("kafka")
-          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-          .option("startingOffsets", "earliest")
-          .option("subscribe", topic)
-          .load()
-          .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-          .as[(String, String)]
-
-        val q = df
-          .writeStream
-          .format("memory")
-          .queryName(table)
-          .trigger(ContinuousTrigger(100))
-          .start()
-        try {
-          val expected1 = (1 to 5).map { _ =>
-            producer.send(new ProducerRecord[String, String](topic, null, null)).get()
-            (null, null)
-          }.asInstanceOf[Seq[(String, String)]]
-
-          val expected2 = (6 to 10).map { i =>
-            producer.send(new ProducerRecord[String, String](topic, i.toString, null)).get()
-            (i.toString, null)
-          }.asInstanceOf[Seq[(String, String)]]
-
-          val expected3 = (11 to 15).map { i =>
-            producer.send(new ProducerRecord[String, String](topic, null, i.toString)).get()
-            (null, i.toString)
-          }.asInstanceOf[Seq[(String, String)]]
-
-          eventually(timeout(streamingTimeout)) {
-            checkAnswer(spark.table(table), (expected1 ++ expected2 ++ expected3).toDF())
-          }
-        } finally {
-          q.stop()
-        }
-      }
-    }
+  test(s"SPARK-27494: read kafka record containing null key/values in continuous mode") {
+    testNullableKeyValue(ContinuousTrigger(100))
   }
 }
 

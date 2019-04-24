@@ -111,10 +111,6 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     write(ordinal, 0L);
   }
 
-  public void unsetNullAt(int ordinal) {
-    BitSetMethods.unset(getBuffer(), startingOffset, ordinal);
-  }
-
   @Override
   public void setNull1Bytes(int ordinal) {
     setNullAt(ordinal);
