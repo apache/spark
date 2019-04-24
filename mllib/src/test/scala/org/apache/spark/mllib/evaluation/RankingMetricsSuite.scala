@@ -46,6 +46,7 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(map ~== 0.355026 absTol eps)
 
     assert(metrics.meanAveragePrecisionAt(1) ~== 0.333334 absTol eps)
+
     assert(metrics.meanAveragePrecisionAt(2) ~== 0.25 absTol eps)
     assert(metrics.meanAveragePrecisionAt(3) ~== 0.24074 absTol eps)
 
