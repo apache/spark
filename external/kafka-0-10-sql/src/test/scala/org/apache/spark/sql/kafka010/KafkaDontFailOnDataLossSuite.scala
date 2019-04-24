@@ -99,7 +99,7 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
     testUtils.createTopic(topic, partitions = 1)
     testUtils.sendMessages(topic, (0 until 50).map(_.toString).toArray)
 
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(1.minute)) {
       assert(
         testUtils.getEarliestOffsets(Set(topic)).head._2 > 0,
         "Kafka didn't delete records after 1 minute")

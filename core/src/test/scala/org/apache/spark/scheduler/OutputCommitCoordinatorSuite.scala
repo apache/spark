@@ -22,7 +22,6 @@ import java.util.Date
 import java.util.concurrent.TimeoutException
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
@@ -159,7 +158,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {
-      ThreadUtils.awaitResult(futureAction, 5 seconds)
+      ThreadUtils.awaitResult(futureAction, 5.seconds)
     }
     assert(tempDir.list().size === 0)
   }

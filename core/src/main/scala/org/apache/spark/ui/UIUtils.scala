@@ -109,12 +109,12 @@ private[spark] object UIUtils extends Logging {
         }
       }
       // if time is more than a year
-      return s"$yearString $weekString $dayString"
+      s"$yearString $weekString $dayString"
     } catch {
       case e: Exception =>
         logError("Error converting time to string", e)
         // if there is some error, return blank string
-        return ""
+        ""
     }
   }
 
@@ -172,7 +172,7 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
-    <script src={prependBaseUri(request, "/static/jquery-1.11.1.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery-1.12.4.min.js")}></script>
     <script src={prependBaseUri(request, "/static/vis.min.js")}></script>
     <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
@@ -195,14 +195,14 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet" href={prependBaseUri(request,
-      "/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+      "/static/jquery.dataTables.1.10.18.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/dataTables.bootstrap.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.4.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.18.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
     <script src={prependBaseUri(request, "/static/dataTables.bootstrap.min.js")}></script>
@@ -336,7 +336,7 @@ private[spark] object UIUtils extends Logging {
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
         <ul class="unstyled">
-          { header.split("\n").map { case t => <li> {t} </li> } }
+          { header.split("\n").map(t => <li> {t} </li>) }
         </ul>
       } else {
         Text(header)
@@ -446,7 +446,7 @@ private[spark] object UIUtils extends Logging {
    * the whole string will rendered as a simple escaped text.
    *
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
-   * attempts to embed links outside Spark UI, or other tags like {@code <script>} will cause in
+   * attempts to embed links outside Spark UI, or other tags like &lt;script&gt; will cause in
    * the whole description to be treated as plain text.
    *
    * @param desc        the original job or stage description string, which may contain html tags.
@@ -458,7 +458,6 @@ private[spark] object UIUtils extends Logging {
    *         is true, and an Elem otherwise.
    */
   def makeDescription(desc: String, basePathUri: String, plainText: Boolean = false): NodeSeq = {
-    import scala.language.postfixOps
 
     // If the description can be parsed as HTML and has only relative links, then render
     // as HTML, otherwise render as escaped string
@@ -468,9 +467,7 @@ private[spark] object UIUtils extends Logging {
 
       // Verify that this has only anchors and span (we are wrapping in span)
       val allowedNodeLabels = Set("a", "span", "br")
-      val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
-        allowedNodeLabels.contains(node.label)
-      }
+      val illegalNodes = (xml \\ "_").filterNot(node => allowedNodeLabels.contains(node.label))
       if (illegalNodes.nonEmpty) {
         throw new IllegalArgumentException(
           "Only HTML anchors allowed in job descriptions\n" +
@@ -491,8 +488,8 @@ private[spark] object UIUtils extends Logging {
           new RewriteRule() {
             override def transform(n: Node): Seq[Node] = {
               n match {
-                case e: Elem if e.child isEmpty => Text(e.text)
-                case e: Elem if e.child nonEmpty => Text(e.child.flatMap(transform).text)
+                case e: Elem if e.child.isEmpty => Text(e.text)
+                case e: Elem => Text(e.child.flatMap(transform).text)
                 case _ => n
               }
             }
@@ -503,7 +500,7 @@ private[spark] object UIUtils extends Logging {
           new RewriteRule() {
             override def transform(n: Node): Seq[Node] = {
               n match {
-                case e: Elem if e \ "@href" nonEmpty =>
+                case e: Elem if (e \ "@href").nonEmpty =>
                   val relativePath = e.attribute("href").get.toString
                   val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
                   e % Attribute(null, "href", fullUri, Null)

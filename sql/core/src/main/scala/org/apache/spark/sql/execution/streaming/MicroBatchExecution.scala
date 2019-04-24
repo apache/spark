@@ -514,7 +514,7 @@ class MicroBatchExecution(
           ct.dataType, Some("Dummy TimeZoneId"))
       case cd: CurrentDate =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
-          cd.dataType, Some("UTC"))
+          cd.dataType, cd.timeZoneId)
     }
 
     val triggerLogicalPlan = sink match {

@@ -374,7 +374,7 @@ object CatalogTable {
 /**
  * This class of statistics is used in [[CatalogTable]] to interact with metastore.
  * We define this new class instead of directly using [[Statistics]] here because there are no
- * concepts of attributes or broadcast hint in catalog.
+ * concepts of attributes in catalog.
  */
 case class CatalogStatistics(
     sizeInBytes: BigInt,

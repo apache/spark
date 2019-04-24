@@ -22,7 +22,7 @@ import java.util.{Locale, Timer, TimerTask}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.{ArrayBuffer, BitSet, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark._
@@ -101,9 +101,6 @@ private[spark] class TaskSchedulerImpl(
   // Protected by `this`
   val taskIdToExecutorId = new HashMap[Long, String]
 
-  // Protected by `this`
-  private[scheduler] val stageIdToFinishedPartitions = new HashMap[Int, BitSet]
-
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
   private val starvationTimer = new Timer(true)
@@ -157,6 +154,8 @@ private[spark] class TaskSchedulerImpl(
   private lazy val barrierSyncTimeout = conf.get(config.BARRIER_SYNC_TIMEOUT)
 
   private[scheduler] var barrierCoordinator: RpcEndpoint = null
+
+  protected val defaultRackValue: Option[String] = None
 
   private def maybeInitBarrierCoordinator(): Unit = {
     if (barrierCoordinator == null) {
@@ -250,20 +249,7 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    // only create a BitSet once for a certain stage since we only remove
-    // that stage when an active TaskSetManager succeed.
-    stageIdToFinishedPartitions.getOrElseUpdate(taskSet.stageId, new BitSet)
-    val tsm = new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
-    // TaskSet got submitted by DAGScheduler may have some already completed
-    // tasks since DAGScheduler does not always know all the tasks that have
-    // been completed by other tasksets when completing a stage, so we mark
-    // those tasks as finished here to avoid launching duplicate tasks, while
-    // holding the TaskSchedulerImpl lock.
-    // See SPARK-25250 and `markPartitionCompletedInAllTaskSets()`
-    stageIdToFinishedPartitions.get(taskSet.stageId).foreach {
-      finishedPartitions => finishedPartitions.foreach(tsm.markPartitionCompleted(_, None))
-    }
-    tsm
+    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -394,9 +380,10 @@ private[spark] class TaskSchedulerImpl(
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
         newExecAvail = true
       }
-      for (rack <- getRackForHost(o.host)) {
-        hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
-      }
+    }
+    val hosts = offers.map(_.host).toSet.toSeq
+    for ((host, Some(rack)) <- hosts.zip(getRacksForHosts(hosts))) {
+      hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += host
     }
 
     // Before making any offers, remove any nodes from the blacklist whose blacklist has expired. Do
@@ -830,8 +817,25 @@ private[spark] class TaskSchedulerImpl(
     blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(Set.empty)
   }
 
-  // By default, rack is unknown
-  def getRackForHost(value: String): Option[String] = None
+  /**
+   * Get the rack for one host.
+   *
+   * Note that [[getRacksForHosts]] should be preferred when possible as that can be much
+   * more efficient.
+   */
+  def getRackForHost(host: String): Option[String] = {
+    getRacksForHosts(Seq(host)).head
+  }
+
+  /**
+   * Get racks for multiple hosts.
+   *
+   * The returned Sequence will be the same length as the hosts argument and can be zipped
+   * together with the hosts argument.
+   */
+  def getRacksForHosts(hosts: Seq[String]): Seq[Option[String]] = {
+    hosts.map(_ => defaultRackValue)
+  }
 
   private def waitBackendReady(): Unit = {
     if (backend.isReady) {
@@ -866,31 +870,19 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
-   * Marks the task has completed in all TaskSetManagers(active / zombie) for the given stage.
+   * Marks the task has completed in all TaskSetManagers for the given stage.
    *
    * After stage failure and retry, there may be multiple TaskSetManagers for the stage.
    * If an earlier attempt of a stage completes a task, we should ensure that the later attempts
    * do not also submit those same tasks.  That also means that a task completion from an earlier
    * attempt can lead to the entire stage getting marked as successful.
-   * And there is also the possibility that the DAGScheduler submits another taskset at the same
-   * time as we're marking a task completed here -- that taskset would have a task for a partition
-   * that was already completed. We maintain the set of finished partitions in
-   * stageIdToFinishedPartitions, protected by this, so we can detect those tasks when the taskset
-   * is submitted. See SPARK-25250 for more details.
-   *
-   * note: this method must be called with a lock on this.
    */
   private[scheduler] def markPartitionCompletedInAllTaskSets(
       stageId: Int,
       partitionId: Int,
       taskInfo: TaskInfo) = {
-    // if we do not find a BitSet for this stage, which means an active TaskSetManager
-    // has already succeeded and removed the stage.
-    stageIdToFinishedPartitions.get(stageId).foreach{
-      finishedPartitions => finishedPartitions += partitionId
-    }
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
-      tsm.markPartitionCompleted(partitionId, Some(taskInfo))
+      tsm.markPartitionCompleted(partitionId, taskInfo)
     }
   }
 

@@ -594,7 +594,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     var rdd: RDD[_] = new MyRDD(sc, 1, Nil)
     (1 to 30).foreach(_ => rdd = rdd.zip(rdd))
     // getPreferredLocs runs quickly, indicating that exponential graph traversal is avoided.
-    failAfter(10 seconds) {
+    failAfter(10.seconds) {
       val preferredLocs = scheduler.getPreferredLocs(rdd, 0)
       // No preferred locations are returned.
       assert(preferredLocs.length === 0)
