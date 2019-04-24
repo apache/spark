@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
+
 /**
  * Internal implementation of the user-facing `Catalog`.
  */
@@ -442,8 +443,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def uncacheTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val cascade = !sessionCatalog.isTemporaryTable(tableIdent)
-    val wasCached = Try(sparkSession.catalog.isCached(tableIdent.unquotedString)).getOrElse(false)
-    if (wasCached) {
+    if (isCached(tableName)) {
       sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableIdent), cascade)
       sparkSession.sessionState.catalog.dropTempView(tableIdent.table)
     }
