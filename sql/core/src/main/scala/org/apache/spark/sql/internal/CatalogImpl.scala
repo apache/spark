@@ -19,7 +19,6 @@ package org.apache.spark.sql.internal
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
