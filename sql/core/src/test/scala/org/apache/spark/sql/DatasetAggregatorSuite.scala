@@ -394,9 +394,9 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 3, 2, 5).toDS()
     assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
     val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
-    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
+    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable)
     val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
-    assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
+    assert(ds3.select(NameAgg.toColumn).schema.head.nullable)
   }
 
   test("SPARK-18147: very complex aggregator result type") {

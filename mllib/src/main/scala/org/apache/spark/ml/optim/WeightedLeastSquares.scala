@@ -133,7 +133,7 @@ private[ml] class WeightedLeastSquares(
         return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA, Array(0D))
       } else {
         require(!(regParam > 0.0 && standardizeLabel), "The standard deviation of the label is " +
-          "zero. Model cannot be regularized with standardization=true")
+          "zero. Model cannot be regularized when labels are standardized.")
         instr.logWarning(s"The standard deviation of the label is zero. Consider setting " +
           s"fitIntercept=true.")
       }

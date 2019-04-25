@@ -28,24 +28,23 @@ import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
 
-import org.apache.kafka.clients.admin.{AdminClient, ConsumerGroupListing}
-import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
-import org.apache.spark.sql.execution.datasources.v2.{OldStreamingDataSourceV2Relation, StreamingDataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
 
@@ -118,17 +117,10 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
       val sources: Seq[BaseStreamingSource] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case r: StreamingDataSourceV2Relation
-              if r.stream.isInstanceOf[KafkaMicroBatchStream] =>
-            r.stream.asInstanceOf[KafkaMicroBatchStream]
-        } ++ (query.get.lastExecution match {
-          case null => Seq()
-          case e => e.logical.collect {
-            case r: OldStreamingDataSourceV2Relation
-                if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-              r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
-          }
-        })
+          case r: StreamingDataSourceV2Relation if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
+              r.stream.isInstanceOf[KafkaContinuousStream] =>
+            r.stream
+        }
       }.distinct
 
       if (sources.isEmpty) {
@@ -1126,7 +1118,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val dsOptions = new DataSourceOptions(options.asJava)
+        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
         val table = provider.getTable(dsOptions)
         val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
         val inputPartitions = stream.planInputPartitions(

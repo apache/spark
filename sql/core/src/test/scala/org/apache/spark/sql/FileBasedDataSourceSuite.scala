@@ -329,80 +329,98 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
+      // TODO: test file source V2 after write path is fixed.
+      Seq(true).foreach { useV1 =>
+        val useV1List = if (useV1) {
+          "csv,json,orc"
+        } else {
+          ""
+        }
+        def validateErrorMessage(msg: String): Unit = {
+          val msg1 = "cannot save interval data type into external storage."
+          val msg2 = "data source does not support calendarinterval data type."
+          assert(msg.toLowerCase(Locale.ROOT).contains(msg1) ||
+            msg.toLowerCase(Locale.ROOT).contains(msg2))
+        }
 
-      // write path
-      Seq("csv", "json", "parquet", "orc").foreach { format =>
-        var msg = intercept[AnalysisException] {
-          sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.contains("Cannot save interval data type into external storage."))
+        withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> useV1List) {
+          // write path
+          Seq("csv", "json", "parquet", "orc").foreach { format =>
+            val msg = intercept[AnalysisException] {
+              sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
+            }.getMessage
+            validateErrorMessage(msg)
+          }
 
-        msg = intercept[AnalysisException] {
-          spark.udf.register("testType", () => new IntervalData())
-          sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support calendarinterval data type."))
-      }
+          // read path
+          Seq("parquet", "csv").foreach { format =>
+            var msg = intercept[AnalysisException] {
+              val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+              spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+              spark.read.schema(schema).format(format).load(tempDir).collect()
+            }.getMessage
+            validateErrorMessage(msg)
 
-      // read path
-      Seq("parquet", "csv").foreach { format =>
-        var msg = intercept[AnalysisException] {
-          val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
-          spark.range(1).write.format(format).mode("overwrite").save(tempDir)
-          spark.read.schema(schema).format(format).load(tempDir).collect()
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support calendarinterval data type."))
-
-        msg = intercept[AnalysisException] {
-          val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
-          spark.range(1).write.format(format).mode("overwrite").save(tempDir)
-          spark.read.schema(schema).format(format).load(tempDir).collect()
-        }.getMessage
-        assert(msg.toLowerCase(Locale.ROOT)
-          .contains(s"$format data source does not support calendarinterval data type."))
+            msg = intercept[AnalysisException] {
+              val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+              spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+              spark.read.schema(schema).format(format).load(tempDir).collect()
+            }.getMessage
+            validateErrorMessage(msg)
+          }
+        }
       }
     }
   }
 
   test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
-    // TODO(SPARK-26744): support data type validating in V2 data source, and test V2 as well.
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "orc") {
-      withTempDir { dir =>
-        val tempDir = new File(dir, "files").getCanonicalPath
+    // TODO: test file source V2 after write path is fixed.
+    Seq(true).foreach { useV1 =>
+      val useV1List = if (useV1) {
+        "csv,orc"
+      } else {
+        ""
+      }
+      def errorMessage(format: String): String = {
+        s"$format data source does not support null data type."
+      }
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1List,
+        SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> useV1List) {
+        withTempDir { dir =>
+          val tempDir = new File(dir, "files").getCanonicalPath
 
-        Seq("parquet", "csv", "orc").foreach { format =>
-          // write path
-          var msg = intercept[AnalysisException] {
-            sql("select null").write.format(format).mode("overwrite").save(tempDir)
-          }.getMessage
-          assert(msg.toLowerCase(Locale.ROOT)
-            .contains(s"$format data source does not support null data type."))
+          Seq("parquet", "csv", "orc").foreach { format =>
+            // write path
+            var msg = intercept[AnalysisException] {
+              sql("select null").write.format(format).mode("overwrite").save(tempDir)
+            }.getMessage
+            assert(msg.toLowerCase(Locale.ROOT)
+              .contains(errorMessage(format)))
 
-          msg = intercept[AnalysisException] {
-            spark.udf.register("testType", () => new NullData())
-            sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
-          }.getMessage
-          assert(msg.toLowerCase(Locale.ROOT)
-            .contains(s"$format data source does not support null data type."))
+            msg = intercept[AnalysisException] {
+              spark.udf.register("testType", () => new NullData())
+              sql("select testType()").write.format(format).mode("overwrite").save(tempDir)
+            }.getMessage
+            assert(msg.toLowerCase(Locale.ROOT)
+              .contains(errorMessage(format)))
 
-          // read path
-          msg = intercept[AnalysisException] {
-            val schema = StructType(StructField("a", NullType, true) :: Nil)
-            spark.range(1).write.format(format).mode("overwrite").save(tempDir)
-            spark.read.schema(schema).format(format).load(tempDir).collect()
-          }.getMessage
-          assert(msg.toLowerCase(Locale.ROOT)
-            .contains(s"$format data source does not support null data type."))
+            // read path
+            msg = intercept[AnalysisException] {
+              val schema = StructType(StructField("a", NullType, true) :: Nil)
+              spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+              spark.read.schema(schema).format(format).load(tempDir).collect()
+            }.getMessage
+            assert(msg.toLowerCase(Locale.ROOT)
+              .contains(errorMessage(format)))
 
-          msg = intercept[AnalysisException] {
-            val schema = StructType(StructField("a", new NullUDT(), true) :: Nil)
-            spark.range(1).write.format(format).mode("overwrite").save(tempDir)
-            spark.read.schema(schema).format(format).load(tempDir).collect()
-          }.getMessage
-          assert(msg.toLowerCase(Locale.ROOT)
-            .contains(s"$format data source does not support null data type."))
+            msg = intercept[AnalysisException] {
+              val schema = StructType(StructField("a", new NullUDT(), true) :: Nil)
+              spark.range(1).write.format(format).mode("overwrite").save(tempDir)
+              spark.read.schema(schema).format(format).load(tempDir).collect()
+            }.getMessage
+            assert(msg.toLowerCase(Locale.ROOT)
+              .contains(errorMessage(format)))
+          }
         }
       }
     }
@@ -453,22 +471,84 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   test("SPARK-25237 compute correct input metrics in FileScanRDD") {
-    withTempPath { p =>
-      val path = p.getAbsolutePath
-      spark.range(1000).repartition(1).write.csv(path)
-      val bytesReads = new mutable.ArrayBuffer[Long]()
-      val bytesReadListener = new SparkListener() {
-        override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-          bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+    // TODO: Test CSV V2 as well after it implements [[SupportsReportStatistics]].
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "csv") {
+      withTempPath { p =>
+        val path = p.getAbsolutePath
+        spark.range(1000).repartition(1).write.csv(path)
+        val bytesReads = new mutable.ArrayBuffer[Long]()
+        val bytesReadListener = new SparkListener() {
+          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+            bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+          }
+        }
+        sparkContext.addSparkListener(bytesReadListener)
+        try {
+          spark.read.csv(path).limit(1).collect()
+          sparkContext.listenerBus.waitUntilEmpty(1000L)
+          assert(bytesReads.sum === 7860)
+        } finally {
+          sparkContext.removeSparkListener(bytesReadListener)
         }
       }
-      sparkContext.addSparkListener(bytesReadListener)
-      try {
-        spark.read.csv(path).limit(1).collect()
-        sparkContext.listenerBus.waitUntilEmpty(1000L)
-        assert(bytesReads.sum === 7860)
-      } finally {
-        sparkContext.removeSparkListener(bytesReadListener)
+    }
+  }
+
+  test("Do not use cache on overwrite") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          val path = dir.toString
+          spark.range(1000).write.mode("overwrite").orc(path)
+          val df = spark.read.orc(path).cache()
+          assert(df.count() == 1000)
+          spark.range(10).write.mode("overwrite").orc(path)
+          assert(df.count() == 10)
+          assert(spark.read.orc(path).count() == 10)
+        }
+      }
+    }
+  }
+
+  test("Do not use cache on append") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          val path = dir.toString
+          spark.range(1000).write.mode("append").orc(path)
+          val df = spark.read.orc(path).cache()
+          assert(df.count() == 1000)
+          spark.range(10).write.mode("append").orc(path)
+          assert(df.count() == 1010)
+          assert(spark.read.orc(path).count() == 1010)
+        }
+      }
+    }
+  }
+
+  test("UDF input_file_name()") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(10).write.orc(path)
+          val row = spark.read.orc(path).select(input_file_name).first()
+          assert(row.getString(0).contains(path))
+        }
+      }
+    }
+  }
+
+  test("Return correct results when data columns overlap with partition columns") {
+    Seq("parquet", "orc", "json").foreach { format =>
+      withTempPath { path =>
+        val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
+        Seq((1, 2, 3, 4, 5)).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+          .write.format(format).save(tablePath.getCanonicalPath)
+
+        val df = spark.read.format(format).load(path.getCanonicalPath)
+          .select("CoL1", "Col2", "CoL5", "CoL3")
+        checkAnswer(df, Row("a", 2, "e", "c"))
       }
     }
   }

@@ -90,7 +90,11 @@ private[hive] class TestHiveExternalCatalog(
 private[hive] class TestHiveSharedState(
     sc: SparkContext,
     hiveClient: Option[HiveClient] = None)
-  extends SharedState(sc) {
+  extends SharedState(sc, initialConfigs = Map.empty[String, String]) {
+
+  // The set of loaded tables should be kept in shared state, since there may be multiple sessions
+  // created that want to use the same tables.
+  val loadedTables = new collection.mutable.HashSet[String]
 
   override lazy val externalCatalog: ExternalCatalogWithListener = {
     new ExternalCatalogWithListener(new TestHiveExternalCatalog(
@@ -116,6 +120,9 @@ class TestHiveContext(
     @transient override val sparkSession: TestHiveSparkSession)
   extends SQLContext(sparkSession) {
 
+  val HIVE_CONTRIB_JAR: String = "hive-contrib-0.13.1.jar"
+  val HIVE_HCATALOG_CORE_JAR: String = "hive-hcatalog-core-0.13.1.jar"
+
   /**
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
    * when running in the JVM, i.e. it needs to be false when calling from Python.
@@ -140,6 +147,14 @@ class TestHiveContext(
 
   def getHiveFile(path: String): File = {
     sparkSession.getHiveFile(path)
+  }
+
+  def getHiveContribJar(): File = {
+    sparkSession.getHiveFile(HIVE_CONTRIB_JAR)
+  }
+
+  def getHiveHcatalogCoreJar(): File = {
+    sparkSession.getHiveFile(HIVE_HCATALOG_CORE_JAR)
   }
 
   def loadTestTable(name: String): Unit = {
@@ -480,14 +495,12 @@ private[hive] class TestHiveSparkSession(
     hiveQTestUtilTables.foreach(registerTestTable)
   }
 
-  private val loadedTables = new collection.mutable.HashSet[String]
-
-  def getLoadedTables: collection.mutable.HashSet[String] = loadedTables
+  def getLoadedTables: collection.mutable.HashSet[String] = sharedState.loadedTables
 
   def loadTestTable(name: String) {
-    if (!(loadedTables contains name)) {
+    if (!sharedState.loadedTables.contains(name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
-      loadedTables += name
+      sharedState.loadedTables += name
       logDebug(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
@@ -534,7 +547,7 @@ private[hive] class TestHiveSparkSession(
       warehouseDir.mkdir()
 
       sharedState.cacheManager.clearCache()
-      loadedTables.clear()
+      sharedState.loadedTables.clear()
       sessionState.catalog.reset()
       metadataHive.reset()
 

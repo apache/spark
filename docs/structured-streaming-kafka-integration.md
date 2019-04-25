@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Structured Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or higher)
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Structured Streaming integration for Kafka 0.10 to read data from and write data to Kafka.
@@ -265,7 +280,7 @@ Each row in the source has the following schema:
 </tr>
 <tr>
   <td>timestamp</td>
-  <td>long</td>
+  <td>timestamp</td>
 </tr>
 <tr>
   <td>timestampType</td>
@@ -692,6 +707,10 @@ Delegation token uses `SCRAM` login module for authentication and because of tha
 must match with Kafka broker configuration.
 
 When delegation token is available on an executor it can be overridden with JAAS login configuration.
+
+#### Caveats
+
+- Obtaining delegation token for proxy user is not yet supported ([KAFKA-6945](https://issues.apache.org/jira/browse/KAFKA-6945)).
 
 ### JAAS login configuration
 

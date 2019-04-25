@@ -41,6 +41,8 @@ private[spark] abstract class MemoryManager(
     onHeapStorageMemory: Long,
     onHeapExecutionMemory: Long) extends Logging {
 
+  require(onHeapExecutionMemory > 0, "onHeapExecutionMemory must be > 0")
+
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
   @GuardedBy("this")
@@ -253,7 +255,7 @@ private[spark] abstract class MemoryManager(
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val default = math.min(maxPageSize, math.max(minPageSize, size))
-    conf.getSizeAsBytes("spark.buffer.pageSize", default)
+    conf.get(BUFFER_PAGESIZE).getOrElse(default)
   }
 
   /**

@@ -38,12 +38,40 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
     attr("key22") -> ColumnStat(distinctCount = Some(2), min = Some(10), max = Some(20),
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
     attr("key31") -> ColumnStat(distinctCount = Some(0), min = None, max = None,
-      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+    attr("key32") -> ColumnStat(distinctCount = Some(0), min = None, max = None,
+      nullCount = Some(4), avgLen = Some(4), maxLen = Some(4)),
+    attr("key33") -> ColumnStat(distinctCount = Some(2), min = None, max = None,
+      nullCount = Some(2), avgLen = Some(4), maxLen = Some(4))
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
   private val nameToColInfo: Map[String, (Attribute, ColumnStat)] =
     columnInfo.map(kv => kv._1.name -> kv)
+
+  test("SPARK-26894: propagate child stats for aliases in Aggregate") {
+    val tableColumns = Seq("key11", "key12")
+    val groupByColumns = Seq("key11")
+    val attributes = groupByColumns.map(nameToAttr)
+
+    val rowCount = 2
+    val child = StatsTestPlan(
+      outputList = tableColumns.map(nameToAttr),
+      rowCount,
+      // rowCount * (overhead + column size)
+      size = Some(4 * (8 + 4)),
+      attributeStats = AttributeMap(tableColumns.map(nameToColInfo)))
+
+    val testAgg = Aggregate(
+      groupingExpressions = attributes,
+      aggregateExpressions = Seq(Alias(nameToAttr("key12"), "abc")()),
+      child)
+
+    val expectedColStats = Seq("abc" -> nameToColInfo("key12")._2)
+    val expectedAttrStats = toAttributeMap(expectedColStats, testAgg)
+
+    assert(testAgg.stats.attributeStats == expectedAttrStats)
+  }
 
   test("set an upper bound if the product of ndv's of group-by columns is too large") {
     // Suppose table1 (key11 int, key12 int) has 4 records: (1, 10), (1, 20), (2, 30), (2, 40)
@@ -90,6 +118,23 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
       tableRowCount = 0,
       groupByColumns = Seq("key31"),
       expectedOutputRowCount = 0)
+  }
+
+  test("group-by column with only null value") {
+    checkAggStats(
+      tableColumns = Seq("key22", "key32"),
+      tableRowCount = 6,
+      groupByColumns = Seq("key22", "key32"),
+      expectedOutputRowCount = nameToColInfo("key22")._2.distinctCount.get)
+  }
+
+  test("group-by column with null value") {
+    checkAggStats(
+      tableColumns = Seq("key21", "key33"),
+      tableRowCount = 6,
+      groupByColumns = Seq("key21", "key33"),
+      expectedOutputRowCount = nameToColInfo("key21")._2.distinctCount.get *
+        (nameToColInfo("key33")._2.distinctCount.get + 1))
   }
 
   test("non-cbo estimation") {

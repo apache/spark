@@ -23,7 +23,7 @@ import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
-import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
+import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED}
 import org.apache.spark.memory._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -97,7 +97,7 @@ private[execution] object HashedRelation {
         new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
           Long.MaxValue,
-          Long.MaxValue,
+          Long.MaxValue / 2,
           1),
         0)
     }
@@ -230,12 +230,12 @@ private[joins] class UnsafeHashedRelation(
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
         Long.MaxValue,
-        Long.MaxValue,
+        Long.MaxValue / 2,
         1),
       0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
-      .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
+      .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
 
     // TODO(josh): We won't need this dummy memory manager after future refactorings; revisit
     // during code review
@@ -285,8 +285,7 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager: TaskMemoryManager): HashedRelation = {
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
-      .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
-
+      .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
     val binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       // Only 70% of the slots can be used before growing, more capacity help to reduce collision
@@ -395,7 +394,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
         new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
           Long.MaxValue,
-          Long.MaxValue,
+          Long.MaxValue / 2,
           1),
         0),
       0)

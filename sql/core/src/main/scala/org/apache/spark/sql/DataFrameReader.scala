@@ -37,9 +37,11 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -176,7 +178,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    option(DataSourceOptions.PATH_KEY, path).load(Seq.empty: _*)
+    option("path", path).load(Seq.empty: _*)
   }
 
   /**
@@ -198,28 +200,31 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val cls = lookupCls.newInstance() match {
       case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
         useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
-        f.fallBackFileFormat
+        f.fallbackFileFormat
       case _ => lookupCls
     }
 
     if (classOf[TableProvider].isAssignableFrom(cls)) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        ds = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = {
+        source = provider, conf = sparkSession.sessionState.conf)
+      val pathsOption = if (paths.isEmpty) {
+        None
+      } else {
         val objectMapper = new ObjectMapper()
-        DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
+        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
-      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "true"
-      val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption + checkFilesExistsOption
-      val dsOptions = new DataSourceOptions(finalOptions.asJava)
+
+      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
+      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val table = userSpecifiedSchema match {
         case Some(schema) => provider.getTable(dsOptions, schema)
         case _ => provider.getTable(dsOptions)
       }
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       table match {
-        case _: SupportsBatchRead =>
-          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
+        case _: SupportsRead if table.supports(BATCH_READ) =>
+          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
 
         case _ => loadV1Source(paths: _*)
       }
@@ -468,8 +473,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         input => rawParser.parse(input, createParser, UTF8String.fromString),
         parsedOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord,
-        parsedOptions.multiLine)
+        parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
@@ -509,7 +513,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val filteredLines: Dataset[String] =
       CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
-    val maybeFirstLine: Option[String] = filteredLines.take(1).headOption
+
+    // For performance, short-circuit the collection of the first line when it won't be used:
+    //   - TextInputCSVDataSource - Only uses firstLine to infer an unspecified schema
+    //   - CSVHeaderChecker       - Only uses firstLine to check header, when headerFlag is true
+    //   - CSVUtils               - Only uses firstLine to filter headers, when headerFlag is true
+    // (If the downstream logic grows more complicated, consider refactoring to an approach that
+    //  delegates this decision to the constituent consumers themselves.)
+    val maybeFirstLine: Option[String] =
+      if (userSpecifiedSchema.isEmpty || parsedOptions.headerFlag) {
+        filteredLines.take(1).headOption
+      } else {
+        None
+      }
 
     val schema = userSpecifiedSchema.getOrElse {
       TextInputCSVDataSource.inferFromDataset(
@@ -538,8 +554,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         input => Seq(rawParser.parse(input)),
         parsedOptions.parseMode,
         schema,
-        parsedOptions.columnNameOfCorruptRecord,
-        parsedOptions.multiLine)
+        parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
@@ -664,7 +679,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param path input path
    * @since 1.5.0
-   * @note Currently, this method can only be used after enabling Hive support.
    */
   def orc(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
@@ -676,7 +690,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param paths input paths
    * @since 2.0.0
-   * @note Currently, this method can only be used after enabling Hive support.
    */
   @scala.annotation.varargs
   def orc(paths: String*): DataFrame = format("orc").load(paths: _*)
@@ -706,6 +719,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
+   * The text files must be encoded as UTF-8.
    *
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
@@ -743,6 +757,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
    * contains a single string column named "value".
+   * The text files must be encoded as UTF-8.
    *
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.

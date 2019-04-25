@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -199,7 +198,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
 
       val cleanupThreshTime = 3000L
       handler.cleanupOldBlocks(cleanupThreshTime)
-      eventually(timeout(10000 millis), interval(10 millis)) {
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
         getWriteAheadLogFiles().size should be < preCleanupLogFiles.size
       }
     }
@@ -280,7 +279,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       maxMem: Long,
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem, 1)
+    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)

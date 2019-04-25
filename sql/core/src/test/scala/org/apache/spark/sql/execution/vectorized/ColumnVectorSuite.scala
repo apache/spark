@@ -108,6 +108,20 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
+  testVectors("date", 10, DateType) { testVector =>
+    (0 until 10).foreach { i =>
+      testVector.appendInt(i)
+    }
+
+    val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
+
+    (0 until 10).foreach { i =>
+      assert(array.get(i, DateType) === i)
+      assert(arrayCopy.get(i, DateType) === i)
+    }
+  }
+
   testVectors("long", 10, LongType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendLong(i)
@@ -119,6 +133,20 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     (0 until 10).foreach { i =>
       assert(array.get(i, LongType) === i)
       assert(arrayCopy.get(i, LongType) === i)
+    }
+  }
+
+  testVectors("timestamp", 10, TimestampType) { testVector =>
+    (0 until 10).foreach { i =>
+      testVector.appendLong(i)
+    }
+
+    val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
+
+    (0 until 10).foreach { i =>
+      assert(array.get(i, TimestampType) === i)
+      assert(arrayCopy.get(i, TimestampType) === i)
     }
   }
 
@@ -270,7 +298,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getBoolean(i) == (i % 2 == 0))
@@ -294,7 +322,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getByte(i) == i)
@@ -318,7 +346,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getShort(i) == i)
@@ -342,7 +370,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getInt(i) == i)
@@ -366,7 +394,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getLong(i) == i.toLong)
@@ -390,7 +418,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getFloat(i) == i.toFloat)
@@ -414,7 +442,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
       ColumnAccessor.decompress(columnAccessor, testVector, 16)
 
-      assert(testVector.isNullAt(0) == true)
+      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
         assert(testVector.isNullAt(i) == false)
         assert(testVector.getDouble(i) == i.toDouble)

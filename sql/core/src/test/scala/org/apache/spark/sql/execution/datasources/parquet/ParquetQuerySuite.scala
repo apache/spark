@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.parquet.hadoop.ParquetOutputFormat
@@ -68,30 +69,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
-  }
-
-  test("SPARK-15678: not use cache on overwrite") {
-    withTempDir { dir =>
-      val path = dir.toString
-      spark.range(1000).write.mode("overwrite").parquet(path)
-      val df = spark.read.parquet(path).cache()
-      assert(df.count() == 1000)
-      spark.range(10).write.mode("overwrite").parquet(path)
-      assert(df.count() == 10)
-      assert(spark.read.parquet(path).count() == 10)
-    }
-  }
-
-  test("SPARK-15678: not use cache on append") {
-    withTempDir { dir =>
-      val path = dir.toString
-      spark.range(1000).write.mode("append").parquet(path)
-      val df = spark.read.parquet(path).cache()
-      assert(df.count() == 1000)
-      spark.range(10).write.mode("append").parquet(path)
-      assert(df.count() == 1010)
-      assert(spark.read.parquet(path).count() == 1010)
-    }
   }
 
   test("self-join") {
@@ -889,6 +866,63 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         checkAnswer(sql("SELECT _2 FROM t WHERE t._1 = 5"), Seq.empty)
       }
     }
+  }
+
+  test("SPARK-26677: negated null-safe equality comparison should not filter matched row groups") {
+    (true :: false :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withTempPath { path =>
+          // Repeated values for dictionary encoding.
+          Seq(Some("A"), Some("A"), None).toDF.repartition(1)
+            .write.parquet(path.getAbsolutePath)
+          val df = spark.read.parquet(path.getAbsolutePath)
+          checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
+        }
+      }
+    }
+  }
+
+  test("Migration from INT96 to TIMESTAMP_MICROS timestamp type") {
+    def testMigration(fromTsType: String, toTsType: String): Unit = {
+      def checkAppend(write: DataFrameWriter[_] => Unit, readback: => DataFrame): Unit = {
+        def data(start: Int, end: Int): Seq[Row] = (start to end).map { i =>
+          val ts = new java.sql.Timestamp(TimeUnit.SECONDS.toMillis(i))
+          ts.setNanos(123456000)
+          Row(ts)
+        }
+        val schema = new StructType().add("time", TimestampType)
+        val df1 = spark.createDataFrame(sparkContext.parallelize(data(0, 1)), schema)
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fromTsType) {
+          write(df1.write)
+        }
+        val df2 = spark.createDataFrame(sparkContext.parallelize(data(2, 10)), schema)
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> toTsType) {
+          write(df2.write.mode(SaveMode.Append))
+        }
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            checkAnswer(readback, df1.unionAll(df2))
+          }
+        }
+      }
+
+      Seq(false, true).foreach { mergeSchema =>
+        withTempPath { file =>
+          checkAppend(_.parquet(file.getCanonicalPath),
+            spark.read.option("mergeSchema", mergeSchema).parquet(file.getCanonicalPath))
+        }
+
+        withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> mergeSchema.toString) {
+          val tableName = "parquet_timestamp_migration"
+          withTable(tableName) {
+            checkAppend(_.saveAsTable(tableName), spark.table(tableName))
+          }
+        }
+      }
+    }
+
+    testMigration(fromTsType = "INT96", toTsType = "TIMESTAMP_MICROS")
+    testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
   }
 }
 

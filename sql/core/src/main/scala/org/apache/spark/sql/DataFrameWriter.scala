@@ -25,15 +25,19 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -243,39 +247,60 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotBucketed("save")
 
     val session = df.sparkSession
-    val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
-    if (classOf[TableProvider].isAssignableFrom(cls)) {
+    val useV1Sources =
+      session.sessionState.conf.userV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
+    val lookupCls = DataSource.lookupDataSource(source, session.sessionState.conf)
+    val cls = lookupCls.newInstance() match {
+      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
+        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        f.fallbackFileFormat
+      case _ => lookupCls
+    }
+    // In Data Source V2 project, partitioning is still under development.
+    // Here we fallback to V1 if partitioning columns are specified.
+    // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
+    if (classOf[TableProvider].isAssignableFrom(cls) && partitioningColumns.isEmpty) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, session.sessionState.conf)
-      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "false"
-      val options = sessionOptions ++ extraOptions + checkFilesExistsOption
-      val dsOptions = new DataSourceOptions(options.asJava)
-      provider.getTable(dsOptions) match {
-        case table: SupportsBatchWrite =>
-          if (mode == SaveMode.Append) {
-            val relation = DataSourceV2Relation.create(table, options)
-            runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan)
-            }
-          } else {
-            val writeBuilder = table.newWriteBuilder(dsOptions)
-              .withQueryId(UUID.randomUUID().toString)
-              .withInputDataSchema(df.logicalPlan.schema)
-            writeBuilder match {
-              case s: SupportsSaveMode =>
-                val write = s.mode(mode).buildForBatch()
-                // It can only return null with `SupportsSaveMode`. We can clean it up after
-                // removing `SupportsSaveMode`.
-                if (write != null) {
-                  runCommand(df.sparkSession, "save") {
-                    WriteToDataSourceV2(write, df.logicalPlan)
-                  }
-                }
+      val options = sessionOptions ++ extraOptions
+      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
-              case _ => throw new AnalysisException(
-                s"data source ${table.name} does not support SaveMode $mode")
-            }
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      provider.getTable(dsOptions) match {
+        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
+          mode match {
+            case SaveMode.Append =>
+              runCommand(df.sparkSession, "save") {
+                AppendData.byName(relation, df.logicalPlan)
+              }
+
+            case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
+              // truncate the table
+              runCommand(df.sparkSession, "save") {
+                OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
+              }
+
+            case _ =>
+              table.newWriteBuilder(dsOptions) match {
+                case writeBuilder: SupportsSaveMode =>
+                  val write = writeBuilder.mode(mode)
+                      .withQueryId(UUID.randomUUID().toString)
+                      .withInputDataSchema(df.logicalPlan.schema)
+                      .buildForBatch()
+                  // It can only return null with `SupportsSaveMode`. We can clean it up after
+                  // removing `SupportsSaveMode`.
+                  if (write != null) {
+                    runCommand(df.sparkSession, "save") {
+                      WriteToDataSourceV2(write, df.logicalPlan)
+                    }
+                  }
+
+                case _ =>
+                  throw new AnalysisException(
+                    s"data source ${table.name} does not support SaveMode $mode")
+              }
           }
 
         // Streaming also uses the data source V2 API. So it may be that the data source implements
@@ -289,6 +314,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveToV1Source(): Unit = {
+    if (SparkSession.active.sessionState.conf.getConf(
+      SQLConf.LEGACY_PASS_PARTITION_BY_AS_OPTIONS)) {
+      partitioningColumns.foreach { columns =>
+        extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
+          DataSourceUtils.encodePartitioningColumns(columns))
+      }
+    }
+
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
       DataSource(
@@ -591,7 +624,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * </ul>
    *
    * @since 1.5.0
-   * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
     format("orc").save(path)
@@ -608,6 +640,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   // Java:
    *   df.write().text("/path/to/output")
    * }}}
+   * The text files will be encoded as UTF-8.
    *
    * You can set the following option(s) for writing text files:
    * <ul>

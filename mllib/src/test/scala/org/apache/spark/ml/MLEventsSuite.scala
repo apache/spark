@@ -19,7 +19,6 @@ package org.apache.spark.ml
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -34,6 +33,7 @@ import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter, MLWri
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
+import org.apache.spark.util.JsonProtocol
 
 
 class MLEventsSuite
@@ -107,19 +107,47 @@ class MLEventsSuite
       .setStages(Array(estimator1, transformer1, estimator2))
     assert(events.isEmpty)
     val pipelineModel = pipeline.fit(dataset1)
-    val expected =
-      FitStart(pipeline, dataset1) ::
-      FitStart(estimator1, dataset1) ::
-      FitEnd(estimator1, model1) ::
-      TransformStart(model1, dataset1) ::
-      TransformEnd(model1, dataset2) ::
-      TransformStart(transformer1, dataset2) ::
-      TransformEnd(transformer1, dataset3) ::
-      FitStart(estimator2, dataset3) ::
-      FitEnd(estimator2, model2) ::
-      FitEnd(pipeline, pipelineModel) :: Nil
-    eventually(timeout(10 seconds), interval(1 second)) {
+
+    val event0 = FitStart[PipelineModel]()
+    event0.estimator = pipeline
+    event0.dataset = dataset1
+    val event1 = FitStart[MyModel]()
+    event1.estimator = estimator1
+    event1.dataset = dataset1
+    val event2 = FitEnd[MyModel]()
+    event2.estimator = estimator1
+    event2.model = model1
+    val event3 = TransformStart()
+    event3.transformer = model1
+    event3.input = dataset1
+    val event4 = TransformEnd()
+    event4.transformer = model1
+    event4.output = dataset2
+    val event5 = TransformStart()
+    event5.transformer = transformer1
+    event5.input = dataset2
+    val event6 = TransformEnd()
+    event6.transformer = transformer1
+    event6.output = dataset3
+    val event7 = FitStart[MyModel]()
+    event7.estimator = estimator2
+    event7.dataset = dataset3
+    val event8 = FitEnd[MyModel]()
+    event8.estimator = estimator2
+    event8.model = model2
+    val event9 = FitEnd[PipelineModel]()
+    event9.estimator = pipeline
+    event9.model = pipelineModel
+
+    val expected = Seq(
+      event0, event1, event2, event3, event4, event5, event6, event7, event8, event9)
+    eventually(timeout(10.seconds), interval(1.second)) {
       assert(events === expected)
+    }
+    // Test if they can be ser/de via JSON protocol.
+    assert(events.nonEmpty)
+    events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+      assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
     }
   }
 
@@ -144,17 +172,40 @@ class MLEventsSuite
       "pipeline0", Array(transformer1, model, transformer2))
     assert(events.isEmpty)
     val output = newPipelineModel.transform(dataset1)
-    val expected =
-      TransformStart(newPipelineModel, dataset1) ::
-      TransformStart(transformer1, dataset1) ::
-      TransformEnd(transformer1, dataset2) ::
-      TransformStart(model, dataset2) ::
-      TransformEnd(model, dataset3) ::
-      TransformStart(transformer2, dataset3) ::
-      TransformEnd(transformer2, dataset4) ::
-      TransformEnd(newPipelineModel, output) :: Nil
-    eventually(timeout(10 seconds), interval(1 second)) {
+
+    val event0 = TransformStart()
+    event0.transformer = newPipelineModel
+    event0.input = dataset1
+    val event1 = TransformStart()
+    event1.transformer = transformer1
+    event1.input = dataset1
+    val event2 = TransformEnd()
+    event2.transformer = transformer1
+    event2.output = dataset2
+    val event3 = TransformStart()
+    event3.transformer = model
+    event3.input = dataset2
+    val event4 = TransformEnd()
+    event4.transformer = model
+    event4.output = dataset3
+    val event5 = TransformStart()
+    event5.transformer = transformer2
+    event5.input = dataset3
+    val event6 = TransformEnd()
+    event6.transformer = transformer2
+    event6.output = dataset4
+    val event7 = TransformEnd()
+    event7.transformer = newPipelineModel
+    event7.output = output
+
+    val expected = Seq(event0, event1, event2, event3, event4, event5, event6, event7)
+    eventually(timeout(10.seconds), interval(1.second)) {
       assert(events === expected)
+    }
+    // Test if they can be ser/de via JSON protocol.
+    assert(events.nonEmpty)
+    events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+      assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
     }
   }
 
@@ -169,7 +220,7 @@ class MLEventsSuite
       val pipelineWriter = newPipeline.write
       assert(events.isEmpty)
       pipelineWriter.save(path)
-      eventually(timeout(10 seconds), interval(1 second)) {
+      eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
           case e: SaveInstanceStart if e.writer.isInstanceOf[DefaultParamsWriter] =>
             assert(e.path.endsWith("writableStage"))
@@ -182,25 +233,36 @@ class MLEventsSuite
           case e => fail(s"Unexpected event thrown: $e")
         }
       }
+      // Test if they can be ser/de via JSON protocol.
+      assert(events.nonEmpty)
+      events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+      }
+      sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
 
       events.clear()
       val pipelineReader = Pipeline.read
       assert(events.isEmpty)
       pipelineReader.load(path)
-      eventually(timeout(10 seconds), interval(1 second)) {
+      eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
-          case e: LoadInstanceStart[PipelineStage]
-              if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+          case e: LoadInstanceStart[_]
+              if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.path.endsWith("writableStage"))
-          case e: LoadInstanceEnd[PipelineStage]
-              if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+          case e: LoadInstanceEnd[_]
+              if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.instance.isInstanceOf[PipelineStage])
-          case e: LoadInstanceStart[Pipeline] =>
+          case e: LoadInstanceStart[_] =>
             assert(e.reader === pipelineReader)
-          case e: LoadInstanceEnd[Pipeline] =>
-            assert(e.instance.uid === newPipeline.uid)
+          case e: LoadInstanceEnd[_] =>
+            assert(e.instance.asInstanceOf[Pipeline].uid === newPipeline.uid)
           case e => fail(s"Unexpected event thrown: $e")
         }
+      }
+      // Test if they can be ser/de via JSON protocol.
+      assert(events.nonEmpty)
+      events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
       }
     }
   }
@@ -217,7 +279,7 @@ class MLEventsSuite
       val pipelineWriter = pipelineModel.write
       assert(events.isEmpty)
       pipelineWriter.save(path)
-      eventually(timeout(10 seconds), interval(1 second)) {
+      eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
           case e: SaveInstanceStart if e.writer.isInstanceOf[DefaultParamsWriter] =>
             assert(e.path.endsWith("writableStage"))
@@ -230,25 +292,36 @@ class MLEventsSuite
           case e => fail(s"Unexpected event thrown: $e")
         }
       }
+      // Test if they can be ser/de via JSON protocol.
+      assert(events.nonEmpty)
+      events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+      }
+      sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
 
       events.clear()
       val pipelineModelReader = PipelineModel.read
       assert(events.isEmpty)
       pipelineModelReader.load(path)
-      eventually(timeout(10 seconds), interval(1 second)) {
+      eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
-          case e: LoadInstanceStart[PipelineStage]
-            if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+          case e: LoadInstanceStart[_]
+            if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.path.endsWith("writableStage"))
-          case e: LoadInstanceEnd[PipelineStage]
-            if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+          case e: LoadInstanceEnd[_]
+            if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.instance.isInstanceOf[PipelineStage])
-          case e: LoadInstanceStart[PipelineModel] =>
+          case e: LoadInstanceStart[_] =>
             assert(e.reader === pipelineModelReader)
-          case e: LoadInstanceEnd[PipelineModel] =>
-            assert(e.instance.uid === pipelineModel.uid)
+          case e: LoadInstanceEnd[_] =>
+            assert(e.instance.asInstanceOf[PipelineModel].uid === pipelineModel.uid)
           case e => fail(s"Unexpected event thrown: $e")
         }
+      }
+      // Test if they can be ser/de via JSON protocol.
+      assert(events.nonEmpty)
+      events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
       }
     }
   }

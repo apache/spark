@@ -341,7 +341,7 @@ pyspark_core = Module(
 
 pyspark_sql = Module(
     name="pyspark-sql",
-    dependencies=[pyspark_core, hive],
+    dependencies=[pyspark_core, hive, avro],
     source_file_regexes=[
         "python/pyspark/sql"
     ],
@@ -360,6 +360,7 @@ pyspark_sql = Module(
         "pyspark.sql.streaming",
         "pyspark.sql.udf",
         "pyspark.sql.window",
+        "pyspark.sql.avro.functions",
         # unittests
         "pyspark.sql.tests.test_appsubmit",
         "pyspark.sql.tests.test_arrow",

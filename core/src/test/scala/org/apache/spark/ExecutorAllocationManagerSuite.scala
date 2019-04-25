@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, never, verify, when}
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config
@@ -38,20 +38,24 @@ import org.apache.spark.util.ManualClock
  */
 class ExecutorAllocationManagerSuite
   extends SparkFunSuite
-  with LocalSparkContext
-  with BeforeAndAfter {
+  with LocalSparkContext {
 
   import ExecutorAllocationManager._
   import ExecutorAllocationManagerSuite._
 
   private val contexts = new mutable.ListBuffer[SparkContext]()
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     contexts.clear()
   }
 
-  after {
-    contexts.foreach(_.stop())
+  override def afterEach(): Unit = {
+    try {
+      contexts.foreach(_.stop())
+    } finally {
+      super.afterEach()
+    }
   }
 
   private def post(bus: LiveListenerBus, event: SparkListenerEvent): Unit = {
@@ -201,7 +205,7 @@ class ExecutorAllocationManagerSuite
     // Verify that running a task doesn't affect the target
     post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(1, 3)))
     post(sc.listenerBus, SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     post(sc.listenerBus, SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
     assert(numExecutorsTarget(manager) === 5)
     assert(addExecutors(manager) === 1)
@@ -282,7 +286,7 @@ class ExecutorAllocationManagerSuite
     assert(totalRunningTasks(manager) === 0)
   }
 
-  test("cancel pending executors when no longer needed") {
+  testRetry("cancel pending executors when no longer needed") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
     post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(2, 5)))
@@ -421,6 +425,7 @@ class ExecutorAllocationManagerSuite
     // Remove when numExecutorsTarget is the same as the current number of executors
     assert(addExecutors(manager) === 1)
     assert(addExecutors(manager) === 2)
+    (1 to 8).foreach(execId => onExecutorAdded(manager, execId.toString))
     (1 to 8).map { i => createTaskInfo(i, i, s"$i") }.foreach {
       info => post(sc.listenerBus, SparkListenerTaskStart(0, 0, info)) }
     assert(executorIds(manager).size === 8)
@@ -809,13 +814,13 @@ class ExecutorAllocationManagerSuite
 
     // New executors have registered
     post(sc.listenerBus, SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 1)
     assert(removeTimes(manager).contains("executor-1"))
     post(sc.listenerBus, SparkListenerExecutorAdded(
-      0L, "executor-2", new ExecutorInfo("host2", 1, Map.empty)))
+      0L, "executor-2", new ExecutorInfo("host2", 1, Map.empty, Map.empty)))
     assert(executorIds(manager).size === 2)
     assert(executorIds(manager).contains("executor-2"))
     assert(removeTimes(manager).size === 2)
@@ -834,7 +839,7 @@ class ExecutorAllocationManagerSuite
     assert(removeTimes(manager).size === 1)
   }
 
-  test("SPARK-4951: call onTaskStart before onBlockManagerAdded") {
+  test("SPARK-4951: call onTaskStart before onExecutorAdded") {
     sc = createSparkContext(2, 10, 2)
     val manager = sc.executorAllocationManager.get
     assert(executorIds(manager).isEmpty)
@@ -842,7 +847,7 @@ class ExecutorAllocationManagerSuite
 
     post(sc.listenerBus, SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
     post(sc.listenerBus, SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     assert(executorIds(manager).size === 1)
     assert(executorIds(manager).contains("executor-1"))
     assert(removeTimes(manager).size === 0)
@@ -854,7 +859,7 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).isEmpty)
     assert(removeTimes(manager).isEmpty)
     post(sc.listenerBus, SparkListenerExecutorAdded(
-      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     post(sc.listenerBus, SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
 
     assert(executorIds(manager).size === 1)
@@ -862,7 +867,7 @@ class ExecutorAllocationManagerSuite
     assert(removeTimes(manager).size === 0)
 
     post(sc.listenerBus, SparkListenerExecutorAdded(
-      0L, "executor-2", new ExecutorInfo("host1", 1, Map.empty)))
+      0L, "executor-2", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     assert(executorIds(manager).size === 2)
     assert(executorIds(manager).contains("executor-2"))
     assert(removeTimes(manager).size === 1)
@@ -936,12 +941,7 @@ class ExecutorAllocationManagerSuite
 
     assert(maxNumExecutorsNeeded(manager) === 0)
     schedule(manager)
-    // Verify executor is timeout but numExecutorsTarget is not recalculated
-    assert(numExecutorsTarget(manager) === 3)
-
-    // Schedule again to recalculate the numExecutorsTarget after executor is timeout
-    schedule(manager)
-    // Verify that current number of executors should be ramp down when executor is timeout
+    // Verify executor is timeout,numExecutorsTarget is recalculated
     assert(numExecutorsTarget(manager) === 2)
   }
 
@@ -1112,7 +1112,7 @@ class ExecutorAllocationManagerSuite
     // test setup -- job with 2 tasks, scale up to two executors
     assert(numExecutorsTarget(manager) === 1)
     manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
-      clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+      clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     manager.listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 2)))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
@@ -1120,7 +1120,7 @@ class ExecutorAllocationManagerSuite
     val taskInfo0 = createTaskInfo(0, 0, "executor-1")
     manager.listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo0))
     manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
-      clock.getTimeMillis(), "executor-2", new ExecutorInfo("host1", 1, Map.empty)))
+      clock.getTimeMillis(), "executor-2", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     val taskInfo1 = createTaskInfo(1, 1, "executor-2")
     manager.listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo1))
     assert(numExecutorsTarget(manager) === 2)
@@ -1146,6 +1146,48 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 1)
     // here's the important verify -- we did kill the executors, but did not adjust the target count
     verify(mockAllocationClient).killExecutors(Seq("executor-1"), false, false, false)
+  }
+
+  test("SPARK-26758 check executor target number after idle time out ") {
+    sc = createSparkContext(1, 5, 3)
+    val manager = sc.executorAllocationManager.get
+    val clock = new ManualClock(10000L)
+    manager.setClock(clock)
+    assert(numExecutorsTarget(manager) === 3)
+    manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
+      clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+    manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
+      clock.getTimeMillis(), "executor-2", new ExecutorInfo("host1", 2, Map.empty)))
+    manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
+      clock.getTimeMillis(), "executor-3", new ExecutorInfo("host1", 3, Map.empty)))
+    // make all the executors as idle, so that it will be killed
+    clock.advance(executorIdleTimeout * 1000)
+    schedule(manager)
+    // once the schedule is run target executor number should be 1
+    assert(numExecutorsTarget(manager) === 1)
+  }
+
+  test("SPARK-26927 call onExecutorRemoved before onTaskStart") {
+    sc = createSparkContext(2, 5)
+    val manager = sc.executorAllocationManager.get
+    assert(executorIds(manager).isEmpty)
+    post(sc.listenerBus, SparkListenerExecutorAdded(
+      0L, "1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
+    post(sc.listenerBus, SparkListenerExecutorAdded(
+      0L, "2", new ExecutorInfo("host2", 1, Map.empty, Map.empty)))
+    post(sc.listenerBus, SparkListenerExecutorAdded(
+      0L, "3", new ExecutorInfo("host3", 1, Map.empty, Map.empty)))
+    assert(executorIds(manager).size === 3)
+
+    post(sc.listenerBus, SparkListenerExecutorRemoved(0L, "3", "disconnected"))
+    assert(executorIds(manager).size === 2)
+    assert(executorIds(manager) === Set("1", "2"))
+
+    val taskInfo1 = createTaskInfo(0, 0, "3")
+    post(sc.listenerBus, SparkListenerTaskStart(0, 0, taskInfo1))
+    // Verify taskStart not adding already removed executors.
+    assert(executorIds(manager).size === 2)
+    assert(executorIds(manager) === Set("1", "2"))
   }
 
   private def createSparkContext(

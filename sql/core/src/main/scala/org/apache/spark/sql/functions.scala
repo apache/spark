@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -1045,7 +1045,7 @@ object functions {
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
     Dataset[T](df.sparkSession,
-      ResolvedHint(df.logicalPlan, HintInfo(broadcast = true)))(df.exprEnc)
+      ResolvedHint(df.logicalPlan, HintInfo(strategy = Some(BROADCAST))))(df.exprEnc)
   }
 
   /**
@@ -2167,6 +2167,19 @@ object functions {
     new Murmur3Hash(cols.map(_.expr))
   }
 
+  /**
+   * Calculates the hash code of given columns using the 64-bit
+   * variant of the xxHash algorithm, and returns the result as a long
+   * column.
+   *
+   * @group misc_funcs
+   * @since 3.0.0
+   */
+  @scala.annotation.varargs
+  def xxhash64(cols: Column*): Column = withExpr {
+    new XxHash64(cols.map(_.expr))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2975,6 +2988,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     FromUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -2986,6 +3000,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     FromUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3004,6 +3019,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3015,6 +3031,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     ToUTCTimestamp(ts.expr, tz.expr)
   }

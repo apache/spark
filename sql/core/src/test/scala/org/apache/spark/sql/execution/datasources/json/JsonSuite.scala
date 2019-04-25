@@ -1961,9 +1961,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         spark.read.schema(schema).json(path).select("_corrupt_record").collect()
       }.getMessage
       assert(msg.contains("only include the internal corrupt record column"))
-      intercept[catalyst.errors.TreeNodeException[_]] {
-        spark.read.schema(schema).json(path).filter($"_corrupt_record".isNotNull).count()
-      }
+
       // workaround
       val df = spark.read.schema(schema).json(path).cache()
       assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
@@ -2424,6 +2422,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkCount(2)
     countForMalformedJSON(0, Seq(""))
+  }
+
+  test("SPARK-26745: count() for non-multiline input with empty lines") {
+    withTempPath { tempPath =>
+      val path = tempPath.getCanonicalPath
+      Seq("""{ "a" : 1 }""", "", """     { "a" : 2 }""", " \t ")
+        .toDS()
+        .repartition(1)
+        .write
+        .text(path)
+      assert(spark.read.json(path).count() === 2)
+    }
   }
 
   test("SPARK-25040: empty strings should be disallowed") {

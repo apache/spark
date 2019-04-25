@@ -132,11 +132,19 @@ class PlanParserSuite extends AnalysisTest {
       table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10",
-      "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements")
+      "This select statement can not have FROM cause as its already specified upfront")
+    intercept(
+      "from a select * from b",
+      "This select statement can not have FROM cause as its already specified upfront")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(
         table("a").where('s < 10).select(star()).insertInto("tbl2")))
+    assertEqual(
+      "select * from (from a select * select *)",
+      table("a").select(star())
+        .union(table("a").select(star()))
+        .as("__auto_generated_subquery_name").select(star()))
   }
 
   test("query organization") {
@@ -370,6 +378,7 @@ class PlanParserSuite extends AnalysisTest {
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
     test("left semi join", LeftSemi, testExistence)
+    test("semi join", LeftSemi, testExistence)
     test("left anti join", LeftAnti, testExistence)
     test("anti join", LeftAnti, testExistence)
 
@@ -752,5 +761,48 @@ class PlanParserSuite extends AnalysisTest {
         Distinct(a.union(b)).except(c.intersect(d, isAll = false), isAll = false))
       assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
     }
+  }
+
+  test("create/alter view as insert into table") {
+    val m1 = intercept[ParseException] {
+      parsePlan("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)")
+    }.getMessage
+    assert(m1.contains("mismatched input 'INSERT' expecting"))
+    // Multi insert query
+    val m2 = intercept[ParseException] {
+      parsePlan(
+        """
+          |CREATE VIEW testView AS FROM jt
+          |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
+          |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
+        """.stripMargin)
+    }.getMessage
+    assert(m2.contains("mismatched input 'INSERT' expecting"))
+    val m3 = intercept[ParseException] {
+      parsePlan("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)")
+    }.getMessage
+    assert(m3.contains("mismatched input 'INSERT' expecting"))
+    // Multi insert query
+    val m4 = intercept[ParseException] {
+      parsePlan(
+        """
+          |ALTER VIEW testView AS FROM jt
+          |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
+          |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
+        """.stripMargin
+      )
+    }.getMessage
+    assert(m4.contains("mismatched input 'INSERT' expecting"))
+  }
+
+  test("Invalid insert constructs in the query") {
+    val m1 = intercept[ParseException] {
+      parsePlan("SELECT * FROM (INSERT INTO BAR VALUES (2))")
+    }.getMessage
+    assert(m1.contains("mismatched input 'FROM' expecting"))
+    val m2 = intercept[ParseException] {
+      parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
+    }.getMessage
+    assert(m2.contains("mismatched input 'FROM' expecting"))
   }
 }
