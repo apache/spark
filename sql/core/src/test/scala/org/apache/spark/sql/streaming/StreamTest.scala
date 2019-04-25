@@ -294,7 +294,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   /** Execute arbitrary code */
   object Execute {
     def apply(name: String)(func: StreamExecution => Any): AssertOnQuery =
-      AssertOnQuery(query => { func(query); true }, "name")
+      AssertOnQuery(query => { func(query); true }, name)
 
     def apply(func: StreamExecution => Any): AssertOnQuery = apply("Execute")(func)
   }
