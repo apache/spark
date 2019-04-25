@@ -25,7 +25,7 @@ import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.{SQLExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
@@ -104,7 +104,7 @@ class SQLAppStatusListener(
     // track of the metrics knows which accumulators to look at.
     val accumIds = exec.metrics.map(_.accumulatorId).toSet
     event.stageIds.foreach { id =>
-      stageMetrics.put(id, new LiveStageMetrics(id, 0, accumIds, new ConcurrentHashMap()))
+      stageMetrics.put(id, new LiveStageMetrics(jobId, id, 0, accumIds, new ConcurrentHashMap()))
     }
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
@@ -180,17 +180,29 @@ class SQLAppStatusListener(
   }
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
-    val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
-    val metrics = exec.stages.toSeq
+    val metrics = exec.metrics.map { m => (m.accumulatorId, m) }.toMap
+    var durationMetricJob = Map[Long, Int]()
+    val metricValues = exec.stages.toSeq
       .flatMap { stageId => Option(stageMetrics.get(stageId)) }
-      .flatMap(_.taskMetrics.values().asScala)
-      .flatMap { metrics => metrics.ids.zip(metrics.values) }
+      .flatMap( stageMetric => stageMetric.taskMetrics.values().asScala
+        .flatMap { taskMetric => (taskMetric.ids, taskMetric.values).zipped map((id, value) => {
+          if (metrics.contains(id) &&
+            metrics(id).name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC)) {
+            durationMetricJob += (id -> stageMetric.jobId)
+          }
+          (id, value)}
+        )})
 
-    val aggregatedMetrics = (metrics ++ exec.driverAccumUpdates.toSeq)
-      .filter { case (id, _) => metricTypes.contains(id) }
+    val aggregatedMetrics = (metricValues ++ exec.driverAccumUpdates.toSeq)
+      .filter { case (id, _) => metrics.contains(id) }
       .groupBy(_._1)
       .map { case (id, values) =>
-        id -> SQLMetrics.stringValue(metricTypes(id), values.map(_._2))
+        val stringJob = if (durationMetricJob.contains(id)) {
+          s", job [${durationMetricJob(id)}]"
+        } else {
+          ""
+        }
+        id -> (SQLMetrics.stringValue(metrics(id).metricType, values.map(_._2)) + stringJob)
       }
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
@@ -403,6 +415,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 }
 
 private class LiveStageMetrics(
+    val jobId: Int,
     val stageId: Int,
     var attemptId: Int,
     val accumulatorIds: Set[Long],

@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSQLContext
@@ -213,6 +213,18 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId), accumulatorUpdates.mapValues(_ * 3))
+
+    assert(df.queryExecution.executedPlan.find(_.isInstanceOf[WholeStageCodegenExec]).isDefined)
+    val durationMetricIds = SparkPlanGraph(
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)).allNodes.flatMap(
+      _.metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+        .map(_.accumulatorId))
+    assert(durationMetricIds.size == 1)
+    val durationMetricId = durationMetricIds.head
+    val durationMetrics =
+      statusStore.executionMetrics(executionId).filter(x => x._1 == durationMetricId)
+    assert(durationMetrics.size == 1)
+    assert(durationMetrics.head._2.contains("job"))
 
     // Retrying a stage should reset the metrics
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
