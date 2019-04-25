@@ -170,7 +170,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
     }
   }
 
-  test(s"SPARK-27494: read kafka record containing null key/values in continuous mode") {
+  test("SPARK-27494: read kafka record containing null key/values in continuous mode") {
     testNullableKeyValue(ContinuousTrigger(100))
   }
 }

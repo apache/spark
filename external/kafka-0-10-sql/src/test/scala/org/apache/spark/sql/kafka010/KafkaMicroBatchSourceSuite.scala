@@ -1041,7 +1041,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     }
   }
 
-  test(s"SPARK-27494: read kafka record containing null key/values in micro-batch mode") {
+  test("SPARK-27494: read kafka record containing null key/values in micro-batch mode") {
     testNullableKeyValue(Trigger.ProcessingTime(100))
   }
 }
