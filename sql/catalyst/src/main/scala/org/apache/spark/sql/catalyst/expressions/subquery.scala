@@ -95,13 +95,13 @@ object SubqueryExpression {
 
   /**
    * Returns true when an expression contains a correlated IN or correlated EXISTS and
-   * false otherwise. An IN is non-correlated only if the left values are literals
+   * false otherwise. An IN is non-correlated only if the left values are foldable
    * and the subquery has no outer references.
    */
   def hasCorrelatedInOrExists(e: Expression): Boolean = {
     e.find {
       case InSubquery(values, ListQuery(_, children, _, _)) =>
-        values.exists(!_.isInstanceOf[Literal]) || children.nonEmpty
+        values.exists(!_.foldable) || children.nonEmpty
       case Exists(_, children, _) =>
         children.nonEmpty
       case _ => false

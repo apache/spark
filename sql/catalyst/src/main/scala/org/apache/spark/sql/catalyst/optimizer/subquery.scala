@@ -559,13 +559,17 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
  *
  * For uncorrelated Exists, we can use `limit 1` and `select 1` after the Exists subquery to
  * reduce the result set.
- * Example:
- * exists(select b from t where t.a = 2) => exists(select 1 from t where t.a = 2 limit 1)
+ * {{{
+ *  SELECT * FROM s WHERE EXISTS(SELECT b FROM t WHERE t.a = 2);
+ *  ==> SELECT * FROM s WHERE EXISTS(SELECT 1 FROM t WHERE t.a = 2 LIMIT 1);
+ * }}}
  *
  * For uncorrelated InSubquery, we can push the left values into the subquery to reduce the result
- * set. Note that InSubquery may be nullable, so we can not eliminate nulls in the subquery.
- * Example:
- * 3 in(select b from t where a = 2) => 3 in(select b from t where a = 2 and (b = 3 or b is null))
+ * set. Note that InSubquery may be nullable, so we can not eliminate nulls for both sides.
+ * {{{
+ *  SELECT * FROM s WHERE 3 IN (SELECT b FROM t WHERE a = 2);
+ *  ==> SELECT * FROM s WHERE 3 IN (SELECT b FROM t WHERE a = 2 AND (b = 3 or b IS NULL));
+ * }}}
  */
 object RewriteUncorrelatedSubquery extends Rule[LogicalPlan] {
 
@@ -579,11 +583,11 @@ object RewriteUncorrelatedSubquery extends Rule[LogicalPlan] {
               Limit(Literal.create(1, IntegerType), sub))
           Exists(newPlan)
         case InSubquery(values, ListQuery(sub, children, _, childOutputs))
-          if values.forall(_.isInstanceOf[Literal]) && children.isEmpty =>
-          // Push the values into the subquery
+          if values.forall(_.foldable) && children.isEmpty =>
+          // Push the outer values into the subquery
           val inCondition = values.zip(sub.output).map {
             case (outer, inner) =>
-              Or(EqualTo(outer, inner), IsNull(inner))
+              Or(EqualTo(outer, inner), IsNull(EqualTo(outer, inner)))
           }.reduceLeft(And)
           val newPlan = Filter(inCondition, sub)
           InSubquery(values, ListQuery(newPlan, childOutputs = childOutputs))
