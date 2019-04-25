@@ -450,6 +450,20 @@ class RankingMetrics(JavaModelWrapper):
         """
         return self.call("recallAt", int(k))
 
+    @since('3.0.0')
+    def meanAveragePrecisionAt(self, k):
+        """
+        Compute the mean average precision (MAP) of all the queries, truncated at ranking
+        position k.
+
+        If for a query, the ranking algorithm returns n (n is less than k) results, the MAP value
+        will be computed as MAP at n.
+
+        If a query has an empty ground truth set, the average precision will be zero and a log
+        warning is generated.
+        """
+        return self.call("meanAveragePrecisionAt", int(k))
+
 
 class MultilabelMetrics(JavaModelWrapper):
     """

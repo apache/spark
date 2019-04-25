@@ -57,6 +57,14 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.recallAt(5) ~== 16.0/45 absTol eps)
     assert(metrics.recallAt(10) ~== 2.0/3 absTol eps)
     assert(metrics.recallAt(15) ~== 2.0/3 absTol eps)
+
+    assert(metrics.meanAveragePrecisionAt(1) ~== 1.0/15 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(2) ~== 11.0/90 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(3) ~== 1.0/6 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(4) ~== 1.0/6 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(5) ~== 19.0/90 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(10) ~== 671.0/1890 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(15) ~== 671.0/1890 absTol eps)
   }
 
   test("MAP, NDCG, Recall with few predictions (SPARK-14886)") {
@@ -74,6 +82,8 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.ndcgAt(2) ~== 0.30657 absTol eps)
     assert(metrics.recallAt(1) ~== 0.1 absTol eps)
     assert(metrics.recallAt(2) ~== 0.1 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(1) ~== 0.1 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(2) ~== 0.1 absTol eps)
   }
 
 }

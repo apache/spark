@@ -109,6 +109,10 @@ public class JavaRankingMetricsExample {
 
     // Mean average precision
     System.out.format("Mean average precision = %f\n", metrics.meanAveragePrecision());
+    for (Integer k : kVector) {
+      System.out.format("Mean average precision at %d = %f\n", k,
+        metrics.meanAveragePrecisionAt(k));
+    }
 
     // Evaluate the model using numerical ratings and regression metrics
     JavaRDD<Tuple2<Object, Object>> userProducts =
