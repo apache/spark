@@ -90,7 +90,8 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
         null
       }
       TaskContext.setTaskContext(taskContext)
-      val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams.asJava, useCache)
+      val consumer = KafkaDataConsumer.acquire(
+        topicPartition, kafkaParams.asJava, useCache)
       try {
         val range = consumer.getAvailableOffsetRange()
         val rcvd = range.earliest until range.latest map { offset =>

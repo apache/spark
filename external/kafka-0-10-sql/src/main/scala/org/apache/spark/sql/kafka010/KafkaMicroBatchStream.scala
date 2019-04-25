@@ -154,8 +154,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
     // Generate factories based on the offset ranges
     offsetRanges.map { range =>
-      KafkaMicroBatchInputPartition(range, executorKafkaParams, pollTimeoutMs, failOnDataLoss,
-        reuseKafkaConsumer)
+      KafkaMicroBatchInputPartition(
+        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
     }.toArray
   }
 

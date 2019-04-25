@@ -162,8 +162,8 @@ case class KafkaContinuousInputPartition(
 object KafkaContinuousReaderFactory extends ContinuousPartitionReaderFactory {
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaContinuousInputPartition]
-    new KafkaContinuousPartitionReader(p.topicPartition, p.startOffset, p.kafkaParams,
-      p.pollTimeoutMs, p.failOnDataLoss)
+    new KafkaContinuousPartitionReader(
+      p.topicPartition, p.startOffset, p.kafkaParams, p.pollTimeoutMs, p.failOnDataLoss)
   }
 }
 

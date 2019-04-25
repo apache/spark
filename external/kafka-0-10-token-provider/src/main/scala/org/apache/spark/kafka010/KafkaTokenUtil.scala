@@ -142,7 +142,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   private def setTrustStoreProperties(clusterConf: KafkaTokenClusterConf,
-    properties: ju.Properties): Unit = {
+      properties: ju.Properties): Unit = {
     clusterConf.trustStoreLocation.foreach { truststoreLocation =>
       properties.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, truststoreLocation)
     }

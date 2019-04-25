@@ -182,19 +182,18 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  private def strategy(caseInsensitiveParams: Map[String, String]) = {
-    caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
-      case ("assign", value) =>
-        AssignStrategy(JsonUtils.partitions(value))
-      case ("subscribe", value) =>
-        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
-      case ("subscribepattern", value) =>
-        SubscribePatternStrategy(value.trim())
-      case _ =>
-        // Should never reach here as we are already matching on
-        // matched strategy names
-        throw new IllegalArgumentException("Unknown option")
-    }
+  private def strategy(caseInsensitiveParams: Map[String, String]) =
+      caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+    case ("assign", value) =>
+      AssignStrategy(JsonUtils.partitions(value))
+    case ("subscribe", value) =>
+      SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
+    case ("subscribepattern", value) =>
+      SubscribePatternStrategy(value.trim())
+    case _ =>
+      // Should never reach here as we are already matching on
+      // matched strategy names
+      throw new IllegalArgumentException("Unknown option")
   }
 
   private def failOnDataLoss(caseInsensitiveParams: Map[String, String]) =
