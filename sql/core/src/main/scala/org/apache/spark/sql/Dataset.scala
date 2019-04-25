@@ -889,19 +889,18 @@ class Dataset[T] private[sql](
   // Called by `Dataset#join`, to attach the Dataset id to the logical plan, so that we
   // can resolve column reference correctly later. See `ResolveDatasetColumnReference`.
   private def createPlanWithDatasetId(): LogicalPlan = {
-    if (!sparkSession.sessionState.conf.getConf(SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE)) {
-      return logicalPlan
-    }
-
     // The alias should start with `SubqueryAlias.HIDDEN_ALIAS_PREFIX`, so that `SubqueryAlias` can
     // recognize it and keep the output qualifiers unchanged.
     SubqueryAlias(s"${SubqueryAlias.HIDDEN_ALIAS_PREFIX}${Dataset.ID_PREFIX}_$id", logicalPlan)
   }
 
   private def prepareJoinPlan(left: Dataset[_], right: Dataset[_]): (LogicalPlan, LogicalPlan) = {
-    // If there is no conflicting attributes, then it's not a self-join and we don't need to attach
-    // the dataset id.
     if (left.logicalPlan.outputSet.intersect(right.logicalPlan.outputSet).isEmpty) {
+      // If there is no conflicting attributes, then it's not a self-join and we don't need to
+      // attach the dataset id.
+      (left.logicalPlan, right.logicalPlan)
+    } else if (!sparkSession.sessionState.conf.getConf(SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE)) {
+      // If the config is disabled, do nothing.
       (left.logicalPlan, right.logicalPlan)
     } else {
       (left.createPlanWithDatasetId(), right.createPlanWithDatasetId())
