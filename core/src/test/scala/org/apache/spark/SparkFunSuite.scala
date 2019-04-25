@@ -20,8 +20,10 @@ package org.apache.spark
 // scalastyle:off
 import java.io.File
 
+import scala.annotation.tailrec
+
 import org.apache.log4j.{Appender, Level, Logger}
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, Outcome}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -54,6 +56,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
 abstract class SparkFunSuite
   extends FunSuite
   with BeforeAndAfterAll
+  with BeforeAndAfterEach
   with ThreadAudit
   with Logging {
 // scalastyle:on
@@ -87,6 +90,47 @@ abstract class SparkFunSuite
 
   protected final def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
+  }
+
+  /**
+   * Note: this method doesn't support `BeforeAndAfter`. You must use `BeforeAndAfterEach` to
+   * set up and tear down resources.
+   */
+  def testRetry(s: String, n: Int = 2)(body: => Unit): Unit = {
+    test(s) {
+      retry(n) {
+        body
+      }
+    }
+  }
+
+  /**
+   * Note: this method doesn't support `BeforeAndAfter`. You must use `BeforeAndAfterEach` to
+   * set up and tear down resources.
+   */
+  def retry[T](n: Int)(body: => T): T = {
+    if (this.isInstanceOf[BeforeAndAfter]) {
+      throw new UnsupportedOperationException(
+        s"testRetry/retry cannot be used with ${classOf[BeforeAndAfter]}. " +
+          s"Please use ${classOf[BeforeAndAfterEach]} instead.")
+    }
+    retry0(n, n)(body)
+  }
+
+  @tailrec private final def retry0[T](n: Int, n0: Int)(body: => T): T = {
+    try body
+    catch { case e: Throwable =>
+      if (n > 0) {
+        logWarning(e.getMessage, e)
+        logInfo(s"\n\n===== RETRY #${n0 - n + 1} =====\n")
+        // Reset state before re-attempting in order so that tests which use patterns like
+        // LocalSparkContext to clean up state can work correctly when retried.
+        afterEach()
+        beforeEach()
+        retry0(n-1, n0)(body)
+      }
+      else throw e
+    }
   }
 
   /**
