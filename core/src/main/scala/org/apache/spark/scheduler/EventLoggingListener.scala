@@ -309,6 +309,9 @@ private[spark] class EventLoggingListener(
       fileSystem.setTimes(target, System.currentTimeMillis(), -1)
     } catch {
       case e: Exception => logDebug(s"failed to set time of $target", e)
+    } finally {
+      // close fileSystem so it's got removed from cache and prevent mem leak [SPARK-27434]
+      fileSystem.close()
     }
   }
 
