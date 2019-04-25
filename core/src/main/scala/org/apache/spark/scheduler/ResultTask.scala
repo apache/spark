@@ -25,6 +25,7 @@ import java.util.Properties
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.CompletionIterator
 
 /**
  * A task that sends back the output to the driver application.
@@ -87,7 +88,15 @@ private[spark] class ResultTask[T, U](
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
-    func(context, rdd.iterator(partition, context))
+    val iter = rdd.iterator(partition, context).asInstanceOf[InterruptibleIterator[T]]
+    val res = func(context, iter)
+    // SPARK-27568: operations like take() could not consume all elements when func() finished,
+    // which would lead to readLock on blocks leaked. So, we manually call completion() for
+    // those operations here.
+    if (iter.hasNext && iter.delegate.isInstanceOf[CompletionIterator[T, Iterator[T]]]) {
+      iter.delegate.asInstanceOf[CompletionIterator[T, Iterator[T]]].completion()
+    }
+    res
   }
 
   // This is only callable on the driver side.
