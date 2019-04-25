@@ -2558,7 +2558,8 @@ test_that("explain()", {
   # extended
   expect_output(
     explain(df, extended = TRUE),
-    "^== Parsed Logical Plan ==.*== Analyzed Logical Plan ==.*== Optimized Logical Plan ==.*== Physical Plan =="
+    paste("^== Parsed Logical Plan ==.*== Analyzed Logical Plan ==.*",
+          "== Optimized Logical Plan ==.*== Physical Plan ==", sep = "")
   )
   expect_equal(
     capture.output(explain(df, TRUE)),
