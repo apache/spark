@@ -14,28 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution.datasources.v2.json
 
-package org.apache.spark.rpc
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
+import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.sources.v2.reader.Scan
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/**
- * A callback that [[RpcEndpoint]] can use to send back a message or failure. It's thread-safe
- * and can be called in any thread.
- */
-private[spark] trait RpcCallContext {
-
-  /**
-   * Reply a message to the sender. If the sender is [[RpcEndpoint]], its `RpcEndpoint.receive`
-   * will be called.
-   */
-  def reply(response: Any): Unit
-
-  /**
-   * Report a failure to the sender.
-   */
-  def sendFailure(e: Throwable): Unit
-
-  /**
-   * The sender of this message.
-   */
-  def senderAddress: RpcAddress
+class JsonScanBuilder (
+    sparkSession: SparkSession,
+    fileIndex: PartitioningAwareFileIndex,
+    schema: StructType,
+    dataSchema: StructType,
+    options: CaseInsensitiveStringMap)
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
+  override def build(): Scan = {
+    JsonScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options)
+  }
 }

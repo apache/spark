@@ -400,8 +400,11 @@ class Dataset[T] private[sql](
         s"codegen ($codegen), cost ($cost)"
     )
 
+    // Because views are possibly resolved in the analyzed plan of this dataset. We use analyzed
+    // plan in `ExplainCommand`, for consistency. Otherwise, the plans shown by explain command
+    // might be inconsistent with the evaluated data of this dataset.
     val explain =
-      ExplainCommand(queryExecution.logical, extended, codegen, cost)
+      ExplainCommand(queryExecution.analyzed, extended, codegen, cost)
 
     sparkSession.sessionState
       .executePlan(explain)

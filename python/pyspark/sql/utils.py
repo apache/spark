@@ -136,7 +136,7 @@ def require_minimum_pyarrow_version():
     """ Raise ImportError if minimum version of pyarrow is not installed
     """
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "0.8.0"
+    minimum_pyarrow_version = "0.12.1"
 
     from distutils.version import LooseVersion
     try:
