@@ -1008,10 +1008,7 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
+    Alias(expr, alias)()
   }
 
   /**
