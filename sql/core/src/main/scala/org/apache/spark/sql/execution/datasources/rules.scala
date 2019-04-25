@@ -356,8 +356,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
         s"$tblName requires that the data to be inserted have the same number of columns as " +
-          s"the number of columns selected in the target table: the number of columns " +
-          s"selected has ${expectedColumns.length + staticPartCols.size} column(s) but the inserted data has " +
+          s"the number of columns selected in the target table: the number of columns selected has " +
+          s"${expectedColumns.length + staticPartCols.size} column(s) but the inserted data has " +
           s"${insert.query.output.length + staticPartCols.size} column(s), " +
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
