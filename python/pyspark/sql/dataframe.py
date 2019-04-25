@@ -253,36 +253,39 @@ class DataFrame(object):
     def explain(self, extended=False, codegen=False, cost=False):
         """Prints the plans to the console for debugging purpose.
 
-        With no (or, all False) options, this prints the physical
-        plan. The options are mutually exclusive: at most one can be
-        true.
+        With no (or, all ``False``) options, this prints the physical plan. The options are mutually
+        exclusive: at most one can be ``True``.
 
         :param extended: boolean, default ``False``. If ``True``, prints the logical plans as well
             as the physical plans.
         :param codegen: boolean, default ``False``. If ``True``, prints the generated code for
             whole-stage codegen.
-        :param cost: boolean, default ``False``. If ``False``, prints the optimized logical plan
+        :param cost: boolean, default ``False``. If ``True``, prints the optimized logical plan
             with operator costs.
 
         >>> df.explain()
         == Physical Plan ==
         *(1) Scan ExistingRDD[age#0,name#1]
 
-        >>> df.explain(extended = True)
+        >>> df.explain(extended = True)  # doctest: +SKIP
         == Parsed Logical Plan ==
-        ...
+        LogicalRDD [age#0, name#1], false
+        <BLANKLINE>
         == Analyzed Logical Plan ==
-        ...
+        age: int, name: string
+        LogicalRDD [age#0, name#1], false
+        <BLANKLINE>
         == Optimized Logical Plan ==
-        ...
+        LogicalRDD [age#0, name#1], false
+        <BLANKLINE>
         == Physical Plan ==
-        ...
+        *(1) Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(codegen = True)
         Found 1 WholeStageCodegen subtrees.
         == Subtree 1 / 1 ==
         *(1) Scan ExistingRDD[age#0,name#1]
-
+        <BLANKLINE>
         Generated code:
         /* 001 */ public Object generate(Object[] references) {
         /* 002 */   return new GeneratedIteratorForCodegenStage1(references);
@@ -291,9 +294,9 @@ class DataFrame(object):
         >>> df.explain(cost = True)
         == Optimized Logical Plan ==
         LogicalRDD [age#0, name#1], false, Statistics(sizeInBytes=8.0 EiB)
-
+        <BLANKLINE>
         == Physical Plan ==
-        ...
+        *(1) Scan ExistingRDD[age#0,name#1]
         """
         print(self._jdf.explainString(extended, codegen, cost))
 
