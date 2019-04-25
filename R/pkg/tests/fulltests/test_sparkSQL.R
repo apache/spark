@@ -2549,6 +2549,34 @@ test_that("showDF()", {
   expect_output(showDF(df, truncate = 3), expected2)
 })
 
+test_that("explain()", {
+  df <- read.json(jsonPath)
+
+  # normal
+  expect_output(explain(df), "^== Physical Plan ==")
+
+  # extended
+  expect_output(
+    explain(df, extended = TRUE),
+    "^== Parsed Logical Plan ==.*== Analyzed Logical Plan ==.*== Optimized Logical Plan ==.*== Physical Plan =="
+  )
+  expect_equal(
+    capture.output(explain(df, TRUE)),
+    capture.output(explain(df, extended = TRUE))
+  )
+
+  # cost
+  expect_output(
+    explain(df, cost = TRUE),
+    "^== Optimized Logical Plan ==.*Statistics\\(sizeInBytes.*== Physical Plan =="
+  )
+
+  # codegen
+  expect_output(
+    explain(df, codegen = TRUE),
+    "^Found 1 WholeStageCodegen subtrees.*== Subtree 1 / 1 ==.*public Object generate")
+})
+
 test_that("isLocal()", {
   df <- read.json(jsonPath)
   expect_false(isLocal(df))
