@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.storage.StorageLevel
 
 
 abstract class QueryTest extends PlanTest {
@@ -208,16 +209,16 @@ abstract class QueryTest extends PlanTest {
   /**
    * Asserts that a given [[Dataset]] will be executed using the given named cache.
    */
-  def assertCached(query: Dataset[_], cachedName: String): Unit = {
+  def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
-    val cachedTableNames = planWithCaching.collect {
-      case cached: InMemoryRelation => cached.cacheBuilder.tableName
-    }.flatten
+    val matched = planWithCaching.find( cached =>
+      cached.isInstanceOf[InMemoryRelation] && {
+        val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
+        cacheBuilder.tableName.get == cachedName && cacheBuilder.storageLevel == storageLevel
+      }).nonEmpty
 
-    assert(
-      cachedTableNames.contains(cachedName),
-      s"Expected query plan to hit cache $cachedName, but it doesn't. " +
-        s"It contains ${cachedTableNames.mkString(" ")} instead\n $planWithCaching")
+    assert(matched, s"Expected query plan to hit cache $cachedName with storage " +
+      s"Level $storageLevel, but it doesn't.")
   }
 
   /**

@@ -35,6 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.storage.StorageLevel.{apply => _, _}
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
@@ -985,23 +986,23 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
           StructType(Array(StructField("key", StringType))),
           Map("LOCATION" -> path.toURI.toString))
         withCache(s"$db.cachedTable") {
-          spark.catalog.cacheTable(s"$db.cachedTable")
-          assertCached(spark.table(s"$db.cachedTable"), s"$db.cachedTable")
+          spark.catalog.cacheTable(s"$db.cachedTable", MEMORY_ONLY)
+          assertCached(spark.table(s"$db.cachedTable"), s"$db.cachedTable", MEMORY_ONLY)
           assert(spark.catalog.isCached(s"$db.cachedTable"),
             s"Table '$db.cachedTable' should be cached")
 
           spark.catalog.refreshTable(s"$db.cachedTable")
-          assertCached(spark.table(s"$db.cachedTable"), s"$db.cachedTable")
+          assertCached(spark.table(s"$db.cachedTable"), s"$db.cachedTable", MEMORY_ONLY)
           assert(spark.catalog.isCached(s"$db.cachedTable"),
             s"Table '$db.cachedTable' should be cached after refresh")
 
           activateDatabase(db) {
-            assertCached(spark.table("cachedTable"), s"$db.cachedTable")
+            assertCached(spark.table("cachedTable"), s"$db.cachedTable", MEMORY_ONLY)
             assert(spark.catalog.isCached("cachedTable"),
               "Table 'cachedTable' should be cached after refresh")
 
             spark.catalog.refreshTable(s"cachedTable")
-            assertCached(spark.table("cachedTable"), s"$db.cachedTable")
+            assertCached(spark.table("cachedTable"), s"$db.cachedTable", MEMORY_ONLY)
             assert(spark.catalog.isCached("cachedTable"),
               "Table 'cachedTable' should be cached after refresh")
           }
@@ -1018,13 +1019,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         StructType(Array(StructField("key", StringType))),
         Map("LOCATION" -> path.toURI.toString))
       withCache("cachedTable") {
-        spark.catalog.cacheTable("cachedTable")
-        assertCached(sql("select * from cachedTable"), "cachedTable")
+        spark.catalog.cacheTable("cachedTable", MEMORY_AND_DISK_2)
+        assertCached(sql("select * from cachedTable"), "cachedTable", MEMORY_AND_DISK_2)
         assert(spark.catalog.isCached("cachedTable"),
           "Table 'cachedTable' should be cached")
 
         spark.catalog.refreshTable("cachedTable")
-        assertCached(sql("select * from cachedTable"), "cachedTable")
+        assertCached(sql("select * from cachedTable"), "cachedTable", MEMORY_AND_DISK_2)
         assert(spark.catalog.isCached("cachedTable"),
           "Table 'cachedTable' should be cached after refresh")
       }
