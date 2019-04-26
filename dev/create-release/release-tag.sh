@@ -62,8 +62,6 @@ done
 init_java
 init_maven_sbt
 
-ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
-
 function uriencode { jq -nSRr --arg v "$1" '$v|@uri'; }
 
 declare -r ENCODED_ASF_PASSWORD=$(uriencode "$ASF_PASSWORD")
@@ -73,7 +71,7 @@ git clone "https://$ASF_USERNAME:$ENCODED_ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_
 cd spark
 
 git config user.name "$GIT_NAME"
-git config user.email $GIT_EMAIL
+git config user.email "$GIT_EMAIL"
 
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
