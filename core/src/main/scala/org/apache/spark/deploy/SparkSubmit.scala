@@ -206,23 +206,7 @@ private[spark] class SparkSubmit extends Logging {
    * Prepare the environment for submitting an application.
    *
    * @param args the parsed SparkSubmitArguments used for environment preparation.
-   * @return a 4-tuple:
-   *        (1) the arguments for the child process,
-   *        (2) a list of classpath entries for the child,
-   *        (3) a map of system properties, and
-   *        (4) the main class for the child
-   */
-  private def prepareSubmitEnvironment(args: SparkSubmitArguments)
-      : (Seq[String], Seq[String], SparkConf, String) = {
-    prepareSubmitEnvironment(args, None, None)
-  }
-
-  /**
-   * Prepare the environment for submitting an application.
-   *
-   * @param args the parsed SparkSubmitArguments used for environment preparation.
    * @param conf the Hadoop Configuration, this argument will only be set in unit test.
-   * @param sparkConf the Spark Configuration, this argument will only be set in unit test.
    * @return a 4-tuple:
    *        (1) the arguments for the child process,
    *        (2) a list of classpath entries for the child,
@@ -233,16 +217,12 @@ private[spark] class SparkSubmit extends Logging {
    */
   private[deploy] def prepareSubmitEnvironment(
       args: SparkSubmitArguments,
-      conf: Option[HadoopConfiguration] = None,
-      sparkConfOpt: Option[SparkConf] = None)
+      conf: Option[HadoopConfiguration] = None)
       : (Seq[String], Seq[String], SparkConf, String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
-    val sparkConf = sparkConfOpt match {
-      case Some(cfg) => cfg
-      case None => new SparkConf()
-    }
+    val sparkConf = new SparkConf()
     var childMainClass = ""
 
     // Set the cluster manager

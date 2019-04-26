@@ -943,20 +943,18 @@ class SparkSubmitSuite
       "--files", s"${tmpFileDir.getAbsolutePath}/tmpFile*",
       "--py-files", s"${tmpPyFileDir.getAbsolutePath}/tmpPy*",
       "--archives", s"${tmpArchiveDir.getAbsolutePath}/*.zip",
+      "--conf", "spark.yarn.dist.files=" +
+        s"${Seq(file1YarnOpt, file2YarnOpt).map(_.getAbsolutePath).mkString(",")}",
+      "--conf", "spark.yarn.dist.pyFiles=" +
+        s"${Seq(pyFile1YarnOpt, pyFile2YarnOpt).map(_.getAbsolutePath).mkString(",")}",
+      "--conf", "spark.yarn.dist.jars=" +
+        s"${Seq(jar1YarnOpt, jar2YarnOpt).map(_.toURI.toString).mkString(",")}",
+      "--conf", "spark.yarn.dist.archives=" +
+        s"${Seq(archive1YarnOpt, archive2YarnOpt).map(_.toURI.toString).mkString(",")}",
       tempPyFile.toURI().toString())
 
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.dist.files",
-      Seq(file1YarnOpt, file2YarnOpt).map(_.getAbsolutePath).mkString(","))
-    sparkConf.set("spark.yarn.dist.pyFiles",
-      Seq(pyFile1YarnOpt, pyFile2YarnOpt).map(_.getAbsolutePath).mkString(","))
-    sparkConf.set("spark.yarn.dist.jars",
-      Seq(jar1YarnOpt, jar2YarnOpt).map(_.toURI.toString).mkString(","))
-    sparkConf.set("spark.yarn.dist.archives",
-      Seq(archive1YarnOpt, archive2YarnOpt).map(_.toURI.toString).mkString(","))
-
     val appArgs = new SparkSubmitArguments(args)
-    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, sparkConfOpt = Some(sparkConf))
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
     conf.get("spark.yarn.dist.jars").split(",").toSet should be
     (Set(Seq(jar1, jar2, jar1YarnOpt, jar2YarnOpt).map(_.toURI.toString).toList))
     conf.get("spark.yarn.dist.files").split(",").toSet should be
