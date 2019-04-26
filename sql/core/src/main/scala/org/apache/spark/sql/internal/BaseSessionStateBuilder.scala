@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.V2WriteSupportCheck
+import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -177,6 +177,7 @@ abstract class BaseSessionStateBuilder(
         PreReadCheck +:
         HiveOnlyCheck +:
         V2WriteSupportCheck +:
+        V2StreamingScanSupportCheck +:
         customCheckRules
   }
 

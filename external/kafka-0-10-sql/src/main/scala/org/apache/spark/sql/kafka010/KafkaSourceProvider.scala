@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.{Collections, Locale, UUID}
+import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -29,9 +29,10 @@ import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySe
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.execution.streaming.{BaseStreamingSink, Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
@@ -353,13 +354,15 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   class KafkaTable(strategy: => ConsumerStrategy) extends Table
-    with SupportsMicroBatchRead with SupportsContinuousRead with SupportsStreamingWrite {
+    with SupportsRead with SupportsWrite with BaseStreamingSink {
 
     override def name(): String = s"Kafka $strategy"
 
     override def schema(): StructType = KafkaOffsetReader.kafkaSchema
 
-    override def capabilities(): ju.Set[TableCapability] = Collections.emptySet()
+    override def capabilities(): ju.Set[TableCapability] = {
+      Set(MICRO_BATCH_READ, CONTINUOUS_READ, STREAMING_WRITE).asJava
+    }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
       () => new KafkaScan(options)
