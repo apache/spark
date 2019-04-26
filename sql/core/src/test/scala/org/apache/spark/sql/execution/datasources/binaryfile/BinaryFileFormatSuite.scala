@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.binaryfile
 
 import java.io.File
 import java.nio.file.{Files, StandardOpenOption}
+import java.nio.file.attribute.PosixFilePermission
 import java.sql.Timestamp
 
 import scala.collection.JavaConverters._
@@ -28,11 +29,14 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
@@ -43,6 +47,8 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
   private var fsTestDir: Path = _
 
   private var fs: FileSystem = _
+
+  private var file1: File = _
 
   private var file1Status: FileStatus = _
 
@@ -58,7 +64,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     val year2015Dir = new File(testDir, "year=2015")
     year2015Dir.mkdir()
 
-    val file1 = new File(year2014Dir, "data.txt")
+    file1 = new File(year2014Dir, "data.txt")
     Files.write(
       file1.toPath,
       Seq("2014-test").asJava,
@@ -285,5 +291,46 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       EqualTo(LENGTH, file1Status.getLen),
       EqualTo(MODIFICATION_TIME, file1Status.getModificationTime)
     ), true)
+  }
+
+
+  test("genPrunedRow") {
+    val path1 = "test:/path/to/dir1"
+    val len1 = 123L
+    val time1 = 4567L
+    val content1 = "abcd".getBytes
+    val status1 = mock(classOf[FileStatus])
+    when(status1.getLen).thenReturn(len1)
+    when(status1.getModificationTime).thenReturn(time1)
+
+    var readContent1Called = false
+    def readContent1: Array[Byte] = {
+      readContent1Called = true
+      content1
+    }
+
+    def test(fieldNames: String*): Unit = {
+      readContent1Called = false
+
+      val row = genPrunedRow(path1, status1, readContent1, fieldNames.toArray)
+      val expectedRowVals = fieldNames.toArray.map {
+        case PATH => UTF8String.fromString(path1)
+        case LENGTH => len1
+        case MODIFICATION_TIME => DateTimeUtils.fromMillis(time1)
+        case CONTENT => content1
+      }
+      val expectedRow = InternalRow(expectedRowVals: _*)
+      assert(row === expectedRow)
+      assert(fieldNames.contains(CONTENT) === readContent1Called)
+    }
+
+    test("path", "length", "modificationTime", "content")
+    test("path", "length", "modificationTime")
+    test("path", "modificationTime", "content")
+    test("path", "length")
+    test("path", "content", "modificationTime", "length")
+    test("path")
+    test("length")
+    test("content")
   }
 }
