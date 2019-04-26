@@ -261,7 +261,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with CastSupport {
   import DataSourceStrategy._
 
-  def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
+  override protected def doApply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _, _)) =>
       pruneFilterProjectRaw(
         l,
