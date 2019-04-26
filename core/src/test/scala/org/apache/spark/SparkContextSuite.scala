@@ -732,13 +732,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("call take() on a cached rdd should not leak readLock on the block") {
+  test("SPARK-27568: call take()/first() on a cached rdd should not leak readLock on the block") {
     val conf = new SparkConf()
       .setAppName("test")
       .setMaster("local")
       .set("spark.storage.exceptionOnPinLeak", "true")
     sc = new SparkContext(conf)
+    // No exception, no pin leak
     assert(sc.parallelize(Range(0, 10), 1).cache().take(1).head === 0)
+    assert(sc.parallelize(Range(0, 10), 1).cache().first() === 0)
   }
 }
 

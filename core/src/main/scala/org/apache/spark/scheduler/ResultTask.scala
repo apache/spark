@@ -91,7 +91,7 @@ private[spark] class ResultTask[T, U](
     val iter = rdd.iterator(partition, context).asInstanceOf[InterruptibleIterator[T]]
     val res = func(context, iter)
     // SPARK-27568: operations like take() could not consume all elements when func() finished,
-    // which would lead to readLock on blocks leaked. So, we manually call completion() for
+    // which would lead to readLock on block leaked. So, we manually call completion() for
     // those operations here.
     if (iter.hasNext && iter.delegate.isInstanceOf[CompletionIterator[T, Iterator[T]]]) {
       iter.delegate.asInstanceOf[CompletionIterator[T, Iterator[T]]].completion()
