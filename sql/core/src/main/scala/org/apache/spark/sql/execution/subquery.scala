@@ -95,7 +95,7 @@ case class Exists(
 /**
  * Evaluates to `true` if `values` are returned in the subquery's result set.
  * If `values` are not found in the subquery's result set, and there are nulls in
- * `values` or the result set, it should return UNKNOWN.
+ * `values` or the result set, it should return null.
  * This is the physical copy of InSubquery to be used inside SparkPlan.
  */
 case class InSubquery(

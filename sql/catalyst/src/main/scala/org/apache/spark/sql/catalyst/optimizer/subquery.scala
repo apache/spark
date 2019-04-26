@@ -568,7 +568,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
  * set. Note that InSubquery may be nullable, so we can not eliminate nulls for both sides.
  * {{{
  *  SELECT * FROM s WHERE 3 IN (SELECT b FROM t WHERE a = 2);
- *  ==> SELECT * FROM s WHERE 3 IN (SELECT b FROM t WHERE a = 2 AND (b = 3 or b IS NULL));
+ *  ==> SELECT * FROM s WHERE 3 IN (SELECT b FROM t WHERE a = 2 AND (b = 3 OR (b = 3) IS NULL));
  * }}}
  */
 object RewriteUncorrelatedSubquery extends Rule[LogicalPlan] {
