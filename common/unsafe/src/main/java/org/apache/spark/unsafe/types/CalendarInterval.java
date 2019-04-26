@@ -56,6 +56,9 @@ public final class CalendarInterval implements Serializable {
   private static Pattern dayTimePattern =
     Pattern.compile("^(?:['|\"])?([+|-])?(\\d+) (\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
 
+  private static Pattern hourTimePattern =
+          Pattern.compile("^(?:['|\"])?(\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
+
   private static Pattern quoteTrimPattern = Pattern.compile("^(?:['|\"])?(.*?)(?:['|\"])?$");
 
   private static long toLong(String s) {
@@ -159,6 +162,37 @@ public final class CalendarInterval implements Serializable {
       } catch (Exception e) {
         throw new IllegalArgumentException(
           "Error parsing interval day-time string: " + e.getMessage(), e);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Parse dayTime string in form: HH:mm:ss.nnnnnnnnn
+   *
+   */
+  public static CalendarInterval fromHourTimeString(String s) throws IllegalArgumentException {
+    CalendarInterval result;
+    if (s == null) {
+      throw new IllegalArgumentException("Interval hour-time string was null");
+    }
+    s = s.trim();
+    Matcher m = hourTimePattern.matcher(s);
+    if (!m.matches()) {
+      throw new IllegalArgumentException(
+              "Interval string does not match hour-time format of 'h:m:s.n': " + s);
+    } else {
+      try {
+        long hours = toLongWithRange("hour", m.group(1), 0, 23);
+        long minutes = toLongWithRange("minute", m.group(2), 0, 59);
+        long seconds = toLongWithRange("second", m.group(3), 0, 59);
+        // Hive allow nanosecond precision interval
+        long nanos = toLongWithRange("nanosecond", m.group(5), 0L, 999999999L);
+        result = new CalendarInterval(0, hours * MICROS_PER_HOUR +
+                minutes * MICROS_PER_MINUTE + seconds * MICROS_PER_SECOND + nanos / 1000L);
+      } catch (Exception e) {
+        throw new IllegalArgumentException(
+                "Error parsing interval hour-time string: " + e.getMessage(), e);
       }
     }
     return result;

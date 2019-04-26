@@ -1183,6 +1183,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
       Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
         "32 seconds 99 milliseconds 899 microseconds")))
+    checkAnswer(sql("select interval '15:40:32.99899999' hour to second"),
+      Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 99 milliseconds " +
+        "899 microseconds")))
     checkAnswer(sql("select interval '30' year"),
       Row(CalendarInterval.fromString("interval 30 years")))
     checkAnswer(sql("select interval '25' month"),

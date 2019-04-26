@@ -653,6 +653,19 @@ class ExpressionParserSuite extends PlanTest {
       checkIntervals(s"'$value' day to second", result)
     }
 
+    // Day-Time intervals.
+    val hourTimeValues = Seq(
+      "11:22:33.123456789",
+      "11:22:33.123456789",
+      "9:8:7.123456789",
+      "0:0:0",
+      "0:0:0",
+      "0:0:1")
+    hourTimeValues.foreach { value =>
+      val result = Literal(CalendarInterval.fromHourTimeString(value))
+      checkIntervals(s"'$value' hour to second", result)
+    }
+
     // Unknown FROM TO intervals
     intercept("interval 10 month to second",
       "Intervals FROM month TO second are not supported.")
