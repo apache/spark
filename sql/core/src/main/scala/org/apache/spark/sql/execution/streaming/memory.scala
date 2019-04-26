@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -49,7 +49,7 @@ object MemoryStream {
 /**
  * A base class for memory stream implementations. Supports adding data and resetting.
  */
-abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {
+abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends SparkDataStream {
   val encoder = encoderFor[A]
   protected val attributes = encoder.schema.toAttributes
 
@@ -78,6 +78,18 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
   }
 
   def addData(data: TraversableOnce[A]): Offset
+
+  override def initialOffset(): OffsetV2 = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def deserializeOffset(json: String): OffsetV2 = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def commit(end: OffsetV2): Unit = {
+    throw new IllegalStateException("should not be called.")
+  }
 }
 
 // This class is used to indicate the memory stream data source. We don't actually use it, as
@@ -263,12 +275,4 @@ object MemoryStreamReaderFactory extends PartitionReaderFactory {
       override def close(): Unit = {}
     }
   }
-}
-
-/** A common trait for MemorySinks with methods used for testing */
-trait MemorySinkBase extends BaseStreamingSink {
-  def allData: Seq[Row]
-  def latestBatchData: Seq[Row]
-  def dataSinceBatch(sinceBatchId: Long): Seq[Row]
-  def latestBatchId: Option[Long]
 }
