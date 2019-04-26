@@ -194,7 +194,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
             grouping = Int.MaxValue
           }
           counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
-            // The score of the combined point will be just the first one's score
+            // The score of the combined point will be just the last one's score
             val lastScore = pairs.last._1
             // The point will contain all counts in this chunk
             val agg = new BinaryLabelCounter()
