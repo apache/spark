@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -138,12 +138,15 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
  * @param extended whether to do extended explain or not
  * @param codegen whether to output generated code from whole-stage codegen or not
  * @param cost whether to show cost information for operators.
+ * @param optQueryExecution if present, this command uses pre-analyzed plan of it,
+ *                          instead of re-analyzing plan.
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     extended: Boolean = false,
     codegen: Boolean = false,
-    cost: Boolean = false)
+    cost: Boolean = false,
+    optQueryExecution: Option[QueryExecution] = None)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] =
@@ -151,7 +154,7 @@ case class ExplainCommand(
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val queryExecution =
+    val queryExecution = optQueryExecution.getOrElse {
       if (logicalPlan.isStreaming) {
         // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
         // output mode does not matter since there is no `Sink`.
@@ -161,6 +164,8 @@ case class ExplainCommand(
       } else {
         sparkSession.sessionState.executePlan(logicalPlan)
       }
+    }
+
     val outputString =
       if (codegen) {
         codegenString(queryExecution.executedPlan)

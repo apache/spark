@@ -498,7 +498,8 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended)
+    val explain = ExplainCommand(queryExecution.logical, extended = extended,
+      optQueryExecution = Some(queryExecution))
     sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       // scalastyle:off println
       r => println(r.getString(0))
