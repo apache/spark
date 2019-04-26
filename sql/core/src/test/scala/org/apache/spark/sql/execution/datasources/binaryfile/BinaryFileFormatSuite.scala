@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.binaryfile
 
 import java.io.File
 import java.nio.file.{Files, StandardOpenOption}
-import java.nio.file.attribute.PosixFilePermission
 import java.sql.Timestamp
 
 import scala.collection.JavaConverters._
@@ -48,8 +47,6 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
 
   private var fs: FileSystem = _
 
-  private var file1: File = _
-
   private var file1Status: FileStatus = _
 
   override def beforeAll(): Unit = {
@@ -64,7 +61,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     val year2015Dir = new File(testDir, "year=2015")
     year2015Dir.mkdir()
 
-    file1 = new File(year2014Dir, "data.txt")
+    val file1 = new File(year2014Dir, "data.txt")
     Files.write(
       file1.toPath,
       Seq("2014-test").asJava,
@@ -130,7 +127,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
 
       for (fileStatus <- fs.listStatus(dirPath)) {
         if (globFilter == null || globFilter.accept(fileStatus.getPath)) {
-          val fpath = fileStatus.getPath.toString.replace("file:/", "file:///")
+          val fpath = fileStatus.getPath.toString
           val flen = fileStatus.getLen
           val modificationTime = new Timestamp(fileStatus.getModificationTime)
 
@@ -300,11 +297,12 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     val time1 = 4567L
     val content1 = "abcd".getBytes
     val status1 = mock(classOf[FileStatus])
+    when(status1.getPath).thenReturn(new Path(path1))
     when(status1.getLen).thenReturn(len1)
     when(status1.getModificationTime).thenReturn(time1)
 
     var readContent1Called = false
-    def readContent1: Array[Byte] = {
+    def readContent1(): Array[Byte] = {
       readContent1Called = true
       content1
     }
@@ -312,7 +310,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     def test(fieldNames: String*): Unit = {
       readContent1Called = false
 
-      val row = genPrunedRow(path1, status1, readContent1, fieldNames.toArray)
+      val row = genPrunedRow(status1, () => readContent1(), fieldNames.toArray)
       val expectedRowVals = fieldNames.toArray.map {
         case PATH => UTF8String.fromString(path1)
         case LENGTH => len1

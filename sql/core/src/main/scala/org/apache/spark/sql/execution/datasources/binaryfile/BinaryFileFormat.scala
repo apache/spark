@@ -21,13 +21,11 @@ import java.sql.Timestamp
 
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobFilter, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
@@ -108,7 +106,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
         val fs = fsPath.getFileSystem(broadcastedHadoopConf.value.value)
         val fileStatus = fs.getFileStatus(fsPath)
 
-        def readContent: Array[Byte] = {
+        def readContent(): Array[Byte] = {
           val stream = fs.open(fsPath)
           try {
             ByteStreams.toByteArray(stream)
@@ -118,7 +116,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
         }
 
         if (filterFuncs.forall(_.apply(fileStatus))) {
-          val row = genPrunedRow(path, fileStatus, readContent, requiredSchema.fieldNames)
+          val row = genPrunedRow(fileStatus, () => readContent(), requiredSchema.fieldNames)
           Iterator(row)
         } else {
           Iterator.empty
@@ -190,16 +188,15 @@ object BinaryFileFormat {
   }
 
   private[binaryfile] def genPrunedRow(
-      path: String,
       status: FileStatus,
-      readContent: => Array[Byte],
+      readContent: () => Array[Byte],
       requiredFieldNames: Array[String]): InternalRow = {
 
     val values = requiredFieldNames.map {
-      case PATH => UTF8String.fromString(path)
+      case PATH => UTF8String.fromString(status.getPath.toString)
       case LENGTH => status.getLen
       case MODIFICATION_TIME => DateTimeUtils.fromMillis(status.getModificationTime)
-      case CONTENT => readContent
+      case CONTENT => readContent()
       case name => throw new RuntimeException(s"Unexcepted field name: ${name}")
     }
     InternalRow(values: _*)
