@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, LessThanOrEqual, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LeafNode, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Project}
-import org.apache.spark.sql.types.{DoubleType, FloatType, StructField, StructType}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types._
 
 class V2AppendDataAnalysisSuite extends DataSourceV2AnalysisSuite {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
@@ -102,6 +102,12 @@ class V2OverwriteByExpressionAnalysisSuite extends DataSourceV2AnalysisSuite {
 
 case class TestRelation(output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
   override def name: String = "table-name"
+}
+
+case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
+  extends LeafNode with NamedRelation {
+  override def name: String = "test-name"
+  override def requireSchemaMatch: Boolean = false
 }
 
 abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
@@ -444,6 +450,22 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Cannot write incompatible data to table", "'table-name'",
       "Cannot write nullable values to non-null column", "'x'",
       "Cannot safely cast", "'x'", "DoubleType to FloatType"))
+  }
+
+  test("bypass output column resolution") {
+    val table = TestRelationAcceptAnySchema(StructType(Seq(
+      StructField("a", FloatType, nullable = false),
+      StructField("b", DoubleType))).toAttributes)
+
+    val query = TestRelation(StructType(Seq(
+      StructField("s", StringType))).toAttributes)
+
+    val plan1 = byName(table, query)
+    val plan2 = byPosition(table, query)
+    assertResolved(plan1)
+    assertResolved(plan2)
+    checkAnalysis(plan1, plan1)
+    checkAnalysis(plan2, plan2)
   }
 
   def assertNotResolved(logicalPlan: LogicalPlan): Unit = {
