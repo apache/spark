@@ -58,8 +58,4 @@ case class OrcScan(
   }
 
   override def hashCode(): Int = getClass.hashCode()
-
-  private def equivalentFilters(a: Array[Filter], b: Array[Filter]): Boolean = {
-    a.sortBy(_.hashCode()).sameElements(b.sortBy(_.hashCode()))
-  }
 }
