@@ -195,11 +195,11 @@ class BinaryClassificationMetrics @Since("3.0.0") (
           }
           counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
             // The score of the combined point will be just the first one's score
-            val firstScore = pairs.head._1
+            val lastScore = pairs.last._1
             // The point will contain all counts in this chunk
             val agg = new BinaryLabelCounter()
             pairs.foreach(pair => agg += pair._2)
-            (firstScore, agg)
+            (lastScore, agg)
           })
         }
       }
