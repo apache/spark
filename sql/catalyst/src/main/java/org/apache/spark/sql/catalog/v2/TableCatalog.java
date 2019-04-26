@@ -82,38 +82,6 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @param schema the schema of the new table, as a struct type
-   * @return metadata for the new table
-   * @throws TableAlreadyExistsException If a table already exists for the identifier
-   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
-   */
-  default Table createTable(
-      Identifier ident,
-      StructType schema) throws TableAlreadyExistsException, NoSuchNamespaceException {
-    return createTable(ident, schema, new Transform[0], Collections.emptyMap());
-  }
-
-  /**
-   * Create a table in the catalog.
-   *
-   * @param ident a table identifier
-   * @param schema the schema of the new table, as a struct type
-   * @param properties a string map of table properties
-   * @return metadata for the new table
-   * @throws TableAlreadyExistsException If a table already exists for the identifier
-   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
-   */
-  default Table createTable(
-      Identifier ident,
-      StructType schema,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
-    return createTable(ident, schema, new Transform[0], properties);
-  }
-
-  /**
-   * Create a table in the catalog.
-   *
-   * @param ident a table identifier
-   * @param schema the schema of the new table, as a struct type
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
    * @return metadata for the new table
