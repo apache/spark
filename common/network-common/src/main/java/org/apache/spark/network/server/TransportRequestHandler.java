@@ -146,7 +146,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       streamManager.streamBeingSent(req.streamId);
       if (buf instanceof DigestFileSegmentManagedBuffer) {
         respond(new DigestStreamResponse(req.streamId, buf.size(), buf,
-                ((DigestFileSegmentManagedBuffer) buf).getDigest())).addListener(future -> {
+          ((DigestFileSegmentManagedBuffer) buf).getDigest())).addListener(future -> {
           streamManager.streamSent(req.streamId);
         });
       } else {

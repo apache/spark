@@ -41,7 +41,7 @@ public final class DigestStreamResponse extends AbstractResponseMessage {
   }
 
   @Override
-  public Type type() { return Type.DigestStreamResponse; }
+  public Message.Type type() { return Type.DigestStreamResponse; }
 
   @Override
   public int encodedLength() {

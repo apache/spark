@@ -33,6 +33,7 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 public final class DigestChunkFetchSuccess extends AbstractResponseMessage {
   public final StreamChunkId streamChunkId;
   public final long digest;
+
   public DigestChunkFetchSuccess(StreamChunkId streamChunkId, ManagedBuffer buffer, long digest) {
     super(buffer, true);
     this.streamChunkId = streamChunkId;
@@ -40,7 +41,7 @@ public final class DigestChunkFetchSuccess extends AbstractResponseMessage {
   }
 
   @Override
-  public Type type() { return Type.DigestChunkFetchSuccess; }
+  public Message.Type type() { return Type.DigestChunkFetchSuccess; }
 
   @Override
   public int encodedLength() {

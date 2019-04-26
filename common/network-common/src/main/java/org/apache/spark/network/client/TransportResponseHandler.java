@@ -253,7 +253,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} since it is not outstanding",
-                resp.streamChunkId, getRemoteAddress(channel));
+          resp.streamChunkId, getRemoteAddress(channel));
         resp.body().release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
@@ -266,11 +266,11 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       if (entry != null) {
         StreamCallback callback = entry.getValue();
         if (resp.byteCount > 0) {
-          StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId, resp.byteCount,
-                  callback, resp.digest);
+          StreamInterceptor interceptor = new StreamInterceptor(
+            this, resp.streamId, resp.byteCount, callback, resp.digest);
           try {
             TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
-                    channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
+              channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
             frameDecoder.setInterceptor(interceptor);
             streamActive = true;
           } catch (Exception e) {

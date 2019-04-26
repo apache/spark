@@ -111,12 +111,11 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
     streamManager.chunkBeingSent(msg.streamChunkId.streamId);
     if (buf instanceof DigestFileSegmentManagedBuffer) {
       respond(channel, new DigestChunkFetchSuccess(msg.streamChunkId, buf,
-              ((DigestFileSegmentManagedBuffer)buf).getDigest()))
-              .addListener((ChannelFutureListener) future ->
-                      streamManager.chunkSent(msg.streamChunkId.streamId));
+        ((DigestFileSegmentManagedBuffer)buf).getDigest())).addListener(
+        (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
     } else {
       respond(channel, new ChunkFetchSuccess(msg.streamChunkId, buf)).addListener(
-              (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
+        (ChannelFutureListener) future -> streamManager.chunkSent(msg.streamChunkId.streamId));
     }
 
   }

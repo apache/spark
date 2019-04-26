@@ -24,14 +24,11 @@ import java.io.InputStream;
 import java.util.zip.CRC32;
 
 public class DigestUtils {
-    private static final int STREAM_BUFFER_LENGTH = 2048;
+    private static final int STREAM_BUFFER_LENGTH = 8192;
     private static final int DIGEST_LENGTH = 8;
 
     public static int getDigestLength() {
        return DIGEST_LENGTH;
-    }
-
-    public DigestUtils() {
     }
 
     public static long getDigest(InputStream data) throws IOException {
@@ -55,7 +52,7 @@ public class DigestUtils {
 
     public static long updateCRC32(CRC32 crc32, InputStream data) throws IOException {
         byte[] buffer = new byte[STREAM_BUFFER_LENGTH];
-        int len = 0;
+        int len;
         while ((len = data.read(buffer)) >= 0) {
             crc32.update(buffer, 0, len);
         }

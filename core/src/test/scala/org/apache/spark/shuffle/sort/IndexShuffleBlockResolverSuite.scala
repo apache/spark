@@ -172,12 +172,9 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
       out.close()
     }
     val digest = DigestUtils.getDigest(new ByteArrayInputStream(new Array[Byte](10)))
-
     resolver.writeIndexFileAndCommit(1, 2, lengths, dataTmp)
     val managedBuffer = resolver.getBlockData(ShuffleBlockId(1, 2, 0))
     assert(managedBuffer.isInstanceOf[DigestFileSegmentManagedBuffer])
     assert(managedBuffer.asInstanceOf[DigestFileSegmentManagedBuffer].getDigest == digest)
-
   }
-
 }
