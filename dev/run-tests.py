@@ -347,6 +347,14 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
 def build_apache_spark(build_tool, hadoop_version):
     """Will build Spark against Hive v1.2.1 given the passed in build tool (either `sbt` or
     `maven`). Defaults to using `sbt`."""
+    set_title_and_block("Building Hive", "BLOCK_BUILD")
+
+    run_cmd(["git", "clone", "-b", "branch-2.3", "https://github.com/apache/hive.git"])
+    run_cmd(["cd", "hive"])
+    mvn_goals = ["clean", "install", "-DskipTests"]
+    exec_maven(mvn_goals)
+    run_cmd(["cd", "-"])
+    rm_r("hive")
 
     set_title_and_block("Building Spark", "BLOCK_BUILD")
 
