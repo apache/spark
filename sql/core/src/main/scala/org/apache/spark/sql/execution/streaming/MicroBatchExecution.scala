@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.sql.{Dataset, SparkSession}
@@ -78,6 +77,7 @@ class MicroBatchExecution(
     val disabledSources =
       sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders.split(",")
 
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
       case streamingRelation@StreamingRelation(dataSourceV1, sourceName, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
@@ -88,31 +88,33 @@ class MicroBatchExecution(
           logInfo(s"Using Source [$source] from DataSourceV1 named '$sourceName' [$dataSourceV1]")
           StreamingExecutionRelation(source, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(ds, dsName, table: SupportsMicroBatchRead, options, output, _)
-          if !disabledSources.contains(ds.getClass.getCanonicalName) =>
-        v2ToRelationMap.getOrElseUpdate(s, {
-          // Materialize source to avoid creating it in every batch
-          val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          nextSourceId += 1
-          logInfo(s"Reading table [$table] from DataSourceV2 named '$dsName' [$ds]")
-          // TODO: operator pushdown.
-          val scan = table.newScanBuilder(options).build()
-          val stream = scan.toMicroBatchStream(metadataPath)
-          StreamingDataSourceV2Relation(output, scan, stream)
-        })
-      case s @ StreamingRelationV2(ds, dsName, _, _, output, v1Relation) =>
-        v2ToExecutionRelationMap.getOrElseUpdate(s, {
-          // Materialize source to avoid creating it in every batch
-          val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          if (v1Relation.isEmpty) {
-            throw new UnsupportedOperationException(
-              s"Data source $dsName does not support microbatch processing.")
-          }
-          val source = v1Relation.get.dataSource.createSource(metadataPath)
-          nextSourceId += 1
-          logInfo(s"Using Source [$source] from DataSourceV2 named '$dsName' [$ds]")
-          StreamingExecutionRelation(source, output)(sparkSession)
-        })
+
+      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output, v1) =>
+        val v2Disabled = disabledSources.contains(src.getClass.getCanonicalName)
+        if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {
+          v2ToRelationMap.getOrElseUpdate(s, {
+            // Materialize source to avoid creating it in every batch
+            val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+            nextSourceId += 1
+            logInfo(s"Reading table [$table] from DataSourceV2 named '$srcName' [$src]")
+            // TODO: operator pushdown.
+            val scan = table.newScanBuilder(options).build()
+            val stream = scan.toMicroBatchStream(metadataPath)
+            StreamingDataSourceV2Relation(output, scan, stream)
+          })
+        } else if (v1.isEmpty) {
+          throw new UnsupportedOperationException(
+            s"Data source $srcName does not support microbatch processing.")
+        } else {
+          v2ToExecutionRelationMap.getOrElseUpdate(s, {
+            // Materialize source to avoid creating it in every batch
+            val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+            val source = v1.get.dataSource.createSource(metadataPath)
+            nextSourceId += 1
+            logInfo(s"Using Source [$source] from DataSourceV2 named '$srcName' [$src]")
+            StreamingExecutionRelation(source, output)(sparkSession)
+          })
+        }
     }
     sources = _logicalPlan.collect {
       // v1 source
@@ -122,8 +124,9 @@ class MicroBatchExecution(
     }
     uniqueSources = sources.distinct
 
+    // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
-      case s: SupportsStreamingWrite =>
+      case s: SupportsWrite =>
         val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
         WriteToMicroBatchDataSource(streamingWrite, _logicalPlan)
 
@@ -519,7 +522,7 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case _: SupportsStreamingWrite =>
+      case _: SupportsWrite =>
         newAttributePlan.asInstanceOf[WriteToMicroBatchDataSource].createPlan(currentBatchId)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
@@ -550,7 +553,7 @@ class MicroBatchExecution(
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
-          case _: SupportsStreamingWrite =>
+          case _: SupportsWrite =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }

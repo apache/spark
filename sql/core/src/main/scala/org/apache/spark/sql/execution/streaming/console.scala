@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util
-import java.util.Collections
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
@@ -60,13 +61,15 @@ class ConsoleSinkProvider extends TableProvider
   def shortName(): String = "console"
 }
 
-object ConsoleTable extends Table with SupportsStreamingWrite {
+object ConsoleTable extends Table with SupportsWrite with BaseStreamingSink {
 
   override def name(): String = "console"
 
   override def schema(): StructType = StructType(Nil)
 
-  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(TableCapability.STREAMING_WRITE).asJava
+  }
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
