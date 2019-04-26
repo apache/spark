@@ -897,6 +897,76 @@ class SparkSubmitSuite
     }
   }
 
+  test("SPARK-27575: yarn confs should merge new value with existing value") {
+    val tmpJarDir = Utils.createTempDir()
+    val jar1 = TestUtils.createJarWithFiles(Map("test.resource" -> "1"), tmpJarDir)
+    val jar2 = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpJarDir)
+
+    val tmpJarDirYarnOpt = Utils.createTempDir()
+    val jar1YarnOpt = TestUtils.createJarWithFiles(Map("test.resource" -> "2"), tmpJarDirYarnOpt)
+    val jar2YarnOpt = TestUtils.createJarWithFiles(Map("test.resource" -> "USER2"),
+      tmpJarDirYarnOpt)
+
+    val tmpFileDir = Utils.createTempDir()
+    val file1 = File.createTempFile("tmpFile1", "", tmpFileDir)
+    val file2 = File.createTempFile("tmpFile2", "", tmpFileDir)
+
+    val tmpFileDirYarnOpt = Utils.createTempDir()
+    val file1YarnOpt = File.createTempFile("tmpPy1YarnOpt", ".py", tmpFileDirYarnOpt)
+    val file2YarnOpt = File.createTempFile("tmpPy2YarnOpt", ".egg", tmpFileDirYarnOpt)
+
+    val tmpPyFileDir = Utils.createTempDir()
+    val pyFile1 = File.createTempFile("tmpPy1", ".py", tmpPyFileDir)
+    val pyFile2 = File.createTempFile("tmpPy2", ".egg", tmpPyFileDir)
+
+    val tmpPyFileDirYarnOpt = Utils.createTempDir()
+    val pyFile1YarnOpt = File.createTempFile("tmpPy1YarnOpt", ".py", tmpPyFileDirYarnOpt)
+    val pyFile2YarnOpt = File.createTempFile("tmpPy2YarnOpt", ".egg", tmpPyFileDirYarnOpt)
+
+    val tmpArchiveDir = Utils.createTempDir()
+    val archive1 = File.createTempFile("archive1", ".zip", tmpArchiveDir)
+    val archive2 = File.createTempFile("archive2", ".zip", tmpArchiveDir)
+
+    val tmpArchiveDirYarnOpt = Utils.createTempDir()
+    val archive1YarnOpt = File.createTempFile("archive1YarnOpt", ".zip", tmpArchiveDirYarnOpt)
+    val archive2YarnOpt = File.createTempFile("archive2YarnOpt", ".zip", tmpArchiveDirYarnOpt)
+
+    val tempPyFile = File.createTempFile("tmpApp", ".py")
+    tempPyFile.deleteOnExit()
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--jars", s"${tmpJarDir.getAbsolutePath}/*.jar",
+      "--files", s"${tmpFileDir.getAbsolutePath}/tmpFile*",
+      "--py-files", s"${tmpPyFileDir.getAbsolutePath}/tmpPy*",
+      "--archives", s"${tmpArchiveDir.getAbsolutePath}/*.zip",
+      tempPyFile.toURI().toString())
+
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.yarn.dist.files",
+      Seq(file1YarnOpt, file2YarnOpt).map(_.getAbsolutePath).mkString(","))
+    sparkConf.set("spark.yarn.dist.pyFiles",
+      Seq(pyFile1YarnOpt, pyFile2YarnOpt).map(_.getAbsolutePath).mkString(","))
+    sparkConf.set("spark.yarn.dist.jars",
+      Seq(jar1YarnOpt, jar2YarnOpt).map(_.toURI.toString).mkString(","))
+    sparkConf.set("spark.yarn.dist.archives",
+      Seq(archive1YarnOpt, archive2YarnOpt).map(_.toURI.toString).mkString(","))
+
+    val appArgs = new SparkSubmitArguments(args)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, sparkConfOpt = Some(sparkConf))
+    conf.get("spark.yarn.dist.jars").split(",").toSet should be
+    (Set(Seq(jar1, jar2, jar1YarnOpt, jar2YarnOpt).map(_.toURI.toString).toList))
+    conf.get("spark.yarn.dist.files").split(",").toSet should be
+    (Set(Seq(file1, file2, file1YarnOpt, file2YarnOpt).map(_.toURI.toString)))
+    conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be
+    (Set(Seq(pyFile1, pyFile2, pyFile1YarnOpt, pyFile2YarnOpt).map(_.getAbsolutePath)))
+    conf.get("spark.yarn.dist.archives").split(",").toSet should be
+    (Set(Seq(archive1, archive2, archive1YarnOpt, archive2YarnOpt).map(_.toURI.toString)))
+  }
+
   // scalastyle:on println
 
   private def checkDownloadedFile(sourcePath: String, outputPath: String): Unit = {
