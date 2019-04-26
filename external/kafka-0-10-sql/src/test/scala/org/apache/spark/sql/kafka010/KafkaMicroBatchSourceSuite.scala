@@ -1041,7 +1041,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     }
   }
 
-  test("SPARK-27494: read kafka record containing null key/values in micro-batch mode") {
+  test("SPARK-27494: read kafka record containing null key/values.") {
     testNullableKeyValue(Trigger.ProcessingTime(100))
   }
 }
@@ -1521,11 +1521,12 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      testUtils.withProducer { producer =>
+      testUtils.withTranscationalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")
           .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("kafka.isolation.level", "read_committed")
           .option("startingOffsets", "earliest")
           .option("subscribe", topic)
           .load()
@@ -1539,21 +1540,26 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
           .trigger(trigger)
           .start()
         try {
-          val expected1 = (1 to 5).map { _ =>
+          var idx = 0
+          producer.beginTransaction()
+          val expected1 = Seq.tabulate(5) { _ =>
             producer.send(new ProducerRecord[String, String](topic, null, null)).get()
             (null, null)
           }.asInstanceOf[Seq[(String, String)]]
 
-          val expected2 = (6 to 10).map { i =>
-            producer.send(new ProducerRecord[String, String](topic, i.toString, null)).get()
-            (i.toString, null)
+          val expected2 = Seq.tabulate(5) { _ =>
+            idx += 1
+            producer.send(new ProducerRecord[String, String](topic, idx.toString, null)).get()
+            (idx.toString, null)
           }.asInstanceOf[Seq[(String, String)]]
 
-          val expected3 = (11 to 15).map { i =>
-            producer.send(new ProducerRecord[String, String](topic, null, i.toString)).get()
-            (null, i.toString)
+          val expected3 = Seq.tabulate(5) { _ =>
+            idx += 1
+            producer.send(new ProducerRecord[String, String](topic, null, idx.toString)).get()
+            (null, idx.toString)
           }.asInstanceOf[Seq[(String, String)]]
 
+          producer.commitTransaction()
           eventually(timeout(streamingTimeout)) {
             checkAnswer(spark.table(table), (expected1 ++ expected2 ++ expected3).toDF())
           }
