@@ -25,11 +25,13 @@ import scala.util.Random
 import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 
-class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
+class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with BeforeAndAfterAll {
   private var testUtils: KafkaTestUtils = _
   private val topic = "topic" + Random.nextInt()
   private val topicPartition = new TopicPartition(topic, 0)
@@ -37,6 +39,11 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    val conf = new SparkConf()
+    val env = mock[SparkEnv]
+    SparkEnv.set(env)
+    when(env.conf).thenReturn(conf)
+
     testUtils = new KafkaTestUtils
     testUtils.setup()
     KafkaDataConsumer.init(16, 64, 0.75f)
@@ -47,6 +54,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
       testUtils.teardown()
       testUtils = null
     }
+    SparkEnv.set(null)
     super.afterAll()
   }
 
