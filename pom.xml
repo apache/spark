@@ -1210,6 +1210,11 @@
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
           </exclusion>
+          <!-- Hadoop-3.2 -->
+          <exclusion>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP-java7</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
