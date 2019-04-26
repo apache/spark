@@ -26,4 +26,12 @@ if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
   exit -1
 fi
 
+# Test Hive 2.3.5-SNAPSHOT
+DIR_NAME=hive-2.3.5-SNAPSHOT
+git clone https://github.com/apache/hive.git ${DIR_NAME}
+cd ${DIR_NAME} && git checkout branch-2.3
+../build/mvn clean install -DskipTests=true
+cd ..
+rm -rf ${DIR_NAME}
+
 exec python -u ./dev/run-tests.py "$@"
