@@ -2514,9 +2514,9 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
 test_that("test hint", {
   df <- sql("SELECT * FROM range(10e10)")
   hintList <- list("hint2", "hint3", "hint4")
-  execution_plan_hint <- capture.output(
-    explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
-  )
+  hinted <- hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList)
+  query_exec <- callJMethod(hinted@sdf, "queryExecution")
+  execution_plan_hint <- callJMethod(callJMethod(query_exec, "logical"), "toString")
   expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
 })
 
