@@ -498,10 +498,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = {
-    // Because views are possibly resolved in the analyzed plan of this dataset. We use analyzed
-    // plan in `ExplainCommand`, for consistency. Otherwise, the plans shown by explain command
-    // might be inconsistent with the evaluated data of this dataset.
-    val explain = ExplainCommand(queryExecution.analyzed, extended = extended)
+    val explain = ExplainCommand(queryExecution.logical, extended = extended)
     sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       // scalastyle:off println
       r => println(r.getString(0))

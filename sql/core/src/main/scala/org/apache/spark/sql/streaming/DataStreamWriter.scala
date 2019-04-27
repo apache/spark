@@ -31,7 +31,8 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources._
-import org.apache.spark.sql.sources.v2.{SupportsStreamingWrite, TableProvider}
+import org.apache.spark.sql.sources.v2.{SupportsWrite, TableProvider}
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -315,8 +316,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
           source = provider, conf = df.sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         provider.getTable(dsOptions) match {
-          case s: SupportsStreamingWrite => s
+          case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
+            table.asInstanceOf[BaseStreamingSink]
           case _ => createV1Sink()
         }
       } else {
