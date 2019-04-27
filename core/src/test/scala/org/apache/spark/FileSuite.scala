@@ -206,7 +206,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     Utils.withContextClassLoader(loader) {
       sc = new SparkContext("local", "test")
-        val objs = sc.makeRDD(1 to 3).map { _ =>
+      val objs = sc.makeRDD(1 to 3).map { _ =>
         Utils.classForName[AnyRef](className, noSparkClassLoader = true).
           getConstructor().newInstance()
       }
