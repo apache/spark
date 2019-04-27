@@ -98,26 +98,27 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     val filterFuncs = filters.map(filter => createFilterFunction(filter))
 
     file: PartitionedFile => {
-      val path = file.filePath
-      val fsPath = new Path(path)
-
+      val path = new Path(file.filePath)
       // TODO: Improve performance here: each file will recompile the glob pattern here.
-      if (pathGlobPattern.forall(new GlobFilter(_).accept(fsPath))) {
-        val fs = fsPath.getFileSystem(broadcastedHadoopConf.value.value)
-        val fileStatus = fs.getFileStatus(fsPath)
-
-        def readContent(): Array[Byte] = {
-          val stream = fs.open(fsPath)
-          try {
-            ByteStreams.toByteArray(stream)
-          } finally {
-            Closeables.close(stream, true)
+      if (pathGlobPattern.forall(new GlobFilter(_).accept(path))) {
+        val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
+        val status = fs.getFileStatus(path)
+        if (filterFuncs.forall(_.apply(status))) {
+          val values = requiredSchema.fieldNames.map {
+            case PATH => UTF8String.fromString(status.getPath.toString)
+            case LENGTH => status.getLen
+            case MODIFICATION_TIME => DateTimeUtils.fromMillis(status.getModificationTime)
+            case CONTENT =>
+              val stream = fs.open(status.getPath)
+              try {
+                ByteStreams.toByteArray(stream)
+              } finally {
+                Closeables.close(stream, true)
+              }
+            case other =>
+              throw new RuntimeException(s"Unsupported field name: ${other}")
           }
-        }
-
-        if (filterFuncs.forall(_.apply(fileStatus))) {
-          val row = genPrunedRow(fileStatus, () => readContent(), requiredSchema.fieldNames)
-          Iterator(row)
+          Iterator.single(InternalRow(values: _*))
         } else {
           Iterator.empty
         }
@@ -186,22 +187,6 @@ object BinaryFileFormat {
       case _ => (_ => true)
     }
   }
-
-  private[binaryfile] def genPrunedRow(
-      status: FileStatus,
-      readContent: () => Array[Byte],
-      requiredFieldNames: Array[String]): InternalRow = {
-
-    val values = requiredFieldNames.map {
-      case PATH => UTF8String.fromString(status.getPath.toString)
-      case LENGTH => status.getLen
-      case MODIFICATION_TIME => DateTimeUtils.fromMillis(status.getModificationTime)
-      case CONTENT => readContent()
-      case name => throw new RuntimeException(s"Unexcepted field name: ${name}")
-    }
-    InternalRow(values: _*)
-  }
-
 }
 
 class BinaryFileSourceOptions(

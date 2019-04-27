@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
-import java.io.File
+import java.io.{File, IOException}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.Timestamp
 
@@ -28,14 +28,12 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
@@ -290,45 +288,53 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     ), true)
   }
 
-
-  test("genPrunedRow") {
-    val path1 = "test:/path/to/dir1"
-    val len1 = 123L
-    val time1 = 4567L
-    val content1 = "abcd".getBytes
-    val status1 = mock(classOf[FileStatus])
-    when(status1.getPath).thenReturn(new Path(path1))
-    when(status1.getLen).thenReturn(len1)
-    when(status1.getModificationTime).thenReturn(time1)
-
-    var readContent1Called = false
-    def readContent1(): Array[Byte] = {
-      readContent1Called = true
-      content1
+  test("column pruning") {
+    def getRequiredSchema(fieldNames: String*): StructType = {
+      StructType(fieldNames.map {
+        case f if schema.fieldNames.contains(f) => schema(f)
+        case other => StructField(other, NullType)
+      })
     }
+    def read(file: File, requiredSchema: StructType): Row = {
+      val format = new BinaryFileFormat
+      val reader = format.buildReaderWithPartitionValues(
+        sparkSession = spark,
+        dataSchema = schema,
+        partitionSchema = StructType(Nil),
+        requiredSchema = requiredSchema,
+        filters = Seq.empty,
+        options = Map.empty,
+        hadoopConf = spark.sessionState.newHadoopConf()
+      )
+      val partitionedFile = mock(classOf[PartitionedFile])
+      when(partitionedFile.filePath).thenReturn(file.getPath)
+      val encoder = RowEncoder(requiredSchema).resolveAndBind()
+      encoder.fromRow(reader(partitionedFile).next())
+    }
+    val file = new File(Utils.createTempDir(), "data")
+    val content = "123".getBytes
+    Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
 
-    def test(fieldNames: String*): Unit = {
-      readContent1Called = false
-
-      val row = genPrunedRow(status1, () => readContent1(), fieldNames.toArray)
-      val expectedRowVals = fieldNames.toArray.map {
-        case PATH => UTF8String.fromString(path1)
-        case LENGTH => len1
-        case MODIFICATION_TIME => DateTimeUtils.fromMillis(time1)
-        case CONTENT => content1
+    read(file, getRequiredSchema(MODIFICATION_TIME, CONTENT, LENGTH, PATH)) match {
+      case Row(t, c, l, p) =>
+        assert(t === new Timestamp(file.lastModified))
+        assert(c === content)
+        assert(l === content.length)
+        assert(p.asInstanceOf[String].endsWith(file.getAbsolutePath))
+    }
+    file.setReadable(false)
+    withClue("cannot read content") {
+      intercept[IOException] {
+        read(file, getRequiredSchema(CONTENT))
       }
-      val expectedRow = InternalRow(expectedRowVals: _*)
-      assert(row === expectedRow)
-      assert(fieldNames.contains(CONTENT) === readContent1Called)
+    }
+    assert(read(file, getRequiredSchema(LENGTH)) === Row(content.length),
+      "Get length should not read content.")
+    intercept[RuntimeException] {
+      read(file, getRequiredSchema(LENGTH, "other"))
     }
 
-    test("path", "length", "modificationTime", "content")
-    test("path", "length", "modificationTime")
-    test("path", "modificationTime", "content")
-    test("path", "length")
-    test("path", "content", "modificationTime", "length")
-    test("path")
-    test("length")
-    test("content")
+    assert(spark.read.format("binaryFile").load(file.getPath).count() === 1,
+      "Count should not read content.")
   }
 }
