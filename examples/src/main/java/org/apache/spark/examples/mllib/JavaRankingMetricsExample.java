@@ -110,6 +110,9 @@ public class JavaRankingMetricsExample {
     // Mean average precision
     System.out.format("Mean average precision = %f\n", metrics.meanAveragePrecision());
 
+    // Mean reciprocal rank
+    System.out.format("Mean reciprocal rank = %f\n", metrics.meanReciprocalRank());
+
     // Evaluate the model using numerical ratings and regression metrics
     JavaRDD<Tuple2<Object, Object>> userProducts =
         ratings.map(r -> new Tuple2<>(r.user(), r.product()));

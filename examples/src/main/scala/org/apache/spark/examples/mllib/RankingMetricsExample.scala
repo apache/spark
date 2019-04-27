@@ -94,6 +94,9 @@ object RankingMetricsExample {
       println(s"Recall at $k = ${metrics.recallAt(k)}")
     }
 
+    // Mean reciprocal rank
+    println(s"Mean reciprocal rank = ${metrics.meanReciprocalRank}")
+
     // Get predictions for each data point
     val allPredictions = model.predict(ratings.map(r => (r.user, r.product))).map(r => ((r.user,
       r.product), r.rating))

@@ -51,5 +51,6 @@ public class JavaRankingMetricsSuite extends SharedSparkSession {
     RankingMetrics<?> metrics = RankingMetrics.of(predictionAndLabels);
     Assert.assertEquals(0.355026, metrics.meanAveragePrecision(), 1e-5);
     Assert.assertEquals(0.75 / 3.0, metrics.precisionAt(4), 1e-5);
+    Assert.assertEquals(0.5, metrics.meanReciprocalRank(), 1e-5);
   }
 }

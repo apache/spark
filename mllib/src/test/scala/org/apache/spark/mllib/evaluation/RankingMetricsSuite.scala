@@ -34,6 +34,7 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val metrics = new RankingMetrics(predictionAndLabels)
     val map = metrics.meanAveragePrecision
+    val mrr = metrics.meanReciprocalRank
 
     assert(metrics.precisionAt(1) ~== 1.0/3 absTol eps)
     assert(metrics.precisionAt(2) ~== 1.0/3 absTol eps)
@@ -57,6 +58,8 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.recallAt(5) ~== 16.0/45 absTol eps)
     assert(metrics.recallAt(10) ~== 2.0/3 absTol eps)
     assert(metrics.recallAt(15) ~== 2.0/3 absTol eps)
+
+    assert(mrr ~= 1.0/2 absTol eps)
   }
 
   test("MAP, NDCG, Recall with few predictions (SPARK-14886)") {

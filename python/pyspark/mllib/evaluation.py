@@ -387,6 +387,8 @@ class RankingMetrics(JavaModelWrapper):
     0.35...
     >>> metrics.recallAt(15)
     0.66...
+    >>> metrics.meanReciprocalRank
+    0.5...
 
     .. versionadded:: 1.4.0
     """
@@ -449,6 +451,16 @@ class RankingMetrics(JavaModelWrapper):
         with a log warning.
         """
         return self.call("recallAt", int(k))
+
+    @property
+    @since('3.0.0')
+    def meanReciprocalRank(self):
+        """
+        Returns the mean reciprocal rank (MRR) of all the queries.
+        If a query has an empty ground truth set, the reciprocal rank will be zero and
+        a log warining is generated.
+        """
+        return self.call("meanReciprocalRank")
 
 
 class MultilabelMetrics(JavaModelWrapper):
