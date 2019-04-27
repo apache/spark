@@ -352,9 +352,6 @@ def build_apache_spark(build_tool, hadoop_version):
 
     rm_r("lib_managed")
 
-    # build with maven first because sbt can't download 2.3.5-SNAPSHOT
-    build_spark_maven(hadoop_version)
-
     if build_tool == "maven":
         build_spark_maven(hadoop_version)
     else:
