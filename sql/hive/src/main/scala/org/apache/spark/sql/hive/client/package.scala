@@ -27,26 +27,22 @@ package object client {
   // scalastyle:off
   private[hive] object hive {
     case object v12 extends HiveVersion("0.12.0")
+    case object v13 extends HiveVersion("0.13.1")
 
     // Do not need Calcite because we disabled hive.cbo.enable.
     //
     // The other excluded dependencies are nowhere to be found, so exclude them explicitly. If
     // they're needed by the metastore client, users will have to dig them out of somewhere and use
     // configuration to point Spark at the correct jars.
-    case object v13 extends HiveVersion("0.13.1",
-      exclusions = Seq("commons-httpclient:commons-httpclient"))
-
     case object v14 extends HiveVersion("0.14.0",
       exclusions = Seq("org.apache.calcite:calcite-core",
         "org.apache.calcite:calcite-avatica",
-        "commons-httpclient:commons-httpclient",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
     case object v1_0 extends HiveVersion("1.0.1",
       exclusions = Seq("eigenbase:eigenbase-properties",
         "org.apache.calcite:calcite-core",
         "org.apache.calcite:calcite-avatica",
-        "commons-httpclient:commons-httpclient",
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "net.hydromatic:linq4j",
         "net.hydromatic:quidem"))
@@ -59,7 +55,6 @@ package object client {
         "org.apache.calcite:calcite-core",
         "org.apache.calcite:calcite-avatica",
         "org.apache.curator:*",
-        "commons-httpclient:commons-httpclient",
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "net.hydromatic:linq4j",
         "net.hydromatic:quidem"))
@@ -69,7 +64,6 @@ package object client {
         "org.apache.calcite:calcite-core",
         "org.apache.calcite:calcite-avatica",
         "org.apache.curator:*",
-        "commons-httpclient:commons-httpclient",
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "net.hydromatic:linq4j",
         "net.hydromatic:quidem"))
@@ -84,7 +78,6 @@ package object client {
       exclusions = Seq("org.apache.calcite:calcite-core",
         "org.apache.calcite:calcite-avatica",
         "org.apache.curator:*",
-        "commons-httpclient:commons-httpclient",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
     case object v2_2 extends HiveVersion("2.2.0",
@@ -92,7 +85,6 @@ package object client {
         "org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
-        "commons-httpclient:commons-httpclient",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
     // Since HIVE-14496, Hive materialized view need calcite-core.
@@ -101,12 +93,10 @@ package object client {
       exclusions = Seq("org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
-        "commons-httpclient:commons-httpclient",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
     // Since HIVE-14496, Hive.java uses calcite-core
-    // Since HIVE-19228, Removed commons-httpclient 3.x usage
     case object v3_1 extends HiveVersion("3.1.1",
       extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
         "org.apache.derby:derby:10.14.1.0"),
