@@ -110,10 +110,12 @@ public class TransportCipher {
   static class EncryptionHandler extends ChannelOutboundHandlerAdapter {
     private final ByteArrayWritableChannel byteChannel;
     private final CryptoOutputStream cos;
+    private boolean isCipherValid;
 
     EncryptionHandler(TransportCipher cipher) throws IOException {
       byteChannel = new ByteArrayWritableChannel(STREAM_BUFFER_SIZE);
       cos = cipher.createOutputStream(byteChannel);
+      isCipherValid = true;
     }
 
     @Override
@@ -124,36 +126,61 @@ public class TransportCipher {
 
     @VisibleForTesting
     EncryptedMessage createEncryptedMessage(Object msg) {
-      return new EncryptedMessage(cos, msg, byteChannel);
+      return new EncryptedMessage(this, cos, msg, byteChannel);
     }
 
     @Override
     public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
       try {
-        cos.close();
+        if (isCipherValid) {
+          cos.close();
+        }
       } finally {
         super.close(ctx, promise);
       }
+    }
+
+    /**
+     * SPARK-25535. Workaround for CRYPTO-141. Avoid further interaction with the underlying cipher
+     * after an error occurs.
+     */
+    void reportError() {
+      this.isCipherValid = false;
+    }
+
+    boolean isCipherValid() {
+      return isCipherValid;
     }
   }
 
   private static class DecryptionHandler extends ChannelInboundHandlerAdapter {
     private final CryptoInputStream cis;
     private final ByteArrayReadableChannel byteChannel;
+    private boolean isCipherValid;
 
     DecryptionHandler(TransportCipher cipher) throws IOException {
       byteChannel = new ByteArrayReadableChannel();
       cis = cipher.createInputStream(byteChannel);
+      isCipherValid = true;
     }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
+      if (!isCipherValid) {
+        throw new IOException("Cipher is in invalid state.");
+      }
       byteChannel.feedData((ByteBuf) data);
 
       byte[] decryptedData = new byte[byteChannel.readableBytes()];
       int offset = 0;
       while (offset < decryptedData.length) {
-        offset += cis.read(decryptedData, offset, decryptedData.length - offset);
+        // SPARK-25535: workaround for CRYPTO-141.
+        try {
+          offset += cis.read(decryptedData, offset, decryptedData.length - offset);
+        } catch (InternalError ie) {
+          isCipherValid = false;
+          throw ie;
+        }
       }
 
       ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
@@ -162,7 +189,9 @@ public class TransportCipher {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
       try {
-        cis.close();
+        if (isCipherValid) {
+          cis.close();
+        }
       } finally {
         super.channelInactive(ctx);
       }
@@ -175,8 +204,9 @@ public class TransportCipher {
     private final ByteBuf buf;
     private final FileRegion region;
     private final long count;
+    private final CryptoOutputStream cos;
+    private final EncryptionHandler handler;
     private long transferred;
-    private CryptoOutputStream cos;
 
     // Due to streaming issue CRYPTO-125: https://issues.apache.org/jira/browse/CRYPTO-125, it has
     // to utilize two helper ByteArrayWritableChannel for streaming. One is used to receive raw data
@@ -186,9 +216,14 @@ public class TransportCipher {
 
     private ByteBuffer currentEncrypted;
 
-    EncryptedMessage(CryptoOutputStream cos, Object msg, ByteArrayWritableChannel ch) {
+    EncryptedMessage(
+        EncryptionHandler handler,
+        CryptoOutputStream cos,
+        Object msg,
+        ByteArrayWritableChannel ch) {
       Preconditions.checkArgument(msg instanceof ByteBuf || msg instanceof FileRegion,
         "Unrecognized message type: %s", msg.getClass().getName());
+      this.handler = handler;
       this.isByteBuf = msg instanceof ByteBuf;
       this.buf = isByteBuf ? (ByteBuf) msg : null;
       this.region = isByteBuf ? null : (FileRegion) msg;
@@ -288,6 +323,9 @@ public class TransportCipher {
     }
 
     private void encryptMore() throws IOException {
+      if (!handler.isCipherValid()) {
+        throw new IOException("Cipher is in invalid state.");
+      }
       byteRawChannel.reset();
 
       if (isByteBuf) {
@@ -296,8 +334,14 @@ public class TransportCipher {
       } else {
         region.transferTo(byteRawChannel, region.transferred());
       }
-      cos.write(byteRawChannel.getData(), 0, byteRawChannel.length());
-      cos.flush();
+
+      try {
+        cos.write(byteRawChannel.getData(), 0, byteRawChannel.length());
+        cos.flush();
+      } catch (InternalError ie) {
+        handler.reportError();
+        throw ie;
+      }
 
       currentEncrypted = ByteBuffer.wrap(byteEncChannel.getData(),
         0, byteEncChannel.length());
