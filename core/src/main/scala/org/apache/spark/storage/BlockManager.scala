@@ -43,7 +43,7 @@ import org.apache.spark.internal.config.Network
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -137,6 +137,8 @@ private[spark] class BlockManager(
 
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
+
+  private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
@@ -411,6 +413,7 @@ private[spark] class BlockManager(
 
     val idFromMaster = master.registerBlockManager(
       id,
+      diskBlockManager.localDirsString,
       maxOnHeapMemory,
       maxOffHeapMemory,
       slaveEndpoint)
@@ -445,7 +448,7 @@ private[spark] class BlockManager(
   private def registerWithExternalShuffleServer() {
     logInfo("Registering executor with local external shuffle service.")
     val shuffleConfig = new ExecutorShuffleInfo(
-      diskBlockManager.localDirs.map(_.toString),
+      diskBlockManager.localDirsString,
       diskBlockManager.subDirsPerLocalDir,
       shuffleManager.getClass.getName)
 
@@ -500,7 +503,8 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo(s"BlockManager $blockManagerId re-registering with master")
-    master.registerBlockManager(blockManagerId, maxOnHeapMemory, maxOffHeapMemory, slaveEndpoint)
+    master.registerBlockManager(blockManagerId, diskBlockManager.localDirsString, maxOnHeapMemory,
+      maxOffHeapMemory, slaveEndpoint)
     reportAllBlocks()
   }
 
@@ -866,17 +870,24 @@ private[spark] class BlockManager(
   private def getRemoteManagedBuffer(blockId: BlockId): Option[ManagedBuffer] = {
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
-    var runningFailureCount = 0
-    var totalFailureCount = 0
-
     // Because all the remote blocks are registered in driver, it is not necessary to ask
     // all the slave executors to get block status.
-    val locationsAndStatus = master.getLocationsAndStatus(blockId)
-    val blockSize = locationsAndStatus.map { b =>
-      b.status.diskSize.max(b.status.memSize)
-    }.getOrElse(0L)
-    val blockLocations = locationsAndStatus.map(_.locations).getOrElse(Seq.empty)
+    val locationsAndStatusOption = master.getLocationsAndStatus(blockId, blockManagerId.host)
+    if (locationsAndStatusOption.isEmpty) {
+      logDebug(s"Block $blockId is unknown by block manager master")
+      return None
+    }
+    val locationsAndStatus = locationsAndStatusOption.get
 
+    val blockSize = locationsAndStatus.status.diskSize.max(locationsAndStatus.status.memSize)
+    if (locationsAndStatus.localDirs.isDefined) {
+      val blockDataOption =
+        readDiskBlockFromSameHostExecutor(blockId, locationsAndStatus.localDirs.get, blockSize)
+      if (blockDataOption.isDefined) {
+        logDebug(s"Read $blockId from the disk of a same host executor")
+        return blockDataOption
+      }
+    }
     // If the block size is above the threshold, we should pass our FileManger to
     // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
     // null value means the block will be persisted in memory.
@@ -885,8 +896,9 @@ private[spark] class BlockManager(
     } else {
       null
     }
-
-    val locations = sortLocations(blockLocations)
+    var runningFailureCount = 0
+    var totalFailureCount = 0
+    val locations = sortLocations(locationsAndStatus.locations)
     val maxFetchFailures = locations.size
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
@@ -944,6 +956,33 @@ private[spark] class BlockManager(
     }
     logDebug(s"Block $blockId not found")
     None
+  }
+
+  private def readDiskBlockFromSameHostExecutor(
+      blockId: BlockId,
+      localDirs: Array[String],
+      blockSize: Long): Option[ManagedBuffer] = {
+    val file = ExecutorDiskReader.getFile(localDirs, subDirsPerLocalDir, blockId.name)
+    if (file.exists()) {
+      val mangedBuffer = securityManager.getIOEncryptionKey() match {
+        case Some(key) =>
+          // Encrypted blocks cannot be memory mapped; return a special object that does decryption
+          // and provides InputStream / FileRegion implementations for reading the data.
+          new EncryptedManagedBuffer(
+            new EncryptedBlockData(file, blockSize, conf, key))
+
+        case _ =>
+          val transportConf = SparkTransportConf.fromSparkConf(conf, "files")
+          new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
+      }
+      if (blockSize > 0 && mangedBuffer.size() == 0) {
+        None
+      } else {
+        Some(mangedBuffer)
+      }
+    } else {
+      None
+    }
   }
 
   /**

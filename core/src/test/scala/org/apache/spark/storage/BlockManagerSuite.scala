@@ -81,6 +81,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   // Implicitly convert strings to BlockIds for test clarity.
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
+
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
   private def init(sparkConf: SparkConf): Unit = {
@@ -565,6 +566,33 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     stopBlockManager(store3)
     // Should return None instead of throwing an exception:
     assert(store.getRemoteBytes("list1").isEmpty)
+  }
+
+  Seq(
+    StorageLevel(useDisk = true, useMemory = false, deserialized = false),
+    StorageLevel(useDisk = true, useMemory = false, deserialized = true)
+  ).foreach { storageLevel =>
+    test(s"SPARK-27622: avoid the network when block requested from same host, $storageLevel") {
+      conf.set("spark.shuffle.io.maxRetries", "0")
+       val noFetcher = new MockBlockTransferService(0) {
+        override def fetchBlockSync(
+          host: String,
+          port: Int,
+          execId: String,
+          blockId: String,
+          tempFileManager: DownloadFileManager): ManagedBuffer = {
+          fail("Fetching over network is not expected when the block is requested from same host")
+        }
+      }
+      val store1 = makeBlockManager(8000, "executor1", this.master, Some(noFetcher))
+      val store2 = makeBlockManager(8000, "executor2", this.master, Some(noFetcher))
+      val list = List(new Array[Byte](4000))
+      store2.putIterator("list", list.iterator, storageLevel, tellMaster = true)
+      val bytesViaStore1 = store1.getRemoteBytes("list")
+      assert(bytesViaStore1.isDefined, "list expected to be accessed")
+      val expectedContent = store2.getBlockData("list").nioByteBuffer().array()
+      assert(bytesViaStore1.get.toArray === expectedContent)
+    }
   }
 
   test("SPARK-14252: getOrElseUpdate should still read from remote storage") {
@@ -1315,8 +1343,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // so that we have a chance to do location refresh
     val blockManagerIds = (0 to maxFailuresBeforeLocationRefresh)
       .map { i => BlockManagerId(s"id-$i", s"host-$i", i + 1) }
-    when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId])).thenReturn(
-      Option(BlockLocationsAndStatus(blockManagerIds, BlockStatus.empty)))
+    when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(BlockLocationsAndStatus(blockManagerIds, BlockStatus.empty, None)))
     when(mockBlockManagerMaster.getLocations(mc.any[BlockId])).thenReturn(
       blockManagerIds)
 
@@ -1325,7 +1353,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val block = store.getRemoteBytes("item")
       .asInstanceOf[Option[ByteBuffer]]
     assert(block.isDefined)
-    verify(mockBlockManagerMaster, times(1)).getLocationsAndStatus("item")
+    verify(mockBlockManagerMaster, times(1))
+      .getLocationsAndStatus("item", "MockBlockTransferServiceHost")
     verify(mockBlockManagerMaster, times(1)).getLocations("item")
   }
 
@@ -1502,8 +1531,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockLocations = Seq(BlockManagerId("id-0", "host-0", 1))
     val blockStatus = BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L)
 
-    when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId])).thenReturn(
-      Option(BlockLocationsAndStatus(blockLocations, blockStatus)))
+    when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId], mc.any[String])).thenReturn(
+      Option(BlockLocationsAndStatus(blockLocations, blockStatus, None)))
     when(mockBlockManagerMaster.getLocations(mc.any[BlockId])).thenReturn(blockLocations)
 
     val store = makeBlockManager(8000, "executor1", mockBlockManagerMaster,
