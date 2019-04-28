@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
@@ -77,7 +78,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     false
   }
 
-  override def shortName(): String = "binaryFile"
+  override def shortName(): String = BINARY_FILE
 
   override protected def buildReader(
       sparkSession: SparkSession,
@@ -87,14 +88,16 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    require(dataSchema.sameType(schema),
+      s"""
+         |Binary file data source expects dataSchema: $schema,
+         |but got: $dataSchema.
+        """.stripMargin)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-
     val binaryFileSourceOptions = new BinaryFileSourceOptions(options)
-
     val pathGlobPattern = binaryFileSourceOptions.pathGlobFilter
-
     val filterFuncs = filters.map(filter => createFilterFunction(filter))
 
     file: PartitionedFile => {
@@ -104,21 +107,24 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
         val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
         val status = fs.getFileStatus(path)
         if (filterFuncs.forall(_.apply(status))) {
-          val values = requiredSchema.fieldNames.map {
-            case PATH => UTF8String.fromString(status.getPath.toString)
-            case LENGTH => status.getLen
-            case MODIFICATION_TIME => DateTimeUtils.fromMillis(status.getModificationTime)
-            case CONTENT =>
+          val writer = new UnsafeRowWriter(requiredSchema.length)
+          writer.resetRowWriter()
+          requiredSchema.fieldNames.zipWithIndex.foreach {
+            case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
+            case (LENGTH, i) => writer.write(i, status.getLen)
+            case (MODIFICATION_TIME, i) =>
+              writer.write(i, DateTimeUtils.fromMillis(status.getModificationTime))
+            case (CONTENT, i) =>
               val stream = fs.open(status.getPath)
               try {
-                ByteStreams.toByteArray(stream)
+                writer.write(i, ByteStreams.toByteArray(stream))
               } finally {
                 Closeables.close(stream, true)
               }
-            case other =>
+            case (other, _) =>
               throw new RuntimeException(s"Unsupported field name: ${other}")
           }
-          Iterator.single(InternalRow(values: _*))
+          Iterator.single(writer.getRow)
         } else {
           Iterator.empty
         }
@@ -135,6 +141,7 @@ object BinaryFileFormat {
   private[binaryfile] val MODIFICATION_TIME = "modificationTime"
   private[binaryfile] val LENGTH = "length"
   private[binaryfile] val CONTENT = "content"
+  private[binaryfile] val BINARY_FILE = "binaryFile"
 
   /**
    * Schema for the binary file data source.

@@ -102,7 +102,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
   }
 
   def testBinaryFileDataSource(pathGlobFilter: String): Unit = {
-    val dfReader = spark.read.format("binaryFile")
+    val dfReader = spark.read.format(BINARY_FILE)
     if (pathGlobFilter != null) {
       dfReader.option("pathGlobFilter", pathGlobFilter)
     }
@@ -158,11 +158,11 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
   }
 
   test("binary file data source do not support write operation") {
-    val df = spark.read.format("binaryFile").load(testDir)
+    val df = spark.read.format(BINARY_FILE).load(testDir)
     withTempDir { tmpDir =>
       val thrown = intercept[UnsupportedOperationException] {
         df.write
-          .format("binaryFile")
+          .format(BINARY_FILE)
           .save(tmpDir + "/test_save")
       }
       assert(thrown.getMessage.contains("Write is not supported for binary file data source"))
@@ -317,7 +317,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
 
     read(file, getRequiredSchema(MODIFICATION_TIME, CONTENT, LENGTH, PATH)) match {
       case Row(t, c, l, p) =>
-        assert(t === new Timestamp(file.lastModified))
+        assert(t === new Timestamp(file.lastModified()))
         assert(c === content)
         assert(l === content.length)
         assert(p.asInstanceOf[String].endsWith(file.getAbsolutePath))
@@ -334,7 +334,9 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       read(file, getRequiredSchema(LENGTH, "other"))
     }
 
-    assert(spark.read.format("binaryFile").load(file.getPath).count() === 1,
-      "Count should not read content.")
+    val df = spark.read.format(BINARY_FILE).load(file.getPath)
+    assert(df.count() === 1, "Count should not read content.")
+    assert(df.select("LENGTH").first().getLong(0) === content.length,
+      "column pruning should be case insensitive")
   }
 }
