@@ -122,4 +122,244 @@ trait ConstraintHelper {
     case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]
   }
+
+  /**
+   * Traverse a condition as a tree and simplify expressions with constraints.
+   * - On matching [[And]], recursively traverse both children, simplify child expressions with
+   *   propagated constraints from sibling and propagate up union of constraints.
+   * - If a child of [[And]] is [[LessThan]], [[LessThanOrEqual]], [[EqualTo]], [[EqualNullSafe]],
+   *   [[GreaterThan]] or [[GreaterThanOrEqual]] propagate the constraint.
+   * - On matching [[Or]] or [[Not]], recursively traverse each children, propagate no constraints.
+   * - Otherwise, stop traversal and propagate no constraints.
+   * @param expression expression to be traversed
+   * @return A tuple including:
+   *         1. Expression: optionally changed condition after traversal
+   *         2. Seq[Expression]: propagated constraints
+   */
+  def simplifyWithConstraints(expression: Expression): (Expression, Seq[Expression]) =
+    expression match {
+      case e @ (_: LessThan | _: LessThanOrEqual | _: EqualTo | _: EqualNullSafe | _: GreaterThan |
+          _: GreaterThanOrEqual )
+        if e.deterministic => (e, Seq(normalize(e)))
+      case a @ And(left, right) =>
+        val (newLeft, leftConstraints) = simplifyWithConstraints(left)
+        val simplifiedRight = simplify(right, leftConstraints)
+        val (simplifiedNewRight, rightConstraints) = simplifyWithConstraints(simplifiedRight)
+        val simplifiedNewLeft = simplify(newLeft, rightConstraints)
+        val newAnd = if ((simplifiedNewLeft fastEquals left) &&
+          (simplifiedNewRight fastEquals right)) {
+          a
+        } else {
+          And(simplifiedNewLeft, simplifiedNewRight)
+        }
+        (newAnd, leftConstraints ++ rightConstraints)
+      case o @ Or(left, right) =>
+        // Ignore the EqualityPredicates from children since they are only propagated through And.
+        val (newLeft, _) = simplifyWithConstraints(left)
+        val (newRight, _) = simplifyWithConstraints(right)
+        val newOr = if ((newLeft fastEquals left) && (newRight fastEquals right)) {
+          o
+        } else {
+          Or(newLeft, newRight)
+        }
+
+        (newOr, Seq.empty)
+      case n @ Not(child) =>
+        // Ignore the EqualityPredicates from children since they are only propagated through And.
+        val (newChild, _) = simplifyWithConstraints(child)
+        val newNot = if (newChild fastEquals child) {
+          n
+        } else {
+          Not(newChild)
+        }
+        (newNot, Seq.empty)
+      case _ => (expression, Seq.empty)
+    }
+
+  private def normalize(expression: Expression) = expression transform {
+    case GreaterThan(x, y) => LessThan(y, x)
+    case GreaterThanOrEqual(x, y) => LessThanOrEqual(y, x)
+  }
+
+  private def simplify(expression: Expression, constraints: Seq[Expression]): Expression =
+    constraints.foldLeft(normalize(expression))((e, constraint) => simplify(e, constraint))
+
+  private def planEqual(x: Expression, y: Expression) =
+    !x.foldable && !y.foldable && x.canonicalized == y.canonicalized
+
+  private def valueEqual(x: Expression, y: Expression) =
+    x.foldable && y.foldable && EqualTo(x, y).eval(EmptyRow).asInstanceOf[Boolean]
+
+  private def valueLessThan(x: Expression, y: Expression) =
+    x.foldable && y.foldable && LessThan(x, y).eval(EmptyRow).asInstanceOf[Boolean]
+
+  private def valueLessThanOrEqual(x: Expression, y: Expression) =
+    x.foldable && y.foldable && LessThanOrEqual(x, y).eval(EmptyRow).asInstanceOf[Boolean]
+
+  private def simplify(expression: Expression, constraint: Expression): Expression =
+    constraint match {
+      case a LessThan b => expression transformUp {
+        case c LessThan d if planEqual(b, d) && (planEqual(a, c) || valueLessThanOrEqual(c, a)) =>
+          Literal.TrueLiteral
+        case c LessThan d if planEqual(b, c) && (planEqual(a, d) || valueLessThanOrEqual(d, a)) =>
+          Literal.FalseLiteral
+        case c LessThan d if planEqual(a, c) && (planEqual(b, d) || valueLessThanOrEqual(b, d)) =>
+          Literal.TrueLiteral
+        case c LessThan d if planEqual(a, d) && (planEqual(b, c) || valueLessThanOrEqual(b, c)) =>
+          Literal.FalseLiteral
+
+        case c LessThanOrEqual d
+          if planEqual(b, d) && (planEqual(a, c) || valueLessThanOrEqual(c, a)) =>
+          Literal.TrueLiteral
+        case c LessThanOrEqual d
+          if planEqual(b, c) && (planEqual(a, d) || valueLessThanOrEqual(d, a)) =>
+          Literal.FalseLiteral
+        case c LessThanOrEqual d
+          if planEqual(a, c) && (planEqual(b, d) || valueLessThanOrEqual(b, d)) =>
+          Literal.TrueLiteral
+        case c LessThanOrEqual d
+          if planEqual(a, d) && (planEqual(b, c) || valueLessThanOrEqual(b, c)) =>
+          Literal.FalseLiteral
+
+        case c EqualTo d if planEqual(b, d) && (planEqual(a, c) || valueLessThanOrEqual(c, a)) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(b, c) && (planEqual(a, d) || valueLessThanOrEqual(d, a)) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(a, c) && (planEqual(b, d) || valueLessThanOrEqual(b, d)) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(a, d) && (planEqual(b, c) || valueLessThanOrEqual(b, c)) =>
+          Literal.FalseLiteral
+
+        case c EqualNullSafe d if planEqual(b, d) && planEqual(a, c) =>
+          Literal.FalseLiteral
+        case c EqualNullSafe d if planEqual(b, c) && planEqual(a, d) =>
+          Literal.FalseLiteral
+        case c EqualNullSafe d if planEqual(a, c) && planEqual(b, d) =>
+          Literal.FalseLiteral
+        case c EqualNullSafe d if planEqual(a, d) && planEqual(b, c) =>
+          Literal.FalseLiteral
+
+        case c EqualNullSafe d if planEqual(b, d) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(b, c) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(a, c) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(a, d) => EqualTo(c, d)
+      }
+      case a LessThanOrEqual b => expression transformUp {
+        case c LessThan d if planEqual(b, d) && valueLessThan(c, a) =>
+          Literal.TrueLiteral
+        case c LessThan d if planEqual(b, c) && (planEqual(a, d) || valueLessThanOrEqual(d, a)) =>
+          Literal.FalseLiteral
+        case c LessThan d if planEqual(a, c) && valueLessThan(b, d) =>
+          Literal.TrueLiteral
+        case c LessThan d if planEqual(a, d) && (planEqual(b, c) || valueLessThanOrEqual(b, c)) =>
+          Literal.FalseLiteral
+
+        case c LessThanOrEqual d
+          if planEqual(b, d) && (planEqual(a, c) || valueLessThanOrEqual(c, a)) =>
+          Literal.TrueLiteral
+        case c LessThanOrEqual d if planEqual(b, c) && valueLessThan(d, a) =>
+          Literal.FalseLiteral
+        case c LessThanOrEqual d if planEqual(b, c) && (planEqual(a, d) || valueEqual(a, d)) =>
+          EqualTo(c, d)
+        case c LessThanOrEqual d
+          if planEqual(a, c) && (planEqual(b, d) || valueLessThanOrEqual(b, d)) =>
+          Literal.TrueLiteral
+        case c LessThanOrEqual d if planEqual(a, d) && valueLessThan(b, c) =>
+          Literal.FalseLiteral
+        case c LessThanOrEqual d if planEqual(a, d) && (planEqual(b, c) || valueEqual(b, c)) =>
+          EqualTo(c, d)
+
+        case c EqualTo d if planEqual(b, d) && valueLessThan(c, a) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(b, c) && valueLessThan(d, a) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(a, c) && valueLessThan(b, d) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(a, d) && valueLessThan(b, c) =>
+          Literal.FalseLiteral
+
+        case c EqualNullSafe d if planEqual(b, d) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(b, c) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(a, c) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(a, d) => EqualTo(c, d)
+      }
+      case a EqualTo b =>
+        if (b.foldable) {
+          expression transformUp { case c if planEqual(a, c) => b }
+        } else if (a.foldable) {
+          expression transformUp { case c if planEqual(b, c) => a }
+        } else {
+          expression transformUp {
+            case c LessThan d if planEqual(b, d) && planEqual(a, c) =>
+              Literal.FalseLiteral
+            case c LessThan d if planEqual(b, c) && planEqual(a, d) =>
+              Literal.FalseLiteral
+            case c LessThan d if planEqual(a, d) && planEqual(b, c) =>
+              Literal.FalseLiteral
+            case c LessThan d if planEqual(a, c) && planEqual(b, d) =>
+             Literal.FalseLiteral
+
+            case c LessThanOrEqual d if planEqual(b, d) && planEqual(a, c) =>
+              Literal.TrueLiteral
+            case c LessThanOrEqual d if planEqual(b, c) && planEqual(a, d) =>
+              Literal.TrueLiteral
+            case c LessThanOrEqual d if planEqual(a, d) && planEqual(b, c) =>
+              Literal.TrueLiteral
+            case c LessThanOrEqual d if planEqual(a, c) && planEqual(b, d) =>
+              Literal.TrueLiteral
+
+            case c EqualTo d if planEqual(b, d) && planEqual(a, c) =>
+             Literal.TrueLiteral
+            case c EqualTo d if planEqual(b, c) && planEqual(a, d) =>
+             Literal.TrueLiteral
+            case c EqualTo d if planEqual(a, d) && planEqual(b, c) =>
+              Literal.TrueLiteral
+            case c EqualTo d if planEqual(a, c) && planEqual(b, d) =>
+              Literal.TrueLiteral
+
+            case c EqualNullSafe d if planEqual(b, d) && planEqual(a, c) =>
+              Literal.TrueLiteral
+            case c EqualNullSafe d if planEqual(b, c) && planEqual(a, d) =>
+              Literal.TrueLiteral
+            case c EqualNullSafe d if planEqual(a, d) && planEqual(b, c) =>
+              Literal.TrueLiteral
+            case c EqualNullSafe d if planEqual(a, c) && planEqual(b, d) =>
+              Literal.TrueLiteral
+
+            case c EqualNullSafe d if planEqual(b, d) => EqualTo(c, d)
+            case c EqualNullSafe d if planEqual(b, c) => EqualTo(c, d)
+            case c EqualNullSafe d if planEqual(a, c) => EqualTo(c, d)
+            case c EqualNullSafe d if planEqual(a, d) => EqualTo(c, d)
+          }
+        }
+      case a EqualNullSafe b => expression transformUp {
+        case c LessThan d if planEqual(b, d) && planEqual(a, c) =>
+          Literal.FalseLiteral
+        case c LessThan d if planEqual(b, c) && planEqual(d, a) =>
+          Literal.FalseLiteral
+        case c LessThan d if planEqual(a, d) && planEqual(b, c) =>
+          Literal.FalseLiteral
+        case c LessThan d if planEqual(a, c) && planEqual(d, b) =>
+          Literal.FalseLiteral
+
+        case c LessThanOrEqual d if planEqual(b, d) && planEqual(a, c) =>
+          EqualTo(c, d)
+        case c LessThanOrEqual d if planEqual(b, c) && planEqual(a, d) =>
+          EqualTo(c, d)
+        case c LessThanOrEqual d if planEqual(a, d) && planEqual(b, c) =>
+          EqualTo(c, d)
+        case c LessThanOrEqual d if planEqual(a, c) && planEqual(b, d) =>
+          EqualTo(c, d)
+
+        case c EqualNullSafe d if planEqual(b, d) && planEqual(a, c) =>
+          Literal.TrueLiteral
+        case c EqualNullSafe d if planEqual(b, c) && planEqual(a, d) =>
+          Literal.TrueLiteral
+        case c EqualNullSafe d if planEqual(a, d) && planEqual(b, c) =>
+          Literal.TrueLiteral
+        case c EqualNullSafe d if planEqual(a, c) && planEqual(b, d) =>
+          Literal.TrueLiteral
+      }
+      case _ => expression
+    }
 }

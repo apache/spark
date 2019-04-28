@@ -95,13 +95,19 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
   protected def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case Filter(condition: Expression, child: LogicalPlan) =>
-        Filter(splitConjunctivePredicates(condition).map(rewriteEqual).sortBy(_.hashCode())
-          .reduce(And), child)
+        val newCondition =
+          splitConjunctivePredicates(condition)
+            .map(rewriteEqual)
+            .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
+            .reduce(And)
+        Filter(newCondition, child)
       case sample: Sample =>
         sample.copy(seed = 0L)
       case Join(left, right, joinType, condition, hint) if condition.isDefined =>
         val newCondition =
-          splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
+          splitConjunctivePredicates(condition.get)
+            .map(rewriteEqual)
+            .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
             .reduce(And)
         Join(left, right, joinType, Some(newCondition), hint)
     }
@@ -113,12 +119,15 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
    * 1. (a = b), (b = a);
    * 2. (a <=> b), (b <=> a).
    */
-  private def rewriteEqual(condition: Expression): Expression = condition match {
+  private def rewriteEqual(condition: Expression): Expression = condition transform {
     case eq @ EqualTo(l: Expression, r: Expression) =>
-      Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)
+      Seq(l, r)
+        .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
+        .reduce(EqualTo)
     case eq @ EqualNullSafe(l: Expression, r: Expression) =>
-      Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe)
-    case _ => condition // Don't reorder.
+      Seq(l, r)
+        .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
+        .reduce(EqualNullSafe)
   }
 
   /** Fails the test if the two plans do not match */

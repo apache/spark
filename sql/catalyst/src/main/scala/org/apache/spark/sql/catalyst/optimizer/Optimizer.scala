@@ -80,7 +80,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         // Constant folding and strength reduction
         TransposeWindow,
         NullPropagation,
-        ConstantPropagation,
+        ConstraintPropagation,
         FoldablePropagation,
         OptimizeIn,
         ConstantFolding,

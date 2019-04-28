@@ -55,99 +55,23 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
- * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
- * value in conjunctive [[Expression Expressions]]
+ * Substitutes expressions which can be statically narrowed by constrains.
  * eg.
  * {{{
- *   SELECT * FROM table WHERE i = 5 AND j = i + 3
- *   ==>  SELECT * FROM table WHERE i = 5 AND j = 8
+ *   SELECT * FROM table WHERE i = 5 AND j = i + 3     => SELECT * FROM table WHERE i = 5 AND j = 8
+ *   SELECT * FROM table WHERE i <= 5 AND i = 5        => SELECT * FROM table WHERE i = 5
+ *   SELECT * FROM table WHERE i < j AND ... AND i > j => SELECT * FROM table WHERE false
  * }}}
- *
- * Approach used:
- * - Populate a mapping of attribute => constant value by looking at all the equals predicates
- * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
- *   in the AND node.
  */
-object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
+object ConstraintPropagation extends Rule[LogicalPlan] with ConstraintHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f: Filter =>
-      val (newCondition, _) = traverse(f.condition, replaceChildren = true)
-      if (newCondition.isDefined) {
-        f.copy(condition = newCondition.get)
-      } else {
+      val (newCondition, _) = simplifyWithConstraints(f.condition)
+      if (newCondition fastEquals f.condition) {
         f
+      } else {
+        f.copy(condition = newCondition)
       }
-  }
-
-  type EqualityPredicates = Seq[((AttributeReference, Literal), BinaryComparison)]
-
-  /**
-   * Traverse a condition as a tree and replace attributes with constant values.
-   * - On matching [[And]], recursively traverse each children and get propagated mappings.
-   *   If the current node is not child of another [[And]], replace all occurrences of the
-   *   attributes with the corresponding constant values.
-   * - If a child of [[And]] is [[EqualTo]] or [[EqualNullSafe]], propagate the mapping
-   *   of attribute => constant.
-   * - On matching [[Or]] or [[Not]], recursively traverse each children, propagate empty mapping.
-   * - Otherwise, stop traversal and propagate empty mapping.
-   * @param condition condition to be traversed
-   * @param replaceChildren whether to replace attributes with constant values in children
-   * @return A tuple including:
-   *         1. Option[Expression]: optional changed condition after traversal
-   *         2. EqualityPredicates: propagated mapping of attribute => constant
-   */
-  private def traverse(condition: Expression, replaceChildren: Boolean)
-    : (Option[Expression], EqualityPredicates) =
-    condition match {
-      case e @ EqualTo(left: AttributeReference, right: Literal) => (None, Seq(((left, right), e)))
-      case e @ EqualTo(left: Literal, right: AttributeReference) => (None, Seq(((right, left), e)))
-      case e @ EqualNullSafe(left: AttributeReference, right: Literal) =>
-        (None, Seq(((left, right), e)))
-      case e @ EqualNullSafe(left: Literal, right: AttributeReference) =>
-        (None, Seq(((right, left), e)))
-      case a: And =>
-        val (newLeft, equalityPredicatesLeft) = traverse(a.left, replaceChildren = false)
-        val (newRight, equalityPredicatesRight) = traverse(a.right, replaceChildren = false)
-        val equalityPredicates = equalityPredicatesLeft ++ equalityPredicatesRight
-        val newSelf = if (equalityPredicates.nonEmpty && replaceChildren) {
-          Some(And(replaceConstants(newLeft.getOrElse(a.left), equalityPredicates),
-            replaceConstants(newRight.getOrElse(a.right), equalityPredicates)))
-        } else {
-          if (newLeft.isDefined || newRight.isDefined) {
-            Some(And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right)))
-          } else {
-            None
-          }
-        }
-        (newSelf, equalityPredicates)
-      case o: Or =>
-        // Ignore the EqualityPredicates from children since they are only propagated through And.
-        val (newLeft, _) = traverse(o.left, replaceChildren = true)
-        val (newRight, _) = traverse(o.right, replaceChildren = true)
-        val newSelf = if (newLeft.isDefined || newRight.isDefined) {
-          Some(Or(left = newLeft.getOrElse(o.left), right = newRight.getOrElse((o.right))))
-        } else {
-          None
-        }
-        (newSelf, Seq.empty)
-      case n: Not =>
-        // Ignore the EqualityPredicates from children since they are only propagated through And.
-        val (newChild, _) = traverse(n.child, replaceChildren = true)
-        (newChild.map(Not), Seq.empty)
-      case _ => (None, Seq.empty)
-    }
-
-  private def replaceConstants(condition: Expression, equalityPredicates: EqualityPredicates)
-    : Expression = {
-    val constantsMap = AttributeMap(equalityPredicates.map(_._1))
-    val predicates = equalityPredicates.map(_._2).toSet
-    def replaceConstants0(expression: Expression) = expression transform {
-      case a: AttributeReference => constantsMap.getOrElse(a, a)
-    }
-    condition transform {
-      case e @ EqualTo(_, _) if !predicates.contains(e) => replaceConstants0(e)
-      case e @ EqualNullSafe(_, _) if !predicates.contains(e) => replaceConstants0(e)
-    }
   }
 }
 
@@ -389,6 +313,7 @@ object SimplifyBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
     case q: LogicalPlan => q transformExpressionsUp {
       // True with equality
       case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
+      case a EqualNullSafe b if a.foldable || b.foldable => EqualTo(a, b)
       case a EqualTo b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
       case a GreaterThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) =>
         TrueLiteral
