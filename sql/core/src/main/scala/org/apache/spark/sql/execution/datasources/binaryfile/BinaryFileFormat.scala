@@ -26,12 +26,10 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan,
-  GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
+import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
@@ -80,7 +78,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     false
   }
 
-  override def shortName(): String = "binaryFile"
+  override def shortName(): String = BINARY_FILE
 
   override protected def buildReader(
       sparkSession: SparkSession,
@@ -90,54 +88,43 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    require(dataSchema.sameType(schema),
+      s"""
+         |Binary file data source expects dataSchema: $schema,
+         |but got: $dataSchema.
+        """.stripMargin)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-
     val binaryFileSourceOptions = new BinaryFileSourceOptions(options)
-
     val pathGlobPattern = binaryFileSourceOptions.pathGlobFilter
-
     val filterFuncs = filters.map(filter => createFilterFunction(filter))
 
     file: PartitionedFile => {
-      val path = file.filePath
-      val fsPath = new Path(path)
-
+      val path = new Path(file.filePath)
       // TODO: Improve performance here: each file will recompile the glob pattern here.
-      if (pathGlobPattern.forall(new GlobFilter(_).accept(fsPath))) {
-        val fs = fsPath.getFileSystem(broadcastedHadoopConf.value.value)
-        val fileStatus = fs.getFileStatus(fsPath)
-        val length = fileStatus.getLen
-        val modificationTime = fileStatus.getModificationTime
-
-        if (filterFuncs.forall(_.apply(fileStatus))) {
-          val stream = fs.open(fsPath)
-          val content = try {
-            ByteStreams.toByteArray(stream)
-          } finally {
-            Closeables.close(stream, true)
+      if (pathGlobPattern.forall(new GlobFilter(_).accept(path))) {
+        val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
+        val status = fs.getFileStatus(path)
+        if (filterFuncs.forall(_.apply(status))) {
+          val writer = new UnsafeRowWriter(requiredSchema.length)
+          writer.resetRowWriter()
+          requiredSchema.fieldNames.zipWithIndex.foreach {
+            case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
+            case (LENGTH, i) => writer.write(i, status.getLen)
+            case (MODIFICATION_TIME, i) =>
+              writer.write(i, DateTimeUtils.fromMillis(status.getModificationTime))
+            case (CONTENT, i) =>
+              val stream = fs.open(status.getPath)
+              try {
+                writer.write(i, ByteStreams.toByteArray(stream))
+              } finally {
+                Closeables.close(stream, true)
+              }
+            case (other, _) =>
+              throw new RuntimeException(s"Unsupported field name: ${other}")
           }
-
-          val fullOutput = dataSchema.map { f =>
-            AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
-          }
-          val requiredOutput = fullOutput.filter { a =>
-            requiredSchema.fieldNames.contains(a.name)
-          }
-
-          // TODO: Add column pruning
-          // currently it still read the file content even if content column is not required.
-          val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
-
-          val internalRow = InternalRow(
-            UTF8String.fromString(path),
-            DateTimeUtils.fromMillis(modificationTime),
-            length,
-            content
-          )
-
-          Iterator(requiredColumns(internalRow))
+          Iterator.single(writer.getRow)
         } else {
           Iterator.empty
         }
@@ -154,6 +141,7 @@ object BinaryFileFormat {
   private[binaryfile] val MODIFICATION_TIME = "modificationTime"
   private[binaryfile] val LENGTH = "length"
   private[binaryfile] val CONTENT = "content"
+  private[binaryfile] val BINARY_FILE = "binaryFile"
 
   /**
    * Schema for the binary file data source.
