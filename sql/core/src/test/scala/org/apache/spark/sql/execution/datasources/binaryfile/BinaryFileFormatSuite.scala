@@ -316,10 +316,10 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
 
     read(file, getRequiredSchema(MODIFICATION_TIME, CONTENT, LENGTH, PATH)) match {
-      case Row(t, c, l, p) =>
+      case Row(t, c, len, p) =>
         assert(t === new Timestamp(file.lastModified()))
         assert(c === content)
-        assert(l === content.length)
+        assert(len === content.length)
         assert(p.asInstanceOf[String].endsWith(file.getAbsolutePath))
     }
     file.setReadable(false)
