@@ -597,7 +597,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
       .select(window($"eventTime", "5 seconds") as 'aliasWindow)
-     
+
     assert(aliasWindow.logicalPlan.output.exists(
         _.metadata.contains(EventTimeWatermark.delayKey)))
   }
