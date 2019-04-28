@@ -31,8 +31,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.Uuid
-import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.expressions.{If, Uuid}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantPropagation, ConvertToLocalRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -2297,6 +2297,98 @@ class DataFrameSuite extends QueryTest
       case _ =>
         fail("emptyDataFrame should be foldable")
     }
+  }
+
+  test("Enhanced constant propagation") {
+    val testRelation =
+      Seq[(Integer, Integer, Int, Int)](
+        (null, null, 1, 1),
+        (null, null, 2, 2),
+        (1, 1, 1, 1),
+        (1, 1, 2, 2),
+        (2, 2, 1, 1),
+        (2, 2, 2, 2)
+      ).toDF("a", "b", "d", "e")
+
+    val columnA = $"a"
+    val columnB = $"b"
+    val columnD = $"d"
+    val columnE = $"e"
+
+    def testSelect(column: Column, expected: Column): Unit = {
+      val expectedRows = testRelation.select(expected).collect()
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConstantPropagation.ruleName) {
+        val df = testRelation.select(column)
+        checkAnswer(df, expectedRows)
+      }
+    }
+
+    def testFilter(column: Column, expected: Column): Unit = {
+      val expectedRows = testRelation.filter(expected).collect()
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConstantPropagation.ruleName) {
+        val df = testRelation.filter(column)
+        checkAnswer(df, expectedRows)
+      }
+    }
+
+    val nullable = abs(columnA) === 1 && columnB === 1 && abs(columnA) <= columnB
+    val reducedNullable = abs(columnA) === 1 && columnB === 1
+
+    val nonNullable = abs(columnD) === 1 && columnE === 1 && abs(columnD) <= columnE
+    val reducedNonNullable = abs(columnD) === 1 && columnE === 1
+
+    val column = rand() < 0 || nullable || nonNullable
+    val partlyReduced = rand() < 0 || nullable || reducedNonNullable
+    val reduced = rand() < 0 || reducedNullable || reducedNonNullable
+
+    val simplifiedNegatedNullable = abs(columnA) =!= 1 || columnB =!= 1 || abs(columnA) > columnB
+    val reducedSimplifiedNegatedNullable = abs(columnA) =!= 1 || columnB =!= 1
+
+    val reducedSimplifiedNegatedNonNullable = abs(columnD) =!= 1 || columnE =!= 1
+
+    val partlyReducedSimplifiedNegated =
+      rand() >= 0 && simplifiedNegatedNullable && reducedSimplifiedNegatedNonNullable
+    val reducedSimplifiedNegated =
+      rand() >= 0 && reducedSimplifiedNegatedNullable && reducedSimplifiedNegatedNonNullable
+
+    testSelect(column, partlyReduced)
+    testSelect(new Column(If(column.expr, column.expr, column.expr)),
+      new Column(If(reduced.expr, partlyReduced.expr, partlyReduced.expr)))
+    testSelect(when(column, column).otherwise(column),
+      when(reduced, partlyReduced).otherwise(partlyReduced))
+    testSelect(filter(array(column), _ => column),
+      filter(array(partlyReduced), _ => reduced))
+    Seq(true, false).foreach { tvl =>
+      withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> s"$tvl") {
+        testSelect(exists(array(column), _ => column),
+          exists(array(partlyReduced), _ => if (tvl) partlyReduced else reduced))
+      }
+    }
+    testSelect(map_filter(map(coalesce(column, lit(false)), column), (_, _) => column),
+      map_filter(map(coalesce(partlyReduced, lit(false)), partlyReduced), (_, _) => reduced))
+    testSelect(!new Column(If(column.expr, (!column).expr, (!column).expr)),
+      !new Column(If(reduced.expr, partlyReducedSimplifiedNegated.expr,
+        partlyReducedSimplifiedNegated.expr)))
+
+    testFilter(column, reduced)
+    testFilter(new Column(If(column.expr, column.expr, column.expr)),
+      new Column(If(reduced.expr, reduced.expr, reduced.expr)))
+    testFilter(when(column, column).otherwise(column),
+      when(reduced, reduced).otherwise(reduced))
+    testFilter(
+      filter(array(column), _ => column)(0),
+      filter(array(reduced), _ => reduced)(0))
+    Seq(true, false).foreach { tvl =>
+      withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> s"$tvl") {
+        testFilter(exists(array(column), _ => column),
+          exists(array(reduced), _ => if (tvl) partlyReduced else reduced))
+      }
+    }
+    testFilter(
+      map_filter(map(coalesce(column, lit(false)), column), (_, _) => column)(true),
+      map_filter(map(coalesce(reduced, lit(false)), reduced), (_, _) => reduced)(true))
+    testFilter(!new Column(If(column.expr, (!column).expr, (!column).expr)),
+      !new Column(If(reduced.expr, reducedSimplifiedNegated.expr, reducedSimplifiedNegated.expr)))
   }
 }
 
