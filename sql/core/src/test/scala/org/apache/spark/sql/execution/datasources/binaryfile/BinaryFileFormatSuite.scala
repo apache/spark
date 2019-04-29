@@ -32,7 +32,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf.{CONF_SOURCES_BINARY_FILE_MAX_LENGTH, SOURCES_BINARY_FILE_MAX_LENGTH}
+import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
@@ -355,13 +355,13 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       }
       val expected = Seq(Row(content))
       QueryTest.checkAnswer(readContent(), expected)
-      withSQLConf(CONF_SOURCES_BINARY_FILE_MAX_LENGTH -> content.length.toString) {
+      withSQLConf(SOURCES_BINARY_FILE_MAX_LENGTH.key -> content.length.toString) {
         QueryTest.checkAnswer(readContent(), expected)
       }
       // Disable read. If the implementation attempts to read, the exception would be different.
       file.setReadable(false)
       val caught = intercept[SparkException] {
-        withSQLConf(CONF_SOURCES_BINARY_FILE_MAX_LENGTH -> (content.length - 1).toString) {
+        withSQLConf(SOURCES_BINARY_FILE_MAX_LENGTH.key -> (content.length - 1).toString) {
           QueryTest.checkAnswer(readContent(), expected)
         }
       }
