@@ -199,7 +199,7 @@ private[spark] object TestUtils {
   def assertExceptionMsg(exception: Throwable, msg: String): Unit = {
     var e = exception
     var contains = e.getMessage.contains(msg)
-    while (e.getCause != null && contains == false) {
+    while (e.getCause != null && !contains) {
       e = e.getCause
       contains = e.getMessage.contains(msg)
     }

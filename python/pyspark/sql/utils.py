@@ -89,7 +89,7 @@ def capture_sql_exception(f):
             return f(*a, **kw)
         except py4j.protocol.Py4JJavaError as e:
             converted = convert_exception(e.java_exception)
-            if type(converted) is not UnknownException:
+            if not isinstance(converted, UnknownException):
                 raise converted
             else:
                 raise

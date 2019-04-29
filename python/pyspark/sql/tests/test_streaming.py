@@ -234,10 +234,10 @@ class StreamingTests(ReusedSQLTestCase):
     def _assert_exception_tree_contains_msg(self, exception, msg):
         e = exception
         contains = msg in e.desc
-        while e.cause is not None and contains is False:
+        while e.cause is not None and not contains:
             e = e.cause
             contains = msg in e.desc
-        self.assertTrue(contains)
+        self.assertTrue(contains, "Exception tree doesn't contain the expected message: %s" %msg)
 
     def test_query_manager_await_termination(self):
         df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')

@@ -137,7 +137,7 @@ case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row])
   extends WriterCommitMessage {}
 
 class MemoryStreamingWrite(
-                            val sink: MemorySink, schema: StructType, needTruncate: Boolean)
+    val sink: MemorySink, schema: StructType, needTruncate: Boolean)
   extends StreamingWrite {
 
   override def createStreamingWriterFactory: MemoryWriterFactory = {
