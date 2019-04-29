@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.sources.v2.reader._
 
 /**
@@ -45,5 +46,9 @@ case class BatchScanExec(
 
   override lazy val inputRDD: RDD[InternalRow] = {
     new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
+  }
+
+  override def doCanonicalize(): BatchScanExec = {
+    this.copy(output = output.map(QueryPlan.normalizeExprId(_, output)))
   }
 }

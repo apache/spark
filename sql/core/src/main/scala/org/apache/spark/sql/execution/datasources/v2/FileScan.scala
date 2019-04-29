@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, Scan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -84,6 +85,11 @@ abstract class FileScan(
 
   override def readSchema(): StructType =
     StructType(readDataSchema.fields ++ readPartitionSchema.fields)
+
+  // Returns whether the two given arrays of [[Filter]]s are equivalent.
+  protected def equivalentFilters(a: Array[Filter], b: Array[Filter]): Boolean = {
+    a.sortBy(_.hashCode()).sameElements(b.sortBy(_.hashCode()))
+  }
 
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
