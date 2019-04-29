@@ -54,7 +54,8 @@ private[spark] object KafkaTokenUtil extends Logging {
     override def getKind: Text = TOKEN_KIND
   }
 
-  private[kafka010] def obtainToken(sparkConf: SparkConf,
+  private[kafka010] def obtainToken(
+      sparkConf: SparkConf,
       clusterConf: KafkaTokenClusterConf): (Token[_ <: TokenIdentifier], Long) = {
     checkProxyUser()
 
@@ -80,7 +81,8 @@ private[spark] object KafkaTokenUtil extends Logging {
       "user is not yet supported.")
   }
 
-  private[kafka010] def createAdminClientProperties(sparkConf: SparkConf,
+  private[kafka010] def createAdminClientProperties(
+      sparkConf: SparkConf,
       clusterConf: KafkaTokenClusterConf): ju.Properties = {
     val adminClientProperties = new ju.Properties
 
@@ -141,7 +143,8 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  private def setTrustStoreProperties(clusterConf: KafkaTokenClusterConf,
+  private def setTrustStoreProperties(
+      clusterConf: KafkaTokenClusterConf,
       properties: ju.Properties): Unit = {
     clusterConf.trustStoreLocation.foreach { truststoreLocation =>
       properties.put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, truststoreLocation)
@@ -151,7 +154,8 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  private def setKeyStoreProperties(clusterConf: KafkaTokenClusterConf,
+  private def setKeyStoreProperties(
+      clusterConf: KafkaTokenClusterConf,
       properties: ju.Properties): Unit = {
     clusterConf.keyStoreLocation.foreach { keystoreLocation =>
       properties.put(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, keystoreLocation)
@@ -164,7 +168,8 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  private def getKeytabJaasParams(sparkConf: SparkConf,
+  private def getKeytabJaasParams(
+      sparkConf: SparkConf,
       clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
@@ -179,7 +184,8 @@ private[spark] object KafkaTokenUtil extends Logging {
     params
   }
 
-  private def getTicketCacheJaasParams(sparkConf: SparkConf,
+  private def getTicketCacheJaasParams(
+      sparkConf: SparkConf,
       clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
@@ -230,7 +236,8 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  def findMatchingToken(sparkConf: SparkConf,
+  def findMatchingToken(
+      sparkConf: SparkConf,
       bootStrapServers: String): Option[KafkaTokenClusterConf] = {
     val tokens = UserGroupInformation.getCurrentUser().getCredentials.getAllTokens.asScala
     val clusterConfigs = tokens
@@ -241,8 +248,8 @@ private[spark] object KafkaTokenUtil extends Logging {
       .filter { clusterConfig =>
         Pattern.compile(clusterConfig.targetServersRegex).matcher(bootStrapServers).matches()
       }
-    require(clusterConfigs.size <= 1, "More than one delegation token matches to be used with the" +
-      s"following bootstrap servers: $bootStrapServers.")
+    require(clusterConfigs.size <= 1, "More than one delegation token matches the following " +
+      s"bootstrap servers: $bootStrapServers.")
     clusterConfigs.headOption
   }
 

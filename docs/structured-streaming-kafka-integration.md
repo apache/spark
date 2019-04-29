@@ -719,23 +719,24 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>None</td>
     <td>
       A list of coma separated host/port pairs to use for establishing the initial connection
-      to the Kafka cluster. For further details please see kafka documentation. Only used to obtain delegation token.
+      to the Kafka cluster. For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code></td>
     <td>.*</td>
     <td>
-      When delegation token obtained it can be used on sources/sinks. If any of the sources/sinks <code>bootstrap.servers</code> configuration
-      matches with this pattern then the delegation token will be used. If multiple matches found an exception will be thrown and the query won't be started.
-      It uses Java pattern matcher in the background.
+      Regular expression to match against the <code>bootstrap.servers</code> config for sources and sinks in the application.
+      If a server address matches this regex, the delegation token obtained from the respective bootstrap servers will be used when connecting.
+      If multiple clusters match the address, an exception will be thrown and the query won't be started.
+      Kafka's secure and unsecure listeners are bound to different ports. When both used the secure listener port has to be part of the regular expression.
     </td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.security.protocol</code></td>
     <td>SASL_SSL</td>
     <td>
-      Protocol used to communicate with brokers. For further details please see kafka documentation. Only used to obtain delegation token.
+      Protocol used to communicate with brokers. For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
   </tr>
   <tr>
@@ -743,14 +744,14 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>kafka</td>
     <td>
       The Kerberos principal name that Kafka runs as. This can be defined either in Kafka's JAAS config or in Kafka's config.
-      For further details please see kafka documentation. Only used to obtain delegation token.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code></td>
     <td>None</td>
     <td>
-      The location of the trust store file. For further details please see kafka documentation. Only used to obtain delegation token.
+      The location of the trust store file. For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
   </tr>
   <tr>
@@ -758,7 +759,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>None</td>
     <td>
       The store password for the trust store file. This is optional and only needed if <code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code> is configured.
-      For further details please see kafka documentation. Only used to obtain delegation token.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
   </tr>
   <tr>
@@ -766,7 +767,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>None</td>
     <td>
       The location of the key store file. This is optional for client and can be used for two-way authentication for client.
-      For further details please see kafka documentation. Only used to obtain delegation token.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
   </tr>
   <tr>
@@ -774,7 +775,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>None</td>
     <td>
       The store password for the key store file. This is optional and only needed if <code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code> is configured.
-      For further details please see kafka documentation. Only used to obtain delegation token.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
   </tr>
   <tr>
@@ -782,7 +783,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>None</td>
     <td>
       The password of the private key in the key store file. This is optional for client.
-      For further details please see kafka documentation. Only used to obtain delegation token.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
   </tr>
   <tr>
@@ -790,7 +791,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>SCRAM-SHA-512</td>
     <td>
       SASL mechanism used for client connections with delegation token. Because SCRAM login module used for authentication a compatible mechanism has to be set here.
-      For further details please see kafka documentation (<code>sasl.mechanism</code>). Only used to authenticate against Kafka broker with delegation token.
+      For further details please see Kafka documentation (<code>sasl.mechanism</code>). Only used to authenticate against Kafka broker with delegation token.
     </td>
   </tr>
 </table>

@@ -56,7 +56,7 @@ private[spark] class KafkaDelegationTokenProvider
           }
         } else {
           logDebug(
-            s"Cluster ${clusterConf.identifier} not requires delegation token, skipping.")
+            s"Cluster ${clusterConf.identifier} does not require delegation token, skipping.")
         }
       }
       lowestNextRenewalDate

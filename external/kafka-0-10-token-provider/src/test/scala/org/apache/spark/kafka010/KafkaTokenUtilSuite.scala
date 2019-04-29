@@ -217,8 +217,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     val thrown = intercept[IllegalArgumentException] {
       KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers)
     }
-    assert(thrown.getMessage contains
-      "More than one delegation token matches")
+    assert(thrown.getMessage.contains("More than one delegation token matches"))
   }
 
   test("getTokenJaasParams with token should return scram module") {

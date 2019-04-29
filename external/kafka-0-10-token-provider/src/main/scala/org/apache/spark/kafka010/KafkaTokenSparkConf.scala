@@ -25,17 +25,17 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 
 private[spark] case class KafkaTokenClusterConf(
-  identifier: String,
-  bootstrapServers: String,
-  targetServersRegex: String,
-  securityProtocol: String,
-  kerberosServiceName: String,
-  trustStoreLocation: Option[String],
-  trustStorePassword: Option[String],
-  keyStoreLocation: Option[String],
-  keyStorePassword: Option[String],
-  keyPassword: Option[String],
-  tokenMechanism: String) {
+    identifier: String,
+    bootstrapServers: String,
+    targetServersRegex: String,
+    securityProtocol: String,
+    kerberosServiceName: String,
+    trustStoreLocation: Option[String],
+    trustStorePassword: Option[String],
+    keyStoreLocation: Option[String],
+    keyStorePassword: Option[String],
+    keyPassword: Option[String],
+    tokenMechanism: String) {
   override def toString: String = s"KafkaTokenClusterConf{" +
     s"identifier=$identifier, " +
     s"bootstrapServers=$bootstrapServers, " +
@@ -57,7 +57,7 @@ private [kafka010] object KafkaTokenSparkConf extends Logging {
   val DEFAULT_SASL_TOKEN_MECHANISM = "SCRAM-SHA-512"
 
   def getClusterConfig(sparkConf: SparkConf, identifier: String): KafkaTokenClusterConf = {
-    val configPrefix = s"${KafkaTokenSparkConf.CLUSTERS_CONFIG_PREFIX}$identifier."
+    val configPrefix = s"$CLUSTERS_CONFIG_PREFIX$identifier."
     val sparkClusterConf = sparkConf.getAllWithPrefix(configPrefix).toMap
     val result = KafkaTokenClusterConf(
       identifier,
@@ -86,7 +86,7 @@ private [kafka010] object KafkaTokenSparkConf extends Logging {
     sparkConf.getAllWithPrefix(KafkaTokenSparkConf.CLUSTERS_CONFIG_PREFIX).toMap.keySet
       .flatMap { k =>
         val split = k.split('.')
-        if (split.length > 0 && !split(0).isEmpty) {
+        if (split.length > 0 && split(0).nonEmpty) {
           Some(split(0))
         } else {
           None
