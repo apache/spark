@@ -301,9 +301,8 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def notifyPartitionCompletion(
-      stageId: Int, partitionId: Int, taskDuration: Long): Unit = {
-    taskResultGetter.enqueuePartitionCompletionNotification(stageId, partitionId, taskDuration)
+  override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
+    taskResultGetter.enqueuePartitionCompletionNotification(stageId, partitionId)
   }
 
   /**
@@ -651,12 +650,9 @@ private[spark] class TaskSchedulerImpl(
    * means that a task completion from an earlier zombie attempt can lead to the entire stage
    * getting marked as successful.
    */
-  private[scheduler] def handlePartitionCompleted(
-      stageId: Int,
-      partitionId: Int,
-      taskDuration: Long) = synchronized {
+  private[scheduler] def handlePartitionCompleted(stageId: Int, partitionId: Int) = synchronized {
     taskSetsByStageIdAndAttempt.get(stageId).foreach(_.values.filter(!_.isZombie).foreach { tsm =>
-      tsm.markPartitionCompleted(partitionId, taskDuration)
+      tsm.markPartitionCompleted(partitionId)
     })
   }
 
