@@ -21,7 +21,6 @@ import java.net.{InetAddress, ServerSocket, Socket}
 
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
-import scala.language.existentials
 import scala.util.Try
 
 import org.apache.spark.SparkEnv

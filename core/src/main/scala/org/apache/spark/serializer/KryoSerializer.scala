@@ -164,8 +164,8 @@ class KryoSerializer(conf: SparkConf)
         }
         // Allow the user to register their own classes by setting spark.kryo.registrator.
         userRegistrators
-          .map(Utils.classForName(_, noSparkClassLoader = true).getConstructor().
-            newInstance().asInstanceOf[KryoRegistrator])
+          .map(Utils.classForName[KryoRegistrator](_, noSparkClassLoader = true).
+            getConstructor().newInstance())
           .foreach { reg => reg.registerClasses(kryo) }
       } catch {
         case e: Exception =>

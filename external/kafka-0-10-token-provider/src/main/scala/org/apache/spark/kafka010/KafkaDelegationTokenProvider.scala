@@ -17,7 +17,6 @@
 
 package org.apache.spark.kafka010
 
-import scala.language.existentials
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration

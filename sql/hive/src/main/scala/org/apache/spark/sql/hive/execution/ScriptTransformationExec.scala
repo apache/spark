@@ -407,8 +407,8 @@ case class HiveScriptIOSchema (
       columnTypes: Seq[DataType],
       serdeProps: Seq[(String, String)]): AbstractSerDe = {
 
-    val serde = Utils.classForName(serdeClassName).getConstructor().
-      newInstance().asInstanceOf[AbstractSerDe]
+    val serde = Utils.classForName[AbstractSerDe](serdeClassName).getConstructor().
+      newInstance()
 
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
@@ -428,8 +428,8 @@ case class HiveScriptIOSchema (
       inputStream: InputStream,
       conf: Configuration): Option[RecordReader] = {
     recordReaderClass.map { klass =>
-      val instance = Utils.classForName(klass).getConstructor().
-        newInstance().asInstanceOf[RecordReader]
+      val instance = Utils.classForName[RecordReader](klass).getConstructor().
+        newInstance()
       val props = new Properties()
       // Can not use props.putAll(outputSerdeProps.toMap.asJava) in scala-2.12
       // See https://github.com/scala/bug/issues/10418
@@ -441,8 +441,8 @@ case class HiveScriptIOSchema (
 
   def recordWriter(outputStream: OutputStream, conf: Configuration): Option[RecordWriter] = {
     recordWriterClass.map { klass =>
-      val instance = Utils.classForName(klass).getConstructor().
-        newInstance().asInstanceOf[RecordWriter]
+      val instance = Utils.classForName[RecordWriter](klass).getConstructor().
+        newInstance()
       instance.initialize(outputStream, conf)
       instance
     }

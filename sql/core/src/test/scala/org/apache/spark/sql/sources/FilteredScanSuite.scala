@@ -19,8 +19,6 @@ package org.apache.spark.sql.sources
 
 import java.util.Locale
 
-import scala.language.existentials
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper

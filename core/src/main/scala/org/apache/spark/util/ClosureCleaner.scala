@@ -21,7 +21,6 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.invoke.SerializedLambda
 
 import scala.collection.mutable.{Map, Set, Stack}
-import scala.language.existentials
 
 import org.apache.xbean.asm7.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.apache.xbean.asm7.Opcodes._
@@ -309,7 +308,9 @@ private[spark] object ClosureCleaner extends Logging {
       var outerPairs: List[(Class[_], AnyRef)] = outerClasses.zip(outerObjects).reverse
       var parent: AnyRef = null
       if (outerPairs.nonEmpty) {
-        val (outermostClass, outermostObject) = outerPairs.head
+        val outermostClass = outerPairs.head._1
+        val outermostObject = outerPairs.head._2
+
         if (isClosure(outermostClass)) {
           logDebug(s" + outermost object is a closure, so we clone it: ${outermostClass}")
         } else if (outermostClass.getName.startsWith("$line")) {

@@ -132,8 +132,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     }
     val wal = classNameOption.map { className =>
       try {
-        instantiateClass(
-          Utils.classForName(className).asInstanceOf[Class[_ <: WriteAheadLog]], sparkConf)
+        instantiateClass(Utils.classForName[WriteAheadLog](className), sparkConf)
       } catch {
         case NonFatal(e) =>
           throw new SparkException(s"Could not create a write ahead log of class $className", e)
