@@ -1389,6 +1389,15 @@ private[spark] class DAGScheduler(
 
     event.reason match {
       case Success =>
+        // An earlier attempt of a stage (which is zombie) may still have running tasks. If these
+        // tasks complete, they still count and we can mark the corresponding partitions as
+        // finished. Here we notify the task scheduler to skip running tasks for the same partition,
+        // to save resource.
+        if (task.stageAttemptId < stage.latestInfo.attemptNumber()) {
+          taskScheduler.notifyPartitionCompletion(
+            stageId, task.partitionId, event.taskInfo.duration)
+        }
+
         task match {
           case rt: ResultTask[_, _] =>
             // Cast to ResultStage here because it's part of the ResultTask
