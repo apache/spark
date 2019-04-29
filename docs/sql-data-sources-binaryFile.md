@@ -37,7 +37,7 @@ It supports the following read option:
     <td>
     An optional glob pattern to only include files with paths matching the pattern.
     The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-    It does not change the behaivor of partition discovery.
+    It does not change the behavior of partition discovery.
     </td>
   </tr>
 </table>
@@ -64,14 +64,14 @@ spark.read().format("binaryFile").option("pathGlobFilter", "*.png").load("/path/
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
-spark.read.format("pathGlobFilter").option("pathGlobFilter", "*.png").load("/path/to/data")
+spark.read.format("binaryFile").option("pathGlobFilter", "*.png").load("/path/to/data")
 
 {% endhighlight %}
 </div>
 <div data-lang="r" markdown="1">
 {% highlight r %}
 
-read.df("/path/to/data", "binaryFile", pathGlobFilter = "*.png")
+read.df("/path/to/data", source = "binaryFile", pathGlobFilter = "*.png")
 
 {% endhighlight %}
 </div>
