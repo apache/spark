@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -101,7 +101,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     val binaryFileSourceOptions = new BinaryFileSourceOptions(options)
     val pathGlobPattern = binaryFileSourceOptions.pathGlobFilter
     val filterFuncs = filters.map(filter => createFilterFunction(filter))
-    val maxLength = sparkSession.conf.get(TEST_BINARY_FILE_MAX_LENGTH)
+    val maxLength = sparkSession.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
       val path = new Path(file.filePath)
@@ -150,16 +150,6 @@ object BinaryFileFormat {
   private[binaryfile] val LENGTH = "length"
   private[binaryfile] val CONTENT = "content"
   private[binaryfile] val BINARY_FILE = "binaryFile"
-
-  private[binaryfile]
-  val CONF_TEST_BINARY_FILE_MAX_LENGTH = "spark.test.data.source.binaryFile.maxLength"
-  /** An internal conf for testing max length. */
-  private[binaryfile] val TEST_BINARY_FILE_MAX_LENGTH = SQLConf
-    .buildConf(CONF_TEST_BINARY_FILE_MAX_LENGTH)
-    .internal()
-    .intConf
-    // The theoretical max length is Int.MaxValue, though VMs might implement a smaller max.
-    .createWithDefault(Int.MaxValue)
 
   /**
    * Schema for the binary file data source.

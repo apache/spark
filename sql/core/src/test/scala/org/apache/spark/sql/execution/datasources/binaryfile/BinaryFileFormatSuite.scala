@@ -28,10 +28,11 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf.{CONF_SOURCES_BINARY_FILE_MAX_LENGTH, SOURCES_BINARY_FILE_MAX_LENGTH}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
@@ -342,29 +343,27 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
   }
 
   test("fail fast and do not attempt to read if a file is too big") {
-    assert(spark.conf.get(TEST_BINARY_FILE_MAX_LENGTH) === Int.MaxValue)
+    assert(spark.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH) === Int.MaxValue)
     withTempPath { file =>
       val path = file.getPath
       val content = "123".getBytes
       Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
-      def readContent(maxLength: Int): Array[Byte] = {
-        try {
-          spark.conf.set(CONF_TEST_BINARY_FILE_MAX_LENGTH, maxLength)
-          spark.read.format(BINARY_FILE)
-            .load(path)
-            .select(CONTENT)
-            .first()
-            .getAs[Array[Byte]](0)
-        } finally {
-          spark.conf.unset(CONF_TEST_BINARY_FILE_MAX_LENGTH)
-        }
+      def readContent(): DataFrame = {
+        spark.read.format(BINARY_FILE)
+          .load(path)
+          .select(CONTENT)
       }
-      assert(readContent(Int.MaxValue) === content)
-      assert(readContent(content.length) === content)
+      val expected = Seq(Row(content))
+      QueryTest.checkAnswer(readContent(), expected)
+      withSQLConf(CONF_SOURCES_BINARY_FILE_MAX_LENGTH -> content.length.toString) {
+        QueryTest.checkAnswer(readContent(), expected)
+      }
       // Disable read. If the implementation attempts to read, the exception would be different.
       file.setReadable(false)
       val caught = intercept[SparkException] {
-        readContent(content.length - 1)
+        withSQLConf(CONF_SOURCES_BINARY_FILE_MAX_LENGTH -> (content.length - 1).toString) {
+          QueryTest.checkAnswer(readContent(), expected)
+        }
       }
       assert(caught.getMessage.contains("exceeds the max length allowed"))
     }
