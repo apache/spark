@@ -193,7 +193,7 @@ private[spark] object TestUtils {
   }
 
   /**
-   * Asserts if exception message doesn't contain the message. Please note this checks all
+   * Asserts that exception message contains the message. Please note this checks all
    * exceptions in the tree.
    */
   def assertExceptionMsg(exception: Throwable, msg: String): Unit = {
