@@ -27,10 +27,12 @@ import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
@@ -338,5 +340,32 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
     assert(df.count() === 1, "Count should not read content.")
     assert(df.select("LENGTH").first().getLong(0) === content.length,
       "column pruning should be case insensitive")
+  }
+
+  test("fail fast and do not attempt to read if a file is too big") {
+    assert(spark.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH) === Int.MaxValue)
+    withTempPath { file =>
+      val path = file.getPath
+      val content = "123".getBytes
+      Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+      def readContent(): DataFrame = {
+        spark.read.format(BINARY_FILE)
+          .load(path)
+          .select(CONTENT)
+      }
+      val expected = Seq(Row(content))
+      QueryTest.checkAnswer(readContent(), expected)
+      withSQLConf(SOURCES_BINARY_FILE_MAX_LENGTH.key -> content.length.toString) {
+        QueryTest.checkAnswer(readContent(), expected)
+      }
+      // Disable read. If the implementation attempts to read, the exception would be different.
+      file.setReadable(false)
+      val caught = intercept[SparkException] {
+        withSQLConf(SOURCES_BINARY_FILE_MAX_LENGTH.key -> (content.length - 1).toString) {
+          QueryTest.checkAnswer(readContent(), expected)
+        }
+      }
+      assert(caught.getMessage.contains("exceeds the max length allowed"))
+    }
   }
 }
