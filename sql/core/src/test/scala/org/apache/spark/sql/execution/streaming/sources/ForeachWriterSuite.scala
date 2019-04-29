@@ -258,48 +258,6 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
       query.stop()
     }
   }
-
-  testQuietly("foreach with abort") {
-    withTempDir { checkpointDir =>
-      val input = MemoryStream[Int]
-      val query = input.toDS().repartition(1).writeStream
-          .option("checkpointLocation", checkpointDir.getCanonicalPath)
-          .foreach(new TestForeachWriter() {
-            override def process(value: Int): Unit = {
-              super.process(value)
-              throw new RuntimeException("ForeachSinkSuite error")
-            }
-
-            override def close(errorOrNull: Throwable): Unit = {
-              super.close(errorOrNull)
-              throw new RuntimeException("ForeachSinkSuite commit error")
-            }
-          }).start()
-      input.addData(1, 2, 3, 4)
-
-      // Error in `process` should fail the Spark job
-      val e = intercept[StreamingQueryException] {
-        query.processAllAvailable()
-      }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getCause.getMessage === "ForeachSinkSuite commit error")
-      assert(query.isActive === false)
-
-      val allEvents = ForeachWriterSuite.allEvents()
-      assert(allEvents.size === 1)
-      assert(allEvents(0).size === 4)
-      assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
-      assert(allEvents(0)(1) === ForeachWriterSuite.Process(value = 1))
-
-      // `close` should be called with the error
-      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
-      assert(errorEvent.error.get.isInstanceOf[RuntimeException])
-      assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
-
-      // 'abort' should be called in this case
-      assert(allEvents(0)(3) === ForeachWriterSuite.Abort())
-    }
-  }
 }
 
 /** A global object to collect events in the executor */
@@ -312,8 +270,6 @@ object ForeachWriterSuite {
   case class Process[T](value: T) extends Event
 
   case class Close(error: Option[Throwable]) extends Event
-
-  case class Abort() extends Event
 
   private val _allEvents = new ConcurrentLinkedQueue[Seq[Event]]()
 
@@ -347,13 +303,6 @@ class TestForeachWriter extends ForeachWriter[Int] {
 
   override def close(errorOrNull: Throwable): Unit = {
     events += ForeachWriterSuite.Close(error = Option(errorOrNull))
-    if (errorOrNull == null) {
-      ForeachWriterSuite.addEvents(events)
-    }
-  }
-
-  override def abort(): Unit = {
-    events += ForeachWriterSuite.Abort()
     ForeachWriterSuite.addEvents(events)
   }
 }
