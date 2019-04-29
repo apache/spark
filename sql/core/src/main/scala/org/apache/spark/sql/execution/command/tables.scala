@@ -364,6 +364,7 @@ case class LoadDataCommand(
     catalog.refreshTable(targetTable.identifier)
 
     CommandUtils.updateTableStats(sparkSession, targetTable)
+    CommandUtils.updateTableWriteInfo(sparkSession, targetTable)
     Seq.empty[Row]
   }
 }

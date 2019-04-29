@@ -190,6 +190,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
       if (catalogTable.nonEmpty) {
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
+        CommandUtils.updateTableWriteInfo(sparkSession, catalogTable.get)
       }
 
     } else {
