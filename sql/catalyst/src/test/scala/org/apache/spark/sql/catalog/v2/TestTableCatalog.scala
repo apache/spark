@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RemoveProperty, RenameColumn, SetProperty, UpdateColumn, UpdateColumnComment}
+import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RemoveProperty, RenameColumn, SetProperty, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.sources.v2.{Table, TableCapability}
@@ -153,7 +153,7 @@ private object TestTableCatalog {
           replace(schema, rename.fieldNames, field =>
             Some(StructField(rename.newName, field.dataType, field.nullable, field.metadata)))
 
-        case update: UpdateColumn =>
+        case update: UpdateColumnType =>
           replace(schema, update.fieldNames, field => {
             if (!update.isNullable && field.nullable) {
               throw new IllegalArgumentException(

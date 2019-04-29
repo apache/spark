@@ -139,7 +139,7 @@ public interface TableChange {
    * @return a TableChange for the update
    */
   static TableChange updateColumn(String[] fieldNames, DataType newDataType) {
-    return new UpdateColumn(fieldNames, newDataType, true);
+    return new UpdateColumnType(fieldNames, newDataType, true);
   }
 
   /**
@@ -154,7 +154,7 @@ public interface TableChange {
    * @return a TableChange for the update
    */
   static TableChange updateColumn(String[] fieldNames, DataType newDataType, boolean isNullable) {
-    return new UpdateColumn(fieldNames, newDataType, isNullable);
+    return new UpdateColumnType(fieldNames, newDataType, isNullable);
   }
 
   /**
@@ -294,12 +294,12 @@ public interface TableChange {
    * <p>
    * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
    */
-  final class UpdateColumn implements TableChange {
+  final class UpdateColumnType implements TableChange {
     private final String[] fieldNames;
     private final DataType newDataType;
     private final boolean isNullable;
 
-    private UpdateColumn(String[] fieldNames, DataType newDataType, boolean isNullable) {
+    private UpdateColumnType(String[] fieldNames, DataType newDataType, boolean isNullable) {
       this.fieldNames = fieldNames;
       this.newDataType = newDataType;
       this.isNullable = isNullable;
