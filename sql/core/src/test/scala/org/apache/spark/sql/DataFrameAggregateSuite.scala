@@ -778,5 +778,8 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val distinctCount1 = df.select(expr("count(distinct(*))"))
     val distinctCount2 = df.select(countDistinct("*"))
     checkAnswer(distinctCount1, distinctCount2)
+
+    val countAndDistinct = df.select(count("*"), countDistinct("*"))
+    checkAnswer(countAndDistinct, Row(100000, 100))
   }
 }
