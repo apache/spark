@@ -306,7 +306,7 @@ private[sql] trait SQLTestUtilsBase
     try f catch {
       case cause: Throwable => throw cause
     } finally {
-      cacheNames.foreach { name => uncacheTable(name) }
+      cacheNames.foreach(uncacheTable)
     }
   }
 
