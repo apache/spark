@@ -25,12 +25,12 @@ import org.apache.hadoop.fs.{FileStatus, GlobFilter, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -154,12 +154,12 @@ object BinaryFileFormat {
   private[binaryfile]
   val CONF_TEST_BINARY_FILE_MAX_LENGTH = "spark.test.data.source.binaryFile.maxLength"
   /** An internal conf for testing max length. */
-  private[binaryfile] val TEST_BINARY_FILE_MAX_LENGTH =
-    ConfigBuilder(CONF_TEST_BINARY_FILE_MAX_LENGTH)
-      .internal()
-      .intConf
-      // The theoretical max length is Int.MaxValue, though VMs might implement a smaller max.
-      .createWithDefault(Int.MaxValue)
+  private[binaryfile] val TEST_BINARY_FILE_MAX_LENGTH = SQLConf
+    .buildConf(CONF_TEST_BINARY_FILE_MAX_LENGTH)
+    .internal()
+    .intConf
+    // The theoretical max length is Int.MaxValue, though VMs might implement a smaller max.
+    .createWithDefault(Int.MaxValue)
 
   /**
    * Schema for the binary file data source.
