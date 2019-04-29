@@ -43,9 +43,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySinkV2 extends Table with SupportsWrite with MemorySinkBase with Logging {
+class MemorySink extends Table with SupportsWrite with MemorySinkBase with Logging {
 
-  override def name(): String = "MemorySinkV2"
+  override def name(): String = "MemorySink"
 
   override def schema(): StructType = StructType(Nil)
 
@@ -69,7 +69,7 @@ class MemorySinkV2 extends Table with SupportsWrite with MemorySinkBase with Log
       }
 
       override def buildForStreaming(): StreamingWrite = {
-        new MemoryStreamingWrite(MemorySinkV2.this, inputSchema, needTruncate)
+        new MemoryStreamingWrite(MemorySink.this, inputSchema, needTruncate)
       }
     }
   }
@@ -130,14 +130,14 @@ class MemorySinkV2 extends Table with SupportsWrite with MemorySinkBase with Log
     batches.clear()
   }
 
-  override def toString(): String = "MemorySinkV2"
+  override def toString(): String = "MemorySink"
 }
 
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row])
   extends WriterCommitMessage {}
 
 class MemoryStreamingWrite(
-    val sink: MemorySinkV2, schema: StructType, needTruncate: Boolean)
+    val sink: MemorySink, schema: StructType, needTruncate: Boolean)
   extends StreamingWrite {
 
   override def createStreamingWriterFactory: MemoryWriterFactory = {
@@ -195,9 +195,9 @@ class MemoryDataWriter(partition: Int, schema: StructType)
 
 
 /**
- * Used to query the data that has been written into a [[MemorySinkV2]].
+ * Used to query the data that has been written into a [[MemorySink]].
  */
-case class MemoryPlanV2(sink: MemorySinkV2, override val output: Seq[Attribute]) extends LeafNode {
+case class MemoryPlan(sink: MemorySink, override val output: Seq[Attribute]) extends LeafNode {
   private val sizePerRow = EstimationUtils.getSizePerRow(output)
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
