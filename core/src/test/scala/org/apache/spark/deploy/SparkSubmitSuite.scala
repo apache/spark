@@ -18,11 +18,10 @@
 package org.apache.spark.deploy
 
 import java.io._
-import java.net.URI
+import java.net.{URI, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
@@ -944,25 +943,34 @@ class SparkSubmitSuite
       "--py-files", s"${tmpPyFileDir.getAbsolutePath}/tmpPy*",
       "--archives", s"${tmpArchiveDir.getAbsolutePath}/*.zip",
       "--conf", "spark.yarn.dist.files=" +
-        s"${Seq(file1YarnOpt, file2YarnOpt).map(_.getAbsolutePath).mkString(",")}",
+        s"${Seq(file1YarnOpt, file2YarnOpt).map(_.toURI.toString).mkString(",")}",
       "--conf", "spark.yarn.dist.pyFiles=" +
-        s"${Seq(pyFile1YarnOpt, pyFile2YarnOpt).map(_.getAbsolutePath).mkString(",")}",
+        s"${Seq(pyFile1YarnOpt, pyFile2YarnOpt).map(_.toURI.toString).mkString(",")}",
       "--conf", "spark.yarn.dist.jars=" +
         s"${Seq(jar1YarnOpt, jar2YarnOpt).map(_.toURI.toString).mkString(",")}",
       "--conf", "spark.yarn.dist.archives=" +
         s"${Seq(archive1YarnOpt, archive2YarnOpt).map(_.toURI.toString).mkString(",")}",
       tempPyFile.toURI().toString())
 
+    def assertEqualsWithURLs(expected: Set[URL], confValue: String): Unit = {
+      val confValPaths = confValue.split(",").map(new Path(_)).toSet
+      assert(expected.map(u => new Path(u.toURI)) === confValPaths)
+    }
+
+    def assertEqualsWithFiles(expected: Set[File], confValue: String): Unit = {
+      assertEqualsWithURLs(expected.map(_.toURI.toURL), confValue)
+    }
+
     val appArgs = new SparkSubmitArguments(args)
     val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-    conf.get("spark.yarn.dist.jars").split(",").toSet should be
-    (Set(Seq(jar1, jar2, jar1YarnOpt, jar2YarnOpt).map(_.toURI.toString).toList))
-    conf.get("spark.yarn.dist.files").split(",").toSet should be
-    (Set(Seq(file1, file2, file1YarnOpt, file2YarnOpt).map(_.toURI.toString)))
-    conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be
-    (Set(Seq(pyFile1, pyFile2, pyFile1YarnOpt, pyFile2YarnOpt).map(_.getAbsolutePath)))
-    conf.get("spark.yarn.dist.archives").split(",").toSet should be
-    (Set(Seq(archive1, archive2, archive1YarnOpt, archive2YarnOpt).map(_.toURI.toString)))
+    assertEqualsWithURLs(
+      Set(jar1, jar2, jar1YarnOpt, jar2YarnOpt), conf.get("spark.yarn.dist.jars"))
+    assertEqualsWithFiles(
+      Set(file1, file2, file1YarnOpt, file2YarnOpt), conf.get("spark.yarn.dist.files"))
+    assertEqualsWithFiles(
+      Set(pyFile1, pyFile2, pyFile1YarnOpt, pyFile2YarnOpt), conf.get("spark.yarn.dist.pyFiles"))
+    assertEqualsWithFiles(Set(archive1, archive2, archive1YarnOpt, archive2YarnOpt),
+      conf.get("spark.yarn.dist.archives"))
   }
 
   // scalastyle:on println
