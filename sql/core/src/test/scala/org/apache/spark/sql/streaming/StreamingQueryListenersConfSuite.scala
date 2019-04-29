@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming
 
-import scala.language.reflectiveCalls
-
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
