@@ -197,14 +197,15 @@ private[spark] object Utils extends Logging {
    * Preferred alternative to Class.forName(className), as well as
    * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
    */
-  def classForName(
+  def classForName[C](
       className: String,
       initialize: Boolean = true,
-      noSparkClassLoader: Boolean = false): Class[_] = {
+      noSparkClassLoader: Boolean = false): Class[C] = {
     if (!noSparkClassLoader) {
-      Class.forName(className, initialize, getContextOrSparkClassLoader)
+      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
     } else {
-      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader)
+      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
+        asInstanceOf[Class[C]]
     }
     // scalastyle:on classforname
   }
@@ -2680,10 +2681,11 @@ private[spark] object Utils extends Logging {
    * other state) and decide they do not need to be added. A log message is printed in that case.
    * Other exceptions are bubbled up.
    */
-  def loadExtensions[T](extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
+  def loadExtensions[T <: AnyRef](
+      extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
     classes.flatMap { name =>
       try {
-        val klass = classForName(name)
+        val klass = classForName[T](name)
         require(extClass.isAssignableFrom(klass),
           s"$name is not a subclass of ${extClass.getName()}.")
 

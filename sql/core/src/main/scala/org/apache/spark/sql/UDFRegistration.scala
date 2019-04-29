@@ -635,7 +635,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   private[sql] def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
 
     try {
-      val clazz = Utils.classForName(className)
+      val clazz = Utils.classForName[AnyRef](className)
       val udfInterfaces = clazz.getGenericInterfaces
         .filter(_.isInstanceOf[ParameterizedType])
         .map(_.asInstanceOf[ParameterizedType])
@@ -699,7 +699,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
     try {
-      val clazz = Utils.classForName(className)
+      val clazz = Utils.classForName[AnyRef](className)
       if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
         throw new AnalysisException(s"class $className doesn't implement interface UserDefinedAggregateFunction")
       }

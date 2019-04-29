@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
