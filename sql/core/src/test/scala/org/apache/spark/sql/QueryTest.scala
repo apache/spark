@@ -211,11 +211,11 @@ abstract class QueryTest extends PlanTest {
    */
   def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
-    val matched = planWithCaching.find( cached =>
+    val matched = planWithCaching.exists{ cached =>
       cached.isInstanceOf[InMemoryRelation] && {
         val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
         cacheBuilder.tableName.get == cachedName && cacheBuilder.storageLevel == storageLevel
-      }).nonEmpty
+      }}
 
     assert(matched, s"Expected query plan to hit cache $cachedName with storage " +
       s"Level $storageLevel, but it doesn't.")
