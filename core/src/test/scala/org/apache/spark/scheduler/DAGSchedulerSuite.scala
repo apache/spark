@@ -134,6 +134,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   /** Stages for which the DAGScheduler has called TaskScheduler.cancelTasks(). */
   val cancelledStages = new HashSet[Int]()
 
+  val tasksMarkedAsCompleted = new ArrayBuffer[Task[_]]()
+
   val taskScheduler = new TaskScheduler() {
     override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
     override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
@@ -156,6 +158,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
     override def killAllTaskAttempts(
       stageId: Int, interruptThread: Boolean, reason: String): Unit = {}
+    override def notifyPartitionCompletion(
+        stageId: Int, partitionId: Int, taskDuration: Long): Unit = {
+      taskSets.filter(_.stageId == stageId).lastOption.foreach { ts =>
+        val tasks = ts.tasks.filter(_.partitionId == partitionId)
+        assert(tasks.length == 1)
+        tasksMarkedAsCompleted += tasks.head
+      }
+    }
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
@@ -246,6 +256,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     failure = null
     sc.addSparkListener(sparkListener)
     taskSets.clear()
+    tasksMarkedAsCompleted.clear()
     cancelledStages.clear()
     cacheLocations.clear()
     results.clear()
@@ -656,6 +667,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       }
       override def killAllTaskAttempts(
           stageId: Int, interruptThread: Boolean, reason: String): Unit = {
+        throw new UnsupportedOperationException
+      }
+      override def notifyPartitionCompletion(
+          stageId: Int, partitionId: Int, taskDuration: Long): Unit = {
         throw new UnsupportedOperationException
       }
       override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
@@ -2860,6 +2875,57 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     sc.addSparkListener(jobListener)
     sc.emptyRDD[Int].countApprox(10000).getFinalValue()
     assert(latch.await(10, TimeUnit.SECONDS))
+  }
+
+  test("Completions in zombie tasksets update status of non-zombie taskset") {
+    val parts = 4
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, (0 until parts).toArray)
+    assert(taskSets.length == 1)
+
+    // Finish the first task of the shuffle map stage.
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(0), Success, makeMapStatus("hostA", 4),
+      Seq.empty, createFakeTaskInfoWithId(0)))
+
+    // The second task of the shuffle map stage failed with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(1),
+      FetchFailed(makeBlockManagerId("hostB"), shuffleDep.shuffleId, 0, 0, "ignored"),
+      null))
+
+    scheduler.resubmitFailedStages()
+    assert(taskSets.length == 2)
+    // The first partition has completed already, so the new attempt only need to run 3 tasks.
+    assert(taskSets(1).tasks.length == 3)
+
+    // Finish the first task of the second attempt of the shuffle map stage.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0), Success, makeMapStatus("hostA", 4),
+      Seq.empty, createFakeTaskInfoWithId(0)))
+
+    // Finish the third task of the first attempt of the shuffle map stage.
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(2), Success, makeMapStatus("hostA", 4),
+      Seq.empty, createFakeTaskInfoWithId(0)))
+    assert(tasksMarkedAsCompleted.length == 1)
+    assert(tasksMarkedAsCompleted.head.partitionId == 2)
+
+    // Finish the forth task of the first attempt of the shuffle map stage.
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(3), Success, makeMapStatus("hostA", 4),
+      Seq.empty, createFakeTaskInfoWithId(0)))
+    assert(tasksMarkedAsCompleted.length == 2)
+    assert(tasksMarkedAsCompleted.last.partitionId == 3)
+
+    // Now the shuffle map stage is completed, and the next stage is submitted.
+    assert(taskSets.length == 3)
+
+    // Finish
+    complete(taskSets(2), Seq((Success, 42), (Success, 42), (Success, 42), (Success, 42)))
+    assertDataStructuresEmpty()
   }
 
   /**
