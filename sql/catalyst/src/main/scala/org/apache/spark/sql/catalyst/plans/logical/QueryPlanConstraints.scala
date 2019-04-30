@@ -334,34 +334,41 @@ trait ConstraintHelper {
             case c EqualNullSafe d if planEqual(a, d) => EqualTo(c, d)
           }
         }
-      case a EqualNullSafe b => expression transformUp {
-        case c LessThan d if planEqual(b, d) && planEqual(a, c) =>
-          Literal.FalseLiteral
-        case c LessThan d if planEqual(b, c) && planEqual(d, a) =>
-          Literal.FalseLiteral
-        case c LessThan d if planEqual(a, d) && planEqual(b, c) =>
-          Literal.FalseLiteral
-        case c LessThan d if planEqual(a, c) && planEqual(d, b) =>
-          Literal.FalseLiteral
+      case a EqualNullSafe b =>
+        if (b.foldable) {
+          expression transformUp { case c if planEqual(a, c) => b }
+        } else if (a.foldable) {
+          expression transformUp { case c if planEqual(b, c) => a }
+        } else {
+          expression transformUp {
+            case c LessThan d if planEqual(b, d) && planEqual(a, c) =>
+              Literal.FalseLiteral
+            case c LessThan d if planEqual(b, c) && planEqual(d, a) =>
+              Literal.FalseLiteral
+            case c LessThan d if planEqual(a, d) && planEqual(b, c) =>
+              Literal.FalseLiteral
+            case c LessThan d if planEqual(a, c) && planEqual(d, b) =>
+              Literal.FalseLiteral
 
-        case c LessThanOrEqual d if planEqual(b, d) && planEqual(a, c) =>
-          EqualTo(c, d)
-        case c LessThanOrEqual d if planEqual(b, c) && planEqual(a, d) =>
-          EqualTo(c, d)
-        case c LessThanOrEqual d if planEqual(a, d) && planEqual(b, c) =>
-          EqualTo(c, d)
-        case c LessThanOrEqual d if planEqual(a, c) && planEqual(b, d) =>
-          EqualTo(c, d)
+            case c LessThanOrEqual d if planEqual(b, d) && planEqual(a, c) =>
+              EqualTo(c, d)
+            case c LessThanOrEqual d if planEqual(b, c) && planEqual(a, d) =>
+              EqualTo(c, d)
+            case c LessThanOrEqual d if planEqual(a, d) && planEqual(b, c) =>
+              EqualTo(c, d)
+            case c LessThanOrEqual d if planEqual(a, c) && planEqual(b, d) =>
+              EqualTo(c, d)
 
-        case c EqualNullSafe d if planEqual(b, d) && planEqual(a, c) =>
-          Literal.TrueLiteral
-        case c EqualNullSafe d if planEqual(b, c) && planEqual(a, d) =>
-          Literal.TrueLiteral
-        case c EqualNullSafe d if planEqual(a, d) && planEqual(b, c) =>
-          Literal.TrueLiteral
-        case c EqualNullSafe d if planEqual(a, c) && planEqual(b, d) =>
-          Literal.TrueLiteral
-      }
+            case c EqualNullSafe d if planEqual(b, d) && planEqual(a, c) =>
+              Literal.TrueLiteral
+            case c EqualNullSafe d if planEqual(b, c) && planEqual(a, d) =>
+              Literal.TrueLiteral
+            case c EqualNullSafe d if planEqual(a, d) && planEqual(b, c) =>
+              Literal.TrueLiteral
+            case c EqualNullSafe d if planEqual(a, c) && planEqual(b, d) =>
+              Literal.TrueLiteral
+          }
+        }
       case _ => expression
     }
 }

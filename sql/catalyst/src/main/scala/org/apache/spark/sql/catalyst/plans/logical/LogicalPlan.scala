@@ -173,15 +173,15 @@ abstract class UnaryNode extends LogicalPlan {
     var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
-        allConstraints += EqualTo(a.toAttribute, l)
+        allConstraints +=
+          (if (l.nullable) EqualNullSafe(a.toAttribute, l) else EqualTo(a.toAttribute, l))
       case a @ Alias(e, _) =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
         allConstraints ++= allConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
         })
-        allConstraints +=
-          (if (e.foldable) EqualTo(e, a.toAttribute) else EqualNullSafe(e, a.toAttribute))
+        allConstraints += EqualNullSafe(e, a.toAttribute)
       case _ => // Don't change.
     }
 
