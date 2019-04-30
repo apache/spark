@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.types.StructType;
 
-import java.util.Collections;
 import java.util.Map;
 
 /**
