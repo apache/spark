@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.Token
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, CreateDelegationTokenOptions}
@@ -56,7 +56,7 @@ private[spark] object KafkaTokenUtil extends Logging {
 
   private[kafka010] def obtainToken(
       sparkConf: SparkConf,
-      clusterConf: KafkaTokenClusterConf): (Token[_ <: TokenIdentifier], Long) = {
+      clusterConf: KafkaTokenClusterConf): (Token[KafkaDelegationTokenIdentifier], Long) = {
     checkProxyUser()
 
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf, clusterConf))

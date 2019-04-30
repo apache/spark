@@ -332,7 +332,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       // TODO: test file source V2 after write path is fixed.
       Seq(true).foreach { useV1 =>
         val useV1List = if (useV1) {
-          "csv,orc"
+          "csv,json,orc"
         } else {
           ""
         }
@@ -521,6 +521,19 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           spark.range(10).write.mode("append").orc(path)
           assert(df.count() == 1010)
           assert(spark.read.orc(path).count() == 1010)
+        }
+      }
+    }
+  }
+
+  test("UDF input_file_name()") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(10).write.orc(path)
+          val row = spark.read.orc(path).select(input_file_name).first()
+          assert(row.getString(0).contains(path))
         }
       }
     }

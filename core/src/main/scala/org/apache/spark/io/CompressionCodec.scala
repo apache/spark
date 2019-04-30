@@ -77,8 +77,9 @@ private[spark] object CompressionCodec {
     val codecClass =
       shortCompressionCodecNames.getOrElse(codecName.toLowerCase(Locale.ROOT), codecName)
     val codec = try {
-      val ctor = Utils.classForName(codecClass).getConstructor(classOf[SparkConf])
-      Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
+      val ctor =
+        Utils.classForName[CompressionCodec](codecClass).getConstructor(classOf[SparkConf])
+      Some(ctor.newInstance(conf))
     } catch {
       case _: ClassNotFoundException | _: IllegalArgumentException => None
     }

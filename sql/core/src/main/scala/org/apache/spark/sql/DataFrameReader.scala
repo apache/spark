@@ -195,7 +195,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val useV1Sources =
-      sparkSession.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
+      sparkSession.sessionState.conf.useV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
     val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     val cls = lookupCls.newInstance() match {
       case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||

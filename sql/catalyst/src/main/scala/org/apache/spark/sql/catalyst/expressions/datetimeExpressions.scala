@@ -626,8 +626,12 @@ case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Op
   override def prettyName: String = "unix_timestamp"
 }
 
-abstract class UnixTime
+abstract class ToTimestamp
   extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
+
+  // The result of the conversion to timestamp is microseconds divided by this factor.
+  // For example if the factor is 1000000, the result of the expression is in seconds.
+  protected def downScaleFactor: Long
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
@@ -650,16 +654,16 @@ abstract class UnixTime
     } else {
       left.dataType match {
         case DateType =>
-          DateTimeUtils.daysToMillis(t.asInstanceOf[Int], timeZone) / MILLIS_PER_SECOND
+          epochDaysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
         case TimestampType =>
-          t.asInstanceOf[Long] / MICROS_PER_SECOND
+          t.asInstanceOf[Long] / downScaleFactor
         case StringType if right.foldable =>
           if (constFormat == null || formatter == null) {
             null
           } else {
             try {
               formatter.parse(
-                t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
+                t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case NonFatal(_) => null
             }
@@ -672,7 +676,7 @@ abstract class UnixTime
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
               TimestampFormatter(formatString, zoneId).parse(
-                t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
+                t.asInstanceOf[UTF8String].toString) / downScaleFactor
             } catch {
               case NonFatal(_) => null
             }
@@ -697,7 +701,7 @@ abstract class UnixTime
             $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
-                ${ev.value} = $formatterName.parse(${eval1.value}.toString()) / $MICROS_PER_SECOND;
+                ${ev.value} = $formatterName.parse(${eval1.value}.toString()) / $downScaleFactor;
               } catch (java.lang.IllegalArgumentException e) {
                 ${ev.isNull} = true;
               } catch (java.text.ParseException e) {
@@ -717,7 +721,7 @@ abstract class UnixTime
           s"""
             try {
               ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
-                .parse($string.toString()) / $MICROS_PER_SECOND;
+                .parse($string.toString()) / $downScaleFactor;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             } catch (java.text.ParseException e) {
@@ -736,10 +740,10 @@ abstract class UnixTime
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = ${eval1.value} / $MICROS_PER_SECOND;
+            ${ev.value} = ${eval1.value} / $downScaleFactor;
           }""")
       case DateType =>
-        val tz = ctx.addReferenceObj("timeZone", timeZone)
+        val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
         ev.copy(code = code"""
@@ -747,10 +751,14 @@ abstract class UnixTime
           boolean ${ev.isNull} = ${eval1.isNull};
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / $MILLIS_PER_SECOND;
+            ${ev.value} = $dtu.epochDaysToMicros(${eval1.value}, $zid) / $downScaleFactor;
           }""")
     }
   }
+}
+
+abstract class UnixTime extends ToTimestamp {
+  override val downScaleFactor: Long = MICROS_PER_SECOND
 }
 
 /**
@@ -1357,7 +1365,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), Cast(UnixTimestamp(left, format), TimestampType))
+    this(left, Option(format), GetTimestamp(left, format))
   }
 
   def this(left: Expression) = this(left, None, Cast(left, TimestampType))
@@ -1580,4 +1588,20 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
   }
+}
+
+/**
+ * Gets timestamps from strings using given pattern.
+ */
+private case class GetTimestamp(
+    left: Expression,
+    right: Expression,
+    timeZoneId: Option[String] = None)
+  extends ToTimestamp {
+
+  override val downScaleFactor = 1
+  override def dataType: DataType = TimestampType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
 }

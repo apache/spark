@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 
-import scala.language.existentials
-
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
