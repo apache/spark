@@ -14,22 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.expressions;
 
-package org.apache.spark.sql.sources.v2;
-
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.reader.Scan;
-import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.unsafe.Platform;
 
 /**
- * An empty mix-in interface for {@link Table}, to indicate this table supports streaming scan with
- * micro-batch mode.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsRead#newScanBuilder(CaseInsensitiveStringMap)} must return a {@link ScanBuilder}
- * that builds {@link Scan} with {@link Scan#toMicroBatchStream(String)} implemented.
- * </p>
+ * General utilities available for unsafe data
  */
-@Evolving
-public interface SupportsMicroBatchRead extends SupportsRead { }
+final class UnsafeDataUtils {
+
+  private UnsafeDataUtils() {
+  }
+
+  public static byte[] getBytes(Object baseObject, long baseOffset, int sizeInBytes) {
+    if (baseObject instanceof byte[]
+      && baseOffset == Platform.BYTE_ARRAY_OFFSET
+      && (((byte[]) baseObject).length == sizeInBytes)) {
+      return (byte[]) baseObject;
+    }
+    byte[] bytes = new byte[sizeInBytes];
+    Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET,
+      sizeInBytes);
+    return bytes;
+  }
+}

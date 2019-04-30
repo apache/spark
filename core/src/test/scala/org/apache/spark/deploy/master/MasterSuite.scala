@@ -26,7 +26,6 @@ import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.io.Source
-import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.json4s._
@@ -216,7 +215,7 @@ class MasterSuite extends SparkFunSuite
       master = makeMaster(conf)
       master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
       // Wait until Master recover from checkpoint data.
-      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         master.workers.size should be(1)
       }
 
@@ -234,7 +233,7 @@ class MasterSuite extends SparkFunSuite
       fakeWorkerInfo.coresUsed should be(0)
 
       master.self.send(MasterChangeAcknowledged(fakeAppInfo.id))
-      eventually(timeout(1 second), interval(10 milliseconds)) {
+      eventually(timeout(1.second), interval(10.milliseconds)) {
         // Application state should be WAITING when "MasterChangeAcknowledged" event executed.
         fakeAppInfo.state should be(ApplicationState.WAITING)
       }
@@ -242,7 +241,7 @@ class MasterSuite extends SparkFunSuite
       master.self.send(
         WorkerSchedulerStateResponse(fakeWorkerInfo.id, fakeExecutors, Seq(fakeDriverInfo.id)))
 
-      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         getState(master) should be(RecoveryState.ALIVE)
       }
 
@@ -267,7 +266,7 @@ class MasterSuite extends SparkFunSuite
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     try {
-      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
           .getLines().mkString("\n")
         val JArray(workers) = (parse(json) \ "workers")
@@ -293,7 +292,7 @@ class MasterSuite extends SparkFunSuite
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     try {
-      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
           .getLines().mkString("\n")
         val JArray(workers) = (parse(json) \ "workers")

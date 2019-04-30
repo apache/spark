@@ -580,7 +580,7 @@ abstract class OrcQueryTest extends OrcTest {
       val m1 = intercept[AnalysisException] {
         testAllCorruptFiles()
       }.getMessage
-      assert(m1.contains("Unable to infer schema"))
+      assert(m1.contains("Unable to infer schema for ORC"))
       testAllCorruptFilesWithoutSchemaInfer()
     }
 

@@ -54,7 +54,7 @@ abstract class FileTable(
     inferSchema(fileIndex.allFiles())
   }.getOrElse {
     throw new AnalysisException(
-      s"Unable to infer schema for $name. It must be specified manually.")
+      s"Unable to infer schema for $formatName. It must be specified manually.")
   }.asNullable
 
   override lazy val schema: StructType = {

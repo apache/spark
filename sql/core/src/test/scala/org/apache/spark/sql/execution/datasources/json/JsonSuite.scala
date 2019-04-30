@@ -1961,9 +1961,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         spark.read.schema(schema).json(path).select("_corrupt_record").collect()
       }.getMessage
       assert(msg.contains("only include the internal corrupt record column"))
-      intercept[catalyst.errors.TreeNodeException[_]] {
-        spark.read.schema(schema).json(path).filter($"_corrupt_record".isNotNull).count()
-      }
+
       // workaround
       val df = spark.read.schema(schema).json(path).cache()
       assert(df.filter($"_corrupt_record".isNotNull).count() == 1)

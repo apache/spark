@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class DDLParserSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -92,7 +94,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(create.tableSchema == new StructType()
             .add("a", IntegerType, nullable = true, "test")
             .add("b", StringType))
-        assert(create.partitioning == Seq("a"))
+        assert(create.partitioning == Seq(IdentityTransform(FieldReference("a"))))
         assert(create.bucketSpec.isEmpty)
         assert(create.properties.isEmpty)
         assert(create.provider == "parquet")
@@ -104,6 +106,52 @@ class DDLParserSuite extends AnalysisTest {
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $query")
+    }
+  }
+
+  test("create table - partitioned by transforms") {
+    val sql =
+      """
+        |CREATE TABLE my_tab (a INT, b STRING, ts TIMESTAMP) USING parquet
+        |PARTITIONED BY (
+        |    a,
+        |    bucket(16, b),
+        |    years(ts),
+        |    months(ts),
+        |    days(ts),
+        |    hours(ts),
+        |    foo(a, "bar", 34))
+      """.stripMargin
+
+    parsePlan(sql) match {
+      case create: CreateTableStatement =>
+        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableSchema == new StructType()
+            .add("a", IntegerType)
+            .add("b", StringType)
+            .add("ts", TimestampType))
+        assert(create.partitioning == Seq(
+            IdentityTransform(FieldReference("a")),
+            BucketTransform(LiteralValue(16, IntegerType), Seq(FieldReference("b"))),
+            YearsTransform(FieldReference("ts")),
+            MonthsTransform(FieldReference("ts")),
+            DaysTransform(FieldReference("ts")),
+            HoursTransform(FieldReference("ts")),
+            ApplyTransform("foo", Seq(
+                FieldReference("a"),
+                LiteralValue(UTF8String.fromString("bar"), StringType),
+                LiteralValue(34, IntegerType)))))
+        assert(create.bucketSpec.isEmpty)
+        assert(create.properties.isEmpty)
+        assert(create.provider == "parquet")
+        assert(create.options.isEmpty)
+        assert(create.location.isEmpty)
+        assert(create.comment.isEmpty)
+        assert(!create.ifNotExists)
+
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
+            s"got ${other.getClass.getName}: $sql")
     }
   }
 

@@ -15,21 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package test.org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.reader.Batch;
+import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory;
 import org.apache.spark.sql.sources.v2.reader.Scan;
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.sql.types.StructType;
 
-/**
- * An empty mix-in interface for {@link Table}, to indicate this table supports streaming scan with
- * continuous mode.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsRead#newScanBuilder(CaseInsensitiveStringMap)} must return a {@link ScanBuilder}
- * that builds {@link Scan} with {@link Scan#toContinuousStream(String)} implemented.
- * </p>
- */
-@Evolving
-public interface SupportsContinuousRead extends SupportsRead { }
+abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
+
+  @Override
+  public Scan build() {
+    return this;
+  }
+
+  @Override
+  public Batch toBatch() {
+    return this;
+  }
+
+  @Override
+  public StructType readSchema() {
+    return new StructType().add("i", "int").add("j", "int");
+  }
+
+  @Override
+  public PartitionReaderFactory createReaderFactory() {
+    return new JavaSimpleReaderFactory();
+  }
+}

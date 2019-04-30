@@ -297,8 +297,7 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print("[info] Building Spark (w/Hive 1.2.1) using Maven with these arguments: ",
-          " ".join(profiles_and_goals))
+    print("[info] Building Spark using Maven with these arguments: ", " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
 
@@ -310,8 +309,7 @@ def build_spark_sbt(hadoop_version):
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
-          " ".join(profiles_and_goals))
+    print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
@@ -323,7 +321,7 @@ def build_spark_unidoc_sbt(hadoop_version):
     sbt_goals = ["unidoc"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark unidoc (w/Hive 1.2.1) using SBT with these arguments: ",
+    print("[info] Building Spark unidoc using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
@@ -334,7 +332,7 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
     profiles_and_goals = build_profiles + sbt_goals
-    print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
+    print("[info] Building Spark assembly using SBT with these arguments: ",
           " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
 
@@ -546,7 +544,9 @@ def main():
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
-        os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
+        # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
+        # /home/jenkins/anaconda2/envs/py36/bin
+        os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
