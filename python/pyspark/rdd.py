@@ -39,9 +39,9 @@ else:
     from itertools import imap as map, ifilter as filter
 
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
-    BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long, AutoBatchedSerializer, read_int, write_int
+from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, NoOpSerializer, \
+    CartesianDeserializer, CloudPickleSerializer, PairDeserializer, PickleSerializer, \
+    UTF8Deserializer, pack_long, read_int, write_int
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -161,32 +161,42 @@ def _local_iterator_from_socket(sock_info, serializer):
             self._sockfile = _create_local_socket(_sock_info)
             self._serializer = _serializer
             self._read_iter = iter([])  # Initialize as empty iterator
+            self._read_status = 1
 
         def __iter__(self):
-            while True:
+            while self._read_status == 1:
                 # Request next partition data from Java
                 write_int(1, self._sockfile)
                 self._sockfile.flush()
 
-                # If nonzero response, then there is a partition to read
-                if read_int(self._sockfile) == 0:
-                    break
+                # If response is 1, then there is a partition to read
+                self._read_status = read_int(self._sockfile)
+                if self._read_status == 1:
 
-                # Load the partition data as a stream and read each item
-                self._read_iter = self._serializer.load_stream(self._sockfile)
-                for item in self._read_iter:
-                    yield item
+                    # Load the partition data as a stream and read each item
+                    self._read_iter = self._serializer.load_stream(self._sockfile)
+                    for item in self._read_iter:
+                        yield item
+
+                # An error occurred, read error message and raise it
+                elif self._read_status == -1:
+                    error_msg = UTF8Deserializer().loads(self._sockfile)
+                    raise RuntimeError("An error occurred while reading the next element from "
+                                       "toLocalIterator: {}".format(error_msg))
 
         def __del__(self):
-            try:
-                # Finish consuming partition data stream
-                for _ in self._read_iter:
+            # If local iterator is not fully consumed,
+            if self._read_status == 1:
+                try:
+                    # Finish consuming partition data stream
+                    for _ in self._read_iter:
+                        pass
+                    # Tell Java to stop sending data and close connection
+                    write_int(0, self._sockfile)
+                    self._sockfile.flush()
+                except Exception:
+                    # Ignore any errors, socket is automatically closed when garbage-collected
                     pass
-                # Tell Java to stop sending data and close connection
-                write_int(0, self._sockfile)
-                self._sockfile.flush()
-            except Exception:
-                pass  # Ignore any errors, socket is automatically closed when garbage-collected
 
     return iter(PyLocalIterable(sock_info, serializer))
 
