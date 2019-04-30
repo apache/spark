@@ -19,20 +19,20 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
   <parent>
-    <artifactId>spark-parent_2.12</artifactId>
     <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.12</artifactId>
     <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
-  <modelVersion>4.0.0</modelVersion>
 
   <artifactId>spark-graph-api_2.12</artifactId>
+  <packaging>jar</packaging>
+  <name>Spark Project Graph API</name>
   <properties>
     <sbt.project.name>graph-api</sbt.project.name>
   </properties>
-  <packaging>jar</packaging>
-  <name>Spark Project Graph API</name>
   <url>http://spark.apache.org/</url>
 
   <dependencies>
@@ -48,4 +48,8 @@
     </dependency>
   </dependencies>
 
+  <build>
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+  </build>
 </project>
