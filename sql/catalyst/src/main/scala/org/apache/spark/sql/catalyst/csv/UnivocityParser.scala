@@ -167,7 +167,7 @@ class UnivocityParser(
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
     case udt: UserDefinedType[_] =>
-      makeConverter(name, udt.sqlType, nullable, options)
+      makeConverter(name, udt.sqlType, nullable)
 
     // We don't actually hit this exception though, we keep it for understandability
     case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")
