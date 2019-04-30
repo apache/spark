@@ -40,6 +40,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.util.Utils
 
 private[spark] object KafkaTokenUtil extends Logging {
   val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
@@ -246,7 +247,8 @@ private[spark] object KafkaTokenUtil extends Logging {
         KafkaTokenSparkConf.getClusterConfig(sparkConf, getClusterIdentifier(token.getService()))
       }
       .filter { clusterConfig =>
-        Pattern.compile(clusterConfig.targetServersRegex).matcher(bootStrapServers).matches()
+        val pattern = Pattern.compile(clusterConfig.targetServersRegex)
+        Utils.stringToSeq(bootStrapServers).exists(pattern.matcher(_).matches())
       }
     require(clusterConfigs.size <= 1, "More than one delegation token matches the following " +
       s"bootstrap servers: $bootStrapServers.")
