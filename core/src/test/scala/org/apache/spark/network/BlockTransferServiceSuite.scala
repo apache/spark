@@ -93,7 +93,7 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
       }
     }
 
-    val blockTransferClientSync = new BlockTransferClientSync(blockTransferService)
+    val blockTransferClientSync = new SyncBlockTransferClient(blockTransferService)
     val e = intercept[SparkException] {
       failAfter(10.seconds) {
         blockTransferClientSync.fetchBlockSync("localhost-unused", 0, "exec-id-unused",

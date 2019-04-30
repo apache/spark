@@ -225,7 +225,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         size = mapIdAndReduceIds.length;
         blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId, shuffleId,
           mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
-      } else if(blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
+      } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
         final int[] rddAndSplitIds = rddAndSplitIds(blockIds);
         size = rddAndSplitIds.length;
         blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId,

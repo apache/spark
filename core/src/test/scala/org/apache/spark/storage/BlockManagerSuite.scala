@@ -39,7 +39,7 @@ import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory.UnifiedMemoryManager
-import org.apache.spark.network.{BlockDataManager, BlockTransferClientSync, BlockTransferService, TransportContext}
+import org.apache.spark.network.{BlockDataManager, BlockTransferService, SyncBlockTransferClient, TransportContext}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
@@ -94,7 +94,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER,
       master: BlockManagerMaster = this.master,
-      blockTransferClientSync: Option[BlockTransferClientSync] = Option.empty,
+      blockTransferClientSync: Option[SyncBlockTransferClient] = Option.empty,
       testConf: Option[SparkConf] = None): BlockManager = {
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
     bmConf.set(TEST_MEMORY, maxMem)
@@ -1292,7 +1292,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("SPARK-13328: refresh block locations (fetch should fail after hitting a threshold)") {
     val mockTransferClient =
-      new MockBlockTransferClientSync(conf.get(BLOCK_FAILURES_BEFORE_LOCATION_REFRESH))
+      new MockSyncBlockTransferClient(conf.get(BLOCK_FAILURES_BEFORE_LOCATION_REFRESH))
     val store =
       makeBlockManager(8000, "executor1", blockTransferClientSync = Option(mockTransferClient))
     store.putSingle("item", 999L, StorageLevel.MEMORY_ONLY, tellMaster = true)
@@ -1303,7 +1303,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val maxFailuresBeforeLocationRefresh =
       conf.get(BLOCK_FAILURES_BEFORE_LOCATION_REFRESH)
     val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
-    val mockTransferClient = new MockBlockTransferClientSync(maxFailuresBeforeLocationRefresh)
+    val mockTransferClient = new MockSyncBlockTransferClient(maxFailuresBeforeLocationRefresh)
     // make sure we have more than maxFailuresBeforeLocationRefresh locations
     // so that we have a chance to do location refresh
     val blockManagerIds = (0 to maxFailuresBeforeLocationRefresh)
@@ -1335,7 +1335,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       }
     }
 
-    val mockTransferClient = new MockBlockTransferClientSync(maxFailures = 10, mockTransferService)
+    val mockTransferClient = new MockSyncBlockTransferClient(maxFailures = 10, mockTransferService)
     val store =
       makeBlockManager(8000, "executor1", blockTransferClientSync = Option(mockTransferClient))
     val store2 =
@@ -1471,7 +1471,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1000L)
 
     val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
-    val mockTransferClient = new MockBlockTransferClientSync(0)
+    val mockTransferClient = new MockSyncBlockTransferClient(0)
     val blockLocations = Seq(BlockManagerId("id-0", "host-0", 1))
     val blockStatus = BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L)
 
@@ -1536,10 +1536,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  class MockBlockTransferClientSync(
+  class MockSyncBlockTransferClient(
       maxFailures: Int,
       blockTransferClient: BlockTransferClient = new MockBlockTransferService())
-    extends BlockTransferClientSync(blockTransferClient) {
+    extends SyncBlockTransferClient(blockTransferClient) {
 
     var numCalls = 0
     var tempFileManager: DownloadFileManager = null

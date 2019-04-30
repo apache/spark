@@ -26,14 +26,18 @@ import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockTransferCli
 import org.apache.spark.storage.EncryptedManagedBuffer
 import org.apache.spark.util.ThreadUtils
 
-private[spark] class BlockTransferClientSync(val blockTransferClient: BlockTransferClient) {
+private[spark] class SyncBlockTransferClient(val blockTransferClient: BlockTransferClient) {
 
   /**
    * A special case of fetchBlocks, as it fetches only one block and is blocking.
    *
    * It is also only available after the BlockTransferClient is initialised.
    */
-  def fetchBlockSync(host: String, port: Int, execId: String, blockId: String,
+  def fetchBlockSync(
+      host: String,
+      port: Int,
+      execId: String,
+      blockId: String,
       tempFileManager: DownloadFileManager): ManagedBuffer = {
     // A monitor for the thread to wait on.
     val result = Promise[ManagedBuffer]()

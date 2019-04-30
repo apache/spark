@@ -139,7 +139,7 @@ private[spark] class BlockManager(
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
 
   // Visible for testing
-  private[storage] var blockTransferClientSync = new BlockTransferClientSync(blockTransferService)
+  private[storage] var blockTransferClientSync = new SyncBlockTransferClient(blockTransferService)
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.

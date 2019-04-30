@@ -23,7 +23,7 @@ import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests._
-import org.apache.spark.network.BlockTransferClientSync
+import org.apache.spark.network.SyncBlockTransferClient
 import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -186,7 +186,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val blockId = blockIds(0)
     val blockManager = SparkEnv.get.blockManager
     val blockTransfer = blockManager.blockTransferService
-    val blockTransferClientSync = new BlockTransferClientSync(blockTransfer)
+    val blockTransferClientSync = new SyncBlockTransferClient(blockTransfer)
     val serializerManager = SparkEnv.get.serializerManager
     val locations = blockManager.master.getLocations(blockId)
     assert(locations.size === storageLevel.replication,

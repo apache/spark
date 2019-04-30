@@ -549,7 +549,7 @@ private[spark] class BlockManagerInfo(
 
   /**
    * Cached blocks held exclusively by this BlockManager. This does not include broadcast blocks
-   * and local disc persisted blocks when external shuffle service is enabled.
+   * and local disk persisted blocks when external shuffle service is enabled.
    */
   private val _exclusiveCachedBlocks = new mutable.HashSet[BlockId]
 
