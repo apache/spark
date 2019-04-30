@@ -40,10 +40,10 @@ class NoSuchPartitionException(
 class NoSuchPermanentFunctionException(db: String, func: String)
   extends AnalysisException(s"Function '$func' not found in database '$db'")
 
-class NoSuchFunctionException(db: String, func: String)
+class NoSuchFunctionException(db: String, func: String, cause: Option[Throwable] = None)
   extends AnalysisException(
     s"Undefined function: '$func'. This function is neither a registered temporary function nor " +
-    s"a permanent function registered in the database '$db'.")
+    s"a permanent function registered in the database '$db'.", cause = cause)
 
 class NoSuchPartitionsException(db: String, table: String, specs: Seq[TablePartitionSpec])
   extends AnalysisException(

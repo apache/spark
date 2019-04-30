@@ -27,7 +27,7 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
 
   test("time window is unevaluable") {
     intercept[UnsupportedOperationException] {
-      evaluate(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
+      evaluateWithoutCodegen(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
     }
   }
 
@@ -77,6 +77,19 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
     }
   }
 
+  test("SPARK-21590: Start time works with negative values and return microseconds") {
+    val validDuration = "10 minutes"
+    for ((text, seconds) <- Seq(
+      ("-10 seconds", -10000000), // -1e7
+      ("-1 minute", -60000000),
+      ("-1 hour", -3600000000L))) { // -6e7
+      assert(TimeWindow(Literal(10L), validDuration, validDuration, "interval " + text).startTime
+        === seconds)
+      assert(TimeWindow(Literal(10L), validDuration, validDuration, text).startTime
+        === seconds)
+    }
+  }
+
   private val parseExpression = PrivateMethod[Long]('parseExpression)
 
   test("parse sql expression for duration in microseconds - string") {
@@ -92,9 +105,9 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
   }
 
   test("parse sql expression for duration in microseconds - long") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal.create(2 << 52, LongType)))
+    val dur = TimeWindow.invokePrivate(parseExpression(Literal.create(2L << 52, LongType)))
     assert(dur.isInstanceOf[Long])
-    assert(dur === (2 << 52))
+    assert(dur === (2L << 52))
   }
 
   test("parse sql expression for duration in microseconds - invalid interval") {

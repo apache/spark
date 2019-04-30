@@ -89,6 +89,11 @@ object RankingMetricsExample {
       println(s"NDCG at $k = ${metrics.ndcgAt(k)}")
     }
 
+    // Recall at K
+    Array(1, 3, 5).foreach { k =>
+      println(s"Recall at $k = ${metrics.recallAt(k)}")
+    }
+
     // Get predictions for each data point
     val allPredictions = model.predict(ratings.map(r => (r.user, r.product))).map(r => ((r.user,
       r.product), r.rating))

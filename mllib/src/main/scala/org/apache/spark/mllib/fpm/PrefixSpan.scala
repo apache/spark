@@ -45,12 +45,11 @@ import org.apache.spark.storage.StorageLevel
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth
- * (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+ * (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
  *
  * @param minSupport the minimal support level of the sequential pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
- * @param maxPatternLength the maximal length of the sequential pattern, any pattern that appears
- *                         less than maxPatternLength will be output
+ * @param maxPatternLength the maximal length of the sequential pattern
  * @param maxLocalProjDBSize The maximum number of items (including delimiters used in the internal
  *                           storage format) allowed in a projected database before local
  *                           processing. If a projected database exceeds this size, another
@@ -175,6 +174,13 @@ class PrefixSpan private (
     val freqSequences = results.map { case (seq: Array[Int], count: Long) =>
       new FreqSequence(toPublicRepr(seq), count)
     }
+    // Cache the final RDD to the same storage level as input
+    if (data.getStorageLevel != StorageLevel.NONE) {
+      freqSequences.persist(data.getStorageLevel)
+      freqSequences.count()
+    }
+    dataInternalRepr.unpersist()
+
     new PrefixSpanModel(freqSequences)
   }
 
@@ -622,8 +628,6 @@ class PrefixSpanModel[Item] @Since("1.5.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     PrefixSpanModel.SaveLoadV1_0.save(this, path)
   }
-
-  override protected val formatVersion: String = "1.0"
 }
 
 @Since("2.0.0")

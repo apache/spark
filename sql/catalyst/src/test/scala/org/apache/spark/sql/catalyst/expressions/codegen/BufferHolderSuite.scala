@@ -23,17 +23,15 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 class BufferHolderSuite extends SparkFunSuite {
 
   test("SPARK-16071 Check the size limit to avoid integer overflow") {
-    var e = intercept[UnsupportedOperationException] {
+    assert(intercept[UnsupportedOperationException] {
       new BufferHolder(new UnsafeRow(Int.MaxValue / 8))
-    }
-    assert(e.getMessage.contains("too many fields"))
+    }.getMessage.contains("too many fields"))
 
     val holder = new BufferHolder(new UnsafeRow(1000))
     holder.reset()
     holder.grow(1000)
-    e = intercept[UnsupportedOperationException] {
+    assert(intercept[IllegalArgumentException] {
       holder.grow(Integer.MAX_VALUE)
-    }
-    assert(e.getMessage.contains("exceeds size limitation"))
+    }.getMessage.contains("exceeds size limitation"))
   }
 }

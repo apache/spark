@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -97,12 +100,13 @@ object PhysicalOperation extends PredicateHelper {
  * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
-  /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
+  /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild, joinHint) */
   type ReturnType =
-    (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
+    (JoinType, Seq[Expression], Seq[Expression],
+      Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
 
-  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case join @ Join(left, right, joinType, condition) =>
+  def unapply(join: Join): Option[ReturnType] = join match {
+    case Join(left, right, joinType, condition, hint) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
@@ -132,11 +136,10 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       if (joinKeys.nonEmpty) {
         val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
-        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right, hint))
       } else {
         None
       }
-    case _ => None
   }
 }
 
@@ -165,22 +168,24 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    */
   def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
-    case Join(left, right, joinType: InnerLike, cond) =>
+    case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
       val (plans, conditions) = flattenJoin(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
-    case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition)) =>
+    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
-  def unapply(plan: LogicalPlan): Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
+  def unapply(plan: LogicalPlan)
+      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
       = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _)) =>
+    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, hint))
+        if hint == JoinHint.NONE =>
       Some(flattenJoin(f))
-    case j @ Join(_, _, joinType, _) =>
+    case j @ Join(_, _, joinType, _, hint) if hint == JoinHint.NONE =>
       Some(flattenJoin(j))
     case _ => None
   }
@@ -215,7 +220,7 @@ object PhysicalAggregation {
           case agg: AggregateExpression
             if !equivalentAggregateExpressions.addExpr(agg) => agg
           case udf: PythonUDF
-            if PythonUDF.isGroupAggPandasUDF(udf) &&
+            if PythonUDF.isGroupedAggPandasUDF(udf) &&
               !equivalentAggregateExpressions.addExpr(udf) => udf
         }
       }
@@ -245,7 +250,7 @@ object PhysicalAggregation {
             equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
             // Similar to AggregateExpression
-          case ue: PythonUDF if PythonUDF.isGroupAggPandasUDF(ue) =>
+          case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
             equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression =>
@@ -264,6 +269,43 @@ object PhysicalAggregation {
         aggregateExpressions,
         rewrittenResultExpressions,
         child))
+
+    case _ => None
+  }
+}
+
+/**
+ * An extractor used when planning physical execution of a window. This extractor outputs
+ * the window function type of the logical window.
+ *
+ * The input logical window must contain same type of window functions, which is ensured by
+ * the rule ExtractWindowExpressions in the analyzer.
+ */
+object PhysicalWindow {
+  // windowFunctionType, windowExpression, partitionSpec, orderSpec, child
+  private type ReturnType =
+    (WindowFunctionType, Seq[NamedExpression], Seq[Expression], Seq[SortOrder], LogicalPlan)
+
+  def unapply(a: Any): Option[ReturnType] = a match {
+    case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
+
+      // The window expression should not be empty here, otherwise it's a bug.
+      if (windowExpressions.isEmpty) {
+        throw new AnalysisException(s"Window expression is empty in $expr")
+      }
+
+      val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
+        .reduceLeft { (t1: WindowFunctionType, t2: WindowFunctionType) =>
+          if (t1 != t2) {
+            // We shouldn't have different window function type here, otherwise it's a bug.
+            throw new AnalysisException(
+              s"Found different window function type in $windowExpressions")
+          } else {
+            t1
+          }
+        }
+
+      Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
 
     case _ => None
   }

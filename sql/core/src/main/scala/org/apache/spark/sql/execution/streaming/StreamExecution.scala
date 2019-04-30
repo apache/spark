@@ -24,19 +24,27 @@ import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.{Condition, ReentrantLock}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.SupportsWrite
+import org.apache.spark.sql.sources.v2.writer.SupportsTruncate
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /** States for [[StreamExecution]]'s lifecycle. */
@@ -53,7 +61,8 @@ case object RECONFIGURING extends State
  * and the results are committed transactionally to the given [[Sink]].
  *
  * @param deleteCheckpointOnStop whether to delete the checkpoint if the query is stopped without
- *                               errors
+ *                               errors. Checkpoint deletion can be forced with the appropriate
+ *                               Spark configuration.
  */
 abstract class StreamExecution(
     override val sparkSession: SparkSession,
@@ -87,8 +96,47 @@ abstract class StreamExecution(
   val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
+    if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
+        && StreamExecution.containsSpecialCharsInPath(checkpointPath)) {
+      // In Spark 2.4 and earlier, the checkpoint path is escaped 3 times (3 `Path.toUri.toString`
+      // calls). If this legacy checkpoint path exists, we will throw an error to tell the user how
+      // to migrate.
+      val legacyCheckpointDir =
+        new Path(new Path(checkpointPath.toUri.toString).toUri.toString).toUri.toString
+      val legacyCheckpointDirExists =
+        try {
+          fs.exists(new Path(legacyCheckpointDir))
+        } catch {
+          case NonFatal(e) =>
+            // We may not have access to this directory. Don't fail the query if that happens.
+            logWarning(e.getMessage, e)
+            false
+        }
+      if (legacyCheckpointDirExists) {
+        throw new SparkException(
+          s"""Error: we detected a possible problem with the location of your checkpoint and you
+             |likely need to move it before restarting this query.
+             |
+             |Earlier version of Spark incorrectly escaped paths when writing out checkpoints for
+             |structured streaming. While this was corrected in Spark 3.0, it appears that your
+             |query was started using an earlier version that incorrectly handled the checkpoint
+             |path.
+             |
+             |Correct Checkpoint Directory: $checkpointPath
+             |Incorrect Checkpoint Directory: $legacyCheckpointDir
+             |
+             |Please move the data from the incorrect directory to the correct one, delete the
+             |incorrect directory, and then restart this query. If you believe you are receiving
+             |this message in error, you can disable it with the SQL conf
+             |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}."""
+            .stripMargin)
+      }
+    }
+    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    fs.mkdirs(checkpointDir)
+    checkpointDir.toString
   }
+  logInfo(s"Checkpoint root $checkpointRoot resolved to $resolvedCheckpointRoot.")
 
   def logicalPlan: LogicalPlan
 
@@ -111,6 +159,9 @@ abstract class StreamExecution(
    */
   @volatile
   var availableOffsets = new StreamProgress
+
+  @volatile
+  var sinkCommitProgress: Option[StreamWriterCommitProgress] = None
 
   /** The current batchId or -1 if execution has not yet been initialized. */
   protected var currentBatchId: Long = -1
@@ -175,6 +226,9 @@ abstract class StreamExecution(
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
+  /** Isolated spark session to run the batches with. */
+  private val sparkSessionForStream = sparkSession.cloneSession()
+
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
    * [[org.apache.spark.util.UninterruptibleThread]] to workaround KAFKA-1894: interrupting a
@@ -216,7 +270,7 @@ abstract class StreamExecution(
 
   /** Returns the path of a file with `name` in the checkpoint directory. */
   protected def checkpointFile(name: String): String =
-    new Path(new Path(resolvedCheckpointRoot), name).toUri.toString
+    new Path(new Path(resolvedCheckpointRoot), name).toString
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
@@ -264,8 +318,6 @@ abstract class StreamExecution(
       // force initialization of the logical plan so that the sources can be created
       logicalPlan
 
-      // Isolated spark session to run the batches with.
-      val sparkSessionForStream = sparkSession.cloneSession()
       // Adaptive execution can change num shuffle partitions, disallow
       sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
       // Disable cost-based join optimization as we do not want stateful operations to be rearranged
@@ -282,7 +334,7 @@ abstract class StreamExecution(
         // `stop()` is already called. Let `finally` finish the cleanup.
       }
     } catch {
-      case e if isInterruptedByStop(e) =>
+      case e if isInterruptedByStop(e, sparkSession.sparkContext) =>
         // interrupted by stop()
         updateStatusMessage("Stopped")
       case e: IOException if e.getMessage != null
@@ -328,10 +380,13 @@ abstract class StreamExecution(
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
 
-        // Delete the temp checkpoint only when the query didn't fail
-        if (deleteCheckpointOnStop && exception.isEmpty) {
+        // Delete the temp checkpoint when either force delete enabled or the query didn't fail
+        if (deleteCheckpointOnStop &&
+            (sparkSession.sessionState.conf
+              .getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) || exception.isEmpty)) {
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
+            logInfo(s"Deleting checkpoint $checkpointPath.")
             val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
             fs.delete(checkpointPath, true)
           } catch {
@@ -354,9 +409,9 @@ abstract class StreamExecution(
     }
   }
 
-  private def isInterruptedByStop(e: Throwable): Boolean = {
+  private def isInterruptedByStop(e: Throwable, sc: SparkContext): Boolean = {
     if (state.get == TERMINATED) {
-      StreamExecution.isInterruptionException(e)
+      StreamExecution.isInterruptionException(e, sc)
     } else {
       false
     }
@@ -379,28 +434,10 @@ abstract class StreamExecution(
   }
 
   /**
-   * Signals to the thread executing micro-batches that it should stop running after the next
-   * batch. This method blocks until the thread stops running.
-   */
-  override def stop(): Unit = {
-    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
-    // intentionally
-    state.set(TERMINATED)
-    if (queryExecutionThread.isAlive) {
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
-      queryExecutionThread.interrupt()
-      queryExecutionThread.join()
-      // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
-    }
-    logInfo(s"Query $prettyIdString was stopped")
-  }
-
-  /**
    * Blocks the current thread until processing for data from the given `source` has reached at
    * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
-  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset): Unit = {
+  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset, timeoutMs: Long): Unit = {
     assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
@@ -416,7 +453,7 @@ abstract class StreamExecution(
     while (notDone) {
       awaitProgressLock.lock()
       try {
-        awaitProgressLockCondition.await(100, TimeUnit.MILLISECONDS)
+        awaitProgressLockCondition.await(timeoutMs, TimeUnit.MILLISECONDS)
         if (streamDeathCause != null) {
           throw streamDeathCause
         }
@@ -543,12 +580,42 @@ abstract class StreamExecution(
     Option(name).map(_ + "<br/>").getOrElse("") +
       s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
   }
+
+  protected def createStreamingWrite(
+      table: SupportsWrite,
+      options: Map[String, String],
+      inputPlan: LogicalPlan): StreamingWrite = {
+    val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
+      .withQueryId(id.toString)
+      .withInputDataSchema(inputPlan.schema)
+    outputMode match {
+      case Append =>
+        writeBuilder.buildForStreaming()
+
+      case Complete =>
+        // TODO: we should do this check earlier when we have capability API.
+        require(writeBuilder.isInstanceOf[SupportsTruncate],
+          table.name + " does not support Complete mode.")
+        writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
+
+      case Update =>
+        // Although no v2 sinks really support Update mode now, but during tests we do want them
+        // to pretend to support Update mode, and treat Update mode same as Append mode.
+        if (Utils.isTesting) {
+          writeBuilder.buildForStreaming()
+        } else {
+          throw new IllegalArgumentException(
+            "Data source v2 streaming sinks does not support Update mode.")
+        }
+    }
+  }
 }
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+  val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
 
-  def isInterruptionException(e: Throwable): Boolean = e match {
+  def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = e match {
     // InterruptedIOException - thrown when an I/O operation is interrupted
     // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
     case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
@@ -563,9 +630,25 @@ object StreamExecution {
     //                               ExecutionException, such as BiFunction.apply
     case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
         if e2.getCause != null =>
-      isInterruptionException(e2.getCause)
+      isInterruptionException(e2.getCause, sc)
+    case se: SparkException =>
+      val jobGroup = sc.getLocalProperty("spark.jobGroup.id")
+      if (jobGroup == null) return false
+      val errorMsg = se.getMessage
+      if (errorMsg.contains("cancelled") && errorMsg.contains(jobGroup) && se.getCause == null) {
+        true
+      } else if (se.getCause != null) {
+        isInterruptionException(se.getCause, sc)
+      } else {
+        false
+      }
     case _ =>
       false
+  }
+
+  /** Whether the path contains special chars that will be escaped when converting to a `URI`. */
+  def containsSpecialCharsInPath(path: Path): Boolean = {
+    path.toUri.getPath != new Path(path.toUri.toString).toUri.getPath
   }
 }
 

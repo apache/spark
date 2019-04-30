@@ -25,32 +25,24 @@ import org.apache.spark.SparkException
  * Contains basic command line parsing functionality and methods to parse some common Spark CLI
  * options.
  */
-private[spark] trait CommandLineUtils {
+private[spark] trait CommandLineUtils extends CommandLineLoggingUtils {
 
+  def main(args: Array[String]): Unit
+}
+
+private[spark] trait CommandLineLoggingUtils {
   // Exposed for testing
   private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
 
   private[spark] var printStream: PrintStream = System.err
 
   // scalastyle:off println
-
-  private[spark] def printWarning(str: String): Unit = printStream.println("Warning: " + str)
-
-  private[spark] def printErrorAndExit(str: String): Unit = {
-    printStream.println("Error: " + str)
-    printStream.println("Run with --help for usage help or --verbose for debug output")
-    exitFn(1)
-  }
-
+  private[spark] def printMessage(str: String): Unit = printStream.println(str)
   // scalastyle:on println
 
-  private[spark] def parseSparkConfProperty(pair: String): (String, String) = {
-    pair.split("=", 2).toSeq match {
-      case Seq(k, v) => (k, v)
-      case _ => printErrorAndExit(s"Spark config without '=': $pair")
-        throw new SparkException(s"Spark config without '=': $pair")
-    }
+  private[spark] def printErrorAndExit(str: String): Unit = {
+    printMessage("Error: " + str)
+    printMessage("Run with --help for usage help or --verbose for debug output")
+    exitFn(1)
   }
-
-  def main(args: Array[String]): Unit
 }

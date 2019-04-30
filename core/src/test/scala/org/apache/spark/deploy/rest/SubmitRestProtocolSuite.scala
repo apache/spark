@@ -22,6 +22,7 @@ import java.lang.Boolean
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -93,7 +94,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     message.sparkProperties = conf.getAll.toMap
     message.validate()
     // optional fields
-    conf.set("spark.jars", "mayonnaise.jar,ketchup.jar")
+    conf.set(JARS, Seq("mayonnaise.jar", "ketchup.jar"))
     conf.set("spark.files", "fireball.png")
     conf.set("spark.driver.memory", s"${Utils.DEFAULT_DRIVER_MEM_MB}m")
     conf.set("spark.driver.cores", "180")

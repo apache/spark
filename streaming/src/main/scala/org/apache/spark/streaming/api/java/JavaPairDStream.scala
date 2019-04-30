@@ -34,7 +34,8 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils, Optional}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
+import org.apache.spark.api.java.function.{FlatMapFunction, Function => JFunction,
+  Function2 => JFunction2}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
@@ -562,9 +563,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Return a new DStream by applying a flatmap function to the value of each key-value pairs in
    * 'this' DStream without changing the key.
    */
-  def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairDStream[K, U] = {
-    import scala.collection.JavaConverters._
-    def fn: (V) => Iterable[U] = (x: V) => f.apply(x).asScala
+  def flatMapValues[U](f: FlatMapFunction[V, U]): JavaPairDStream[K, U] = {
+    def fn: (V) => Iterator[U] = (x: V) => f.call(x).asScala
     implicit val cm: ClassTag[U] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
     dstream.flatMapValues(fn)

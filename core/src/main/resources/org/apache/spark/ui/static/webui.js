@@ -33,7 +33,7 @@ function collapseTable(thisName, table){
     var status = window.localStorage.getItem(thisName) == "true";
     status = !status;
 
-    thisClass = '.' + thisName
+    var thisClass = '.' + thisName
 
     // Expand the list of additional metrics.
     var tableDiv = $(thisClass).parent().find('.' + table);
@@ -63,6 +63,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-finishedDrivers','aggregated-finishedDrivers');
   collapseTablePageLoad('collapse-aggregated-runtimeInformation','aggregated-runtimeInformation');
   collapseTablePageLoad('collapse-aggregated-sparkProperties','aggregated-sparkProperties');
+  collapseTablePageLoad('collapse-aggregated-hadoopProperties','aggregated-hadoopProperties');
   collapseTablePageLoad('collapse-aggregated-systemProperties','aggregated-systemProperties');
   collapseTablePageLoad('collapse-aggregated-classpathEntries','aggregated-classpathEntries');
   collapseTablePageLoad('collapse-aggregated-activeJobs','aggregated-activeJobs');
@@ -72,6 +73,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-allActiveStages','aggregated-allActiveStages');
   collapseTablePageLoad('collapse-aggregated-allPendingStages','aggregated-allPendingStages');
   collapseTablePageLoad('collapse-aggregated-allCompletedStages','aggregated-allCompletedStages');
+  collapseTablePageLoad('collapse-aggregated-allSkippedStages','aggregated-allSkippedStages');
   collapseTablePageLoad('collapse-aggregated-allFailedStages','aggregated-allFailedStages');
   collapseTablePageLoad('collapse-aggregated-activeStages','aggregated-activeStages');
   collapseTablePageLoad('collapse-aggregated-pendingOrSkippedStages','aggregated-pendingOrSkippedStages');
@@ -82,4 +84,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-rdds','aggregated-rdds');
   collapseTablePageLoad('collapse-aggregated-activeBatches','aggregated-activeBatches');
   collapseTablePageLoad('collapse-aggregated-completedBatches','aggregated-completedBatches');
+  collapseTablePageLoad('collapse-aggregated-runningExecutions','aggregated-runningExecutions');
+  collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');
+  collapseTablePageLoad('collapse-aggregated-failedExecutions','aggregated-failedExecutions');
 });

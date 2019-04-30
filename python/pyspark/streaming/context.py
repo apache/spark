@@ -17,10 +17,7 @@
 
 from __future__ import print_function
 
-import os
-import sys
-
-from py4j.java_gateway import java_import, JavaObject
+from py4j.java_gateway import java_import
 
 from pyspark import RDD, SparkConf
 from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
@@ -79,22 +76,8 @@ class StreamingContext(object):
         java_import(gw.jvm, "org.apache.spark.streaming.api.java.*")
         java_import(gw.jvm, "org.apache.spark.streaming.api.python.*")
 
-        # start callback server
-        # getattr will fallback to JVM, so we cannot test by hasattr()
-        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
-            gw.callback_server_parameters.eager_load = True
-            gw.callback_server_parameters.daemonize = True
-            gw.callback_server_parameters.daemonize_connections = True
-            gw.callback_server_parameters.port = 0
-            gw.start_callback_server(gw.callback_server_parameters)
-            cbport = gw._callback_server.server_socket.getsockname()[1]
-            gw._callback_server.port = cbport
-            # gateway with real port
-            gw._python_proxy_port = gw._callback_server.port
-            # get the GatewayServer object in JVM by ID
-            jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
-            # update the port of CallbackClient with real port
-            jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)
+        from pyspark.java_gateway import ensure_callback_server_started
+        ensure_callback_server_started(gw)
 
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
@@ -236,7 +219,7 @@ class StreamingContext(object):
         Set each DStreams in this context to remember RDDs it generated
         in the last given duration. DStreams remember RDDs only for a
         limited duration of time and releases them for garbage collection.
-        This method allows the developer to specify how to long to remember
+        This method allows the developer to specify how long to remember
         the RDDs (if the developer wishes to query old data outside the
         DStream computation).
 
@@ -275,6 +258,7 @@ class StreamingContext(object):
         for new files and reads them as text files. Files must be wrriten to the
         monitored directory by "moving" them from another location within the same
         file system. File names starting with . are ignored.
+        The text files must be encoded as UTF-8.
         """
         return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
 
@@ -301,7 +285,7 @@ class StreamingContext(object):
 
     def queueStream(self, rdds, oneAtATime=True, default=None):
         """
-        Create an input stream from an queue of RDDs or list. In each batch,
+        Create an input stream from a queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
 
         .. note:: Changes to the queue after the stream is created will not be recognized.
@@ -338,7 +322,7 @@ class StreamingContext(object):
         jdstreams = [d._jdstream for d in dstreams]
         # change the final serializer to sc.serializer
         func = TransformFunction(self._sc,
-                                 lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
+                                 lambda t, *rdds: transformFunc(rdds),
                                  *[d._jrdd_deserializer for d in dstreams])
         jfunc = self._jvm.TransformFunction(func)
         jdstream = self._jssc.transform(jdstreams, jfunc)
@@ -357,9 +341,11 @@ class StreamingContext(object):
             raise ValueError("All DStreams should have same serializer")
         if len(set(s._slideDuration for s in dstreams)) > 1:
             raise ValueError("All DStreams should have same slide duration")
-        first = dstreams[0]
-        jrest = [d._jdstream for d in dstreams[1:]]
-        return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+        cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaDStream
+        jdstreams = SparkContext._gateway.new_array(cls, len(dstreams))
+        for i in range(0, len(dstreams)):
+            jdstreams[i] = dstreams[i]._jdstream
+        return DStream(self._jssc.union(jdstreams), self, dstreams[0]._jrdd_deserializer)
 
     def addStreamingListener(self, streamingListener):
         """

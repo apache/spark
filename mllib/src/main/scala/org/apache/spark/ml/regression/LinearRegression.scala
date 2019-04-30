@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
@@ -37,12 +37,14 @@ import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.regression.{LinearRegressionModel => OldLinearRegressionModel}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -314,7 +316,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setEpsilon(value: Double): this.type = set(epsilon, value)
   setDefault(epsilon -> 1.35)
 
-  override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
+  override protected def train(dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
@@ -325,9 +327,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Instance(label, weight, features)
     }
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, solver, tol, elasticNetParam,
-      fitIntercept, maxIter, regParam, standardization, aggregationDepth, loss, epsilon)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, solver, tol,
+      elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth, loss,
+      epsilon)
     instr.logNumFeatures(numFeatures)
 
     if ($(loss) == SquaredError && (($(solver) == Auto &&
@@ -338,7 +342,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         elasticNetParam = $(elasticNetParam), $(standardization), true,
         solverType = WeightedLeastSquares.Auto, maxIter = $(maxIter), tol = $(tol))
-      val model = optimizer.fit(instances)
+      val model = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       // When it is trained by WeightedLeastSquares, training summary does not
       // attach returned model.
       val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
@@ -352,9 +356,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         model.diagInvAtWA.toArray,
         model.objectiveHistory)
 
-      lrModel.setSummary(Some(trainingSummary))
-      instr.logSuccess(lrModel)
-      return lrModel
+      return lrModel.setSummary(Some(trainingSummary))
     }
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
@@ -377,6 +379,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val yMean = ySummarizer.mean(0)
     val rawYStd = math.sqrt(ySummarizer.variance(0))
+
+    instr.logNumExamples(ySummarizer.count)
+    instr.logNamedValue(Instrumentation.loggerTags.meanOfLabels, yMean)
+    instr.logNamedValue(Instrumentation.loggerTags.varianceOfLabels, rawYStd)
+
     if (rawYStd == 0.0) {
       if ($(fitIntercept) || yMean == 0.0) {
         // If the rawYStd==0 and fitIntercept==true, then the intercept is yMean with
@@ -384,11 +391,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of
         // the fitIntercept.
         if (yMean == 0.0) {
-          logWarning(s"Mean and standard deviation of the label are zero, so the coefficients " +
-            s"and the intercept will all be zero; as a result, training is not needed.")
+          instr.logWarning(s"Mean and standard deviation of the label are zero, so the " +
+            s"coefficients and the intercept will all be zero; as a result, training is not " +
+            s"needed.")
         } else {
-          logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
-            s"zeros and the intercept will be the mean of the label; as a result, " +
+          instr.logWarning(s"The standard deviation of the label is zero, so the coefficients " +
+            s"will be zeros and the intercept will be the mean of the label; as a result, " +
             s"training is not needed.")
         }
         if (handlePersistence) instances.unpersist()
@@ -408,13 +416,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           Array(0D),
           Array(0D))
 
-        model.setSummary(Some(trainingSummary))
-        instr.logSuccess(model)
-        return model
+        return model.setSummary(Some(trainingSummary))
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
-        logWarning(s"The standard deviation of the label is zero. " +
+        instr.logWarning(s"The standard deviation of the label is zero. " +
           "Consider setting fitIntercept=true.")
       }
     }
@@ -429,7 +435,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
       featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
-      logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
+      instr.logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
         "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
         "columns. This behavior is the same as R glmnet but different from LIBSVM.")
     }
@@ -521,12 +527,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       }
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
-        logError(msg)
+        instr.logError(msg)
         throw new SparkException(msg)
       }
 
-      bcFeaturesMean.destroy(blocking = false)
-      bcFeaturesStd.destroy(blocking = false)
+      bcFeaturesMean.destroy()
+      bcFeaturesStd.destroy()
 
       val parameters = state.x.toArray.clone()
 
@@ -589,8 +595,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       objectiveHistory)
 
     model.setSummary(Some(trainingSummary))
-    instr.logSuccess(model)
-    model
   }
 
   @Since("1.4.0")
@@ -643,33 +647,20 @@ class LinearRegressionModel private[ml] (
     @Since("1.3.0") val intercept: Double,
     @Since("2.3.0") val scale: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
-  with LinearRegressionParams with MLWritable {
+  with LinearRegressionParams with GeneralMLWritable
+  with HasTrainingSummary[LinearRegressionTrainingSummary] {
 
   private[ml] def this(uid: String, coefficients: Vector, intercept: Double) =
     this(uid, coefficients, intercept, 1.0)
-
-  private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
   override val numFeatures: Int = coefficients.size
 
   /**
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * thrown if `hasSummary` is false.
    */
   @Since("1.5.0")
-  def summary: LinearRegressionTrainingSummary = trainingSummary.getOrElse {
-    throw new SparkException("No training summary available for this LinearRegressionModel")
-  }
-
-  private[regression]
-  def setSummary(summary: Option[LinearRegressionTrainingSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
-
-  /** Indicates whether a training summary exists for this model instance. */
-  @Since("1.5.0")
-  def hasSummary: Boolean = trainingSummary.isDefined
+  override def summary: LinearRegressionTrainingSummary = super.summary
 
   /**
    * Evaluates the model on a test dataset.
@@ -699,7 +690,7 @@ class LinearRegressionModel private[ml] (
   }
 
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     dot(features, coefficients) + intercept
   }
 
@@ -710,7 +701,7 @@ class LinearRegressionModel private[ml] (
   }
 
   /**
-   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
+   * Returns a [[org.apache.spark.ml.util.GeneralMLWriter]] instance for this ML instance.
    *
    * For [[LinearRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
@@ -718,7 +709,50 @@ class LinearRegressionModel private[ml] (
    * This also does not save the [[parent]] currently.
    */
   @Since("1.6.0")
-  override def write: MLWriter = new LinearRegressionModel.LinearRegressionModelWriter(this)
+  override def write: GeneralMLWriter = new GeneralMLWriter(this)
+}
+
+/** A writer for LinearRegression that handles the "internal" (or default) format */
+private class InternalLinearRegressionModelWriter
+  extends MLWriterFormat with MLFormatRegister {
+
+  override def format(): String = "internal"
+  override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
+
+  private case class Data(intercept: Double, coefficients: Vector, scale: Double)
+
+  override def write(path: String, sparkSession: SparkSession,
+    optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
+    val instance = stage.asInstanceOf[LinearRegressionModel]
+    val sc = sparkSession.sparkContext
+    // Save metadata and Params
+    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    // Save model data: intercept, coefficients, scale
+    val data = Data(instance.intercept, instance.coefficients, instance.scale)
+    val dataPath = new Path(path, "data").toString
+    sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+  }
+}
+
+/** A writer for LinearRegression that handles the "pmml" format */
+private class PMMLLinearRegressionModelWriter
+  extends MLWriterFormat with MLFormatRegister {
+
+  override def format(): String = "pmml"
+
+  override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
+
+  private case class Data(intercept: Double, coefficients: Vector)
+
+  override def write(path: String, sparkSession: SparkSession,
+    optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
+    val sc = sparkSession.sparkContext
+    // Construct the MLLib model which knows how to write to PMML.
+    val instance = stage.asInstanceOf[LinearRegressionModel]
+    val oldModel = new OldLinearRegressionModel(instance.coefficients, instance.intercept)
+    // Save PMML
+    oldModel.toPMML(sc, path)
+  }
 }
 
 @Since("1.6.0")
@@ -729,22 +763,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 
   @Since("1.6.0")
   override def load(path: String): LinearRegressionModel = super.load(path)
-
-  /** [[MLWriter]] instance for [[LinearRegressionModel]] */
-  private[LinearRegressionModel] class LinearRegressionModelWriter(instance: LinearRegressionModel)
-    extends MLWriter with Logging {
-
-    private case class Data(intercept: Double, coefficients: Vector, scale: Double)
-
-    override protected def saveImpl(path: String): Unit = {
-      // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: intercept, coefficients, scale
-      val data = Data(instance.intercept, instance.coefficients, instance.scale)
-      val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
-    }
-  }
 
   private class LinearRegressionModelReader extends MLReader[LinearRegressionModel] {
 
@@ -771,7 +789,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
         new LinearRegressionModel(metadata.uid, coefficients, intercept, scale)
       }
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

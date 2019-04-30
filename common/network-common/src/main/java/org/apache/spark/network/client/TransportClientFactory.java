@@ -84,7 +84,7 @@ public class TransportClientFactory implements Closeable {
 
   private final Class<? extends Channel> socketChannelClass;
   private EventLoopGroup workerGroup;
-  private PooledByteBufAllocator pooledAllocator;
+  private final PooledByteBufAllocator pooledAllocator;
   private final NettyMemoryMetrics metrics;
 
   public TransportClientFactory(
@@ -103,8 +103,13 @@ public class TransportClientFactory implements Closeable {
         ioMode,
         conf.clientThreads(),
         conf.getModuleName() + "-client");
-    this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
-      conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    if (conf.sharedByteBufAllocators()) {
+      this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(
+          conf.preferDirectBufsForSharedByteBufAllocators(), false /* allowCache */);
+    } else {
+      this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
+          conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    }
     this.metrics = new NettyMemoryMetrics(
       this.pooledAllocator, conf.getModuleName() + "-client", conf);
   }

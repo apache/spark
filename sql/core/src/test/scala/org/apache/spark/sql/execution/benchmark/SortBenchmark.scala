@@ -17,34 +17,32 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.util.{Arrays, Comparator}
+import java.util.Arrays
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
-import org.apache.spark.util.Benchmark
 import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.collection.unsafe.sort._
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Benchmark to measure performance for aggregate primitives.
- * To run this:
- *  build/sbt "sql/test-only *benchmark.SortBenchmark"
- *
- * Benchmarks in this file are skipped in normal builds.
+ * {{{
+ *   To run this benchmark:
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/<this class>-results.txt".
+ * }}}
  */
-class SortBenchmark extends BenchmarkBase {
+object SortBenchmark extends BenchmarkBase {
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
     val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
-    new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
-      buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
-        override def compare(
-          r1: RecordPointerAndKeyPrefix,
-          r2: RecordPointerAndKeyPrefix): Int = {
-          refCmp.compare(r1.keyPrefix, r2.keyPrefix)
-        }
-      })
+    new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(buf, lo, hi,
+      (r1: RecordPointerAndKeyPrefix, r2: RecordPointerAndKeyPrefix) =>
+        refCmp.compare(r1.keyPrefix, r2.keyPrefix))
   }
 
   private def generateKeyPrefixTestData(size: Int, rand: => Long): (LongArray, LongArray) = {
@@ -54,10 +52,10 @@ class SortBenchmark extends BenchmarkBase {
       new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
-  ignore("sort") {
+  def sortBenchmark(): Unit = {
     val size = 25000000
     val rand = new XORShiftRandom(123)
-    val benchmark = new Benchmark("radix sort " + size, size)
+    val benchmark = new Benchmark("radix sort " + size, size, output = output)
     benchmark.addTimerCase("reference TimSort key prefix array") { timer =>
       val array = Array.tabulate[Long](size * 2) { i => rand.nextLong }
       val buf = new LongArray(MemoryBlock.fromLongArray(array))
@@ -114,20 +112,11 @@ class SortBenchmark extends BenchmarkBase {
       timer.stopTiming()
     }
     benchmark.run()
+  }
 
-    /*
-      Running benchmark: radix sort 25000000
-      Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 3.13.0-44-generic
-      Intel(R) Core(TM) i7-4600U CPU @ 2.10GHz
-
-      radix sort 25000000:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      -------------------------------------------------------------------------------------------
-      reference TimSort key prefix array     15546 / 15859          1.6         621.9       1.0X
-      reference Arrays.sort                    2416 / 2446         10.3          96.6       6.4X
-      radix sort one byte                       133 /  137        188.4           5.3     117.2X
-      radix sort two bytes                      255 /  258         98.2          10.2      61.1X
-      radix sort eight bytes                    991 /  997         25.2          39.6      15.7X
-      radix sort key prefix array              1540 / 1563         16.2          61.6      10.1X
-    */
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    runBenchmark("radix sort") {
+      sortBenchmark()
+    }
   }
 }

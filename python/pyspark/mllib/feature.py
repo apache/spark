@@ -22,8 +22,6 @@ from __future__ import absolute_import
 
 import sys
 import warnings
-import random
-import binascii
 if sys.version >= '3':
     basestring = str
     unicode = str
@@ -59,7 +57,7 @@ class VectorTransformer(object):
 
 
 class Normalizer(VectorTransformer):
-    """
+    r"""
     Normalizes samples individually to unit L\ :sup:`p`\  norm
 
     For any 1 <= `p` < float('inf'), normalizes samples using
@@ -520,6 +518,20 @@ class IDFModel(JavaVectorTransformer):
         """
         return self.call('idf')
 
+    @since('3.0.0')
+    def docFreq(self):
+        """
+        Returns the document frequency.
+        """
+        return self.call('docFreq')
+
+    @since('3.0.0')
+    def numDocs(self):
+        """
+        Returns number of documents evaluated to compute idf
+        """
+        return self.call('numDocs')
+
 
 class IDF(object):
     """
@@ -819,7 +831,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     sys.path.pop(0)

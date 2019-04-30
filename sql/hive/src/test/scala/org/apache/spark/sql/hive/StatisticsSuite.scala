@@ -19,19 +19,21 @@ package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
 import java.sql.Timestamp
+import java.util.Locale
 
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.hadoop.hive.common.StatsSetupConst
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.HiveExternalCatalog._
@@ -108,6 +110,41 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("Hive serde table with incorrect statistics") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        val dataSize = tempDir.listFiles.filter(!_.getName.endsWith(".crc")).map(_.length).sum
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+             |STORED AS
+             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        // Before SPARK-19678, sizeInBytes should be equal to dataSize.
+        // After SPARK-19678, sizeInBytes should be equal to DEFAULT_SIZE_IN_BYTES.
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+
+        spark.sql("REFRESH TABLE t1")
+        // After SPARK-19678 and enable ENABLE_FALL_BACK_TO_HDFS_FOR_STATS,
+        // sizeInBytes should be equal to dataSize.
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === dataSize)
+        }
+      }
+    }
+  }
+
   test("analyze Hive serde tables") {
     def queryTotalSize(tableName: String): BigInt =
       spark.table(tableName).queryExecution.analyzed.stats.sizeInBytes
@@ -148,6 +185,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("SPARK-24626 parallel file listing in Stats computation") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2",
+      SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION.key -> "True") {
+      val checkSizeTable = "checkSizeTable"
+      withTable(checkSizeTable) {
+          sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-01') SELECT * FROM src")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-02') SELECT * FROM src")
+          sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-03') SELECT * FROM src")
+          val tableMeta = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier(checkSizeTable))
+          HiveCatalogMetrics.reset()
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
+          val size = CommandUtils.calculateTotalSize(spark, tableMeta)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
+          assert(size === BigInt(17436))
+      }
+    }
+  }
+
   test("analyze non hive compatible datasource tables") {
     val table = "parquet_tab"
     withTable(table) {
@@ -177,8 +234,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val fetchedStats0 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
       assert(fetchedStats0.get.colStats == Map(
-        "a" -> ColumnStat(2, Some(1), Some(2), 0, 4, 4),
-        "b" -> ColumnStat(1, Some(1), Some(1), 0, 4, 4)))
+        "a" -> CatalogColumnStat(Some(2), Some("1"), Some("2"), Some(0), Some(4), Some(4)),
+        "b" -> CatalogColumnStat(Some(1), Some("1"), Some("1"), Some(0), Some(4), Some(4))))
     }
   }
 
@@ -208,8 +265,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val fetchedStats1 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1)).get
       assert(fetchedStats1.colStats == Map(
-        "C1" -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(1), nullCount = 0,
-          avgLen = 4, maxLen = 4)))
+        "C1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))))
     }
   }
 
@@ -468,7 +525,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
         }.getMessage
         assert(message.contains(
-          s"DS is not a valid partition column in table `default`.`${tableName.toLowerCase}`"))
+          "DS is not a valid partition column in table " +
+            s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -482,8 +540,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName $partitionSpec COMPUTE STATISTICS")
       }.getMessage
       assert(message.contains("The list of partition columns with values " +
-        s"in partition specification for table '${tableName.toLowerCase}' in database 'default' " +
-        "is not a prefix of the list of partition columns defined in the table schema"))
+        s"in partition specification for table '${tableName.toLowerCase(Locale.ROOT)}' in " +
+        "database 'default' is not a prefix of the list of partition columns defined in " +
+        "the table schema"))
     }
 
     withTable(tableName) {
@@ -529,12 +588,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
-        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
+        "hour is not a valid partition column in table " +
+          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
       )
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
-        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
+        "hour is not a valid partition column in table " +
+          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
       )
 
       intercept[NoSuchPartitionException] {
@@ -596,7 +657,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
       val fetchedStats0 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetchedStats0.get.colStats == Map("c1" -> ColumnStat(0, None, None, 0, 4, 4)))
+      assert(fetchedStats0.get.colStats ==
+        Map("c1" -> CatalogColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))))
 
       // Insert new data and analyze: have the latest column stats.
       sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
@@ -604,18 +666,18 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val fetchedStats1 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1)).get
       assert(fetchedStats1.colStats == Map(
-        "c1" -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(1), nullCount = 0,
-          avgLen = 4, maxLen = 4)))
+        "c1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))))
 
       // Analyze another column: since the table is not changed, the precious column stats are kept.
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c2")
       val fetchedStats2 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1)).get
       assert(fetchedStats2.colStats == Map(
-        "c1" -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(1), nullCount = 0,
-          avgLen = 4, maxLen = 4),
-        "c2" -> ColumnStat(distinctCount = 1, min = None, max = None, nullCount = 0,
-          avgLen = 1, maxLen = 1)))
+        "c1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c2" -> CatalogColumnStat(distinctCount = Some(1), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))))
 
       // Insert new data and analyze: stale column stats are removed and newly collected column
       // stats are added.
@@ -624,11 +686,56 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val fetchedStats3 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2)).get
       assert(fetchedStats3.colStats == Map(
-        "c1" -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-          avgLen = 4, maxLen = 4),
-        "c3" -> ColumnStat(distinctCount = 2, min = Some(10.0), max = Some(20.0), nullCount = 0,
-          avgLen = 8, maxLen = 8)))
+        "c1" -> CatalogColumnStat(distinctCount = Some(2), min = Some("1"), max = Some("2"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c3" -> CatalogColumnStat(distinctCount = Some(2), min = Some("10.0"), max = Some("20.0"),
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))))
     }
+  }
+
+  test("collecting statistics for all columns") {
+    val table = "update_col_stats_table"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (c1 INT, c2 STRING, c3 DOUBLE)")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+      val fetchedStats0 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      assert(fetchedStats0.get.colStats == Map(
+        "c1" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c3" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        "c2" -> CatalogColumnStat(distinctCount = Some(0), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(20), maxLen = Some(20))))
+
+      // Insert new data and analyze: have the latest column stats.
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'b', null")
+
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+      val fetchedStats1 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
+      assert(fetchedStats1.get.colStats == Map(
+        "c1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c3" -> CatalogColumnStat(distinctCount = Some(1), min = Some("10.0"), max = Some("10.0"),
+          nullCount = Some(1), avgLen = Some(8), maxLen = Some(8)),
+        "c2" -> CatalogColumnStat(distinctCount = Some(2), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))))
+    }
+  }
+
+  test("analyze column command paramaters validation") {
+    val e1 = intercept[IllegalArgumentException] {
+      AnalyzeColumnCommand(TableIdentifier("test"), Option(Seq("c1")), true).run(spark)
+    }
+    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+      " mutually exclusive"))
+    val e2 = intercept[IllegalArgumentException] {
+      AnalyzeColumnCommand(TableIdentifier("test"), None, false).run(spark)
+    }
+    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+      " mutually exclusive"))
   }
 
   private def createNonPartitionedTable(
@@ -999,114 +1106,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("verify serialized column stats after analyzing columns") {
     import testImplicits._
 
-    val tableName = "column_stats_test2"
+    val tableName = "column_stats_test_ser"
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-
-    val expectedSerializedColStats = Map(
-      "spark.sql.statistics.colStats.cbinary.avgLen" -> "3",
-      "spark.sql.statistics.colStats.cbinary.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cbinary.maxLen" -> "3",
-      "spark.sql.statistics.colStats.cbinary.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cbinary.version" -> "1",
-      "spark.sql.statistics.colStats.cbool.avgLen" -> "1",
-      "spark.sql.statistics.colStats.cbool.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cbool.max" -> "true",
-      "spark.sql.statistics.colStats.cbool.maxLen" -> "1",
-      "spark.sql.statistics.colStats.cbool.min" -> "false",
-      "spark.sql.statistics.colStats.cbool.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cbool.version" -> "1",
-      "spark.sql.statistics.colStats.cbyte.avgLen" -> "1",
-      "spark.sql.statistics.colStats.cbyte.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cbyte.max" -> "2",
-      "spark.sql.statistics.colStats.cbyte.maxLen" -> "1",
-      "spark.sql.statistics.colStats.cbyte.min" -> "1",
-      "spark.sql.statistics.colStats.cbyte.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cbyte.version" -> "1",
-      "spark.sql.statistics.colStats.cdate.avgLen" -> "4",
-      "spark.sql.statistics.colStats.cdate.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cdate.max" -> "2016-05-09",
-      "spark.sql.statistics.colStats.cdate.maxLen" -> "4",
-      "spark.sql.statistics.colStats.cdate.min" -> "2016-05-08",
-      "spark.sql.statistics.colStats.cdate.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cdate.version" -> "1",
-      "spark.sql.statistics.colStats.cdecimal.avgLen" -> "16",
-      "spark.sql.statistics.colStats.cdecimal.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cdecimal.max" -> "8.000000000000000000",
-      "spark.sql.statistics.colStats.cdecimal.maxLen" -> "16",
-      "spark.sql.statistics.colStats.cdecimal.min" -> "1.000000000000000000",
-      "spark.sql.statistics.colStats.cdecimal.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cdecimal.version" -> "1",
-      "spark.sql.statistics.colStats.cdouble.avgLen" -> "8",
-      "spark.sql.statistics.colStats.cdouble.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cdouble.max" -> "6.0",
-      "spark.sql.statistics.colStats.cdouble.maxLen" -> "8",
-      "spark.sql.statistics.colStats.cdouble.min" -> "1.0",
-      "spark.sql.statistics.colStats.cdouble.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cdouble.version" -> "1",
-      "spark.sql.statistics.colStats.cfloat.avgLen" -> "4",
-      "spark.sql.statistics.colStats.cfloat.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cfloat.max" -> "7.0",
-      "spark.sql.statistics.colStats.cfloat.maxLen" -> "4",
-      "spark.sql.statistics.colStats.cfloat.min" -> "1.0",
-      "spark.sql.statistics.colStats.cfloat.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cfloat.version" -> "1",
-      "spark.sql.statistics.colStats.cint.avgLen" -> "4",
-      "spark.sql.statistics.colStats.cint.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cint.max" -> "4",
-      "spark.sql.statistics.colStats.cint.maxLen" -> "4",
-      "spark.sql.statistics.colStats.cint.min" -> "1",
-      "spark.sql.statistics.colStats.cint.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cint.version" -> "1",
-      "spark.sql.statistics.colStats.clong.avgLen" -> "8",
-      "spark.sql.statistics.colStats.clong.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.clong.max" -> "5",
-      "spark.sql.statistics.colStats.clong.maxLen" -> "8",
-      "spark.sql.statistics.colStats.clong.min" -> "1",
-      "spark.sql.statistics.colStats.clong.nullCount" -> "1",
-      "spark.sql.statistics.colStats.clong.version" -> "1",
-      "spark.sql.statistics.colStats.cshort.avgLen" -> "2",
-      "spark.sql.statistics.colStats.cshort.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cshort.max" -> "3",
-      "spark.sql.statistics.colStats.cshort.maxLen" -> "2",
-      "spark.sql.statistics.colStats.cshort.min" -> "1",
-      "spark.sql.statistics.colStats.cshort.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cshort.version" -> "1",
-      "spark.sql.statistics.colStats.cstring.avgLen" -> "3",
-      "spark.sql.statistics.colStats.cstring.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cstring.maxLen" -> "3",
-      "spark.sql.statistics.colStats.cstring.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cstring.version" -> "1",
-      "spark.sql.statistics.colStats.ctimestamp.avgLen" -> "8",
-      "spark.sql.statistics.colStats.ctimestamp.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.ctimestamp.max" -> "2016-05-09 00:00:02.0",
-      "spark.sql.statistics.colStats.ctimestamp.maxLen" -> "8",
-      "spark.sql.statistics.colStats.ctimestamp.min" -> "2016-05-08 00:00:01.0",
-      "spark.sql.statistics.colStats.ctimestamp.nullCount" -> "1",
-      "spark.sql.statistics.colStats.ctimestamp.version" -> "1"
-    )
-
-    val expectedSerializedHistograms = Map(
-      "spark.sql.statistics.colStats.cbyte.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cbyte").histogram.get),
-      "spark.sql.statistics.colStats.cshort.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cshort").histogram.get),
-      "spark.sql.statistics.colStats.cint.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cint").histogram.get),
-      "spark.sql.statistics.colStats.clong.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("clong").histogram.get),
-      "spark.sql.statistics.colStats.cdouble.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cdouble").histogram.get),
-      "spark.sql.statistics.colStats.cfloat.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cfloat").histogram.get),
-      "spark.sql.statistics.colStats.cdecimal.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cdecimal").histogram.get),
-      "spark.sql.statistics.colStats.cdate.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cdate").histogram.get),
-      "spark.sql.statistics.colStats.ctimestamp.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("ctimestamp").histogram.get)
-    )
 
     def checkColStatsProps(expected: Map[String, String]): Unit = {
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
@@ -1126,6 +1129,29 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         checkColStatsProps(expectedSerializedColStats ++ expectedSerializedHistograms)
       }
+    }
+  }
+
+  test("verify column stats can be deserialized from tblproperties") {
+    import testImplicits._
+
+    val tableName = "column_stats_test_de"
+    // (data.head.productArity - 1) because the last column does not support stats collection.
+    assert(stats.size == data.head.productArity - 1)
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+
+    withTable(tableName) {
+      df.write.saveAsTable(tableName)
+
+      // Put in stats properties manually.
+      val table = getCatalogTable(tableName)
+      val newTable = table.copy(
+        properties = table.properties ++
+          expectedSerializedColStats ++ expectedSerializedHistograms +
+          ("spark.sql.statistics.totalSize" -> "1") /* totalSize always required */)
+      hiveClient.alterTable(newTable)
+
+      validateColStats(tableName, statsWithHgms)
     }
   }
 

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.lang.Double.longBitsToDouble
-import java.lang.Float.intBitsToFloat
 import java.math.MathContext
 
 import scala.collection.mutable
@@ -67,6 +65,28 @@ object RandomDataGenerator {
       }
     }
     Some(f)
+  }
+
+  /**
+   * A wrapper of Float.intBitsToFloat to use a unique NaN value for all NaN values.
+   * This prevents `checkEvaluationWithUnsafeProjection` from failing due to
+   * the difference between `UnsafeRow` binary presentation for NaN.
+   * This is visible for testing.
+   */
+  def intBitsToFloat(bits: Int): Float = {
+    val value = java.lang.Float.intBitsToFloat(bits)
+    if (value.isNaN) Float.NaN else value
+  }
+
+  /**
+   * A wrapper of Double.longBitsToDouble to use a unique NaN value for all NaN values.
+   * This prevents `checkEvaluationWithUnsafeProjection` from failing due to
+   * the difference between `UnsafeRow` binary presentation for NaN.
+   * This is visible for testing.
+   */
+  def longBitsToDouble(bits: Long): Double = {
+    val value = java.lang.Double.longBitsToDouble(bits)
+    if (value.isNaN) Double.NaN else value
   }
 
   /**

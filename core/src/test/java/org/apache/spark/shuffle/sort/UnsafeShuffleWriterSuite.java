@@ -45,6 +45,7 @@ import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZ4CompressionCodec;
 import org.apache.spark.io.LZFCompressionCodec;
 import org.apache.spark.io.SnappyCompressionCodec;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
@@ -95,13 +96,13 @@ public class UnsafeShuffleWriterSuite {
   @SuppressWarnings("unchecked")
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    tempDir = Utils.createTempDir("test", "test");
+    tempDir = Utils.createTempDir(null, "test");
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
     partitionSizesInMergedFile = null;
     spillFilesCreated.clear();
     conf = new SparkConf()
-      .set("spark.buffer.pageSize", "1m")
-      .set("spark.memory.offHeap.enabled", "false");
+      .set(package$.MODULE$.BUFFER_PAGESIZE().key(), "1m")
+      .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
     taskMetrics = new TaskMetrics();
     memoryManager = new TestMemoryManager(conf);
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
@@ -162,7 +163,8 @@ public class UnsafeShuffleWriterSuite {
       new SerializedShuffleHandle<>(0, 1, shuffleDep),
       0, // map id
       taskContext,
-      conf
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics()
     );
   }
 
@@ -183,17 +185,17 @@ public class UnsafeShuffleWriterSuite {
         fin.getChannel().position(startOffset);
         InputStream in = new LimitedInputStream(fin, partitionSize);
         in = blockManager.serializerManager().wrapForEncryption(in);
-        if (conf.getBoolean("spark.shuffle.compress", true)) {
+        if ((boolean) conf.get(package$.MODULE$.SHUFFLE_COMPRESS())) {
           in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
         }
-        DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in);
-        Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
-        while (records.hasNext()) {
-          Tuple2<Object, Object> record = records.next();
-          assertEquals(i, hashPartitioner.getPartition(record._1()));
-          recordsList.add(record);
+        try (DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
+          Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
+          while (records.hasNext()) {
+            Tuple2<Object, Object> record = records.next();
+            assertEquals(i, hashPartitioner.getPartition(record._1()));
+            recordsList.add(record);
+          }
         }
-        recordsStream.close();
         startOffset += partitionSize;
       }
     }
@@ -234,6 +236,7 @@ public class UnsafeShuffleWriterSuite {
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
+    assertEquals(0, spillFilesCreated.size());
     assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
     assertEquals(0, taskMetrics.shuffleWriteMetrics().recordsWritten());
     assertEquals(0, taskMetrics.shuffleWriteMetrics().bytesWritten());
@@ -277,12 +280,12 @@ public class UnsafeShuffleWriterSuite {
       String compressionCodecName,
       boolean encrypt) throws Exception {
     if (compressionCodecName != null) {
-      conf.set("spark.shuffle.compress", "true");
+      conf.set(package$.MODULE$.SHUFFLE_COMPRESS(), true);
       conf.set("spark.io.compression.codec", compressionCodecName);
     } else {
-      conf.set("spark.shuffle.compress", "false");
+      conf.set(package$.MODULE$.SHUFFLE_COMPRESS(), false);
     }
-    conf.set(org.apache.spark.internal.config.package$.MODULE$.IO_ENCRYPTION_ENABLED(), encrypt);
+    conf.set(package$.MODULE$.IO_ENCRYPTION_ENABLED(), encrypt);
 
     SerializerManager manager;
     if (encrypt) {
@@ -388,7 +391,7 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void mergeSpillsWithCompressionAndEncryptionSlowPath() throws Exception {
-    conf.set("spark.shuffle.unsafe.fastMergeEnabled", "false");
+    conf.set(package$.MODULE$.SHUFFLE_UNDAFE_FAST_MERGE_ENABLE(), false);
     testMergingSpills(false, LZ4CompressionCodec.class.getName(), true);
   }
 
@@ -428,14 +431,14 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOff() throws Exception {
-    conf.set("spark.shuffle.sort.useRadixSort", "false");
+    conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), false);
     writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
     assertEquals(2, spillFilesCreated.size());
   }
 
   @Test
   public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOn() throws Exception {
-    conf.set("spark.shuffle.sort.useRadixSort", "true");
+    conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), true);
     writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
     assertEquals(3, spillFilesCreated.size());
   }
@@ -521,7 +524,8 @@ public class UnsafeShuffleWriterSuite {
         new SerializedShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,
-        conf);
+        conf,
+        taskContext.taskMetrics().shuffleWriteMetrics());
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.

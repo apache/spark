@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
- * An abstract representation of progress through a {@link MicroBatchReader} or
- * {@link ContinuousReader}.
+ * An abstract representation of progress through a {@link MicroBatchStream} or
+ * {@link ContinuousStream}.
  * During execution, offsets provided by the data source implementation will be logged and used as
  * restart checkpoints. Each source should provide an offset implementation which the source can use
  * to reconstruct a position in the stream up to which data has been seen/processed.
@@ -30,7 +30,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * maintain compatibility with DataSource V1 APIs. This extension will be removed once we
  * get rid of V1 completely.
  */
-@InterfaceStability.Evolving
+@Evolving
 public abstract class Offset extends org.apache.spark.sql.execution.streaming.Offset {
     /**
      * A JSON-serialized representation of an Offset that is

@@ -172,7 +172,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
         .select("maxAbs")
         .head()
       val model = new MaxAbsScalerModel(metadata.uid, maxAbs)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

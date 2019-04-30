@@ -18,6 +18,9 @@
 import time
 from datetime import datetime
 import traceback
+import sys
+
+from py4j.java_gateway import is_instance_of
 
 from pyspark import SparkContext, RDD
 
@@ -64,7 +67,14 @@ class TransformFunction(object):
             t = datetime.fromtimestamp(milliseconds / 1000.0)
             r = self.func(t, *rdds)
             if r:
-                return r._jrdd
+                # Here, we work around to ensure `_jrdd` is `JavaRDD` by wrapping it by `map`.
+                # org.apache.spark.streaming.api.python.PythonTransformFunction requires to return
+                # `JavaRDD`; however, this could be `JavaPairRDD` by some APIs, for example, `zip`.
+                # See SPARK-17756.
+                if is_instance_of(self.ctx._gateway, r._jrdd, "org.apache.spark.api.java.JavaRDD"):
+                    return r._jrdd
+                else:
+                    return r.map(lambda x: x)._jrdd
         except:
             self.failure = traceback.format_exc()
 
@@ -147,4 +157,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

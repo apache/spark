@@ -1,0 +1,29 @@
+================================================================================================
+Benchmark Kryo Unsafe vs safe Serialization
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+
+Benchmark Kryo Unsafe vs safe Serialization: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+basicTypes: Int with unsafe:true               138 /  149          7.2         138.0       1.0X
+basicTypes: Long with unsafe:true              168 /  173          6.0         167.7       0.8X
+basicTypes: Float with unsafe:true             153 /  174          6.5         153.1       0.9X
+basicTypes: Double with unsafe:true            161 /  185          6.2         161.1       0.9X
+Array: Int with unsafe:true                      2 /    3        409.7           2.4      56.5X
+Array: Long with unsafe:true                     4 /    5        232.5           4.3      32.1X
+Array: Float with unsafe:true                    3 /    4        367.3           2.7      50.7X
+Array: Double with unsafe:true                   4 /    5        228.5           4.4      31.5X
+Map of string->Double  with unsafe:true         38 /   45         26.5          37.8       3.7X
+basicTypes: Int with unsafe:false              176 /  187          5.7         175.9       0.8X
+basicTypes: Long with unsafe:false             191 /  203          5.2         191.2       0.7X
+basicTypes: Float with unsafe:false            166 /  176          6.0         166.2       0.8X
+basicTypes: Double with unsafe:false           174 /  190          5.7         174.3       0.8X
+Array: Int with unsafe:false                    19 /   26         52.9          18.9       7.3X
+Array: Long with unsafe:false                   27 /   31         37.7          26.5       5.2X
+Array: Float with unsafe:false                   8 /   10        124.3           8.0      17.2X
+Array: Double with unsafe:false                 12 /   13         83.6          12.0      11.5X
+Map of string->Double  with unsafe:false        38 /   42         26.1          38.3       3.6X
+
+

@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.{IOException, NotSerializableException, ObjectInputStream}
 
+import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.memory.TestMemoryConsumer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.NonSerializable
@@ -144,7 +145,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("managed memory leak error should not mask other failures (SPARK-9266") {
-    val conf = new SparkConf().set("spark.unsafe.exceptionOnMemoryLeak", "true")
+    val conf = new SparkConf().set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
     sc = new SparkContext("local[1,1]", "test", conf)
 
     // If a task leaks memory but fails due to some other cause, then make sure that the original
@@ -257,7 +258,9 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local[1,2]", "test")
     intercept[SparkException] {
       sc.parallelize(1 to 2).foreach { i =>
+        // scalastyle:off throwerror
         throw new LinkageError()
+        // scalastyle:on throwerror
       }
     }
   }

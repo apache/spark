@@ -336,7 +336,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("struct", 0, Long.MaxValue)
     val schema = new StructType().add("int", IntegerType).add("long", LongType)
     val vector = ArrowUtils.toArrowField("struct", schema, nullable = false, null)
-      .createVector(allocator).asInstanceOf[NullableMapVector]
+      .createVector(allocator).asInstanceOf[StructVector]
 
     vector.allocateNew()
     val intVector = vector.getChildByOrdinal(0).asInstanceOf[IntVector]
@@ -373,7 +373,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("struct", 0, Long.MaxValue)
     val schema = new StructType().add("int", IntegerType).add("long", LongType)
     val vector = ArrowUtils.toArrowField("struct", schema, nullable = true, null)
-      .createVector(allocator).asInstanceOf[NullableMapVector]
+      .createVector(allocator).asInstanceOf[StructVector]
     vector.allocateNew()
     val intVector = vector.getChildByOrdinal(0).asInstanceOf[IntVector]
     val longVector = vector.getChildByOrdinal(1).asInstanceOf[BigIntVector]

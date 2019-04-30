@@ -51,15 +51,19 @@ public class UTF8StringSuite {
 
     assertTrue(s1.contains(s2));
     assertTrue(s2.contains(s1));
-    assertTrue(s1.startsWith(s1));
-    assertTrue(s1.endsWith(s1));
+    assertTrue(s1.startsWith(s2));
+    assertTrue(s1.endsWith(s2));
   }
 
   @Test
   public void basicTest() {
     checkBasic("", 0);
-    checkBasic("hello", 5);
+    checkBasic("¡", 1); // 2 bytes char
+    checkBasic("ку", 2); // 2 * 2 bytes chars
+    checkBasic("hello", 5); // 5 * 1 byte chars
     checkBasic("大 千 世 界", 7);
+    checkBasic("︽﹋％", 3); // 3 * 3 bytes chars
+    checkBasic("\uD83E\uDD19", 1); // 4 bytes char
   }
 
   @Test
@@ -389,12 +393,14 @@ public class UTF8StringSuite {
 
   @Test
   public void split() {
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
-      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+    UTF8String[] negativeAndZeroLimitCase =
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
   }
 
   @Test
@@ -790,5 +796,22 @@ public class UTF8StringSuite {
     assertEquals(fromString(""), fromString("数数数据砖ab").trimRight(fromString("数据砖ab")));
     assertEquals(fromString("头"), fromString("头a???/").trimRight(fromString("数?/*&^%a")));
     assertEquals(fromString("头"), fromString("头数b数数 [").trimRight(fromString(" []数b")));
+  }
+
+  @Test
+  public void skipWrongFirstByte() {
+    int[] wrongFirstBytes = {
+      0x80, 0x9F, 0xBF, // Skip Continuation bytes
+      0xC0, 0xC2, // 0xC0..0xC1 - disallowed in UTF-8
+      // 0xF5..0xFF - disallowed in UTF-8
+      0xF5, 0xF6, 0xF7, 0xF8, 0xF9,
+      0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF
+    };
+    byte[] c = new byte[1];
+
+    for (int i = 0; i < wrongFirstBytes.length; ++i) {
+      c[0] = (byte)wrongFirstBytes[i];
+      assertEquals(fromBytes(c).numChars(), 1);
+    }
   }
 }

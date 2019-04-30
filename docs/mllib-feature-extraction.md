@@ -2,6 +2,21 @@
 layout: global
 title: Feature Extraction and Transformation - RDD-based API
 displayTitle: Feature Extraction and Transformation - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -105,7 +120,7 @@ p(w_i | w_j ) = \frac{\exp(u_{w_i}^{\top}v_{w_j})}{\sum_{l=1}^{V} \exp(u_l^{\top
 \]`
 where $V$ is the vocabulary size. 
 
-The skip-gram model with softmax is expensive because the cost of computing $\log p(w_i | w_j)$ 
+The skip-gram model with softmax is expensive because the cost of computing $\log p(w_i | w_j)$
 is proportional to $V$, which can be easily in order of millions. To speed up training of Word2Vec, 
 we used hierarchical softmax, which reduced the complexity of computing of $\log p(w_i | w_j)$ to
 $O(\log(V))$
@@ -278,8 +293,8 @@ for details on the API.
 multiplication. In other words, it scales each column of the dataset by a scalar multiplier. This
 represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29)
 between the input vector, `v` and transforming vector, `scalingVec`, to yield a result vector.
-Qu8T948*1#
-Denoting the `scalingVec` as "`w`," this transformation may be written as:
+
+Denoting the `scalingVec` as "`w`", this transformation may be written as:
 
 `\[ \begin{pmatrix}
 v_1 \\

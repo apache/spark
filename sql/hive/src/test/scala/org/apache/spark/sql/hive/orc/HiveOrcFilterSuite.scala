@@ -351,7 +351,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
     }
   }
 
-  test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
+  test("SPARK-12218 and SPARK-25699 Converting conjunctions into ORC SearchArguments") {
     import org.apache.spark.sql.sources._
     // The `LessThan` should be converted while the `StringContains` shouldn't
     val schema = new StructType(
@@ -381,6 +381,49 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
           GreaterThan("a", 1),
           StringContains("b", "prefix")
         ))
+      )).get.toString
+    }
+
+    // Can not remove unsupported `StringContains` predicate since it is under `Or` operator.
+    assert(OrcFilters.createFilter(schema, Array(
+      Or(
+        LessThan("a", 10),
+        And(
+          StringContains("b", "prefix"),
+          GreaterThan("a", 1)
+        )
+      )
+    )).isEmpty)
+
+    // Safely remove unsupported `StringContains` predicate and push down `LessThan`
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(schema, Array(
+        And(
+          LessThan("a", 10),
+          StringContains("b", "prefix")
+        )
+      )).get.toString
+    }
+
+    // Safely remove unsupported `StringContains` predicate, push down `LessThan` and `GreaterThan`.
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |leaf-1 = (LESS_THAN_EQUALS a 1)
+        |expr = (and leaf-0 (not leaf-1))
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(schema, Array(
+        And(
+          And(
+            LessThan("a", 10),
+            StringContains("b", "prefix")
+          ),
+          GreaterThan("a", 1)
+        )
       )).get.toString
     }
   }

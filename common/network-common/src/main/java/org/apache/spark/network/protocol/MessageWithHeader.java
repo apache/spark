@@ -137,28 +137,29 @@ class MessageWithHeader extends AbstractFileRegion {
   }
 
   private int copyByteBuf(ByteBuf buf, WritableByteChannel target) throws IOException {
-    ByteBuffer buffer = buf.nioBuffer();
-    int written = (buffer.remaining() <= NIO_BUFFER_LIMIT) ?
-      target.write(buffer) : writeNioBuffer(target, buffer);
+    // SPARK-24578: cap the sub-region's size of returned nio buffer to improve the performance
+    // for the case that the passed-in buffer has too many components.
+    int length = Math.min(buf.readableBytes(), NIO_BUFFER_LIMIT);
+    // If the ByteBuf holds more then one ByteBuffer we should better call nioBuffers(...)
+    // to eliminate extra memory copies.
+    int written = 0;
+    if (buf.nioBufferCount() == 1) {
+      ByteBuffer buffer = buf.nioBuffer(buf.readerIndex(), length);
+      written = target.write(buffer);
+    } else {
+      ByteBuffer[] buffers = buf.nioBuffers(buf.readerIndex(), length);
+      for (ByteBuffer buffer: buffers) {
+        int remaining = buffer.remaining();
+        int w = target.write(buffer);
+        written += w;
+        if (w < remaining) {
+          // Could not write all, we need to break now.
+          break;
+        }
+      }
+    }
     buf.skipBytes(written);
     return written;
-  }
-
-  private int writeNioBuffer(
-      WritableByteChannel writeCh,
-      ByteBuffer buf) throws IOException {
-    int originalLimit = buf.limit();
-    int ret = 0;
-
-    try {
-      int ioSize = Math.min(buf.remaining(), NIO_BUFFER_LIMIT);
-      buf.limit(buf.position() + ioSize);
-      ret = writeCh.write(buf);
-    } finally {
-      buf.limit(originalLimit);
-    }
-
-    return ret;
   }
 
   @Override

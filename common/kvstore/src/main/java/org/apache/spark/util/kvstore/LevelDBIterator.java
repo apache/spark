@@ -196,6 +196,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
    * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
    * the iterator will eventually be released.
    */
+  @SuppressWarnings("deprecation")
   @Override
   protected void finalize() throws Throwable {
     db.closeIterator(this);

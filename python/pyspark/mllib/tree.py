@@ -17,9 +17,10 @@
 
 from __future__ import absolute_import
 
+import sys
 import random
 
-from pyspark import SparkContext, RDD, since
+from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, inherit_doc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
@@ -654,7 +655,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

@@ -231,7 +231,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
     // Make sure we can successfully create a UnsafeKVExternalSorter with a `BytesToBytesMap`
     // which has duplicated keys and the number of entries exceeds its capacity.
     try {
-      TaskContext.setTaskContext(new TaskContextImpl(0, 0, 0, 0, 0, taskMemoryManager, null, null))
+      val context = new TaskContextImpl(0, 0, 0, 0, 0, taskMemoryManager, new Properties(), null)
+      TaskContext.setTaskContext(context)
       new UnsafeKVExternalSorter(
         schema,
         schema,

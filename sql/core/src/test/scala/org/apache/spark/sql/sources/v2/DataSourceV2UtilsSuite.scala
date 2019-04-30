@@ -33,8 +33,8 @@ class DataSourceV2UtilsSuite extends SparkFunSuite {
     conf.setConfString(s"spark.sql.$keyPrefix.config.name", "false")
     conf.setConfString("spark.datasource.another.config.name", "123")
     conf.setConfString(s"spark.datasource.$keyPrefix.", "123")
-    val cs = classOf[DataSourceV2WithSessionConfig].newInstance()
-    val confs = DataSourceV2Utils.extractSessionConfigs(cs.asInstanceOf[DataSourceV2], conf)
+    val source = new DataSourceV2WithSessionConfig
+    val confs = DataSourceV2Utils.extractSessionConfigs(source, conf)
     assert(confs.size == 2)
     assert(confs.keySet.filter(_.startsWith("spark.datasource")).size == 0)
     assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 from collections import namedtuple
 
@@ -176,8 +177,7 @@ class Catalog(object):
         if path is not None:
             options["path"] = path
         if source is None:
-            source = self._sparkSession.conf.get(
-                "spark.sql.sources.default", "org.apache.spark.sql.parquet")
+            source = self._sparkSession._wrapped._conf.defaultDataSourceName()
         if schema is None:
             df = self._jcatalog.createTable(tableName, source, options)
         else:
@@ -306,7 +306,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

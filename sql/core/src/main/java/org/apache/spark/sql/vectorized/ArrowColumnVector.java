@@ -22,7 +22,7 @@ import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * A column vector backed by Apache Arrow. Currently calendar interval type and map type are not
  * supported.
  */
-@InterfaceStability.Evolving
+@Evolving
 public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
@@ -161,13 +161,13 @@ public final class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof ListVector) {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
-    } else if (vector instanceof NullableMapVector) {
-      NullableMapVector mapVector = (NullableMapVector) vector;
-      accessor = new StructAccessor(mapVector);
+    } else if (vector instanceof StructVector) {
+      StructVector structVector = (StructVector) vector;
+      accessor = new StructAccessor(structVector);
 
-      childColumns = new ArrowColumnVector[mapVector.size()];
+      childColumns = new ArrowColumnVector[structVector.size()];
       for (int i = 0; i < childColumns.length; ++i) {
-        childColumns[i] = new ArrowColumnVector(mapVector.getVectorById(i));
+        childColumns[i] = new ArrowColumnVector(structVector.getVectorById(i));
       }
     } else {
       throw new UnsupportedOperationException();
@@ -453,9 +453,9 @@ public final class ArrowColumnVector extends ColumnVector {
     @Override
     final ColumnarArray getArray(int rowId) {
       ArrowBuf offsets = accessor.getOffsetBuffer();
-      int index = rowId * accessor.OFFSET_WIDTH;
+      int index = rowId * ListVector.OFFSET_WIDTH;
       int start = offsets.getInt(index);
-      int end = offsets.getInt(index + accessor.OFFSET_WIDTH);
+      int end = offsets.getInt(index + ListVector.OFFSET_WIDTH);
       return new ColumnarArray(arrayData, start, end - start);
     }
   }
@@ -470,7 +470,7 @@ public final class ArrowColumnVector extends ColumnVector {
    */
   private static class StructAccessor extends ArrowVectorAccessor {
 
-    StructAccessor(NullableMapVector vector) {
+    StructAccessor(StructVector vector) {
       super(vector);
     }
   }

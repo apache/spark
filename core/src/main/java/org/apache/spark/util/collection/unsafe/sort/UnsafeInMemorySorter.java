@@ -125,7 +125,7 @@ public final class UnsafeInMemorySorter {
     int initialSize,
     boolean canUseRadixSort) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      consumer.allocateArray(initialSize * 2), canUseRadixSort);
+      consumer.allocateArray(initialSize * 2L), canUseRadixSort);
   }
 
   public UnsafeInMemorySorter(
@@ -214,7 +214,9 @@ public final class UnsafeInMemorySorter {
 
   public void expandPointerArray(LongArray newArray) {
     if (newArray.size() < array.size()) {
+      // checkstyle.off: RegexpSinglelineJava
       throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
+      // checkstyle.on: RegexpSinglelineJava
     }
     Platform.copyMemory(
       array.getBaseObject(),

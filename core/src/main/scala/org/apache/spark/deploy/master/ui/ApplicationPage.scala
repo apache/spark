@@ -33,14 +33,13 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val appId = UIUtils.stripXSS(request.getParameter("appId"))
+    val appId = request.getParameter("appId")
     val state = master.askSync[MasterStateResponse](RequestMasterState)
     val app = state.activeApps.find(_.id == appId)
       .getOrElse(state.completedApps.find(_.id == appId).orNull)
     if (app == null) {
       val msg = <div class="row-fluid">No running application with ID {appId}</div>
-      return UIUtils.basicSparkPage(msg, "Not Found")
+      return UIUtils.basicSparkPage(request, msg, "Not Found")
     }
 
     val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Logs")
@@ -127,7 +126,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
           }
         </div>
       </div>;
-    UIUtils.basicSparkPage(content, "Application: " + app.desc.name)
+    UIUtils.basicSparkPage(request, content, "Application: " + app.desc.name)
   }
 
   private def executorRow(executor: ExecutorDesc): Seq[Node] = {

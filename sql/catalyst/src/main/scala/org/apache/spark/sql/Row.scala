@@ -20,14 +20,14 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object Row {
   /**
    * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
@@ -57,6 +57,7 @@ object Row {
   /**
    * Merge multiple rows into a single row, one after another.
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.0.0")
   def merge(rows: Row*): Row = {
     // TODO: Improve the performance of this if used in performance critical part.
     new GenericRow(rows.flatMap(_.toSeq).toArray)
@@ -124,7 +125,7 @@ object Row {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 trait Row extends Serializable {
   /** Number of elements in the Row. */
   def size: Int = length
@@ -269,11 +270,25 @@ trait Row extends Serializable {
   def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
+   * Returns the value at position i of date type as java.time.LocalDate.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getLocalDate(i: Int): java.time.LocalDate = getAs[java.time.LocalDate](i)
+
+  /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
+
+  /**
+   * Returns the value at position i of date type as java.time.Instant.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getInstant(i: Int): java.time.Instant = getAs[java.time.Instant](i)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.

@@ -25,12 +25,14 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
-import org.apache.spark.sql.functions.{avg, broadcast, col, max}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
+
+  import testImplicits._
 
   test("range/filter should be combined") {
     val df = spark.range(10).filter("id = 1").selectExpr("id + 1")
@@ -49,12 +51,12 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
-    val df = spark.range(3).groupBy("id").count().orderBy("id")
+    val df = spark.range(3).groupBy(col("id") * 2).count().orderBy(col("id") * 2)
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(df.collect() === Array(Row(0, 1), Row(1, 1), Row(2, 1)))
+    assert(df.collect() === Array(Row(0, 1), Row(2, 1), Row(4, 1)))
   }
 
   test("BroadcastHashJoin should be included in WholeStageCodegen") {
@@ -249,12 +251,12 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Skip splitting consume function when parameter number exceeds JVM limit") {
-    import testImplicits._
-
-    Seq((255, false), (254, true)).foreach { case (columnNum, hasSplit) =>
+    // since every field is nullable we have 2 params for each input column (one for the value
+    // and one for the isNull variable)
+    Seq((128, false), (127, true)).foreach { case (columnNum, hasSplit) =>
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        spark.range(10).select(Seq.tabulate(columnNum) {i => ('id + i).as(s"c$i")} : _*)
+        spark.range(10).select(Seq.tabulate(columnNum) {i => lit(i).as(s"c$i")} : _*)
           .write.mode(SaveMode.Overwrite).parquet(path)
 
         withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "255",
@@ -263,10 +265,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
           val df = spark.read.parquet(path).selectExpr(projection: _*)
 
           val plan = df.queryExecution.executedPlan
-          val wholeStageCodeGenExec = plan.find(p => p match {
-            case wp: WholeStageCodegenExec => true
+          val wholeStageCodeGenExec = plan.find {
+            case _: WholeStageCodegenExec => true
             case _ => false
-          })
+          }
           assert(wholeStageCodeGenExec.isDefined)
           val code = wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
           assert(code.body.contains("project_doConsume") == hasSplit)
@@ -305,6 +307,64 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       assert(after1 == after2, "Should hit codegen cache. No new compilation to bytecode expected")
 
       // a different query can result in codegen cache miss, that's by design
+    }
+  }
+
+  ignore("SPARK-23598: Codegen working for lots of aggregation operations without runtime errors") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      var df = Seq((8, "bat"), (15, "mouse"), (5, "horse")).toDF("age", "name")
+      for (i <- 0 until 70) {
+        df = df.groupBy("name").agg(avg("age").alias("age"))
+      }
+      assert(df.limit(1).collect() === Array(Row("bat", 8.0)))
+    }
+  }
+
+  test("SPARK-25767: Lazy evaluated stream of expressions handled correctly") {
+    val a = Seq(1).toDF("key")
+    val b = Seq((1, "a")).toDF("key", "value")
+    val c = Seq(1).toDF("key")
+
+    val ab = a.join(b, Stream("key"), "left")
+    val abc = ab.join(c, Seq("key"), "left")
+
+    checkAnswer(abc, Row(1, "a"))
+  }
+
+  test("SPARK-26680: Stream in groupBy does not cause StackOverflowError") {
+    val groupByCols = Stream(col("key"))
+    val df = Seq((1, 2), (2, 3), (1, 3)).toDF("key", "value")
+      .groupBy(groupByCols: _*)
+      .max("value")
+
+    checkAnswer(df, Seq(Row(1, 3), Row(2, 3)))
+  }
+
+  test("SPARK-26572: evaluate non-deterministic expressions for aggregate results") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val baseTable = Seq(1, 1).toDF("idx")
+
+      // BroadcastHashJoinExec with a HashAggregateExec child containing no aggregate expressions
+      val distinctWithId = baseTable.distinct().withColumn("id", monotonically_increasing_id())
+        .join(baseTable, "idx")
+      assert(distinctWithId.queryExecution.executedPlan.collectFirst {
+        case WholeStageCodegenExec(
+          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _))) => true
+      }.isDefined)
+      checkAnswer(distinctWithId, Seq(Row(1, 0), Row(1, 0)))
+
+      // BroadcastHashJoinExec with a HashAggregateExec child containing a Final mode aggregate
+      // expression
+      val groupByWithId =
+        baseTable.groupBy("idx").sum().withColumn("id", monotonically_increasing_id())
+        .join(baseTable, "idx")
+      assert(groupByWithId.queryExecution.executedPlan.collectFirst {
+        case WholeStageCodegenExec(
+          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _))) => true
+      }.isDefined)
+      checkAnswer(groupByWithId, Seq(Row(1, 2, 0), Row(1, 2, 0)))
     }
   }
 }

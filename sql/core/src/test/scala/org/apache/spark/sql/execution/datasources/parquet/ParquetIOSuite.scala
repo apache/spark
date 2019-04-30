@@ -27,6 +27,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.parquet.HadoopReadOptions
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.example.data.{Group, GroupWriter}
 import org.apache.parquet.example.data.simple.SimpleGroup
@@ -34,15 +35,17 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -542,7 +545,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
 
-      withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+      withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
         withTempPath { dir =>
           val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
           spark.range(1 << 16).selectExpr("(id % 4) AS i")
@@ -778,6 +781,41 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
       val option = new ParquetOptions(Map("Compression" -> "uncompressed"), spark.sessionState.conf)
       assert(option.compressionCodecClassName == "UNCOMPRESSED")
+    }
+  }
+
+  test("SPARK-23173 Writing a file with data converted from JSON with and incorrect user schema") {
+    withTempPath { file =>
+      val jsonData =
+        """{
+        |  "a": 1,
+        |  "c": "foo"
+        |}
+        |""".stripMargin
+      val jsonSchema = new StructType()
+        .add("a", LongType, nullable = false)
+        .add("b", StringType, nullable = false)
+        .add("c", StringType, nullable = false)
+      spark.range(1).select(from_json(lit(jsonData), jsonSchema) as "input")
+        .write.parquet(file.getAbsolutePath)
+      checkAnswer(spark.read.parquet(file.getAbsolutePath), Seq(Row(Row(1, null, "foo"))))
+    }
+  }
+
+  test("Write Spark version into Parquet metadata") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(1).repartition(1).write.parquet(path)
+      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+
+      val conf = new Configuration()
+      val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
+      val parquetReadOptions = HadoopReadOptions.builder(conf).build()
+      val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
+      val metaData = m.getFileMetaData.getKeyValueMetaData
+      m.close()
+
+      assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
     }
   }
 }

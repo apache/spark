@@ -49,7 +49,7 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
 
   def detach() {
     getSparkUI(ssc).detachTab(this)
-    getSparkUI(ssc).removeStaticHandler("/static/streaming")
+    getSparkUI(ssc).detachHandler("/static/streaming")
   }
 }
 

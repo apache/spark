@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.expressions.javalang;
 
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.TypedColumn;
 import org.apache.spark.sql.execution.aggregate.TypedAverage;
@@ -33,9 +31,9 @@ import org.apache.spark.sql.execution.aggregate.TypedSumLong;
  * Scala users should use {@link org.apache.spark.sql.expressions.scalalang.typed}.
  *
  * @since 2.0.0
+ * @deprecated As of release 3.0.0, please use the untyped builtin aggregate functions.
  */
-@Experimental
-@InterfaceStability.Evolving
+@Deprecated
 public class typed {
   // Note: make sure to keep in sync with typed.scala
 
