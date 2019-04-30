@@ -117,7 +117,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         .collect().toSeq)
   }
 
-  test("join - self join without manual alias") {
+  test("SPARK-27547: join - self join without manual alias") {
     val df1 = spark.range(3)
     val df2 = df1.filter($"id" > 0)
 

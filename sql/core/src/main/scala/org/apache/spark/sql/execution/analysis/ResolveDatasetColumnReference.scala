@@ -91,16 +91,15 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
         case SubqueryAlias(DatasetIdAlias(id), child) if dsIdSet.contains(id) =>
           colRefs.filterNot(ambiguousColRefs.contains).foreach { ref =>
             if (id == ref.datasetId) {
+              if (ref.colPos < 0 || ref.colPos >= child.output.length) {
+                logWarning("[BUG] Hit an invalid Dataset column reference: " + ref)
+              }
               if (colRefToActualCol.contains(ref)) {
                 ambiguousColRefs += ref
                 colRefToActualCol.remove(ref)
               } else {
-                if (ref.colPos < 0 || ref.colPos >= child.output.length) {
-                  logWarning("[BUG] Hit an invalid Dataset column reference: " + ref)
-                } else {
-                  val actualCol = child.output(ref.colPos).asInstanceOf[AttributeReference]
-                  colRefToActualCol(ref) = actualCol
-                }
+                val actualCol = child.output(ref.colPos).asInstanceOf[AttributeReference]
+                colRefToActualCol(ref) = actualCol
               }
             }
           }

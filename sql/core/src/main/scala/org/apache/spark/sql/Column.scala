@@ -144,11 +144,11 @@ class Column(val expr: Expression) extends Logging {
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
+    case that: Column => that.expr.semanticEquals(this.expr)
     case _ => false
   }
 
-  override def hashCode: Int = this.expr.hashCode()
+  override def hashCode: Int = this.expr.semanticHash()
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
