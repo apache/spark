@@ -25,7 +25,6 @@ import org.apache.spark._
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.KVIterator
 
@@ -79,9 +78,7 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
       groupingSchema,
       updateInputRow,
       mergeAggBuffer,
-      createNewAggregationBuffer,
-      createNewAggregationBuffer,
-      sortBasedMergeAggFunctions = new Array[AggregateFunction](5))
+      createNewAggregationBuffer)
 
     (5000 to 100000).foreach { _ =>
       randomKV(inputRow, group)
