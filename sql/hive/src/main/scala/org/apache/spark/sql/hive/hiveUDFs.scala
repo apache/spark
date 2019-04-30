@@ -303,6 +303,13 @@ private[hive] case class HiveGenericUDTF(
  *  - `wrap()`/`wrapperFor()`: from 3 to 1
  *  - `unwrap()`/`unwrapperFor()`: from 1 to 3
  *  - `GenericUDAFEvaluator.terminatePartial()`: from 2 to 3
+ *
+ *  Note that, Hive UDAF is initialized with aggregate mode, and some specific Hive UDAFs can't
+ *  mix UPDATE and MERGE actions during its life cycle. However, Spark may do UPDATE on a UDAF and
+ *  then do MERGE, in case of hash aggregate falling back to sort aggregate. To work around this
+ *  issue, we track the ability to do MERGE in the Hive UDAF aggregate buffer. If Spark does
+ *  UPDATE then MERGE, we can detect it and re-create the aggregate buffer with a different
+ *  aggregate mode.
  */
 private[hive] case class HiveUDAFFunction(
     name: String,
@@ -311,7 +318,7 @@ private[hive] case class HiveUDAFFunction(
     isUDAFBridgeRequired: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[GenericUDAFEvaluator.AggregationBuffer]
+  extends TypedImperativeAggregate[HiveUDAFBuffer]
   with HiveInspectors
   with UserDefinedExpression {
 
@@ -397,30 +404,45 @@ private[hive] case class HiveUDAFFunction(
   // aggregate buffer. However, the Spark UDAF framework does not expose this information when
   // creating the buffer. Here we return null, and create the buffer in `update` and `merge`
   // on demand, so that we can know what input we are dealing with.
-  override def createAggregationBuffer(): AggregationBuffer = null
+  override def createAggregationBuffer(): HiveUDAFBuffer = null
 
   @transient
   private lazy val inputProjection = UnsafeProjection.create(children)
 
-  override def update(buffer: AggregationBuffer, input: InternalRow): AggregationBuffer = {
+  override def update(buffer: HiveUDAFBuffer, input: InternalRow): HiveUDAFBuffer = {
     // The input is original data, we create buffer with the partial1 evaluator.
     val nonNullBuffer = if (buffer == null) {
-      partial1HiveEvaluator.evaluator.getNewAggregationBuffer
+      HiveUDAFBuffer(partial1HiveEvaluator.evaluator.getNewAggregationBuffer, false)
     } else {
       buffer
     }
 
+    assert(!nonNullBuffer.canDoMerge, "can not call `merge` then `update` on a Hive UDAF.")
+
     partial1HiveEvaluator.evaluator.iterate(
-      nonNullBuffer, wrap(inputProjection(input), inputWrappers, cached, inputDataTypes))
+      nonNullBuffer.buf, wrap(inputProjection(input), inputWrappers, cached, inputDataTypes))
     nonNullBuffer
   }
 
-  override def merge(buffer: AggregationBuffer, input: AggregationBuffer): AggregationBuffer = {
+  override def merge(buffer: HiveUDAFBuffer, input: HiveUDAFBuffer): HiveUDAFBuffer = {
     // The input is aggregate buffer, we create buffer with the final evaluator.
     val nonNullBuffer = if (buffer == null) {
-      finalHiveEvaluator.evaluator.getNewAggregationBuffer
+      HiveUDAFBuffer(finalHiveEvaluator.evaluator.getNewAggregationBuffer, true)
     } else {
       buffer
+    }
+
+    // It's possible that we've called `update` of this Hive UDAF, and some specific Hive UDAF
+    // implementation can't mix the `update` and `merge` calls during its life cycle. To work
+    // around it, here we create a fresh buffer with final evaluator, and merge the existing buffer
+    // to it, and replace the existing buffer with it.
+    val mergeableBuf = if (!nonNullBuffer.canDoMerge) {
+      val newBuf = finalHiveEvaluator.evaluator.getNewAggregationBuffer
+      finalHiveEvaluator.evaluator.merge(
+        newBuf, partial1HiveEvaluator.evaluator.terminatePartial(nonNullBuffer.buf))
+      HiveUDAFBuffer(newBuf, true)
+    } else {
+      nonNullBuffer
     }
 
     // The 2nd argument of the Hive `GenericUDAFEvaluator.merge()` method is an input aggregation
@@ -428,24 +450,24 @@ private[hive] case class HiveUDAFFunction(
     // this `AggregationBuffer`s into this format before shuffling partial aggregation results, and
     // calls `GenericUDAFEvaluator.terminatePartial()` to do the conversion.
     finalHiveEvaluator.evaluator.merge(
-      nonNullBuffer, partial1HiveEvaluator.evaluator.terminatePartial(input))
-    nonNullBuffer
+      mergeableBuf.buf, partial1HiveEvaluator.evaluator.terminatePartial(input.buf))
+    mergeableBuf
   }
 
-  override def eval(buffer: AggregationBuffer): Any = {
-    resultUnwrapper(finalHiveEvaluator.evaluator.terminate(buffer))
+  override def eval(buffer: HiveUDAFBuffer): Any = {
+    resultUnwrapper(finalHiveEvaluator.evaluator.terminate(buffer.buf))
   }
 
-  override def serialize(buffer: AggregationBuffer): Array[Byte] = {
+  override def serialize(buffer: HiveUDAFBuffer): Array[Byte] = {
     // Serializes an `AggregationBuffer` that holds partial aggregation results so that we can
     // shuffle it for global aggregation later.
-    aggBufferSerDe.serialize(buffer)
+    aggBufferSerDe.serialize(buffer.buf)
   }
 
-  override def deserialize(bytes: Array[Byte]): AggregationBuffer = {
+  override def deserialize(bytes: Array[Byte]): HiveUDAFBuffer = {
     // Deserializes an `AggregationBuffer` from the shuffled partial aggregation phase to prepare
     // for global aggregation by merging multiple partial aggregation results within a single group.
-    aggBufferSerDe.deserialize(bytes)
+    HiveUDAFBuffer(aggBufferSerDe.deserialize(bytes), false)
   }
 
   // Helper class used to de/serialize Hive UDAF `AggregationBuffer` objects
@@ -493,3 +515,5 @@ private[hive] case class HiveUDAFFunction(
     }
   }
 }
+
+case class HiveUDAFBuffer(buf: AggregationBuffer, canDoMerge: Boolean)
