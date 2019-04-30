@@ -89,7 +89,7 @@ class UnivocityParserSuite extends SparkFunSuite {
   }
 
   test("Throws exception for empty string with non null type") {
-      val options = new CSVOptions(Map.empty[String, String], "GMT")
+    val options = new CSVOptions(Map.empty[String, String], "GMT")
     val exception = intercept[RuntimeException]{
       parser.makeConverter("_1", IntegerType, nullable = false, options = options).apply("")
     }
@@ -196,4 +196,36 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(doubleVal2 == Double.PositiveInfinity)
   }
 
+  test("SPARK-27591 UserDefinedType can be read") {
+
+    @SQLUserDefinedType(udt = classOf[StringBasedUDT])
+    case class NameId(name: String, id: Int)
+
+    class StringBasedUDT extends UserDefinedType[NameId] {
+      override def sqlType: DataType = StringType
+
+      override def serialize(obj: NameId): Any = s"${obj.name}\t${obj.id}"
+
+      override def deserialize(datum: Any): NameId = datum match {
+        case s: String =>
+          val split = s.split("\t")
+          if (split.length != 2) throw new RuntimeException(s"Can't parse $s into NameId");
+          NameId(split(0), Integer.parseInt(split(1)))
+        case _ => throw new RuntimeException(s"Can't parse $datum into NameId");
+      }
+
+      override def userClass: Class[NameId] = classOf[NameId]
+    }
+
+    object StringBasedUDT extends StringBasedUDT
+
+    val options = new CSVOptions(Map.empty[String, String], "GMT")
+
+    val convertedValue = parser.makeConverter(
+      "_1", StringBasedUDT, nullable = false, options = options
+    ).apply("name\t42")
+
+    assert(convertedValue.isInstanceOf[UTF8String])
+    assert(convertedValue == UTF8String.fromString("name\t42"))
+  }
 }

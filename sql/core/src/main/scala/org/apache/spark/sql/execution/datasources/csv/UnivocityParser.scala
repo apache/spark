@@ -158,7 +158,7 @@ class UnivocityParser(
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
-    case udt: UserDefinedType[_] => (datum: String) =>
+    case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable, options)
 
     // We don't actually hit this exception though, we keep it for understandability
