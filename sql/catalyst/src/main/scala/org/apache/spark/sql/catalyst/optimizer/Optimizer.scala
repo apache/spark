@@ -149,8 +149,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PropagateEmptyRelation) ::
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
-    Batch("Rewrite Uncorrelated Subquery", Once,
-      RewriteUncorrelatedSubquery) ::
     Batch("Subquery", Once,
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
