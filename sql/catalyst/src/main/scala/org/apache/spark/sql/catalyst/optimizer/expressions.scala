@@ -66,7 +66,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object ConstraintPropagation extends Rule[LogicalPlan] with ConstraintHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f: Filter =>
-      val (newCondition, _) = simplifyWithConstraints(f.condition)
+      val newCondition = simplifyWithConstraints(f.condition)
       if (newCondition fastEquals f.condition) {
         f
       } else {

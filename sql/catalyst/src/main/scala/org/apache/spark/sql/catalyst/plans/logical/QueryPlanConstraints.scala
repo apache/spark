@@ -123,6 +123,14 @@ trait ConstraintHelper {
     case _ => Seq.empty[Attribute]
   }
 
+  def simplifyWithConstraints(expression: Expression): Expression =
+    simplify(normalize(expression))._1
+
+  private def normalize(expression: Expression) = expression transform {
+    case GreaterThan(x, y) => LessThan(y, x)
+    case GreaterThanOrEqual(x, y) => LessThanOrEqual(y, x)
+  }
+
   /**
    * Traverse a condition as a tree and simplify expressions with constraints.
    * - On matching [[And]], recursively traverse both children, simplify child expressions with
@@ -136,53 +144,47 @@ trait ConstraintHelper {
    *         1. Expression: optionally changed condition after traversal
    *         2. Seq[Expression]: propagated constraints
    */
-  def simplifyWithConstraints(expression: Expression): (Expression, Seq[Expression]) =
-    expression match {
-      case e @ (_: LessThan | _: LessThanOrEqual | _: EqualTo | _: EqualNullSafe | _: GreaterThan |
-          _: GreaterThanOrEqual )
-        if e.deterministic => (e, Seq(normalize(e)))
-      case a @ And(left, right) =>
-        val (newLeft, leftConstraints) = simplifyWithConstraints(left)
-        val simplifiedRight = simplify(right, leftConstraints)
-        val (simplifiedNewRight, rightConstraints) = simplifyWithConstraints(simplifiedRight)
-        val simplifiedNewLeft = simplify(newLeft, rightConstraints)
-        val newAnd = if ((simplifiedNewLeft fastEquals left) &&
-          (simplifiedNewRight fastEquals right)) {
-          a
-        } else {
-          And(simplifiedNewLeft, simplifiedNewRight)
-        }
-        (newAnd, leftConstraints ++ rightConstraints)
-      case o @ Or(left, right) =>
-        // Ignore the EqualityPredicates from children since they are only propagated through And.
-        val (newLeft, _) = simplifyWithConstraints(left)
-        val (newRight, _) = simplifyWithConstraints(right)
-        val newOr = if ((newLeft fastEquals left) && (newRight fastEquals right)) {
-          o
-        } else {
-          Or(newLeft, newRight)
-        }
+  private def simplify(expression: Expression): (Expression, Seq[Expression]) = expression match {
+    case e @ (_: LessThan | _: LessThanOrEqual | _: EqualTo | _: EqualNullSafe | _: GreaterThan |
+        _: GreaterThanOrEqual )
+      if e.deterministic => (e, Seq(e))
+    case a @ And(left, right) =>
+      val (newLeft, leftConstraints) = simplify(left)
+      val simplifiedRight = simplify(right, leftConstraints)
+      val (simplifiedNewRight, rightConstraints) = simplify(simplifiedRight)
+      val simplifiedNewLeft = simplify(newLeft, rightConstraints)
+      val newAnd = if ((simplifiedNewLeft fastEquals left) &&
+        (simplifiedNewRight fastEquals right)) {
+        a
+      } else {
+        And(simplifiedNewLeft, simplifiedNewRight)
+      }
+      (newAnd, leftConstraints ++ rightConstraints)
+    case o @ Or(left, right) =>
+      // Ignore the EqualityPredicates from children since they are only propagated through And.
+      val (newLeft, _) = simplify(left)
+      val (newRight, _) = simplify(right)
+      val newOr = if ((newLeft fastEquals left) && (newRight fastEquals right)) {
+        o
+      } else {
+        Or(newLeft, newRight)
+      }
 
-        (newOr, Seq.empty)
-      case n @ Not(child) =>
-        // Ignore the EqualityPredicates from children since they are only propagated through And.
-        val (newChild, _) = simplifyWithConstraints(child)
-        val newNot = if (newChild fastEquals child) {
-          n
-        } else {
-          Not(newChild)
-        }
-        (newNot, Seq.empty)
-      case _ => (expression, Seq.empty)
-    }
-
-  private def normalize(expression: Expression) = expression transform {
-    case GreaterThan(x, y) => LessThan(y, x)
-    case GreaterThanOrEqual(x, y) => LessThanOrEqual(y, x)
+      (newOr, Seq.empty)
+    case n @ Not(child) =>
+      // Ignore the EqualityPredicates from children since they are only propagated through And.
+      val (newChild, _) = simplify(child)
+      val newNot = if (newChild fastEquals child) {
+        n
+      } else {
+        Not(newChild)
+      }
+      (newNot, Seq.empty)
+    case _ => (expression, Seq.empty)
   }
 
   private def simplify(expression: Expression, constraints: Seq[Expression]): Expression =
-    constraints.foldLeft(normalize(expression))((e, constraint) => simplify(e, constraint))
+    constraints.foldLeft(expression)((e, constraint) => simplify(e, constraint))
 
   private def planEqual(x: Expression, y: Expression) =
     !x.foldable && !y.foldable && x.canonicalized == y.canonicalized
