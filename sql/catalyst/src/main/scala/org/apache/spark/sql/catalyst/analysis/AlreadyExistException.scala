@@ -46,7 +46,7 @@ class TableAlreadyExistsException(message: String) extends AnalysisException(mes
 }
 
 class TempTableAlreadyExistsException(table: String)
-    extends TableAlreadyExistsException(s"Temporary view '$table' already exists")
+  extends TableAlreadyExistsException(s"Temporary view '$table' already exists")
 
 class PartitionAlreadyExistsException(db: String, table: String, spec: TablePartitionSpec)
   extends AnalysisException(
