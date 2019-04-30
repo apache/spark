@@ -46,9 +46,12 @@ private[spark] object ResourceDiscoverer extends Logging {
     } else {
       SPARK_EXECUTOR_RESOURCE_PREFIX
     }
-    // get unique resource types
-    val resourceTypes = sparkconf.getAllWithPrefix(prefix).map(x => x._1.split('.')(0)).toSet
-    resourceTypes.map{ rtype => {
+    // get unique resource types by grabbing first part config with multiple periods,
+    // ie resourceType.count, grab resourceType part
+    val resourceTypes = sparkconf.getAllWithPrefix(prefix).map { case (k, _) =>
+      k.split('.').head
+    }.toSet
+    resourceTypes.map { rtype => {
       val rInfo = getResourceAddrsForType(sparkconf, prefix, rtype)
       (rtype -> rInfo)
     }}.toMap
@@ -69,7 +72,7 @@ private[spark] object ResourceDiscoverer extends Logging {
           val parsedJson = parse(output)
           parsedJson.extract[ResourceInformation]
         } catch {
-          case e@(_: SparkException | _: MappingException | _: JsonParseException) =>
+          case e @ (_: SparkException | _: MappingException | _: JsonParseException) =>
             throw new SparkException(s"Error running the resource discovery script: $scriptFile" +
               s" for $resourceType", e)
         }

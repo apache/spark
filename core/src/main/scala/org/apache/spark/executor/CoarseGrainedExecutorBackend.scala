@@ -86,8 +86,8 @@ private[spark] class CoarseGrainedExecutorBackend(
   def parseResources(resourcesFile: Option[String]): Map[String, ResourceInformation] = {
     // only parse the resources if a task requires them
     val taskConfPrefix = SPARK_TASK_RESOURCE_PREFIX
-    val resourceInfo = if (env.conf.getAllWithPrefix(taskConfPrefix).size > 0) {
-      val resources = resourcesFile.map(resourceFileStr => {
+    val resourceInfo = if (env.conf.getAllWithPrefix(taskConfPrefix).nonEmpty) {
+      val resources = resourcesFile.map { resourceFileStr => {
         val source = new BufferedInputStream(new FileInputStream(resourceFileStr))
         val resourceMap = try {
           val parsedJson = parse(source).asInstanceOf[JArray].arr
@@ -100,9 +100,9 @@ private[spark] class CoarseGrainedExecutorBackend(
           source.close()
         }
         resourceMap
-      }).getOrElse(ResourceDiscoverer.findResources(env.conf, false))
+      }}.getOrElse(ResourceDiscoverer.findResources(env.conf, false))
 
-      if (resources.size == 0) {
+      if (resources.isEmpty) {
         throw new SparkException(s"User specified resources per task via: $taskConfPrefix," +
           s" but can't find any resources available on the executor.")
       }
