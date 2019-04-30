@@ -49,7 +49,7 @@ public class ExternalShuffleBlockHandlerSuite {
   OneForOneStreamManager streamManager;
   ExternalShuffleBlockResolver blockResolver;
   RpcHandler handler;
-  ManagedBuffer blockMarkers[] = {
+  ManagedBuffer[] blockMarkers = {
     new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
     new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
   };
