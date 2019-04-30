@@ -530,7 +530,6 @@ class SparkSession(object):
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        from distutils.version import LooseVersion
         from pyspark.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import from_arrow_type, to_arrow_type, TimestampType
         from pyspark.sql.utils import require_minimum_pandas_version, \
@@ -544,11 +543,7 @@ class SparkSession(object):
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
-            if LooseVersion(pa.__version__) < LooseVersion("0.12.0"):
-                temp_batch = pa.RecordBatch.from_pandas(pdf[0:100], preserve_index=False)
-                arrow_schema = temp_batch.schema
-            else:
-                arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
+            arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
             for name, field in zip(schema, arrow_schema):
                 struct.add(name, from_arrow_type(field.type), nullable=field.nullable)

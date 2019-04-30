@@ -50,73 +50,65 @@ object SchemaPruning extends Rule[LogicalPlan] {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
         if canPruneRelation(hadoopFsRelation) =>
-        val (normalizedProjects, normalizedFilters) =
-          normalizeAttributeRefNames(l.output, projects, filters)
-        val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
 
-        // If requestedRootFields includes a nested field, continue. Otherwise,
-        // return op
-        if (requestedRootFields.exists { root: RootField => !root.derivedFromAtt }) {
-          val dataSchema = hadoopFsRelation.dataSchema
-          val prunedDataSchema = pruneDataSchema(dataSchema, requestedRootFields)
-
-          // If the data schema is different from the pruned data schema, continue. Otherwise,
-          // return op. We effect this comparison by counting the number of "leaf" fields in
-          // each schemata, assuming the fields in prunedDataSchema are a subset of the fields
-          // in dataSchema.
-          if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
+        prunePhysicalColumns(l.output, projects, filters, hadoopFsRelation.dataSchema,
+          prunedDataSchema => {
             val prunedHadoopRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
-
-            val prunedRelation = buildPrunedRelation(l, prunedHadoopRelation)
-            val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
-
-            buildNewProjection(normalizedProjects, normalizedFilters, prunedRelation,
-              projectionOverSchema)
-          } else {
-            op
-          }
-        } else {
-          op
-        }
+            buildPrunedRelation(l, prunedHadoopRelation)
+          }).getOrElse(op)
 
       case op @ PhysicalOperation(projects, filters,
           d @ DataSourceV2Relation(table: FileTable, output, _)) if canPruneTable(table) =>
-        val (normalizedProjects, normalizedFilters) =
-          normalizeAttributeRefNames(output, projects, filters)
-        val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
 
-        // If requestedRootFields includes a nested field, continue. Otherwise,
-        // return op
-        if (requestedRootFields.exists { root: RootField => !root.derivedFromAtt }) {
-          val dataSchema = table.dataSchema
-          val prunedDataSchema = pruneDataSchema(dataSchema, requestedRootFields)
-
-          // If the data schema is different from the pruned data schema, continue. Otherwise,
-          // return op. We effect this comparison by counting the number of "leaf" fields in
-          // each schemata, assuming the fields in prunedDataSchema are a subset of the fields
-          // in dataSchema.
-          if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
+        prunePhysicalColumns(output, projects, filters, table.dataSchema,
+          prunedDataSchema => {
             val prunedFileTable = table match {
               case o: OrcTable => o.copy(userSpecifiedSchema = Some(prunedDataSchema))
               case _ =>
                 val message = s"${table.formatName} data source doesn't support schema pruning."
                 throw new AnalysisException(message)
             }
-
-
-            val prunedRelationV2 = buildPrunedRelationV2(d, prunedFileTable)
-            val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
-
-            buildNewProjection(normalizedProjects, normalizedFilters, prunedRelationV2,
-              projectionOverSchema)
-          } else {
-            op
-          }
-        } else {
-          op
-        }
+            buildPrunedRelationV2(d, prunedFileTable)
+          }).getOrElse(op)
     }
+
+  /**
+   * This method returns optional logical plan. `None` is returned if no nested field is required or
+   * all nested fields are required.
+   */
+  private def prunePhysicalColumns(
+      output: Seq[AttributeReference],
+      projects: Seq[NamedExpression],
+      filters: Seq[Expression],
+      dataSchema: StructType,
+      leafNodeBuilder: StructType => LeafNode): Option[LogicalPlan] = {
+    val (normalizedProjects, normalizedFilters) =
+      normalizeAttributeRefNames(output, projects, filters)
+    val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
+
+    // If requestedRootFields includes a nested field, continue. Otherwise,
+    // return op
+    if (requestedRootFields.exists { root: RootField => !root.derivedFromAtt }) {
+      val prunedDataSchema = pruneDataSchema(dataSchema, requestedRootFields)
+
+      // If the data schema is different from the pruned data schema, continue. Otherwise,
+      // return op. We effect this comparison by counting the number of "leaf" fields in
+      // each schemata, assuming the fields in prunedDataSchema are a subset of the fields
+      // in dataSchema.
+      if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
+        val prunedRelation = leafNodeBuilder(prunedDataSchema)
+        val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
+
+        Some(buildNewProjection(normalizedProjects, normalizedFilters, prunedRelation,
+          projectionOverSchema))
+      } else {
+        None
+      }
+    } else {
+      None
+    }
+  }
 
   /**
    * Checks to see if the given relation can be pruned. Currently we support Parquet and ORC v1.

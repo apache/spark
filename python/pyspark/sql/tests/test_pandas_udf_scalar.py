@@ -28,7 +28,6 @@ if sys.version >= '3':
 
 from datetime import date, datetime
 from decimal import Decimal
-from distutils.version import LooseVersion
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
@@ -240,19 +239,12 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_null_binary(self):
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            with QuietTest(self.sc):
-                with self.assertRaisesRegexp(
-                        NotImplementedError,
-                        'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
-                    pandas_udf(lambda x: x, BinaryType())
-        else:
-            data = [(bytearray(b"a"),), (None,), (bytearray(b"bb"),), (bytearray(b"ccc"),)]
-            schema = StructType().add("binary", BinaryType())
-            df = self.spark.createDataFrame(data, schema)
-            str_f = pandas_udf(lambda x: x, BinaryType())
-            res = df.select(str_f(col('binary')))
-            self.assertEquals(df.collect(), res.collect())
+        data = [(bytearray(b"a"),), (None,), (bytearray(b"bb"),), (bytearray(b"ccc"),)]
+        schema = StructType().add("binary", BinaryType())
+        df = self.spark.createDataFrame(data, schema)
+        str_f = pandas_udf(lambda x: x, BinaryType())
+        res = df.select(str_f(col('binary')))
+        self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_array_type(self):
         data = [([1, 2],), ([3, 4],)]
@@ -293,15 +285,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         struct_f = pandas_udf(lambda x: x, return_type)
         actual = df.select(struct_f(struct(col('id'), col('id').cast('string').alias('str'))))
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            with QuietTest(self.sc):
-                from py4j.protocol import Py4JJavaError
-                with self.assertRaisesRegexp(
-                        Py4JJavaError,
-                        'Unsupported type in conversion from Arrow'):
-                    self.assertEqual(expected, actual.collect())
-        else:
-            self.assertEqual(expected, actual.collect())
+        self.assertEqual(expected, actual.collect())
 
     def test_vectorized_udf_struct_complex(self):
         df = self.spark.range(10)

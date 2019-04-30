@@ -34,25 +34,27 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
   override def next(): Boolean = {
     if (currentReader == null) {
       if (readers.hasNext) {
-        if (ignoreMissingFiles || ignoreCorruptFiles) {
-          try {
-            currentReader = getNextReader()
-          } catch {
-            case e: FileNotFoundException if ignoreMissingFiles =>
-              logWarning(s"Skipped missing file: $currentReader", e)
-              currentReader = null
-              return false
-            // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
-            case e: FileNotFoundException if !ignoreMissingFiles => throw e
-            case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-              logWarning(
-                s"Skipped the rest of the content in the corrupted file: $currentReader", e)
-              currentReader = null
-              InputFileBlockHolder.unset()
-              return false
-          }
-        } else {
+        try {
           currentReader = getNextReader()
+        } catch {
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning(s"Skipped missing file: $currentReader", e)
+            currentReader = null
+            return false
+          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+          case e: FileNotFoundException if !ignoreMissingFiles =>
+            throw new FileNotFoundException(
+              e.getMessage + "\n" +
+                "It is possible the underlying files have been updated. " +
+                "You can explicitly invalidate the cache in Spark by " +
+                "running 'REFRESH TABLE tableName' command in SQL or " +
+                "by recreating the Dataset/DataFrame involved.")
+          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+            logWarning(
+              s"Skipped the rest of the content in the corrupted file: $currentReader", e)
+            currentReader = null
+            InputFileBlockHolder.unset()
+            return false
         }
       } else {
         return false

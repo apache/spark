@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import java.util
-import java.util.Collections
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
-import org.apache.spark.sql.sources.v2.{SupportsStreamingWrite, TableCapability}
+import org.apache.spark.sql.sources.v2.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
@@ -43,13 +43,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySinkV2 extends SupportsStreamingWrite with MemorySinkBase with Logging {
+class MemorySink extends Table with SupportsWrite with MemorySinkBase with Logging {
 
-  override def name(): String = "MemorySinkV2"
+  override def name(): String = "MemorySink"
 
   override def schema(): StructType = StructType(Nil)
 
-  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(TableCapability.STREAMING_WRITE).asJava
+  }
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {
@@ -67,7 +69,7 @@ class MemorySinkV2 extends SupportsStreamingWrite with MemorySinkBase with Loggi
       }
 
       override def buildForStreaming(): StreamingWrite = {
-        new MemoryStreamingWrite(MemorySinkV2.this, inputSchema, needTruncate)
+        new MemoryStreamingWrite(MemorySink.this, inputSchema, needTruncate)
       }
     }
   }
@@ -128,14 +130,14 @@ class MemorySinkV2 extends SupportsStreamingWrite with MemorySinkBase with Loggi
     batches.clear()
   }
 
-  override def toString(): String = "MemorySinkV2"
+  override def toString(): String = "MemorySink"
 }
 
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row])
   extends WriterCommitMessage {}
 
 class MemoryStreamingWrite(
-    val sink: MemorySinkV2, schema: StructType, needTruncate: Boolean)
+    val sink: MemorySink, schema: StructType, needTruncate: Boolean)
   extends StreamingWrite {
 
   override def createStreamingWriterFactory: MemoryWriterFactory = {
@@ -193,9 +195,9 @@ class MemoryDataWriter(partition: Int, schema: StructType)
 
 
 /**
- * Used to query the data that has been written into a [[MemorySinkV2]].
+ * Used to query the data that has been written into a [[MemorySink]].
  */
-case class MemoryPlanV2(sink: MemorySinkV2, override val output: Seq[Attribute]) extends LeafNode {
+case class MemoryPlan(sink: MemorySink, override val output: Seq[Attribute]) extends LeafNode {
   private val sizePerRow = EstimationUtils.getSizePerRow(output)
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
