@@ -281,8 +281,20 @@ class ExecutorAllocationManagerSuite
 
     post(sc.listenerBus, SparkListenerStageCompleted(stage))
 
+    val attemptStage = createStageInfo(stage.stageId, 5, attemptId = 1)
+    post(sc.listenerBus, SparkListenerStageSubmitted(attemptStage))
+
+    val attemptTaskInfo1 = createTaskInfo(3, 0, "executor-1")
+    val attemptTaskInfo2 = createTaskInfo(4, 1, "executor-1")
+    post(sc.listenerBus, SparkListenerTaskStart(0, 0, taskInfo1))
+    post(sc.listenerBus, SparkListenerTaskStart(0, 0, taskInfo2))
+
     post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, Success, taskInfo1, null))
-    post(sc.listenerBus, SparkListenerTaskEnd(2, 0, null, Success, taskInfo2, null))
+    post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, Success, taskInfo2, null))
+
+    post(sc.listenerBus, SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo1, null))
+    post(sc.listenerBus, SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo2, null))
+
     assert(totalRunningTasks(manager) === 0)
   }
 
@@ -1229,9 +1241,10 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def createStageInfo(
       stageId: Int,
       numTasks: Int,
-      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
+      attemptId: Int = 0
     ): StageInfo = {
-    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details",
+    new StageInfo(stageId, attemptId, "name", numTasks, Seq.empty, Seq.empty, "no details",
       taskLocalityPreferences = taskLocalityPreferences)
   }
 

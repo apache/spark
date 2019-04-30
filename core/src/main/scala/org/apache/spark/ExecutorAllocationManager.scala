@@ -649,6 +649,7 @@ private[spark] class ExecutorAllocationManager(
     // Number of running tasks per stage including speculative tasks.
     // Should be 0 when no stages are active.
     private val stageIdToNumRunningTask = new mutable.HashMap[Int, Int]
+    private val activeStageIdToStageAttemptId = new mutable.HashMap[Int, Int]
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
     // Number of speculative tasks to be scheduled in each stage
@@ -665,10 +666,12 @@ private[spark] class ExecutorAllocationManager(
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
+      val attemptId = stageSubmitted.stageInfo.attemptNumber()
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {
         stageIdToNumTasks(stageId) = numTasks
         stageIdToNumRunningTask(stageId) = 0
+        activeStageIdToStageAttemptId(stageId) = attemptId
         allocationManager.onSchedulerBacklogged()
 
         // Compute the number of tasks requested by the stage on each host
@@ -696,6 +699,7 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.synchronized {
         stageIdToNumTasks -= stageId
         stageIdToNumRunningTask -= stageId
+        activeStageIdToStageAttemptId -= stageId
         stageIdToNumSpeculativeTasks -= stageId
         stageIdToTaskIndices -= stageId
         stageIdToSpeculativeTaskIndices -= stageId
@@ -756,8 +760,11 @@ private[spark] class ExecutorAllocationManager(
       val taskId = taskEnd.taskInfo.taskId
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
+      val stageAttemptId = taskEnd.stageAttemptId
       allocationManager.synchronized {
-        if (stageIdToNumRunningTask.contains(stageId)) {
+        if (stageIdToNumRunningTask.contains(stageId)
+          && activeStageIdToStageAttemptId.contains(stageId)
+          && activeStageIdToStageAttemptId(stageId) == stageAttemptId) {
           stageIdToNumRunningTask(stageId) -= 1
         }
         // If the executor is no longer running any scheduled tasks, mark it as idle
