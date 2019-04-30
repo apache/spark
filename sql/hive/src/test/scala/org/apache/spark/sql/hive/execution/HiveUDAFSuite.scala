@@ -28,10 +28,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import test.org.apache.spark.sql.MyDoubleAvg
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
@@ -93,21 +93,33 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     ))
   }
 
-  test("customized Hive UDAF with two aggregation buffers") {
-    val df = sql("SELECT key % 2, mock2(value) FROM t GROUP BY key % 2")
+  test("SPARK-24935: customized Hive UDAF with two aggregation buffers") {
+    withTempView("v") {
+      spark.range(100).createTempView("v")
+      val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
 
-    val aggs = df.queryExecution.executedPlan.collect {
-      case agg: ObjectHashAggregateExec => agg
+      val aggs = df.queryExecution.executedPlan.collect {
+        case agg: ObjectHashAggregateExec => agg
+      }
+
+      // There should be two aggregate operators, one for partial aggregation, and the other for
+      // global aggregation.
+      assert(aggs.length == 2)
+
+      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+        checkAnswer(df, Seq(
+          Row(0, Row(50, 0)),
+          Row(1, Row(50, 0))
+        ))
+      }
+
+      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
+        checkAnswer(df, Seq(
+          Row(0, Row(50, 0)),
+          Row(1, Row(50, 0))
+        ))
+      }
     }
-
-    // There should be two aggregate operators, one for partial aggregation, and the other for
-    // global aggregation.
-    assert(aggs.length == 2)
-
-    checkAnswer(df, Seq(
-      Row(0, Row(1, 1)),
-      Row(1, Row(1, 1))
-    ))
   }
 
   test("call JAVA UDAF") {
