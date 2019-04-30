@@ -48,15 +48,9 @@ private[netty] class NettyRpcEnv(
     host: String,
     securityManager: SecurityManager,
     numUsableCores: Int) extends RpcEnv(conf) with Logging {
-  // try to get specific threads configurations of driver and executor
-  val executorId = conf.get(EXECUTOR_ID).getOrElse("")
-  // neither driver nor executor if executor id is not set
-  val role = executorId match {
-    case "" => None
-    case SparkContext.DRIVER_IDENTIFIER => Some("driver")
-    // any other non-empty values since executor must has "spark.executor.id" set
-    case _ => Some("executor")
-  }
+  val role = conf.get(EXECUTOR_ID).map { id =>
+    if (id == SparkContext.DRIVER_IDENTIFIER) Some("driver") else Some("executor")
+  }.getOrElse(None)
 
   private[netty] val transportConf = SparkTransportConf.fromSparkConf(
     conf.clone.set(RPC_IO_NUM_CONNECTIONS_PER_PEER, 1),

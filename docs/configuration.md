@@ -1954,6 +1954,46 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+### Thread Configurations
+
+Depending on jobs and cluster configurations, we can set number of threads in several places in Spark to utilize 
+available resources efficiently to get better performance. Prior to Spark 3.0, these thread configurations apply 
+to all roles of Spark, such as driver, executor, worker and master. From Spark 3.0, we can configure threads in 
+finer granularity starting from driver and executor. Take RPC module as example in below table. For other modules,
+like shuffle, just replace "rpc" with "shuffle" in the property names except 
+spark.{driver|executor}.rpc.netty.dispatcher.numThreads, which is only for RPC module.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.{driver|executor}.rpc.io.serverThreads</td>
+  <td>
+    Fall back on spark.rpc.io.serverThreads
+  </td>
+  <td>Number of threads used in the server thread pool</td>
+</tr>
+<tr>
+  <td>spark.{driver|executor}.rpc.io.clientThreads</td>
+  <td>
+    Fall back on spark.rpc.io.clientThreads
+  </td>
+  <td>Number of threads used in the client thread pool</td>
+</tr>
+<tr>
+  <td>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</td>
+  <td>
+    Fall back on spark.rpc.netty.dispatcher.numThreads
+  </td>
+  <td>Number of threads used in RPC message dispatcher thread pool</td>
+</tr>
+</table>
+
+The default values of spark.rpc.io.serverThreads, spark.rpc.io.clientThreads and spark.rpc.netty.dispatcher.numThreads
+are same. It's <br>
+number of CPU cores if specified. Otherwise, the available processors to the JVM. In either cases, the default value 
+is limited to <code>org.apache.spark.network.util.NettyUtils.MAX_DEFAULT_NETTY_THREADS</code>.
+
+    
 ### Security
 
 Please refer to the [Security](security.html) page for available options on how to secure different

@@ -198,21 +198,14 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   private def getNumOfThreads(conf: SparkConf): Int = {
     val availableCores =
       if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
-    // module configuration
+
     val modNumThreads = conf.get(RPC_NETTY_DISPATCHER_NUM_THREADS)
       .getOrElse(math.max(2, availableCores))
-    // get right role
-    val executorId = conf.get(EXECUTOR_ID).getOrElse("")
-    val role = executorId match {
-      case "" => ""
-      case SparkContext.DRIVER_IDENTIFIER => "driver"
-      case _ => "executor"
-    }
-    if (role.isEmpty) {
-      modNumThreads
-    } else {
+
+    conf.get(EXECUTOR_ID).map { id =>
+      val role = if (id == SparkContext.DRIVER_IDENTIFIER) "driver" else "executor"
       conf.getInt(s"spark.$role.rpc.netty.dispatcher.numThreads", modNumThreads)
-    }
+    }.getOrElse(modNumThreads)
   }
 
   /** Thread pool used for dispatching messages. */
