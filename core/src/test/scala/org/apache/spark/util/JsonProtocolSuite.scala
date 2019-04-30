@@ -1091,7 +1091,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "Partition ID" : -1
       |  }
       |}
     """.stripMargin
@@ -1138,7 +1139,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "Partition ID" : -1
       |  }
       |}
     """.stripMargin
@@ -1191,7 +1193,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "Partition ID" : -1
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -1292,7 +1295,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "Partition ID" : -1
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -1393,7 +1397,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Internal": true,
       |        "Count Failed Values": false
       |      }
-      |    ]
+      |    ],
+      |    "Partition ID" : -1
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,

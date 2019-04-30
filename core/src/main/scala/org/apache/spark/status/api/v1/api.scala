@@ -257,7 +257,8 @@ class TaskData private[spark](
     val taskMetrics: Option[TaskMetrics] = None,
     val executorLogs: Map[String, String],
     val schedulerDelay: Long,
-    val gettingResultTime: Long)
+    val gettingResultTime: Long,
+    val partitionId: Int)
 
 class TaskMetrics private[spark](
     val executorDeserializeTime: Long,

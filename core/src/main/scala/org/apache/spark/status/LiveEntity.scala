@@ -223,7 +223,8 @@ private class LiveTask(
       metrics.shuffleWriteMetrics.recordsWritten,
 
       stageId,
-      stageAttemptId)
+      stageAttemptId,
+      info.partitionId)
   }
 
 }

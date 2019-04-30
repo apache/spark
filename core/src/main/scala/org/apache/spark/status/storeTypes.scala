@@ -141,6 +141,7 @@ private[spark] object TaskIndexNames {
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
   final val COMPLETION_TIME = "ct"
+  final val PARTITION_ID = "pid"
 }
 
 /**
@@ -231,7 +232,9 @@ private[spark] class TaskDataWrapper(
     val shuffleRecordsWritten: Long,
 
     val stageId: Int,
-    val stageAttemptId: Int) {
+    val stageAttemptId: Int,
+    @KVIndexParam(value = TaskIndexNames.PARTITION_ID, parent = TaskIndexNames.STAGE)
+    val partitionId: Int) {
 
   def hasMetrics: Boolean = executorDeserializeTime >= 0
 
@@ -287,7 +290,8 @@ private[spark] class TaskDataWrapper(
       metrics,
       executorLogs = null,
       schedulerDelay = 0L,
-      gettingResultTime = 0L)
+      gettingResultTime = 0L,
+      partitionId)
   }
 
   @JsonIgnore @KVIndex(TaskIndexNames.STAGE)

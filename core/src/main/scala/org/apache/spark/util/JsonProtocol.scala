@@ -304,7 +304,8 @@ private[spark] object JsonProtocol {
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
     ("Killed" -> taskInfo.killed) ~
-    ("Accumulables" -> accumulablesToJson(taskInfo.accumulables))
+    ("Accumulables" -> accumulablesToJson(taskInfo.accumulables)) ~
+    ("Partition ID" -> taskInfo.partitionId)
   }
 
   private lazy val accumulableBlacklist = Set("internal.metrics.updatedBlockStatuses")
@@ -804,9 +805,11 @@ private[spark] object JsonProtocol {
       case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq.empty[AccumulableInfo]
     }
+    val partitionId = jsonOption(json \ "Partition ID").map(_.extract[Int]).getOrElse(-1)
 
     val taskInfo =
       new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
+    taskInfo.setPartitionId(partitionId)
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed

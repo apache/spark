@@ -46,7 +46,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 18,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 11,
   "index" : 11,
@@ -95,7 +96,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 8,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 12,
   "index" : 12,
@@ -144,7 +146,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 7,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 13,
   "index" : 13,
@@ -193,7 +196,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 53,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 14,
   "index" : 14,
@@ -242,7 +246,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 5,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 15,
   "index" : 15,
@@ -291,7 +296,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 4,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 16,
   "index" : 16,
@@ -340,7 +346,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 4,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 17,
   "index" : 17,
@@ -389,7 +396,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 20,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 18,
   "index" : 18,
@@ -438,7 +446,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 3,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 19,
   "index" : 19,
@@ -487,7 +496,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 5,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 20,
   "index" : 20,
@@ -536,7 +546,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 4,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 21,
   "index" : 21,
@@ -585,7 +596,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 3,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 22,
   "index" : 22,
@@ -634,7 +646,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 3,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 23,
   "index" : 23,
@@ -683,7 +696,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 16,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 24,
   "index" : 24,
@@ -732,7 +746,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 5,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 25,
   "index" : 25,
@@ -781,7 +796,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 9,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 26,
   "index" : 26,
@@ -830,7 +846,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 8,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 27,
   "index" : 27,
@@ -879,7 +896,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 6,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 28,
   "index" : 28,
@@ -928,7 +946,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 17,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 29,
   "index" : 29,
@@ -977,7 +996,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 11,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 30,
   "index" : 30,
@@ -1026,7 +1046,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 24,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 31,
   "index" : 31,
@@ -1075,7 +1096,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 14,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 32,
   "index" : 32,
@@ -1124,7 +1146,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 13,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 33,
   "index" : 33,
@@ -1173,7 +1196,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 10,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 34,
   "index" : 34,
@@ -1222,7 +1246,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 9,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 35,
   "index" : 35,
@@ -1271,7 +1296,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 10,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 36,
   "index" : 36,
@@ -1320,7 +1346,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 6,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 37,
   "index" : 37,
@@ -1369,7 +1396,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 6,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 38,
   "index" : 38,
@@ -1418,7 +1446,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 13,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 39,
   "index" : 39,
@@ -1467,7 +1496,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 13,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 40,
   "index" : 40,
@@ -1516,7 +1546,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 6,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 41,
   "index" : 41,
@@ -1565,7 +1596,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 6,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 42,
   "index" : 42,
@@ -1614,7 +1646,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 15,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 43,
   "index" : 43,
@@ -1663,7 +1696,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 21,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 44,
   "index" : 44,
@@ -1712,7 +1746,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 16,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 45,
   "index" : 45,
@@ -1761,7 +1796,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 16,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 46,
   "index" : 46,
@@ -1810,7 +1846,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 11,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 47,
   "index" : 47,
@@ -1859,7 +1896,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 13,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 48,
   "index" : 48,
@@ -1908,7 +1946,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 3,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 49,
   "index" : 49,
@@ -1957,7 +1996,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 4,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 50,
   "index" : 50,
@@ -2006,7 +2046,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 4,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 51,
   "index" : 51,
@@ -2055,7 +2096,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 2,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 52,
   "index" : 52,
@@ -2104,7 +2146,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 5,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 53,
   "index" : 53,
@@ -2153,7 +2196,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 5,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 54,
   "index" : 54,
@@ -2202,7 +2246,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 38,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 55,
   "index" : 55,
@@ -2251,7 +2296,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 5,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 56,
   "index" : 56,
@@ -2300,7 +2346,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 6,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 57,
   "index" : 57,
@@ -2349,7 +2396,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 2,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 58,
   "index" : 58,
@@ -2398,7 +2446,8 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 4,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 }, {
   "taskId" : 59,
   "index" : 59,
@@ -2447,5 +2496,6 @@
   },
   "executorLogs" : { },
   "schedulerDelay" : 3,
-  "gettingResultTime" : 0
+  "gettingResultTime" : 0,
+  "partitionId" : -1
 } ]

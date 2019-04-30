@@ -207,8 +207,8 @@ private[v1] class StagesResource extends BaseAppResource {
         || containsValue(task.taskMetrics.get.shuffleWriteMetrics.writeTime))
     }
     val filteredTaskDataSequence: Seq[TaskData] = taskDataList.filter(f =>
-      (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.attempt)
-        || containsValue(f.launchTime)
+      (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.partitionId)
+        || containsValue(f.attempt) || containsValue(f.launchTime)
         || containsValue(f.resultFetchStart.getOrElse(defaultOptionString))
         || containsValue(f.executorId) || containsValue(f.host) || containsValue(f.status)
         || containsValue(f.taskLocality) || containsValue(f.speculative)

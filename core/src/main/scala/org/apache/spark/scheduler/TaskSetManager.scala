@@ -496,6 +496,7 @@ private[spark] class TaskSetManager(
         val attemptNum = taskAttempts(index).size
         val info = new TaskInfo(taskId, index, attemptNum, curTime,
           execId, host, taskLocality, speculative)
+        info.setPartitionId(task.partitionId)
         taskInfos(taskId) = info
         taskAttempts(index) = info :: taskAttempts(index)
         // Update our locality level for delay scheduling

@@ -561,9 +561,10 @@ private[ui] class TaskPagedTable(
 
     val taskHeadersAndCssClasses: Seq[(String, String)] =
       Seq(
-        (HEADER_TASK_INDEX, ""), (HEADER_ID, ""), (HEADER_ATTEMPT, ""), (HEADER_STATUS, ""),
-        (HEADER_LOCALITY, ""), (HEADER_EXECUTOR, ""), (HEADER_HOST, ""), (HEADER_LAUNCH_TIME, ""),
-        (HEADER_DURATION, ""), (HEADER_SCHEDULER_DELAY, TaskDetailsClassNames.SCHEDULER_DELAY),
+        (HEADER_TASK_INDEX, ""), (HEADER_ID, ""), (HEADER_PARTITION_ID, ""), (HEADER_ATTEMPT, ""),
+        (HEADER_STATUS, ""), (HEADER_LOCALITY, ""), (HEADER_EXECUTOR, ""), (HEADER_HOST, ""),
+        (HEADER_LAUNCH_TIME, ""), (HEADER_DURATION, ""),
+        (HEADER_SCHEDULER_DELAY, TaskDetailsClassNames.SCHEDULER_DELAY),
         (HEADER_DESER_TIME, TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
         (HEADER_GC_TIME, ""),
         (HEADER_SER_TIME, TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
@@ -774,6 +775,7 @@ private[spark] object ApiHelper {
 
   val HEADER_ID = "ID"
   val HEADER_TASK_INDEX = "Index"
+  val HEADER_PARTITION_ID = "Partition ID"
   val HEADER_ATTEMPT = "Attempt"
   val HEADER_STATUS = "Status"
   val HEADER_LOCALITY = "Locality Level"
@@ -802,6 +804,7 @@ private[spark] object ApiHelper {
   private[ui] val COLUMN_TO_INDEX = Map(
     HEADER_ID -> null.asInstanceOf[String],
     HEADER_TASK_INDEX -> TaskIndexNames.TASK_INDEX,
+    HEADER_PARTITION_ID -> TaskIndexNames.PARTITION_ID,
     HEADER_ATTEMPT -> TaskIndexNames.ATTEMPT,
     HEADER_STATUS -> TaskIndexNames.STATUS,
     HEADER_LOCALITY -> TaskIndexNames.LOCALITY,

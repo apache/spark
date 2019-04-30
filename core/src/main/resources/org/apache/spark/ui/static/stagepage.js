@@ -658,6 +658,15 @@ $(document).ready(function () {
                             name: "Index"
                         },
                         {data : "taskId", name: "ID"},
+                        {data: function (row, type) {
+                            if (row.partitionId != -1) {
+                                return type !== 'display' ? (isNaN(row.partitionId) ? "N/A" : row.partitionId ) : row.partitionId;
+                            } else {
+                                return "";
+                            }
+                        },
+                        name: "Partition ID"
+                        },
                         {data : "attempt", name: "Attempt"},
                         {data : "status", name: "Status"},
                         {data : "taskLocality", name: "Locality Level"},
@@ -869,14 +878,14 @@ $(document).ready(function () {
                         }
                     ],
                     "columnDefs": [
-                        { "visible": false, "targets": 11 },
                         { "visible": false, "targets": 12 },
                         { "visible": false, "targets": 13 },
                         { "visible": false, "targets": 14 },
                         { "visible": false, "targets": 15 },
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
-                        { "visible": false, "targets": 18 }
+                        { "visible": false, "targets": 18 },
+                        { "visible": false, "targets": 19 }
                     ],
                 };
                 taskTableSelector = $(taskTable).DataTable(taskConf);
@@ -906,7 +915,7 @@ $(document).ready(function () {
                             $(".toggle-vis").prop('checked', false);
                             column.visible(false);
                             var taskSummaryMetricsTableFilteredArray =
-                                taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
+                                taskSummaryMetricsTableArray.filter(row => row.checkboxId < 12);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
                         }
                     } else {
@@ -933,18 +942,18 @@ $(document).ready(function () {
                 if (accumulatorTable.length == 0) {
                     $("#accumulator-update-table").hide();
                 } else {
-                    taskTableSelector.column(18).visible(true);
+                    taskTableSelector.column(19).visible(true);
                     $("#accumulator-update-table").show();
                 }
                 // Showing relevant stage data depending on stage type for task table and executor
                 // summary table
-                taskTableSelector.column(19).visible(dataToShow.showInputData);
-                taskTableSelector.column(20).visible(dataToShow.showOutputData);
-                taskTableSelector.column(21).visible(dataToShow.showShuffleWriteData);
+                taskTableSelector.column(20).visible(dataToShow.showInputData);
+                taskTableSelector.column(21).visible(dataToShow.showOutputData);
                 taskTableSelector.column(22).visible(dataToShow.showShuffleWriteData);
-                taskTableSelector.column(23).visible(dataToShow.showShuffleReadData);
-                taskTableSelector.column(24).visible(dataToShow.showBytesSpilledData);
+                taskTableSelector.column(23).visible(dataToShow.showShuffleWriteData);
+                taskTableSelector.column(24).visible(dataToShow.showShuffleReadData);
                 taskTableSelector.column(25).visible(dataToShow.showBytesSpilledData);
+                taskTableSelector.column(26).visible(dataToShow.showBytesSpilledData);
 
                 if (window.localStorage) {
                     if (window.localStorage.getItem("arrowtoggle1class") !== null &&
