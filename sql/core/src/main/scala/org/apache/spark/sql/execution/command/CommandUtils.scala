@@ -42,16 +42,14 @@ object CommandUtils extends Logging {
 
   /** Change statistics after changing data by commands. */
   def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
-    if (table.stats.nonEmpty) {
-      val catalog = sparkSession.sessionState.catalog
-      if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-        val newTable = catalog.getTableMetadata(table.identifier)
-        val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
-        val newStats = CatalogStatistics(sizeInBytes = newSize)
-        catalog.alterTableStats(table.identifier, Some(newStats))
-      } else {
-        catalog.alterTableStats(table.identifier, None)
-      }
+    val catalog = sparkSession.sessionState.catalog
+    if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+      val newTable = catalog.getTableMetadata(table.identifier)
+      val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
+      val newStats = CatalogStatistics(sizeInBytes = newSize)
+      catalog.alterTableStats(table.identifier, Some(newStats))
+    } else if (table.stats.nonEmpty) {
+      catalog.alterTableStats(table.identifier, None)
     }
   }
 
@@ -168,7 +166,7 @@ object CommandUtils extends Logging {
   private[sql] def computeColumnStats(
       sparkSession: SparkSession,
       relation: LogicalPlan,
-      columns: Seq[Attribute]): (Long, Map[String, CatalogColumnStat]) = {
+      columns: Seq[Attribute]): (Long, Map[Attribute, ColumnStat]) = {
     val conf = sparkSession.sessionState.conf
 
     // Collect statistics per column.
@@ -195,8 +193,8 @@ object CommandUtils extends Logging {
     val rowCount = statsRow.getLong(0)
     val columnStats = columns.zipWithIndex.map { case (attr, i) =>
       // according to `statExprs`, the stats struct always have 7 fields.
-      (attr.name, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
-        attributePercentiles.get(attr)).toCatalogColumnStat(attr.name, attr.dataType))
+      (attr, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
+        attributePercentiles.get(attr)))
     }.toMap
     (rowCount, columnStats)
   }

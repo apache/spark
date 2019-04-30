@@ -301,6 +301,7 @@ package object config {
       .doc("Number of subdirectories inside each path listed in spark.local.dir for " +
         "hashing Block files into.")
       .intConf
+      .checkValue(_ > 0, "The number of subdirectories must be positive.")
       .createWithDefault(64)
 
   private[spark] val BLOCK_FAILURES_BEFORE_LOCATION_REFRESH =
@@ -357,6 +358,13 @@ package object config {
 
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
+
+  private[spark] val SHUFFLE_SERVICE_DB_ENABLED =
+    ConfigBuilder("spark.shuffle.service.db.enabled")
+      .doc("Whether to use db in ExternalShuffleService. Note that this only affects " +
+        "standalone mode.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").intConf.createWithDefault(7337)
@@ -598,7 +606,7 @@ package object config {
 
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
-    .longConf
+    .bytesConf(ByteUnit.BYTE)
     .createWithDefault(128 * 1024 * 1024)
 
   private[spark] val FILES_OPEN_COST_IN_BYTES = ConfigBuilder("spark.files.openCostInBytes")
@@ -606,7 +614,7 @@ package object config {
       " the same time. This is used when putting multiple files into a partition. It's better to" +
       " over estimate, then the partitions with small files will be faster than partitions with" +
       " bigger files.")
-    .longConf
+    .bytesConf(ByteUnit.BYTE)
     .createWithDefault(4 * 1024 * 1024)
 
   private[spark] val HADOOP_RDD_IGNORE_EMPTY_SPLITS =
@@ -860,8 +868,9 @@ package object config {
   private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.sort.initialBufferSize")
       .internal()
-      .intConf
-      .checkValue(v => v > 0, "The value should be a positive integer.")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0 && v <= Int.MaxValue,
+        s"The buffer size must be greater than 0 and less than or equal to ${Int.MaxValue}.")
       .createWithDefault(4096)
 
   private[spark] val SHUFFLE_COMPRESS =
@@ -883,7 +892,7 @@ package object config {
       .internal()
       .doc("Initial threshold for the size of a collection before we start tracking its " +
         "memory usage.")
-      .longConf
+      .bytesConf(ByteUnit.BYTE)
       .createWithDefault(5 * 1024 * 1024)
 
   private[spark] val SHUFFLE_SPILL_BATCH_SIZE =
@@ -1294,4 +1303,10 @@ package object config {
     .doc("Staging directory used while submitting applications.")
     .stringConf
     .createOptional
+
+  private[spark] val BUFFER_PAGESIZE = ConfigBuilder("spark.buffer.pageSize")
+    .doc("The amount of memory used per page in bytes")
+    .bytesConf(ByteUnit.BYTE)
+    .createOptional
+
 }

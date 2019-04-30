@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import java.util
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
@@ -75,7 +79,7 @@ class RateStreamTable(
     rowsPerSecond: Long,
     rampUpTimeSeconds: Long,
     numPartitions: Int)
-  extends Table with SupportsMicroBatchRead with SupportsContinuousRead {
+  extends Table with SupportsRead {
 
   override def name(): String = {
     s"RateStream(rowsPerSecond=$rowsPerSecond, rampUpTimeSeconds=$rampUpTimeSeconds, " +
@@ -84,19 +88,19 @@ class RateStreamTable(
 
   override def schema(): StructType = RateStreamProvider.SCHEMA
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
-    override def build(): Scan = new Scan {
-      override def readSchema(): StructType = RateStreamProvider.SCHEMA
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
+  }
 
-      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-        new RateStreamMicroBatchStream(
-          rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
-      }
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
-      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-        new RateStreamContinuousStream(rowsPerSecond, numPartitions)
-      }
-    }
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+      new RateStreamMicroBatchStream(
+        rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
+
+    override def toContinuousStream(checkpointLocation: String): ContinuousStream =
+      new RateStreamContinuousStream(rowsPerSecond, numPartitions)
   }
 }
 

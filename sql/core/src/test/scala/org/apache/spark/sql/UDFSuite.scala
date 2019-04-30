@@ -496,7 +496,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Using java.time.Instant in UDF") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val expected = java.time.Instant.parse("2019-02-27T00:00:00Z")
       val plusSec = udf((i: java.time.Instant) => i.plusSeconds(1))
       val df = spark.sql("SELECT TIMESTAMP '2019-02-26 23:59:59Z' as t")
@@ -506,7 +506,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Using java.time.LocalDate in UDF") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val expected = java.time.LocalDate.parse("2019-02-27")
       val plusDay = udf((i: java.time.LocalDate) => i.plusDays(1))
       val df = spark.sql("SELECT DATE '2019-02-26' as d")

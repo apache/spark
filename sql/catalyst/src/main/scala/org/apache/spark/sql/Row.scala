@@ -270,11 +270,25 @@ trait Row extends Serializable {
   def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
+   * Returns the value at position i of date type as java.time.LocalDate.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getLocalDate(i: Int): java.time.LocalDate = getAs[java.time.LocalDate](i)
+
+  /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
+
+  /**
+   * Returns the value at position i of date type as java.time.Instant.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getInstant(i: Int): java.time.Instant = getAs[java.time.Instant](i)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.

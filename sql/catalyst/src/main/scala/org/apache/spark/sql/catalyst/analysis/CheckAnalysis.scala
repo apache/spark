@@ -178,7 +178,7 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
-            def isAggregateExpression(expr: Expression) = {
+            def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
 
@@ -375,6 +375,25 @@ trait CheckAnalysis extends PredicateHelper {
           case _: UnresolvedHint =>
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
+
+          case f @ Filter(condition, _)
+            if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
+            val invalidExprSqls = PlanHelper.specialExpressionsInUnsupportedOperator(f).map(_.sql)
+            failAnalysis(
+              s"""
+                 |Aggregate/Window/Generate expressions are not valid in where clause of the query.
+                 |Expression in where clause: [${condition.sql}]
+                 |Invalid expressions: [${invalidExprSqls.mkString(", ")}]""".stripMargin)
+
+          case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
+            val invalidExprSqls =
+              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(_.sql)
+            failAnalysis(
+              s"""
+                 |The query operator `${other.nodeName}` contains one or more unsupported
+                 |expression types Aggregate, Window or Generate.
+                 |Invalid expressions: [${invalidExprSqls.mkString(", ")}]""".stripMargin
+            )
 
           case _ => // Analysis successful!
         }

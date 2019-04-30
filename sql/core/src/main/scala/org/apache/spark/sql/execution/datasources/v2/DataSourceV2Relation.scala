@@ -49,7 +49,7 @@ case class DataSourceV2Relation(
   }
 
   def newScanBuilder(): ScanBuilder = {
-    table.asBatchReadable.newScanBuilder(options)
+    table.asReadable.newScanBuilder(options)
   }
 
   override def computeStats(): Statistics = {
@@ -65,6 +65,11 @@ case class DataSourceV2Relation(
 
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
+  }
+
+  override def refresh(): Unit = table match {
+    case table: FileTable => table.fileIndex.refresh()
+    case _ => // Do nothing.
   }
 }
 

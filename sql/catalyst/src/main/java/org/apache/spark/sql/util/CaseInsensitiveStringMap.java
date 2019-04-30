@@ -18,8 +18,11 @@
 package org.apache.spark.sql.util;
 
 import org.apache.spark.annotation.Experimental;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -35,16 +38,29 @@ import java.util.Set;
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {
+  private final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
+
+  private String unsupportedOperationMsg = "CaseInsensitiveStringMap is read-only.";
 
   public static CaseInsensitiveStringMap empty() {
     return new CaseInsensitiveStringMap(new HashMap<>(0));
   }
 
+  private final Map<String, String> original;
+
   private final Map<String, String> delegate;
 
   public CaseInsensitiveStringMap(Map<String, String> originalMap) {
-    this.delegate = new HashMap<>(originalMap.size());
-    putAll(originalMap);
+    original = new HashMap<>(originalMap);
+    delegate = new HashMap<>(originalMap.size());
+    for (Map.Entry<String, String> entry : originalMap.entrySet()) {
+      String key = toLowerCase(entry.getKey());
+      if (delegate.containsKey(key)) {
+        logger.warn("Converting duplicated key " + entry.getKey() +
+                " into CaseInsensitiveStringMap.");
+      }
+      delegate.put(key, entry.getValue());
+    }
   }
 
   @Override
@@ -78,24 +94,22 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
 
   @Override
   public String put(String key, String value) {
-    return delegate.put(toLowerCase(key), value);
+    throw new UnsupportedOperationException(unsupportedOperationMsg);
   }
 
   @Override
   public String remove(Object key) {
-    return delegate.remove(toLowerCase(key));
+    throw new UnsupportedOperationException(unsupportedOperationMsg);
   }
 
   @Override
   public void putAll(Map<? extends String, ? extends String> m) {
-    for (Map.Entry<? extends String, ? extends String> entry : m.entrySet()) {
-      put(entry.getKey(), entry.getValue());
-    }
+    throw new UnsupportedOperationException(unsupportedOperationMsg);
   }
 
   @Override
   public void clear() {
-    delegate.clear();
+    throw new UnsupportedOperationException(unsupportedOperationMsg);
   }
 
   @Override
@@ -156,5 +170,12 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
   public double getDouble(String key, double defaultValue) {
     String value = get(key);
     return value == null ? defaultValue : Double.parseDouble(value);
+  }
+
+  /**
+   * Returns the original case-sensitive map.
+   */
+  public Map<String, String> asCaseSensitiveMap() {
+    return Collections.unmodifiableMap(original);
   }
 }
