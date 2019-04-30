@@ -23,6 +23,7 @@ import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.Utils;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,12 +44,14 @@ public class Catalogs {
    * @param name a String catalog name
    * @param conf a SQLConf
    * @return an initialized CatalogPlugin
-   * @throws SparkException If the plugin class cannot be found or instantiated
+   * @throws CatalogNotFoundException if the plugin class cannot be found
+   * @throws SparkException if the plugin class cannot be instantiated
    */
-  public static CatalogPlugin load(String name, SQLConf conf) throws SparkException {
+  public static CatalogPlugin load(String name, SQLConf conf)
+      throws CatalogNotFoundException, SparkException {
     String pluginClassName = conf.getConfString("spark.sql.catalog." + name, null);
     if (pluginClassName == null) {
-      throw new SparkException(String.format(
+      throw new CatalogNotFoundException(String.format(
           "Catalog '%s' plugin class not found: spark.sql.catalog.%s is not defined", name, name));
     }
 
@@ -96,7 +99,7 @@ public class Catalogs {
     Map<String, String> allConfs = mapAsJavaMapConverter(conf.getAllConfs()).asJava();
     Pattern prefix = Pattern.compile("^spark\\.sql\\.catalog\\." + name + "\\.(.+)");
 
-    CaseInsensitiveStringMap options = CaseInsensitiveStringMap.empty();
+    HashMap<String, String> options = new HashMap<>();
     for (Map.Entry<String, String> entry : allConfs.entrySet()) {
       Matcher matcher = prefix.matcher(entry.getKey());
       if (matcher.matches() && matcher.groupCount() > 0) {
@@ -104,6 +107,6 @@ public class Catalogs {
       }
     }
 
-    return options;
+    return new CaseInsensitiveStringMap(options);
   }
 }

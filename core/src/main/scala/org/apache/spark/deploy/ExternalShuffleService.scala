@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy
 
+import java.io.File
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
@@ -49,6 +50,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val enabled = sparkConf.get(config.SHUFFLE_SERVICE_ENABLED)
   private val port = sparkConf.get(config.SHUFFLE_SERVICE_PORT)
 
+  private val registeredExecutorsDB = "registeredExecutors.ldb"
+
   private val transportConf =
     SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
   private val blockHandler = newShuffleBlockHandler(transportConf)
@@ -58,9 +61,29 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private val shuffleServiceSource = new ExternalShuffleServiceSource
 
+  protected def findRegisteredExecutorsDBFile(dbName: String): File = {
+    val localDirs = sparkConf.getOption("spark.local.dir").map(_.split(",")).getOrElse(Array())
+    if (localDirs.length >= 1) {
+      new File(localDirs.find(new File(_, dbName).exists()).getOrElse(localDirs(0)), dbName)
+    } else {
+      logWarning(s"'spark.local.dir' should be set first when we use db in " +
+        s"ExternalShuffleService. Note that this only affects standalone mode.")
+      null
+    }
+  }
+
+  /** Get blockhandler  */
+  def getBlockHandler: ExternalShuffleBlockHandler = {
+    blockHandler
+  }
+
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
-    new ExternalShuffleBlockHandler(conf, null)
+    if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
+      new ExternalShuffleBlockHandler(conf, findRegisteredExecutorsDBFile(registeredExecutorsDB))
+    } else {
+      new ExternalShuffleBlockHandler(conf, null)
+    }
   }
 
   /** Starts the external shuffle service if the user has configured us to. */

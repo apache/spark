@@ -18,26 +18,30 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.sources.v2.{SupportsBatchRead, SupportsBatchWrite, Table}
+import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
 
 object DataSourceV2Implicits {
   implicit class TableHelper(table: Table) {
-    def asBatchReadable: SupportsBatchRead = {
+    def asReadable: SupportsRead = {
       table match {
-        case support: SupportsBatchRead =>
+        case support: SupportsRead =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support batch reads: ${table.name}")
+          throw new AnalysisException(s"Table does not support reads: ${table.name}")
       }
     }
 
-    def asBatchWritable: SupportsBatchWrite = {
+    def asWritable: SupportsWrite = {
       table match {
-        case support: SupportsBatchWrite =>
+        case support: SupportsWrite =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support batch writes: ${table.name}")
+          throw new AnalysisException(s"Table does not support writes: ${table.name}")
       }
     }
+
+    def supports(capability: TableCapability): Boolean = table.capabilities.contains(capability)
+
+    def supportsAny(capabilities: TableCapability*): Boolean = capabilities.exists(supports)
   }
 }

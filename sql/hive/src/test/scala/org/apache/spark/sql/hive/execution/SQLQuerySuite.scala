@@ -1105,7 +1105,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
         sql(
-          s"ADD JAR ${hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+          s"ADD JAR ${hiveContext.getHiveContribJar().getCanonicalPath}")
         try {
           sql(
             """
@@ -2162,6 +2162,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
           }.getMessage
           assert(m.contains(s"contains invalid character(s)"))
+
+          val m1 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
+          }.getMessage
+          assert(m1.contains(s"contains invalid character(s)"))
 
           val m2 = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")

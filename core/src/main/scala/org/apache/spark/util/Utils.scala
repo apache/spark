@@ -60,6 +60,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
@@ -188,15 +189,24 @@ private[spark] object Utils extends Logging {
 
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
-    // scalastyle:off classforname
-    Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
-    // scalastyle:on classforname
+    Try { classForName(clazz, initialize = false) }.isSuccess
   }
 
   // scalastyle:off classforname
-  /** Preferred alternative to Class.forName(className) */
-  def classForName(className: String): Class[_] = {
-    Class.forName(className, true, getContextOrSparkClassLoader)
+  /**
+   * Preferred alternative to Class.forName(className), as well as
+   * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
+   */
+  def classForName[C](
+      className: String,
+      initialize: Boolean = true,
+      noSparkClassLoader: Boolean = false): Class[C] = {
+    if (!noSparkClassLoader) {
+      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
+    } else {
+      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
+        asInstanceOf[Class[C]]
+    }
     // scalastyle:on classforname
   }
 
@@ -2490,6 +2500,12 @@ private[spark] object Utils extends Logging {
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
   }
 
+  def isStreamingDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+    val streamingDynamicAllocationEnabled = conf.get(STREAMING_DYN_ALLOCATION_ENABLED)
+    streamingDynamicAllocationEnabled &&
+      (!isLocalMaster(conf) || conf.get(STREAMING_DYN_ALLOCATION_TESTING))
+  }
+
   /**
    * Return the initial number of executors for dynamic allocation.
    */
@@ -2665,10 +2681,11 @@ private[spark] object Utils extends Logging {
    * other state) and decide they do not need to be added. A log message is printed in that case.
    * Other exceptions are bubbled up.
    */
-  def loadExtensions[T](extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
+  def loadExtensions[T <: AnyRef](
+      extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
     classes.flatMap { name =>
       try {
-        val klass = classForName(name)
+        val klass = classForName[T](name)
         require(extClass.isAssignableFrom(klass),
           s"$name is not a subclass of ${extClass.getName()}.")
 

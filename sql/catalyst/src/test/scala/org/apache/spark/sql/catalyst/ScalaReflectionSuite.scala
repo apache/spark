@@ -145,6 +145,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
   private def deserializerFor[T: TypeTag]: Expression =
     deserializerForType(ScalaReflection.localTypeOf[T])
 
+  test("isSubtype") {
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[_]]))
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[Int]]))
+    assert(!isSubtype(localTypeOf[Option[_]], localTypeOf[Option[Int]]))
+  }
+
   test("SQLUserDefinedType annotation on Scala structure") {
     val schema = schemaFor[TestingUDT.NestedStruct]
     assert(schema === Schema(

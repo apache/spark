@@ -311,6 +311,9 @@ class ParquetFileFormat
       SQLConf.SESSION_LOCAL_TIMEZONE.key,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     hadoopConf.setBoolean(
+      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
+      sparkSession.sessionState.conf.nestedSchemaPruningEnabled)
+    hadoopConf.setBoolean(
       SQLConf.CASE_SENSITIVE.key,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
@@ -424,11 +427,12 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
+        val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz), parquetFilter)
+          new ParquetRecordReader[UnsafeRow](readSupport, parquetFilter)
         } else {
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz))
+          new ParquetRecordReader[UnsafeRow](readSupport)
         }
         val iter = new RecordReaderIterator(reader)
         // SPARK-23457 Register a task completion lister before `initialization`.

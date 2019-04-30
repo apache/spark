@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -261,7 +260,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.sparkPlan
-      .collect { case _: aggregate.HashAggregateExec => true }
+      .collect { case _: HashAggregateExec => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
@@ -2043,6 +2042,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
+      )
+    }
+  }
+
+  test("xxhash64 function") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    withTempView("tbl") {
+      df.createOrReplaceTempView("tbl")
+      checkAnswer(
+        df.select(xxhash64($"i", $"j")),
+        sql("SELECT xxhash64(i, j) from tbl")
       )
     }
   }

@@ -91,4 +91,10 @@ class RuleExecutorSuite extends SparkFunSuite {
     }.getMessage
     assert(message.contains("the structural integrity of the plan is broken"))
   }
+
+  test("SPARK-27243: dumpTimeSpent when no rule has run") {
+    RuleExecutor.resetMetrics()
+    // This should not throw an exception
+    RuleExecutor.dumpTimeSpent()
+  }
 }

@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Spark Standalone Mode
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -240,6 +255,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
+    This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
 </tr>
 <tr>
@@ -258,6 +274,16 @@ SPARK_WORKER_OPTS supports the following system properties:
     and should depend on the amount of available disk space you have.  Application logs and jars are
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.db.enabled</code></td>
+  <td>true</td>
+  <td>
+    Store External Shuffle service state on local disk so that when the external shuffle service is restarted, it will
+    automatically reload info on current executors.  This only affects standalone mode (yarn always has this behavior
+    enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
+    eventually gets cleaned up.  This config may be removed in the future.
   </td>
 </tr>
 <tr>

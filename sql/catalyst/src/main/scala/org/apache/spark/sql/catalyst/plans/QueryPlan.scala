@@ -279,7 +279,7 @@ object QueryPlan extends PredicateHelper {
    */
   def normalizeExprId[T <: Expression](e: T, input: AttributeSeq): T = {
     e.transformUp {
-      case s: SubqueryExpression => s.canonicalize(input)
+      case s: PlanExpression[_] => s.canonicalize(input)
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {

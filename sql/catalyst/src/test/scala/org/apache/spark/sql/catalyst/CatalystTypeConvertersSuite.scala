@@ -169,7 +169,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("converting TimestampType to java.time.Instant") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       Seq(
         -9463427405253013L,
         -244000001L,
@@ -199,7 +199,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("converting DateType to java.time.LocalDate") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_EANBLED.key -> "true") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       Seq(
         -701265,
         -371419,
