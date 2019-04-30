@@ -73,7 +73,7 @@ object TypeUtils {
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    val limit = math.min(x.length, y.length)
+    val limit = if (x.length <= y.length) x.length else y.length
     var i = 0
     while (i < limit) {
       val res = (x(i) & 0xff) - (y(i) & 0xff)
