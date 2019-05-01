@@ -657,6 +657,39 @@ The following example shows how to save/load a MLlib model by SparkR.
 
 SparkR supports the Structured Streaming API. Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](structured-streaming-programming-guide.html)
 
+# Apache Arrow in SparkR
+
+Apache Arrow is an in-memory columnar data format that is used in Spark to efficiently transfer data between JVM and R processes. See also PySpark optimization done, [PySpark Usage Guide for Pandas with Apache Arrow](sql-pyspark-pandas-with-arrow.html). This guide targets to explain how to use Arrow optimization in SparkR with some key points.
+
+## Ensure Arrow Installed
+
+Currently, Arrow R library is not on CRAN as of [ARROW-3204](https://issues.apache.org/jira/browse/ARROW-3204). Therefore, it should be installed directly from Github. You can use `remotes::install_github` as below.
+
+```bash
+Rscript -e 'remotes::install_github("apache/arrow@[TAG]", subdir = "r")'
+```
+
+`[TAG]` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R packge is installed and available on all cluster nodes. The current supported version is 0.12.0.
+
+## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
+
+To enable Arrow optimization between SparkR DataFrame and R DataFrame, set `spark.sql.execution.arrow.enabled` to `true`.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+# Start up spark session with Arrow optimization enabled
+sparkR.session(master = "local[*]",
+               sparkConfig = list(spark.sql.execution.arrow.enabled = "true"))
+{% endhighlight %}
+</div>
+
+This configuration internally enables Arrow optimization in `gapply`, `dapply`, conversion to/from R DataFrame.
+
+## Supported SQL Types
+
+Currently, all Spark SQL data types are supported by Arrow-based conversion except `FloatType`, `BinaryType`, `ArrayType`, `StructType` and `MapType`.
+
+
 # R Function Name Conflicts
 
 When loading and attaching a new package in R, it is possible to have a name [conflict](https://stat.ethz.ch/R-manual/R-devel/library/base/html/library.html), where a
