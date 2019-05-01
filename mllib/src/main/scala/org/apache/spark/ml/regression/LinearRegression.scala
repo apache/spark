@@ -115,7 +115,6 @@ private[regression] trait LinearRegressionParams extends PredictorParams
           "normal solver, please change solver to auto or l-bfgs.")
         require($(elasticNetParam) == 0.0, "LinearRegression with huber loss only supports " +
           s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
-
       }
     }
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
