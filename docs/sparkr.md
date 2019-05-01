@@ -669,7 +669,7 @@ Currently, Arrow R library is not on CRAN yet [ARROW-3204](https://issues.apache
 Rscript -e 'remotes::install_github("apache/arrow@TAG", subdir = "r")'
 ```
 
-`TAG` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R packge is installed and available on all cluster nodes. The current supported version is 0.12.0.
+`TAG` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R packge is installed and available on all cluster nodes. The current supported version is 0.12.1.
 
 ## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
 
