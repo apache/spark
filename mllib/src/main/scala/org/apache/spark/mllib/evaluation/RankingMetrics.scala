@@ -102,12 +102,9 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("3.0.0")
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels
-      .map {
-        case (pred, lab) =>
+    predictionAndLabels.map { case (pred, lab) =>
           averagePrecisionAt(pred, lab, k)
-      }
-      .mean()
+    }.mean()
   }
 
   /**
@@ -259,9 +256,8 @@ object RankingMetrics {
   @Since("1.4.0")
   def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]
-    val rdd = predictionAndLabels.rdd.map {
-      case (predictions, labels) =>
-        (predictions.asScala.toArray, labels.asScala.toArray)
+    val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>
+      (predictions.asScala.toArray, labels.asScala.toArray)
     }
     new RankingMetrics(rdd)
   }
