@@ -450,7 +450,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(state.finishedDrivers.size == 1)
   }
 
-  test("does not restart outdated supervised drivers") {
+  test("SPARK-27347: do not restart outdated supervised drivers") {
     // Covers scenario where:
     // - agent goes down
     // - supervised job is relaunched on another agent
