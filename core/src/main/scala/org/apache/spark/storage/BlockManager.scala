@@ -138,9 +138,6 @@ private[spark] class BlockManager(
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
 
-  // Visible for testing
-  private[storage] var blockTransferClientSync = new SyncBlockTransferClient(blockTransferService)
-
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
     val deleteFilesOnStop =
@@ -901,7 +898,7 @@ private[spark] class BlockManager(
       val loc = locationIterator.next()
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
-        blockTransferClientSync.fetchBlockSync(loc.host, loc.port, loc.executorId, blockId.toString,
+        blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId, blockId.toString,
           tempFileManager)
       } catch {
         case NonFatal(e) =>
