@@ -91,7 +91,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         val source = new BufferedInputStream(new FileInputStream(resourceFileStr))
         val resourceMap = try {
           val parsedJson = parse(source).asInstanceOf[JArray].arr
-          parsedJson.map(_.extract[ResourceInformation]).map(x => (x.getName() -> x)).toMap
+          parsedJson.map(_.extract[ResourceInformation]).map(x => (x.name -> x)).toMap
         } catch {
           case e @ (_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
             throw new SparkException(
@@ -111,8 +111,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         logDebug("===============================================================================")
         logDebug("Executor Resources:")
         resources.foreach{ case (k, v) =>
-          logDebug(s"$k -> [name: ${v.getName}, units: ${v.getUnits}, count: ${v.getCount}," +
-            s" addresses: ${v.getAddresses().deep}]")}
+          logDebug(s"$k -> [name: ${v.name}, units: ${v.units}, count: ${v.count}," +
+            s" addresses: ${v.addresses.deep}]")}
         logDebug("===============================================================================")
       }
       resources

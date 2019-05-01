@@ -54,11 +54,11 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val resources = ResourceDiscoverer.findResources(sparkconf, false)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
-      assert(gpuValue.get.getCount() == 2, "Should have 2")
-      assert(gpuValue.get.getName() == "gpu", "name should be gpu")
-      assert(gpuValue.get.getUnits() == "", "units should be empty")
-      assert(gpuValue.get.getAddresses().size == 2, "Should have 2 indexes")
-      assert(gpuValue.get.getAddresses().deep == Array("0", "1").deep, "should have 0,1 entries")
+      assert(gpuValue.get.count == 2, "Should have 2")
+      assert(gpuValue.get.name == "gpu", "name should be gpu")
+      assert(gpuValue.get.units == "", "units should be empty")
+      assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
+      assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
     }
   }
 
@@ -76,10 +76,10 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val resources = ResourceDiscoverer.findResources(sparkconf, false)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
-      assert(gpuValue.get.getCount() == 2, "Should have 2")
-      assert(gpuValue.get.getName() == "gpu", "name should be gpu")
-      assert(gpuValue.get.getUnits() == "", "units should be empty")
-      assert(gpuValue.get.getAddresses().size == 0, "Should have 0 indexes")
+      assert(gpuValue.get.count == 2, "Should have 2")
+      assert(gpuValue.get.name == "gpu", "name should be gpu")
+      assert(gpuValue.get.units == "", "units should be empty")
+      assert(gpuValue.get.addresses.size == 0, "Should have 0 indexes")
     }
   }
 
@@ -146,19 +146,19 @@ class ResourceDiscovererSuite extends SparkFunSuite
       assert(resources.size === 2)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
-      assert(gpuValue.get.getCount() == 2, "Should have 2")
-      assert(gpuValue.get.getName() == "gpu", "name should be gpu")
-      assert(gpuValue.get.getUnits() == "", "units should be empty")
-      assert(gpuValue.get.getAddresses().size == 2, "Should have 2 indexes")
-      assert(gpuValue.get.getAddresses().deep == Array("0", "1").deep, "should have 0,1 entries")
+      assert(gpuValue.get.count == 2, "Should have 2")
+      assert(gpuValue.get.name == "gpu", "name should be gpu")
+      assert(gpuValue.get.units == "", "units should be empty")
+      assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
+      assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
 
       val fpgaValue = resources.get("fpga")
       assert(fpgaValue.nonEmpty, "Should have a gpu entry")
-      assert(fpgaValue.get.getCount() == 3, "Should have 3")
-      assert(fpgaValue.get.getName() == "fpga", "name should be fpga")
-      assert(fpgaValue.get.getUnits() == "mb", "units should be mb")
-      assert(fpgaValue.get.getAddresses().size == 3, "Should have 3 indexes")
-      assert(fpgaValue.get.getAddresses().deep == Array("f1", "f2", "f3").deep,
+      assert(fpgaValue.get.count == 3, "Should have 3")
+      assert(fpgaValue.get.name == "fpga", "name should be fpga")
+      assert(fpgaValue.get.units == "mb", "units should be mb")
+      assert(fpgaValue.get.addresses.size == 3, "Should have 3 indexes")
+      assert(fpgaValue.get.addresses.deep == Array("f1", "f2", "f3").deep,
         "should have f1,f2,f3 entries")
     }
   }
@@ -180,11 +180,11 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val resources = ResourceDiscoverer.findResources(sparkconf, true)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
-      assert(gpuValue.get.getCount() == 2, "Should have 2")
-      assert(gpuValue.get.getName() == "gpu", "name should be gpu")
-      assert(gpuValue.get.getUnits() == "", "units should be empty")
-      assert(gpuValue.get.getAddresses().size == 2, "Should have 2 indexes")
-      assert(gpuValue.get.getAddresses().deep == Array("0", "1").deep, "should have 0,1 entries")
+      assert(gpuValue.get.count == 2, "Should have 2")
+      assert(gpuValue.get.name == "gpu", "name should be gpu")
+      assert(gpuValue.get.units == "", "units should be empty")
+      assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
+      assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
 
     }
   }

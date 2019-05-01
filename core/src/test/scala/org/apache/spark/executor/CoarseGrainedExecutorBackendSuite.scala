@@ -92,10 +92,10 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       assert(parsedResources.size === 1)
       assert(parsedResources.get("gpu").nonEmpty)
-      assert(parsedResources.get("gpu").get.getName() === "gpu")
-      assert(parsedResources.get("gpu").get.getUnits() === "")
-      assert(parsedResources.get("gpu").get.getCount() === 2)
-      assert(parsedResources.get("gpu").get.getAddresses().deep === Array("0", "1").deep)
+      assert(parsedResources.get("gpu").get.name === "gpu")
+      assert(parsedResources.get("gpu").get.units === "")
+      assert(parsedResources.get("gpu").get.count === 2)
+      assert(parsedResources.get("gpu").get.addresses.deep === Array("0", "1").deep)
     }
   }
 
@@ -125,15 +125,15 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       assert(parsedResources.size === 2)
       assert(parsedResources.get("gpu").nonEmpty)
-      assert(parsedResources.get("gpu").get.getName() === "gpu")
-      assert(parsedResources.get("gpu").get.getUnits() === "")
-      assert(parsedResources.get("gpu").get.getCount() === 2)
-      assert(parsedResources.get("gpu").get.getAddresses().deep === Array("0", "1").deep)
+      assert(parsedResources.get("gpu").get.name === "gpu")
+      assert(parsedResources.get("gpu").get.units === "")
+      assert(parsedResources.get("gpu").get.count === 2)
+      assert(parsedResources.get("gpu").get.addresses.deep === Array("0", "1").deep)
       assert(parsedResources.get("fpga").nonEmpty)
-      assert(parsedResources.get("fpga").get.getName() === "fpga")
-      assert(parsedResources.get("fpga").get.getUnits() === "mb")
-      assert(parsedResources.get("fpga").get.getCount() === 3)
-      assert(parsedResources.get("fpga").get.getAddresses().deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get("fpga").get.name === "fpga")
+      assert(parsedResources.get("fpga").get.units === "mb")
+      assert(parsedResources.get("fpga").get.count === 3)
+      assert(parsedResources.get("fpga").get.addresses.deep === Array("f1", "f2", "f3").deep)
     }
   }
 
@@ -162,10 +162,10 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       assert(parsedResources.size === 1)
       assert(parsedResources.get("fpga").nonEmpty)
-      assert(parsedResources.get("fpga").get.getName() === "fpga")
-      assert(parsedResources.get("fpga").get.getUnits() === "")
-      assert(parsedResources.get("fpga").get.getCount() === 3)
-      assert(parsedResources.get("fpga").get.getAddresses().deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get("fpga").get.name === "fpga")
+      assert(parsedResources.get("fpga").get.units === "")
+      assert(parsedResources.get("fpga").get.count === 3)
+      assert(parsedResources.get("fpga").get.addresses.deep === Array("f1", "f2", "f3").deep)
     }
   }
 

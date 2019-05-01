@@ -35,13 +35,7 @@ import org.apache.spark.annotation.Evolving
  */
 @Evolving
 case class ResourceInformation(
-    private val name: String,
-    private val units: String,
-    private val count: Long,
-    private val addresses: Array[String] = Array.empty) {
-
-  def getName(): String = name
-  def getUnits(): String = units
-  def getCount(): Long = count
-  def getAddresses(): Array[String] = addresses
-}
+    val name: String,
+    val units: String,
+    val count: Long,
+    val addresses: Array[String] = Array.empty)
