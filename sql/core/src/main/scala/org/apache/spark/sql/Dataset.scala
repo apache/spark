@@ -494,12 +494,15 @@ class Dataset[T] private[sql](
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
    *
+   * Note that temporary views are already resolved when creating `Dataset`. So if
+   * temporary views are changed after that, the output of this command shows the plans
+   * before such changes.
+   *
    * @group basic
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended,
-      optQueryExecution = Some(queryExecution))
+    val explain = ExplainCommand(queryExecution, extended = extended)
     sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       // scalastyle:off println
       r => println(r.getString(0))
