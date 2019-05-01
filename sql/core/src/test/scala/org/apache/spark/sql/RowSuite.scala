@@ -90,9 +90,10 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
     assert(r1.toString == "[2147483647,21474.83647,-5,this is a string,true,null]")
     val r2 = Row(null, Int.MinValue, Double.NaN, Short.MaxValue, "", false)
     assert(r2.toString == "[null,-2147483648,NaN,32767,,false]")
-    val r3 = Row(r1, Seq(1, 2, 3), Map(1 -> "a", 2 -> "b"), new java.sql.Timestamp(1556700000000L))
+    val tsString = "2019-05-01 17:30:12.0"
+    val r3 = Row(r1, Seq(1, 2, 3), Map(1 -> "a", 2 -> "b"), java.sql.Timestamp.valueOf(tsString))
     assert(r3.toString == "[[2147483647,21474.83647,-5,this is a string,true,null]," +
-      "List(1, 2, 3),Map(1 -> a, 2 -> b),2019-05-01 10:40:00.0]")
+      s"List(1, 2, 3),Map(1 -> a, 2 -> b),$tsString]")
     val empty = Row()
     assert(empty.toString == "[]")
   }
