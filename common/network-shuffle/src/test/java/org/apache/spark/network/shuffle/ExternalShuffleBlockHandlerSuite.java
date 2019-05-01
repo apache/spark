@@ -85,7 +85,7 @@ public class ExternalShuffleBlockHandlerSuite {
     when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(blockMarkers[0]);
     when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
 
-    checkOpenBlocksReceive(new String[] { "shuffle_0_0_0", "shuffle_0_0_1" });
+    checkOpenBlocksReceive(new String[] { "shuffle_0_0_0", "shuffle_0_0_1" }, blockMarkers);
 
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
@@ -97,14 +97,31 @@ public class ExternalShuffleBlockHandlerSuite {
     when(blockResolver.getBlockData("app0", "exec1", 0, 0)).thenReturn(blockMarkers[0]);
     when(blockResolver.getBlockData("app0", "exec1", 0, 1)).thenReturn(blockMarkers[1]);
 
-    checkOpenBlocksReceive(new String[] { "rdd_0_0", "rdd_0_1" });
+    checkOpenBlocksReceive(new String[] { "rdd_0_0", "rdd_0_1" }, blockMarkers);
 
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 1);
     verifyOpenBlockLatencyMetrics();
   }
 
-  private void checkOpenBlocksReceive(String[] blockIds) {
+  @Test
+  public void testOpenDiskPersistedRDDBlocksWithMissingBlock() {
+    ManagedBuffer[] blockMarkersWithMissingBlock = {
+      new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
+      null
+    };
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0))
+      .thenReturn(blockMarkersWithMissingBlock[0]);
+    when(blockResolver.getBlockData("app0", "exec1", 0, 1))
+      .thenReturn(null);
+
+    checkOpenBlocksReceive(new String[] { "rdd_0_0", "rdd_0_1" }, blockMarkersWithMissingBlock);
+
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0);
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 1);
+  }
+
+  private void checkOpenBlocksReceive(String[] blockIds, ManagedBuffer[] blockMarkers) {
     when(client.getClientId()).thenReturn("app0");
 
     RpcResponseCallback callback = mock(RpcResponseCallback.class);

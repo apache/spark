@@ -104,6 +104,15 @@ private[deploy] class Worker(
   private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
     conf.get(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT)
 
+  val EXTERNAL_SHUFFLE_SERVICE_ENABLED = conf.get(config.SHUFFLE_SERVICE_ENABLED)
+
+  if (CLEANUP_NON_SHUFFLE_FILES_ENABLED && EXTERNAL_SHUFFLE_SERVICE_ENABLED) {
+    logWarning("Both 'spark.storage.cleanupFilesAfterExecutorExit' and " +
+      "'spark.shuffle.service.enabled' are switched on. But with SPARK-25888 the external " +
+      "shuffle service able to serve disk persisted RDD blocks. So to keep benefiting from " +
+      "SPARK-25888 the cleanup only will be triggered after the application is stopped.")
+  }
+
   private var master: Option[RpcEndpointRef] = None
 
   /**
@@ -750,7 +759,8 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
-          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED) {
+
+          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED && !EXTERNAL_SHUFFLE_SERVICE_ENABLED) {
             shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
           }
         case None =>

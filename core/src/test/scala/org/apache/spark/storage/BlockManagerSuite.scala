@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.File
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -40,7 +41,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
@@ -1352,6 +1353,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations("item").nonEmpty)
     assert(store2.getRemoteBytes("item").isEmpty)
     assert(master.getLocations("item").isEmpty)
+  }
+
+  test("SPARK-25888: serving of removed file not detected by shuffle service") {
+    // although the existence of the file is checked before serving it but a delete can happen
+    // somewhere after that check
+    val store = makeBlockManager(8000, "executor1")
+    val emptyBlockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+        host: String,
+        port: Int,
+        execId: String,
+        blockId: String,
+        tempFileManager: DownloadFileManager): ManagedBuffer = {
+        val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 1)
+        // empty ManagedBuffer
+        new FileSegmentManagedBuffer(transConf, new File("missing.file"), 0, 0)
+      }
+    }
+    val store2 =
+      makeBlockManager(8000, "executor2", this.master, Some(emptyBlockFetcher))
+    store.putSingle("item", "value", StorageLevel.DISK_ONLY, tellMaster = true)
+    assert(master.getLocations("item").nonEmpty)
+    assert(store2.getRemoteBytes("item").isEmpty)
   }
 
   test("test sorting of block locations") {

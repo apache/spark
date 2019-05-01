@@ -898,8 +898,12 @@ private[spark] class BlockManager(
       val loc = locationIterator.next()
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
-        blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId, blockId.toString,
-          tempFileManager)
+        val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
+          blockId.toString, tempFileManager)
+        if (blockSize > 0 && buf.size() == 0) {
+          throw new IllegalStateException("Empty buffer received for non empty block")
+        }
+        buf
       } catch {
         case NonFatal(e) =>
           runningFailureCount += 1

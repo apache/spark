@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.netty.channel.Channel;
+import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -30,7 +31,33 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 public class OneForOneStreamManagerSuite {
 
   @Test
-  public void managedBuffersAreFeedWhenConnectionIsClosed() throws Exception {
+  public void testMissingChunk() {
+    OneForOneStreamManager manager = new OneForOneStreamManager();
+    List<ManagedBuffer> buffers = new ArrayList<>();
+    TestManagedBuffer buffer1 = Mockito.spy(new TestManagedBuffer(10));
+    TestManagedBuffer buffer2 = Mockito.spy(new TestManagedBuffer(20));
+    TestManagedBuffer buffer3 = Mockito.spy(new TestManagedBuffer(20));
+
+    buffers.add(buffer1);
+    buffers.add(null);
+    buffers.add(buffer2);
+    buffers.add(null);
+    buffers.add(buffer3);
+
+    Channel dummyChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
+    long streamId = manager.registerStream("appId", buffers.iterator(), dummyChannel);
+    Assert.assertEquals(1, manager.numStreamStates());
+    Assert.assertNotNull(manager.getChunk(streamId, 0));
+    Assert.assertNull(manager.getChunk(streamId, 1));
+    Assert.assertNotNull(manager.getChunk(streamId, 2));
+    manager.connectionTerminated(dummyChannel);
+    Mockito.verify(buffer1, Mockito.never()).release();
+    Mockito.verify(buffer2, Mockito.never()).release();
+    Mockito.verify(buffer3, Mockito.times(1)).release();
+  }
+
+  @Test
+  public void managedBuffersAreFeedWhenConnectionIsClosed() {
     OneForOneStreamManager manager = new OneForOneStreamManager();
     List<ManagedBuffer> buffers = new ArrayList<>();
     TestManagedBuffer buffer1 = Mockito.spy(new TestManagedBuffer(10));
@@ -40,12 +67,11 @@ public class OneForOneStreamManagerSuite {
 
     Channel dummyChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
     manager.registerStream("appId", buffers.iterator(), dummyChannel);
-    assert manager.numStreamStates() == 1;
-
+    Assert.assertEquals(1, manager.numStreamStates());
     manager.connectionTerminated(dummyChannel);
 
     Mockito.verify(buffer1, Mockito.times(1)).release();
     Mockito.verify(buffer2, Mockito.times(1)).release();
-    assert manager.numStreamStates() == 0;
+    Assert.assertEquals(0, manager.numStreamStates());
   }
 }
