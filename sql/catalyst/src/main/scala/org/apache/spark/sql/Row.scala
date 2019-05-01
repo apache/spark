@@ -475,20 +475,17 @@ trait Row extends Serializable {
    * start, end, and separator strings.
    */
   def mkString(start: String, sep: String, end: String): String = {
-    var first = true
-    var i = 0
     val n = length
     val builder = new StringBuilder
     builder.append(start)
-    while (i < n) {
-      if (first) {
-        builder.append(get(i))
-        first = false
-      } else {
+    if (n > 0) {
+      builder.append(get(0))
+      var i = 1
+      while (i < n) {
         builder.append(sep)
         builder.append(get(i))
+        i += 1
       }
-      i += 1
     }
     builder.append(end)
     builder.toString()
