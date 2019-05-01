@@ -22,7 +22,7 @@ import java.net.URI
 import org.mockito.Mockito._
 import org.scalatest.Matchers
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, ExternalCatalog, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
@@ -46,7 +46,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
     new Analyzer(catalog, conf)
   }
 
-  test("builtin functions don't call the external catalog") {
+  test("query builtin functions don't call the external catalog") {
     val inMemoryCatalog = new InMemoryCatalog
     val catalog = spy(inMemoryCatalog)
     val analyzer = getAnalyzer(catalog)
@@ -58,4 +58,17 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
     analyzer.execute(plan)
     verifyZeroInteractions(catalog)
   }
+
+  test("check the existence of builtin functions don't call the external catalog") {
+    val inMemoryCatalog = new InMemoryCatalog
+    val externCatalog = spy(inMemoryCatalog)
+    val catalog = new SessionCatalog(externCatalog, FunctionRegistry.builtin, conf)
+    catalog.createDatabase(
+      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      ignoreIfExists = false)
+    reset(externCatalog)
+    catalog.functionExists(FunctionIdentifier("sum"))
+    verifyZeroInteractions(externCatalog)
+  }
+
 }
