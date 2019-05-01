@@ -372,7 +372,7 @@ trait Row extends Serializable {
     }.toMap
   }
 
-  override def toString: String = s"[${this.mkString(",")}]"
+  override def toString: String = this.mkString("[", ",", "]")
 
   /**
    * Make a copy of the current [[Row]] object.
