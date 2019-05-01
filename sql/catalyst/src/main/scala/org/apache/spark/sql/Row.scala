@@ -465,16 +465,34 @@ trait Row extends Serializable {
   }
 
   /** Displays all elements of this sequence in a string (without a separator). */
-  def mkString: String = toSeq.mkString
+  def mkString: String = mkString("")
 
   /** Displays all elements of this sequence in a string using a separator string. */
-  def mkString(sep: String): String = toSeq.mkString(sep)
+  def mkString(sep: String): String = mkString("", sep, "")
 
   /**
    * Displays all elements of this traversable or iterator in a string using
    * start, end, and separator strings.
    */
-  def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
+  def mkString(start: String, sep: String, end: String): String = {
+    var first = true
+    var i = 0
+    val n = length
+    val builder = new StringBuilder
+    builder.append(start)
+    while (i < n) {
+      if (first) {
+        builder.append(get(i))
+        first = false
+      } else {
+        builder.append(sep)
+        builder.append(get(i))
+      }
+      i += 1
+    }
+    builder.append(end)
+    builder.toString()
+  }
 
   /**
    * Returns the value at position i.
