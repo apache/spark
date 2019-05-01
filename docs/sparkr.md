@@ -663,32 +663,58 @@ Apache Arrow is an in-memory columnar data format that is used in Spark to effic
 
 ## Ensure Arrow Installed
 
-Currently, Arrow R library is not on CRAN as of [ARROW-3204](https://issues.apache.org/jira/browse/ARROW-3204). Therefore, it should be installed directly from Github. You can use `remotes::install_github` as below.
+Currently, Arrow R library is not on CRAN yet [ARROW-3204](https://issues.apache.org/jira/browse/ARROW-3204). Therefore, it should be installed directly from Github. You can use `remotes::install_github` as below.
 
 ```bash
-Rscript -e 'remotes::install_github("apache/arrow@[TAG]", subdir = "r")'
+Rscript -e 'remotes::install_github("apache/arrow@TAG", subdir = "r")'
 ```
 
-`[TAG]` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R packge is installed and available on all cluster nodes. The current supported version is 0.12.0.
+`TAG` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R packge is installed and available on all cluster nodes. The current supported version is 0.12.0.
 
 ## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
 
-To enable Arrow optimization between SparkR DataFrame and R DataFrame, set `spark.sql.execution.arrow.enabled` to `true`.
+Arrow optimization is available when converting a Spark DataFrame to an R DataFrame using the call `createDataFrame(r_df)`,
+when creating a Spark DataFrame from an R DataFrame with `collect(spark_df)`, when applying an R native function to each partition
+via `dapply(...)` and when applying an R native function to grouped data via `gapply(...)`.
+To use Arrow when executing these calls, users need to first set the Spark configuration ‘spark.sql.execution.arrow.enabled’
+to ‘true’. This is disabled by default.
+
+In addition, optimizations enabled by ‘spark.sql.execution.arrow.enabled’ could fallback automatically to non-Arrow optimization
+implementation if an error occurs before the actual computation within Spark during converting a Spark DataFrame to/from an R
+DataFrame.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
 # Start up spark session with Arrow optimization enabled
 sparkR.session(master = "local[*]",
                sparkConfig = list(spark.sql.execution.arrow.enabled = "true"))
+
+# Converts Spark DataFrame from an R DataFrame
+spark_df <- createDataFrame(mtcars)
+
+# Converts Spark DataFrame to an R DataFrame
+collect(spark_df)
+
+# Apply an R native function to each partition.
+collect(dapply(spark_df, function(rdf) { data.frame(rdf$gear + 1) }, structType("gear double")))
+
+# Apply an R native function to grouped data.
+collect(gapply(spark_df,
+               "gear",
+               function(key, group) {
+                 data.frame(gear = key[[1]], disp = mean(group$disp) > group$disp)
+               },
+               structType("gear double, disp boolean")))
 {% endhighlight %}
 </div>
 
-This configuration internally enables Arrow optimization in `gapply`, `dapply`, conversion to/from R DataFrame.
+Using the above optimizations with Arrow will produce the same results as when Arrow is not enabled. Note that even with Arrow,
+`collect(spark_df)` results in the collection of all records in the DataFrame to the driver program and should be done on a
+small subset of the data.
 
 ## Supported SQL Types
 
 Currently, all Spark SQL data types are supported by Arrow-based conversion except `FloatType`, `BinaryType`, `ArrayType`, `StructType` and `MapType`.
-
 
 # R Function Name Conflicts
 
