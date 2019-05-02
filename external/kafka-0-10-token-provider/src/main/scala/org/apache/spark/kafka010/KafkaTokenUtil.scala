@@ -48,6 +48,7 @@ private[spark] object KafkaTokenUtil extends Logging {
 
   private[kafka010] def getTokenService(identifier: String): Text =
     new Text(s"$TOKEN_SERVICE_PREFIX.$identifier")
+
   private def getClusterIdentifier(service: Text): String =
     service.toString().replace(s"$TOKEN_SERVICE_PREFIX.", "")
 

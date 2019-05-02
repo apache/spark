@@ -71,16 +71,12 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
     Configuration.setConfiguration(new KafkaJaasConfiguration)
   }
 
-  protected def addTokenToUGI(identifier: String, tokenService: Option[String] = None): Unit = {
+  protected def addTokenToUGI(tokenService: Text): Unit = {
     val token = new Token[KafkaDelegationTokenIdentifier](
       tokenId.getBytes,
       tokenPassword.getBytes,
       KafkaTokenUtil.TOKEN_KIND,
-      if (tokenService.isEmpty) {
-        KafkaTokenUtil.getTokenService(identifier)
-      } else {
-        new Text(tokenService.get)
-      }
+      tokenService
     )
     val creds = new Credentials()
     creds.addToken(token.getService, token)

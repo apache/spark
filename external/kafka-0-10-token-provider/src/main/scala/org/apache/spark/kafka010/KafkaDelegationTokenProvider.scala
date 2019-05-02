@@ -36,11 +36,11 @@ private[spark] class KafkaDelegationTokenProvider
       hadoopConf: Configuration,
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
+    var lowestNextRenewalDate: Option[Long] = None
     try {
-      var lowestNextRenewalDate: Option[Long] = None
       KafkaTokenSparkConf.getAllClusterConfigs(sparkConf).foreach { clusterConf =>
-        if (delegationTokensRequired(clusterConf)) {
-          try {
+        try {
+          if (delegationTokensRequired(clusterConf)) {
             logDebug(
               s"Attempting to fetch Kafka security token for cluster ${clusterConf.identifier}.")
             val (token, nextRenewalDate) = KafkaTokenUtil.obtainToken(sparkConf, clusterConf)
@@ -48,22 +48,21 @@ private[spark] class KafkaDelegationTokenProvider
             if (lowestNextRenewalDate.isEmpty || nextRenewalDate < lowestNextRenewalDate.get) {
               lowestNextRenewalDate = Some(nextRenewalDate)
             }
-          } catch {
-            case NonFatal(e) =>
-              logWarning(s"Failed to get token from service: $serviceName " +
-                s"cluster: ${clusterConf.identifier}", e)
+          } else {
+            logDebug(
+              s"Cluster ${clusterConf.identifier} does not require delegation token, skipping.")
           }
-        } else {
-          logDebug(
-            s"Cluster ${clusterConf.identifier} does not require delegation token, skipping.")
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Failed to get token from service: $serviceName " +
+              s"cluster: ${clusterConf.identifier}", e)
         }
       }
-      lowestNextRenewalDate
     } catch {
       case NonFatal(e) =>
         logWarning(s"Failed to get token cluster configuration", e)
-        None
     }
+    lowestNextRenewalDate
   }
 
   override def delegationTokensRequired(

@@ -19,6 +19,7 @@ package org.apache.spark.kafka010
 
 import java.security.PrivilegedExceptionAction
 
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
@@ -30,6 +31,8 @@ import org.apache.spark.internal.config._
 class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   private val identifier1 = "cluster1"
   private val identifier2 = "cluster2"
+  private val tokenService1 = KafkaTokenUtil.getTokenService(identifier1)
+  private val tokenService2 = KafkaTokenUtil.getTokenService(identifier2)
   private val bootStrapServers = "127.0.0.1:0"
   private val matchingTargetServersRegex = "127.0.0.*:0"
   private val nonMatchingTargetServersRegex = "127.0.1.*:0"
@@ -188,8 +191,8 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(identifier1)
-    addTokenToUGI(identifier2, Some("intentionally_garbage"))
+    addTokenToUGI(tokenService1)
+    addTokenToUGI(new Text("intentionally_garbage"))
 
     assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
   }
@@ -198,7 +201,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(identifier1)
+    addTokenToUGI(tokenService1)
 
     assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) ===
       Some(KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)))
@@ -211,8 +214,8 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(identifier1)
-    addTokenToUGI(identifier2)
+    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService2)
 
     val thrown = intercept[IllegalArgumentException] {
       KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers)
@@ -221,7 +224,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("getTokenJaasParams with token should return scram module") {
-    addTokenToUGI(identifier1)
+    addTokenToUGI(tokenService1)
     val clusterConf = createClusterConf(SASL_SSL.name)
 
     val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
