@@ -1326,12 +1326,20 @@ object SQLConf {
 
   val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
-      .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas, " +
-        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame, " +
-        "and createDataFrame when its input is an R DataFrame. " +
+      .doc("When true, make use of Apache Arrow for columnar data transfers." +
+        "In case of PySpark, " +
+        "1. pyspark.sql.DataFrame.toPandas " +
+        "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
-        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
+        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType." +
+
+        "In case of SparkR," +
+        "1. createDataFrame when its input is an R DataFrame " +
+        "2. collect " +
+        "3. dapply " +
+        "4. gapply " +
+        "The following data types are unsupported: " +
+        "FloatType, BinaryType, ArrayType, StructType and MapType.")
       .booleanConf
       .createWithDefault(false)
 
