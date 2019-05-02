@@ -177,18 +177,17 @@ object ExplainCommand {
     extended: Boolean,
     codegen: Boolean,
     cost: Boolean): ExplainCommand = {
-    val sparkSession = SparkSession.getActiveSession
-    assert(sparkSession.nonEmpty, "Explain command shouldn't be initialized on executors")
+    val sparkSession = SparkSession.active
 
     val queryExecution =
       if (logicalPlan.isStreaming) {
         // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
         // output mode does not matter since there is no `Sink`.
         new IncrementalExecution(
-          sparkSession.get, logicalPlan, OutputMode.Append(), "<unknown>",
+          sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
           UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
       } else {
-        sparkSession.get.sessionState.executePlan(logicalPlan)
+        sparkSession.sessionState.executePlan(logicalPlan)
       }
     new ExplainCommand(queryExecution, extended, codegen, cost)
   }

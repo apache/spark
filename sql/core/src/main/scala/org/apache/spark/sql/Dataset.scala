@@ -494,10 +494,6 @@ class Dataset[T] private[sql](
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
    *
-   * Note that temporary views are already resolved when creating `Dataset`. So if
-   * temporary views are changed after that, the output of this command shows the plans
-   * before such changes.
-   *
    * @group basic
    * @since 1.6.0
    */
