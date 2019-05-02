@@ -669,12 +669,12 @@ Currently, Arrow R library is not on CRAN yet [ARROW-3204](https://issues.apache
 Rscript -e 'remotes::install_github("apache/arrow@TAG", subdir = "r")'
 ```
 
-`TAG` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R packge is installed and available on all cluster nodes. The current supported version is 0.12.1.
+`TAG` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R package is installed and available on all cluster nodes. The current supported version is 0.12.1.
 
 ## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
 
-Arrow optimization is available when converting a Spark DataFrame to an R DataFrame using the call `createDataFrame(r_df)`,
-when creating a Spark DataFrame from an R DataFrame with `collect(spark_df)`, when applying an R native function to each partition
+Arrow optimization is available when converting a Spark DataFrame to an R DataFrame using the call `collect(spark_df)`,
+when creating a Spark DataFrame from an R DataFrame with `createDataFrame(r_df)`, when applying an R native function to each partition
 via `dapply(...)` and when applying an R native function to grouped data via `gapply(...)`.
 To use Arrow when executing these calls, users need to first set the Spark configuration ‘spark.sql.execution.arrow.enabled’
 to ‘true’. This is disabled by default.
