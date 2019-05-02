@@ -321,6 +321,10 @@ public final class CalendarInterval implements Serializable {
       appendUnit(sb, rest, "microsecond");
     }
 
+    if (months == 0 && microseconds == 0) {
+      sb.append(" 0 microseconds");
+    }
+
     return sb.toString();
   }
 
