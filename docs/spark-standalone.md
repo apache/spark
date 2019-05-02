@@ -42,7 +42,7 @@ Once started, the master will print out a `spark://HOST:PORT` URL for itself, wh
 or pass as the "master" argument to `SparkContext`. You can also find this URL on
 the master's web UI, which is [http://localhost:8080](http://localhost:8080) by default.
 
-Similarly, you can start one or more workers and connect them to the master via:
+Similarly, you can start one or more workers and connect them to the master's spark URL (default: spark://<master>:7070) via:
 
     ./sbin/start-slave.sh <master-spark-URL>
 
