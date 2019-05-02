@@ -432,6 +432,14 @@
             <groupId>org.jvnet.staxex</groupId>
             <artifactId>stax-ex</artifactId>
           </exclusion>
+          <!--
+            SPARK-27611: Exclude redundant javax.activation implementation, which
+            conflicts with the existing javax.activation:activation:1.1.1 dependency.
+            -->
+          <exclusion>
+            <groupId>jakarta.activation</groupId>
+            <artifactId>jakarta.activation-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
