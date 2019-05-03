@@ -196,7 +196,8 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     dataContext.insertCachedRddData();
   }
 
-  private static void createRemovableTestFiles(TestShuffleDataContext dataContext) throws IOException {
+  private static void createRemovableTestFiles(TestShuffleDataContext dataContext)
+    throws IOException {
     dataContext.insertSpillData();
     dataContext.insertBroadcastData();
     dataContext.insertTempShuffleData();
