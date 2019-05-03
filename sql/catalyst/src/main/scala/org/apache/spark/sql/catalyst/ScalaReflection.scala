@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-
 /**
  * A helper trait to create [[org.apache.spark.sql.catalyst.encoders.ExpressionEncoder]]s
  * for classes whose fields are entirely defined by constructor params but should not be
@@ -622,6 +621,14 @@ object ScalaReflection extends ScalaReflection {
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor[T: TypeTag]: Schema = schemaFor(localTypeOf[T])
+
+  /** Returns a catalyst DataType and its nullability for the given Scala class using reflection. */
+  def schemaFor(cls: Class[_]): Schema = schemaFor {
+    // ClassTag
+    val m = runtimeMirror(cls.getClassLoader)
+    val classSymbol = m.classSymbol(cls)
+    classSymbol.toType
+  }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = cleanUpReflectionObjects {

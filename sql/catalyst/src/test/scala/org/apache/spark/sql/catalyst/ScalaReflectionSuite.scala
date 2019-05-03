@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
+import scala.reflect._
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
@@ -119,8 +120,6 @@ object ScroogeLikeExample {
 }
 
 trait ScroogeLikeExample extends Product1[Int] with Serializable {
-  import ScroogeLikeExample._
-
   def x: Int
 
   def _1: Int = x
@@ -152,16 +151,21 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SQLUserDefinedType annotation on Scala structure") {
-    val schema = schemaFor[TestingUDT.NestedStruct]
-    assert(schema === Schema(
+    val schema1 = schemaFor[TestingUDT.NestedStruct]
+    val schema2 = schemaFor(classTag[TestingUDT.NestedStruct].runtimeClass)
+
+    assert(schema1 === Schema(
       new TestingUDT.NestedStructUDT,
       nullable = true
     ))
+    assert(schema1 === schema2)
   }
 
   test("primitive data") {
-    val schema = schemaFor[PrimitiveData]
-    assert(schema === Schema(
+    val schema1 = schemaFor[PrimitiveData]
+    val schema2 = schemaFor(classTag[PrimitiveData].runtimeClass)
+
+    assert(schema1 === Schema(
       StructType(Seq(
         StructField("intField", IntegerType, nullable = false),
         StructField("longField", LongType, nullable = false),
@@ -171,11 +175,14 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("byteField", ByteType, nullable = false),
         StructField("booleanField", BooleanType, nullable = false))),
       nullable = true))
+    assert(schema1 === schema2)
   }
 
   test("nullable data") {
-    val schema = schemaFor[NullableData]
-    assert(schema === Schema(
+    val schema1 = schemaFor[NullableData]
+    val schema2 = schemaFor(classTag[NullableData].runtimeClass)
+
+    assert(schema1 === Schema(
       StructType(Seq(
         StructField("intField", IntegerType, nullable = true),
         StructField("longField", LongType, nullable = true),
@@ -190,11 +197,14 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("timestampField", TimestampType, nullable = true),
         StructField("binaryField", BinaryType, nullable = true))),
       nullable = true))
+    assert(schema1 === schema2)
   }
 
   test("optional data") {
-    val schema = schemaFor[OptionalData]
-    assert(schema === Schema(
+    val schema1 = schemaFor[OptionalData]
+    val schema2 = schemaFor(classTag[OptionalData].runtimeClass)
+
+    assert(schema1 === Schema(
       StructType(Seq(
         StructField("intField", IntegerType, nullable = true),
         StructField("longField", LongType, nullable = true),
@@ -205,11 +215,14 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("booleanField", BooleanType, nullable = true),
         StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true))),
       nullable = true))
+    assert(schema1 === schema2)
   }
 
   test("complex data") {
-    val schema = schemaFor[ComplexData]
-    assert(schema === Schema(
+    val schema1 = schemaFor[ComplexData]
+    val schema2 = schemaFor(classTag[ComplexData].runtimeClass)
+
+    assert(schema1 === Schema(
       StructType(Seq(
         StructField(
           "arrayField",
@@ -250,58 +263,77 @@ class ScalaReflectionSuite extends SparkFunSuite {
           "nestedArrayField",
           ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true)))),
       nullable = true))
+    assert(schema1 === schema2)
   }
 
   test("generic data") {
-    val schema = schemaFor[GenericData[Int]]
-    assert(schema === Schema(
+    val d = GenericData(3)
+    val schema1 = schemaFor[GenericData[Int]]
+    val schema2 = schemaFor(d.getClass)
+
+    assert(schema1 === Schema(
       StructType(Seq(
         StructField("genericField", IntegerType, nullable = false))),
       nullable = true))
+    assert(schema1 === schema2)
+
   }
 
   test("tuple data") {
-    val schema = schemaFor[(Int, String)]
-    assert(schema === Schema(
+    val schema1 = schemaFor[(Int, String)]
+    val schema2 = schemaFor(classTag[(Int, String)].runtimeClass)
+
+    assert(schema1 === Schema(
       StructType(Seq(
         StructField("_1", IntegerType, nullable = false),
         StructField("_2", StringType, nullable = true))),
       nullable = true))
+    assert(schema1 === schema2)
   }
 
   test("type-aliased data") {
     assert(schemaFor[GenericData[Int]] == schemaFor[GenericData.IntData])
+    assert(schemaFor(classTag[GenericData[Int]].runtimeClass) ==
+      schemaFor(classTag[GenericData.IntData].runtimeClass))
   }
 
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
-    val dataType = schemaFor[PrimitiveData].dataType
-    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
+    val dataType1 = schemaFor[PrimitiveData].dataType
+    val dataType2 = schemaFor(classTag[PrimitiveData].runtimeClass).dataType
+
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType1)(data) === convertedData)
+    assert(dataType1 == dataType2)
   }
 
   test("convert Option[Product] to catalyst") {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(primitiveData))
-    val dataType = schemaFor[OptionalData].dataType
+    val dataType1 = schemaFor[OptionalData].dataType
+    val dataType2 = schemaFor(classTag[OptionalData].runtimeClass).dataType
+
     val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
       InternalRow(1, 1, 1, 1, 1, 1, true))
-    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType1)(data) === convertedData)
+    assert(dataType1 == dataType2)
   }
 
   test("infer schema from case class with multiple constructors") {
-    val dataType = schemaFor[MultipleConstructorsData].dataType
-    dataType match {
+    val dataType1 = schemaFor[MultipleConstructorsData].dataType
+    val dataType2 = schemaFor[MultipleConstructorsData].dataType
+
+    dataType1 match {
       case s: StructType =>
         // Schema should have order: a: Int, b: String, c: Double
         assert(s.fieldNames === Seq("a", "b", "c"))
         assert(s.fields.map(_.dataType) === Seq(IntegerType, StringType, DoubleType))
     }
+    assert(dataType1 == dataType2)
   }
 
   test("SPARK-15062: Get correct serializer for List[_]") {
-    val list = List(1, 2, 3)
     val serializer = serializerFor[List[Int]]
     assert(serializer.isInstanceOf[NewInstance])
     assert(serializer.asInstanceOf[NewInstance]
@@ -375,12 +407,15 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-23025: schemaFor should support Null type") {
-    val schema = schemaFor[(Int, Null)]
-    assert(schema === Schema(
+    val schema1 = schemaFor[(Int, Null)]
+    val schema2 = schemaFor(classTag[(Int, Null)].runtimeClass)
+
+    assert(schema1 === Schema(
       StructType(Seq(
         StructField("_1", IntegerType, nullable = false),
         StructField("_2", NullType, nullable = true))),
       nullable = true))
+    assert(schema1 == schema2)
   }
 
   test("SPARK-23835: add null check to non-nullable types in Tuples") {
@@ -394,9 +429,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-8288: schemaFor works for a class with only a companion object constructor") {
-    val schema = schemaFor[ScroogeLikeExample]
-    assert(schema === Schema(
+    val schema1 = schemaFor[ScroogeLikeExample]
+    val schema2 = schemaFor(classTag[ScroogeLikeExample].runtimeClass)
+
+    assert(schema1 === Schema(
       StructType(Seq(
         StructField("x", IntegerType, nullable = false))), nullable = true))
+    assert(schema1 == schema2)
   }
 }

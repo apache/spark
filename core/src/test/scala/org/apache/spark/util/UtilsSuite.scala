@@ -18,8 +18,9 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, InputStream, PrintStream, SequenceInputStream}
+  FileOutputStream, PrintStream, SequenceInputStream}
 import java.lang.{Double => JDouble, Float => JFloat}
+import java.lang.invoke.MethodHandleInfo
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -429,7 +430,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("deserialize long value") {
-    val testval : Long = 9730889947L
+    val testval: Long = 9730889947L
     val bbuf = ByteBuffer.allocate(8)
     assert(bbuf.hasArray)
     bbuf.order(ByteOrder.BIG_ENDIAN)
@@ -1194,7 +1195,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     e = new Error("Block2")
     isErrorOccurred = false
     try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = {}, finallyBlock = {})
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        throw e
+      }(catchBlock = {}, finallyBlock = {})
     } catch {
       case t: Error =>
         assert(t.getSuppressed.length == 0)
@@ -1309,6 +1312,18 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(Utils.trimExceptCRLF(s"a${s}") === "a")
       assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
     }
+  }
+
+  test("getSerializedLambda") {
+    // TODO: adds more tests
+    val f = (x: Int, y: String) => x + y
+    val serializedLambda = Utils.getSerializedLambda(f)
+
+    assert(serializedLambda.nonEmpty)
+    assert(serializedLambda.get.getFunctionalInterfaceClass == "scala/Function2")
+    assert(serializedLambda.get.getFunctionalInterfaceMethodSignature ==
+      "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;")
+    assert(serializedLambda.get.getImplMethodKind == MethodHandleInfo.REF_invokeStatic)
   }
 }
 
