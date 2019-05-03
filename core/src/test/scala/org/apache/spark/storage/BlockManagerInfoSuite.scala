@@ -27,141 +27,133 @@ class BlockManagerInfoSuite extends SparkFunSuite {
 
   def testWithShuffleServiceOnOff(testName: String)
       (f: (Boolean, BlockManagerInfo) => Unit): Unit = {
-    Seq(true, false).foreach { shuffleServiceEnabled =>
-      val blockManagerInfo = new BlockManagerInfo(
+    Seq(true, false).foreach { svcEnabled =>
+      val bmInfo = new BlockManagerInfo(
         BlockManagerId("executor0", "host", 1234, None),
         timeMs = 300,
         maxOnHeapMem = 10000,
         maxOffHeapMem = 20000,
         slaveEndpoint = null,
-        if (shuffleServiceEnabled) Some(new JHashMap[BlockId, BlockStatus]) else None)
-      test(s"$testName externalShuffleServiceEnabled=$shuffleServiceEnabled") {
-        f(shuffleServiceEnabled, blockManagerInfo)
+        if (svcEnabled) Some(new JHashMap[BlockId, BlockStatus]) else None)
+      test(s"$testName externalShuffleServiceEnabled=$svcEnabled") {
+        f(svcEnabled, bmInfo)
       }
     }
   }
 
-  testWithShuffleServiceOnOff("add broadcast block") { (_, blockManagerInfo) =>
+  testWithShuffleServiceOnOff("broadcast block") { (_, bmInfo) =>
     val broadcastId: BlockId = BroadcastBlockId(0, "field1")
-    blockManagerInfo.updateBlockInfo(
+    bmInfo.updateBlockInfo(
       broadcastId, StorageLevel.MEMORY_AND_DISK, memSize = 200, diskSize = 100)
-    assert(blockManagerInfo.blocks.asScala
-      === Map(broadcastId -> BlockStatus(StorageLevel.MEMORY_AND_DISK, 0, 100)))
-    assert(blockManagerInfo.exclusiveCachedBlocks === Set())
-    assert(blockManagerInfo.remainingMem == 29800)
+    assert(bmInfo.blocks.asScala ===
+      Map(broadcastId -> BlockStatus(StorageLevel.MEMORY_AND_DISK, 0, 100)))
+    assert(bmInfo.exclusiveCachedBlocks.isEmpty)
+    assert(bmInfo.remainingMem == 29800)
   }
 
-  testWithShuffleServiceOnOff("add RDD block with MEMORY_ONLY") {
-    (shuffleServiceEnabled, blockManagerInfo) =>
+  testWithShuffleServiceOnOff("RDD block with MEMORY_ONLY") { (svcEnabled, bmInfo) =>
     val rddId: BlockId = RDDBlockId(0, 0)
-    blockManagerInfo.updateBlockInfo(rddId, StorageLevel.MEMORY_ONLY, memSize = 200, diskSize = 0)
-    assert(blockManagerInfo.blocks.asScala
-      === Map(rddId -> BlockStatus(StorageLevel.MEMORY_ONLY, 200, 0)))
-    assert(blockManagerInfo.exclusiveCachedBlocks === Set(rddId))
-    assert(blockManagerInfo.remainingMem == 29800)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala === Map())
+    bmInfo.updateBlockInfo(rddId, StorageLevel.MEMORY_ONLY, memSize = 200, diskSize = 0)
+    assert(bmInfo.blocks.asScala ===
+      Map(rddId -> BlockStatus(StorageLevel.MEMORY_ONLY, 200, 0)))
+    assert(bmInfo.exclusiveCachedBlocks === Set(rddId))
+    assert(bmInfo.remainingMem == 29800)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.isEmpty)
     }
   }
 
-  testWithShuffleServiceOnOff("add RDD block with MEMORY_AND_DISK") {
-    (shuffleServiceEnabled, blockManagerInfo) =>
+  testWithShuffleServiceOnOff("RDD block with MEMORY_AND_DISK") { (svcEnabled, bmInfo) =>
     val rddId: BlockId = RDDBlockId(0, 0)
-    blockManagerInfo.updateBlockInfo(
+    bmInfo.updateBlockInfo(
       rddId, StorageLevel.MEMORY_AND_DISK, memSize = 200, diskSize = 400)
-    assert(blockManagerInfo.blocks.asScala
-      === Map(rddId -> BlockStatus(StorageLevel.MEMORY_AND_DISK, 0, 400)))
-    val exclusiveCachedBlocksForOneMemoryOnly = if (shuffleServiceEnabled) Set() else Set(rddId)
-    assert(blockManagerInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
-    assert(blockManagerInfo.remainingMem == 29800)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala
-        === Map(rddId -> BlockStatus(StorageLevel.MEMORY_AND_DISK, 0, 400)))
+    assert(bmInfo.blocks.asScala ===
+      Map(rddId -> BlockStatus(StorageLevel.MEMORY_AND_DISK, 0, 400)))
+    val exclusiveCachedBlocksForOneMemoryOnly = if (svcEnabled) Set() else Set(rddId)
+    assert(bmInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
+    assert(bmInfo.remainingMem == 29800)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.asScala ===
+        Map(rddId -> BlockStatus(StorageLevel.MEMORY_AND_DISK, 0, 400)))
     }
   }
 
-  testWithShuffleServiceOnOff("add RDD block with DISK_ONLY") {
-    (shuffleServiceEnabled, blockManagerInfo) =>
+  testWithShuffleServiceOnOff("RDD block with DISK_ONLY") { (svcEnabled, bmInfo) =>
     val rddId: BlockId = RDDBlockId(0, 0)
-    blockManagerInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
-    assert(blockManagerInfo.blocks.asScala
-      === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
-    val exclusiveCachedBlocksForOneMemoryOnly = if (shuffleServiceEnabled) Set() else Set(rddId)
-    assert(blockManagerInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
-    assert(blockManagerInfo.remainingMem == 30000)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala
-        === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
+    bmInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
+    assert(bmInfo.blocks.asScala ===
+      Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
+    val exclusiveCachedBlocksForOneMemoryOnly = if (svcEnabled) Set() else Set(rddId)
+    assert(bmInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
+    assert(bmInfo.remainingMem == 30000)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.asScala ===
+        Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
     }
   }
 
-  testWithShuffleServiceOnOff("update RDD block from MEMORY_ONLY to DISK_ONLY") {
-    (shuffleServiceEnabled, blockManagerInfo) =>
+  testWithShuffleServiceOnOff("update from MEMORY_ONLY to DISK_ONLY") { (svcEnabled, bmInfo) =>
     val rddId: BlockId = RDDBlockId(0, 0)
-    blockManagerInfo.updateBlockInfo(rddId, StorageLevel.MEMORY_ONLY, memSize = 200, 0)
-    assert(blockManagerInfo.blocks.asScala
-      === Map(rddId -> BlockStatus(StorageLevel.MEMORY_ONLY, 200, 0)))
-    assert(blockManagerInfo.exclusiveCachedBlocks === Set(rddId))
-    assert(blockManagerInfo.remainingMem == 29800)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala == Map())
+    bmInfo.updateBlockInfo(rddId, StorageLevel.MEMORY_ONLY, memSize = 200, 0)
+    assert(bmInfo.blocks.asScala  === Map(rddId -> BlockStatus(StorageLevel.MEMORY_ONLY, 200, 0)))
+    assert(bmInfo.exclusiveCachedBlocks === Set(rddId))
+    assert(bmInfo.remainingMem == 29800)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.asScala == Map())
     }
 
-    blockManagerInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
-    assert(blockManagerInfo.blocks.asScala
-      === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
-    val exclusiveCachedBlocksForNoMemoryOnly = if (shuffleServiceEnabled) Set() else Set(rddId)
-    assert(blockManagerInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForNoMemoryOnly)
-    assert(blockManagerInfo.remainingMem == 30000)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala
-        === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
+    bmInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
+    assert(bmInfo.blocks.asScala === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
+    val exclusiveCachedBlocksForNoMemoryOnly = if (svcEnabled) Set() else Set(rddId)
+    assert(bmInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForNoMemoryOnly)
+    assert(bmInfo.remainingMem == 30000)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.asScala ===
+        Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
     }
   }
 
-  testWithShuffleServiceOnOff("using invalid StorageLevel") {
-    (shuffleServiceEnabled, blockManagerInfo) =>
+  testWithShuffleServiceOnOff("using invalid StorageLevel") { (svcEnabled, bmInfo) =>
     val rddId: BlockId = RDDBlockId(0, 0)
-    blockManagerInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
-    assert(blockManagerInfo.blocks.asScala
+    bmInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
+    assert(bmInfo.blocks.asScala
       === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
-    val exclusiveCachedBlocksForOneMemoryOnly = if (shuffleServiceEnabled) Set() else Set(rddId)
-    assert(blockManagerInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
-    assert(blockManagerInfo.remainingMem == 30000)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala
-        === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
+    val exclusiveCachedBlocksForOneMemoryOnly = if (svcEnabled) Set() else Set(rddId)
+    assert(bmInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
+    assert(bmInfo.remainingMem == 30000)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.asScala ===
+        Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
     }
 
-    blockManagerInfo.updateBlockInfo(rddId, StorageLevel.NONE, memSize = 0, diskSize = 200)
-    assert(blockManagerInfo.blocks.asScala === Map())
-    assert(blockManagerInfo.exclusiveCachedBlocks === Set())
-    assert(blockManagerInfo.remainingMem == 30000)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala === Map())
+    bmInfo.updateBlockInfo(rddId, StorageLevel.NONE, memSize = 0, diskSize = 200)
+    assert(bmInfo.blocks.isEmpty)
+    assert(bmInfo.exclusiveCachedBlocks.isEmpty)
+    assert(bmInfo.remainingMem == 30000)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.asScala === Map())
     }
   }
 
-  testWithShuffleServiceOnOff("remove block") {
-    (shuffleServiceEnabled, blockManagerInfo) =>
+  testWithShuffleServiceOnOff("remove block") { (svcEnabled, bmInfo) =>
     val rddId: BlockId = RDDBlockId(0, 0)
-    blockManagerInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
-    assert(blockManagerInfo.blocks.asScala
+    bmInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
+    assert(bmInfo.blocks.asScala
       === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
-    val exclusiveCachedBlocksForOneMemoryOnly = if (shuffleServiceEnabled) Set() else Set(rddId)
-    assert(blockManagerInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
-    assert(blockManagerInfo.remainingMem == 30000)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala
-        === Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
+    val exclusiveCachedBlocksForOneMemoryOnly = if (svcEnabled) Set() else Set(rddId)
+    assert(bmInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
+    assert(bmInfo.remainingMem == 30000)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.asScala ===
+        Map(rddId -> BlockStatus(StorageLevel.DISK_ONLY, 0, 200)))
     }
 
-    blockManagerInfo.removeBlock(rddId)
-    assert(blockManagerInfo.blocks.asScala === Map())
-    assert(blockManagerInfo.exclusiveCachedBlocks === Set())
-    assert(blockManagerInfo.remainingMem == 30000)
-    if (shuffleServiceEnabled) {
-      assert(blockManagerInfo.externalShuffleServiceBlockStatus.get.asScala === Map())
+    bmInfo.removeBlock(rddId)
+    assert(bmInfo.blocks.asScala.isEmpty)
+    assert(bmInfo.exclusiveCachedBlocks.isEmpty)
+    assert(bmInfo.remainingMem == 30000)
+    if (svcEnabled) {
+      assert(bmInfo.externalShuffleServiceBlockStatus.get.isEmpty)
     }
   }
 }
