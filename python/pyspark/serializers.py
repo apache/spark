@@ -62,11 +62,12 @@ import itertools
 if sys.version < '3':
     import cPickle as pickle
     from itertools import izip as zip, imap as map
+    pickle_protocol = 2
 else:
     import pickle
     basestring = unicode = str
     xrange = range
-pickle_protocol = pickle.HIGHEST_PROTOCOL
+    pickle_protocol = 3
 
 from pyspark import cloudpickle
 from pyspark.util import _exception_message
@@ -435,10 +436,7 @@ class BatchedSerializer(Serializer):
                 yield items
 
     def dump_stream(self, iterator, stream):
-        a = list(self._batched(iterator))
-        for i in a:
-            print(i)
-        self.serializer.dump_stream(a, stream)
+        self.serializer.dump_stream(self._batched(iterator), stream)
 
     def load_stream(self, stream):
         return chain.from_iterable(self._load_stream_without_unbatching(stream))

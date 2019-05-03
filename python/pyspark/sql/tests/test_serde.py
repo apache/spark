@@ -19,9 +19,8 @@ import datetime
 import shutil
 import tempfile
 import time
-import unittest
 
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, UTCOffsetTimezone
