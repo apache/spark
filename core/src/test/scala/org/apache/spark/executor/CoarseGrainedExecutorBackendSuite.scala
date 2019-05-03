@@ -74,6 +74,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("parsing one resources") {
     val conf = new SparkConf
+    conf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
     conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
@@ -101,6 +102,11 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
   test("parsing multiple resources") {
     val conf = new SparkConf
+    conf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_COUNT_POSTFIX, "3")
+    conf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_UNITS_POSTFIX, "gb")
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_COUNT_POSTFIX, "1024")
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_UNITS_POSTFIX, "mb")
+    conf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
     conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
@@ -116,7 +122,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
           ("addresses" -> JArray(Array("0", "1").map(JString(_)).toList))
       val fpgaArgs =
         ("name" -> "fpga") ~
-          ("units" -> "mb") ~
+          ("units" -> "gb") ~
           ("count" -> 3) ~
           ("addresses" -> JArray(Array("f1", "f2", "f3").map(JString(_)).toList))
       val ja = JArray(List(gpuArgs, fpgaArgs))
@@ -131,15 +137,189 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.get("gpu").get.addresses.deep === Array("0", "1").deep)
       assert(parsedResources.get("fpga").nonEmpty)
       assert(parsedResources.get("fpga").get.name === "fpga")
-      assert(parsedResources.get("fpga").get.units === "mb")
+      assert(parsedResources.get("fpga").get.units === "gb")
       assert(parsedResources.get("fpga").get.count === 3)
       assert(parsedResources.get("fpga").get.addresses.deep === Array("f1", "f2", "f3").deep)
     }
   }
 
-  test("use discoverer") {
+  test("error checking parsing resources and executor and task configs") {
+    val conf = new SparkConf
+    conf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    // we don't really use this, just need it to get at the parser function
+    val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
+      4, Seq.empty[URL], env, None)
+
+    // not enough gpu's on the executor
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "gpu") ~
+          ("units" -> "") ~
+          ("count" -> 1) ~
+          ("addresses" -> JArray(Array("0").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs))
+      val f1 = writeFileWithJson(tmpDir, ja)
+
+      var error = intercept[SparkException] {
+        val parsedResources = backend.parseResources(Some(f1))
+      }.getMessage()
+
+      assert(error.contains("isn't large enough to meet task requirements"))
+    }
+
+    // missing resource on the executor
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "fpga") ~
+          ("units" -> "") ~
+          ("count" -> 1) ~
+          ("addresses" -> JArray(Array("0").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs))
+      val f1 = writeFileWithJson(tmpDir, ja)
+
+      var error = intercept[SparkException] {
+        val parsedResources = backend.parseResources(Some(f1))
+      }.getMessage()
+
+      assert(error.contains("Executor resource config missing required task resource"))
+    }
+
+    // extra unit in executor config
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "gpu") ~
+          ("units" -> "m") ~
+          ("count" -> 2) ~
+          ("addresses" -> JArray(Array("0").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs))
+      val f1 = writeFileWithJson(tmpDir, ja)
+
+      var error = intercept[SparkException] {
+        val parsedResources = backend.parseResources(Some(f1))
+      }.getMessage()
+
+      assert(error.contains("the task units config is missing"))
+    }
+
+    // number of addresses with count >, this is ok
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "gpu") ~
+          ("units" -> "") ~
+          ("count" -> 2) ~
+          ("addresses" -> JArray(Array("0", "1", "2").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs))
+      val f1 = writeFileWithJson(tmpDir, ja)
+      val parsedResources = backend.parseResources(Some(f1))
+      assert(parsedResources.size === 1)
+      assert(parsedResources.get("gpu").nonEmpty)
+      assert(parsedResources.get("gpu").get.name === "gpu")
+      assert(parsedResources.get("gpu").get.units === "")
+      assert(parsedResources.get("gpu").get.count === 2)
+      assert(parsedResources.get("gpu").get.addresses.deep === Array("0", "1", "2").deep)
+    }
+
+    // count of gpu's > then user executor config
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "gpu") ~
+          ("units" -> "") ~
+          ("count" -> 3) ~
+          ("addresses" -> JArray(Array("0").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs))
+      val f1 = writeFileWithJson(tmpDir, ja)
+
+      var error = intercept[SparkException] {
+        val parsedResources = backend.parseResources(Some(f1))
+      }.getMessage()
+
+      assert(error.contains("gpu, count: 3 doesn't match what user requests for executor count: 2"))
+    }
+
+    // number of addresses mismatch with count <
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "gpu") ~
+          ("units" -> "") ~
+          ("count" -> 2) ~
+          ("addresses" -> JArray(Array("0").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs))
+      val f1 = writeFileWithJson(tmpDir, ja)
+
+      var error = intercept[SparkException] {
+        val parsedResources = backend.parseResources(Some(f1))
+      }.getMessage()
+
+      assert(error.contains("The number of resource addresses is expected to " +
+        "either be >= to the count or be empty if not applicable"))
+    }
+  }
+
+  test("parsing resources task configs with units missing executor units") {
+    val conf = new SparkConf
+    conf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_UNITS_POSTFIX, "g")
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    // we don't really use this, just need it to get at the parser function
+    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
+      4, Seq.empty[URL], env, None)
+
+    // executor config doesn't have units on gpu and task one does
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "gpu") ~
+          ("units" -> "") ~
+          ("count" -> 2) ~
+          ("addresses" -> JArray(Array("0").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs))
+      val f1 = writeFileWithJson(tmpDir, ja)
+
+      var error = intercept[SparkException] {
+        val parsedResources = backend.parseResources(Some(f1))
+      }.getMessage()
+
+      assert(error.contains("executor units config is missing"))
+    }
+  }
+
+  test("parsing resources task configs with missing executor count config") {
     val conf = new SparkConf
     conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    // we don't really use this, just need it to get at the parser function
+    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
+      4, Seq.empty[URL], env, None)
+
+    // executor config doesn't have units on gpu and task one does
+    withTempDir { tmpDir =>
+      val gpuArgs =
+        ("name" -> "gpu") ~
+          ("units" -> "") ~
+          ("count" -> 2) ~
+          ("addresses" -> JArray(Array("0").map(JString(_)).toList))
+      val ja = JArray(List(gpuArgs))
+      val f1 = writeFileWithJson(tmpDir, ja)
+
+      var error = intercept[SparkException] {
+        val parsedResources = backend.parseResources(Some(f1))
+      }.getMessage()
+
+      assert(error.contains("Executor resource: gpu not specified via config: " +
+        "spark.executor.resource.gpu.count, but required by the task, please " +
+        "fix your configuration"))
+    }
+  }
+
+  test("use discoverer") {
+    val conf = new SparkConf
+    conf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_COUNT_POSTFIX, "3")
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_COUNT_POSTFIX, "3")
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val fpgaDiscovery = new File(dir, "resourceDiscoverScriptfpga")

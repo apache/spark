@@ -82,12 +82,108 @@ private[spark] class CoarseGrainedExecutorBackend(
     }(ThreadUtils.sameThread)
   }
 
+  // Check that the executor resources at startup will satisfy the user specified task
+  // requirements (spark.taks.resource.*) and that they match the executor configs
+  // specified by the user (spark.executor.resource.*) to catch mismatches between what
+  // the user requested and what resource manager gave or what the discovery script found.
+  private def checkExecResourcesMeetTaskRequirements(
+      taskResourceConfigs: Array[(String, String)],
+      actualExecResources: Map[String, ResourceInformation]): Unit = {
+
+    // get just the of resource name to count
+    val taskResourcesAndCounts = taskResourceConfigs.
+      withFilter { case (k, v) => k.endsWith(SPARK_RESOURCE_COUNT_POSTFIX)}.
+      map { case (k, v) => (k.dropRight(SPARK_RESOURCE_COUNT_POSTFIX.size), v)}
+
+    case class ResourceRealCounts(execCount: Long, taskCount: Long)
+
+    // SPARK will only base it off the counts and known byte units, if
+    // user is trying to use something else we will have to add a plugin later
+    taskResourcesAndCounts.foreach { case (rName, taskCount) =>
+      if (actualExecResources.contains(rName)) {
+        val execResourceInfo = actualExecResources(rName)
+        val taskUnits = env.conf.getOption(
+          SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_UNITS_POSTFIX)
+        val userExecUnitsConfigName =
+          SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_UNITS_POSTFIX
+        val userExecConfigUnits = env.conf.getOption(userExecUnitsConfigName)
+        val realCounts = if (execResourceInfo.units.nonEmpty) {
+          if (taskUnits.nonEmpty && taskUnits.get.nonEmpty) {
+            if (userExecConfigUnits.isEmpty || userExecConfigUnits.get.isEmpty) {
+              throw new SparkException(s"Resource: $rName has units in task config " +
+                s"and executor startup config but the user specified executor resource " +
+                s"config is missing the units config - see ${userExecUnitsConfigName}.")
+            }
+            try {
+              val execCountWithUnits =
+                Utils.byteStringAsBytes(execResourceInfo.count.toString + execResourceInfo.units)
+              val taskCountWithUnits = Utils.byteStringAsBytes(taskCount + taskUnits.get)
+              ResourceRealCounts(execCountWithUnits, taskCountWithUnits)
+            } catch {
+              case e: NumberFormatException =>
+                // Ignore units not of byte types and just use count
+                logWarning(s"Illegal resource unit type, spark only " +
+                  s"supports conversion of byte types, units: $execResourceInfo.units, " +
+                  s"ignoring the type and using the raw count.", e)
+                ResourceRealCounts(execResourceInfo.count, taskCount.toLong)
+            }
+          } else {
+            throw new SparkException(
+              s"Resource: $rName has an executor units config: ${execResourceInfo.units}, but " +
+                s"the task units config is missing.")
+          }
+        } else {
+          if (taskUnits.nonEmpty && taskUnits.get.nonEmpty) {
+            throw new SparkException(
+              s"Resource: $rName has a task units config: ${taskUnits.get}, but the executor " +
+              s"units config is missing.")
+          }
+          ResourceRealCounts(execResourceInfo.count, taskCount.toLong)
+        }
+        if (realCounts.execCount < realCounts.taskCount) {
+          throw new SparkException(s"Executor resource: $rName, count: ${realCounts.execCount} " +
+            s"isn't large enough to meet task requirements of: ${realCounts.taskCount}")
+        }
+        // also make sure the executor resource count on start matches the
+        // spark.executor.resource configs specified by user
+        val userExecCountConfigName =
+          SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_POSTFIX
+        val userExecConfigCount = env.conf.getOption(userExecCountConfigName).
+          getOrElse(throw new SparkException(s"Executor resource: $rName not specified " +
+            s"via config: $userExecCountConfigName, but required " +
+            s"by the task, please fix your configuration"))
+        val execConfigCountWithUnits = if (userExecConfigUnits.nonEmpty) {
+          val count = try {
+            Utils.byteStringAsBytes(userExecConfigCount + userExecConfigUnits.get)
+          } catch {
+            case e: NumberFormatException =>
+              // Ignore units not of byte types and just use count
+              logWarning(s"Illegal resource unit type, spark only " +
+                s"supports conversion of byte types, units: $userExecConfigUnits, " +
+                s"ignoring the type and using the raw count.", e)
+              userExecConfigCount.toLong
+          }
+          count
+        } else {
+          userExecConfigCount.toLong
+        }
+        if (execConfigCountWithUnits != realCounts.execCount) {
+          throw new SparkException(s"Executor resource: $rName, count: ${realCounts.execCount} " +
+            s"doesn't match what user requests for executor count: $execConfigCountWithUnits, " +
+            s"via $userExecCountConfigName")
+        }
+      } else {
+        throw new SparkException(s"Executor resource config missing required task resource: $rName")
+      }
+    }
+  }
+
   // visible for testing
   def parseResources(resourcesFile: Option[String]): Map[String, ResourceInformation] = {
     // only parse the resources if a task requires them
-    val taskConfPrefix = SPARK_TASK_RESOURCE_PREFIX
-    val resourceInfo = if (env.conf.getAllWithPrefix(taskConfPrefix).nonEmpty) {
-      val resources = resourcesFile.map { resourceFileStr => {
+    val taskResourceConfigs = env.conf.getAllWithPrefix(SPARK_TASK_RESOURCE_PREFIX)
+    val resourceInfo = if (taskResourceConfigs.nonEmpty) {
+      val execResources = resourcesFile.map { resourceFileStr => {
         val source = new BufferedInputStream(new FileInputStream(resourceFileStr))
         val resourceMap = try {
           val parsedJson = parse(source).asInstanceOf[JArray].arr
@@ -95,28 +191,47 @@ private[spark] class CoarseGrainedExecutorBackend(
         } catch {
           case e @ (_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
             throw new SparkException(
-              s"Exception parsing the resources passed in: $resourcesFile", e)
+              s"Exception parsing the resources passed in: $SPARK_TASK_RESOURCE_PREFIX", e)
         } finally {
           source.close()
         }
         resourceMap
       }}.getOrElse(ResourceDiscoverer.findResources(env.conf, false))
 
-      if (resources.isEmpty) {
-        throw new SparkException(s"User specified resources per task via: $taskConfPrefix," +
-          s" but can't find any resources available on the executor.")
+      if (execResources.isEmpty) {
+        throw new SparkException(s"User specified resources per task via: " +
+          s"$SPARK_TASK_RESOURCE_PREFIX, but can't find any resources available on the executor.")
       }
-      logInfo(s"Executor ${executorId} using resources: ${resources.keys}")
+
+      // check that the executor has all the resources required by the application/task
+      checkExecResourcesMeetTaskRequirements(taskResourceConfigs, execResources)
+
+      // make sure the addresses make sense with count
+      execResources.foreach { case (rName, rInfo) =>
+        // check to make sure we have enough addresses when any specified, if we have
+        // more don't worry about it
+        if (rInfo.addresses.nonEmpty && rInfo.addresses.size < rInfo.count) {
+          throw new SparkException(s"The number of resource addresses is expected to either " +
+            s"be >= to the count or be empty if not applicable! Resource: $rName, " +
+            s"count: ${rInfo.count}, number of addresses: ${rInfo.addresses.size}")
+        }
+      }
+
+      logInfo(s"Executor ${executorId} using resources: ${execResources.keys}")
       if (log.isDebugEnabled) {
         logDebug("===============================================================================")
         logDebug("Executor Resources:")
-        resources.foreach{ case (k, v) =>
+        execResources.foreach{ case (k, v) =>
           logDebug(s"$k -> [name: ${v.name}, units: ${v.units}, count: ${v.count}," +
             s" addresses: ${v.addresses.deep}]")}
         logDebug("===============================================================================")
       }
-      resources
+      execResources
     } else {
+      if (resourcesFile.nonEmpty) {
+        logWarning(s"A resources file was specified but the application is not configured " +
+          s"to use any resources, see the configs with prefix: ${SPARK_TASK_RESOURCE_PREFIX}")
+      }
       Map.empty[String, ResourceInformation]
     }
     resourceInfo

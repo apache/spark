@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils.executeAndGetOutput
 /**
  * Discovers resources (GPUs/FPGAs/etc).
  * This class find resources by running and parses the output of the user specified script
- * from the config spark.{driver/executor}.{resourceType}.discoveryScript.
+ * from the config spark.{driver/executor}.resource.{resourceType}.discoveryScript.
  * The output of the script it runs is expected to be JSON in the format of the
  * ResourceInformation class, with addresses being optional.
  *
@@ -52,12 +52,12 @@ private[spark] object ResourceDiscoverer extends Logging {
       k.split('.').head
     }.toSet
     resourceTypes.map { rtype => {
-      val rInfo = getResourceAddrsForType(sparkconf, prefix, rtype)
+      val rInfo = getResourceInfoForType(sparkconf, prefix, rtype)
       (rtype -> rInfo)
     }}.toMap
   }
 
-  private def getResourceAddrsForType(
+  private def getResourceInfoForType(
       sparkconf: SparkConf,
       prefix: String,
       resourceType: String): ResourceInformation = {
