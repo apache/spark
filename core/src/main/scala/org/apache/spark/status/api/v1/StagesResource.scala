@@ -24,8 +24,12 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.status.api.v1.StageStatus._
 import org.apache.spark.status.api.v1.TaskSorting._
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{SparkUI, UIUtils}
 import org.apache.spark.ui.jobs.ApiHelper._
+
+import org.json4s.Xml.toJson
+
+import scala.xml.Node
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class StagesResource extends BaseAppResource {
@@ -216,6 +220,49 @@ private[v1] class StagesResource extends BaseAppResource {
         || taskMetricsContainsValue(f)
         || containsValue(f.schedulerDelay) || containsValue(f.gettingResultTime)))
     filteredTaskDataSequence
+  }
+
+  @GET
+  @Path("{stageId: \\d+}/{stageAttemptId: \\d+}/eventTimeline")
+  def eventTimeline(
+    @PathParam("stageId") stageId: Int,
+    @PathParam("stageAttemptId") stageAttemptId: Int,
+    @QueryParam("details") @DefaultValue("true") details: Boolean,
+    @Context uriInfo: UriInfo):
+  HashMap[String, Object] = {
+    withUI { ui =>
+      val uriQueryParameters = uriInfo.getQueryParameters(true)
+      System.err.println("Hereeeeeeeeeee 1 " + uriQueryParameters.toString)
+      val totalTasks = uriQueryParameters.getFirst("totalTasks").toInt
+      val eventTimelineParameterTaskPage =
+        uriQueryParameters.getFirst("task.eventTimelinePageNumber")
+      val eventTimelineParameterTaskPageSize =
+        uriQueryParameters.getFirst("task.eventTimelinePageSize")
+      var eventTimelineTaskPage = Option(eventTimelineParameterTaskPage).map(_.toInt).getOrElse(1)
+      var eventTimelineTaskPageSize =
+        Option(eventTimelineParameterTaskPageSize).map(_.toInt).getOrElse(100)
+      if (eventTimelineTaskPageSize < 1 || eventTimelineTaskPageSize > totalTasks) {
+        eventTimelineTaskPageSize = totalTasks
+      }
+      val eventTimelineTotalPages =
+        (totalTasks + eventTimelineTaskPageSize - 1) / eventTimelineTaskPageSize
+      if (eventTimelineTaskPage < 1 || eventTimelineTaskPage > eventTimelineTotalPages) {
+        eventTimelineTaskPage = 1
+      }
+
+      val from = (eventTimelineTaskPage - 1) * eventTimelineTaskPageSize
+      val to = totalTasks.min(eventTimelineTaskPage * eventTimelineTaskPageSize)
+      val _tasksToShow: Seq[TaskData] = ui.store.taskList(
+        stageId, stageAttemptId, from, to, indexName("Index"), true)
+      val currentTime = System.currentTimeMillis()
+
+      val ret = new HashMap[String, Object]()
+      val abc = UIUtils.makeTimeline(_tasksToShow, currentTime, eventTimelineTaskPage,
+        eventTimelineTaskPageSize, eventTimelineTotalPages, stageId, stageAttemptId, totalTasks, ui.conf)
+      System.err.println("Hereeeeeeeeeee 2 ")
+      ret.put("abcd", abc.toString())
+      ret
+    }
   }
 
 }

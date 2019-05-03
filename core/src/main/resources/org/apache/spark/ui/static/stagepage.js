@@ -271,6 +271,33 @@ function getStageAttemptId() {
   return stgAttemptId;
 }
 
+function submitEventTimelineForm(e) {
+  e.preventDefault();
+  var form = $("#form-event-timeline-page");
+  getStandAloneAppId(function (appId) {
+    var endPoint = stageEndPoint(appId);
+    var stageAttemptId = getStageAttemptId();
+    var url = endPoint + "/" + stageAttemptId + "/eventTimeline";
+
+    $.ajax({
+        type: "GET",
+        url: url,
+        data: form.serialize(),
+        success: function(data)
+        {
+            var jsonStr = JSON.stringify(data);
+            console.log("Hereeeeeeeeee 1 " + jsonStr);
+            var domj = JSON.parse(jsonStr);
+            console.log("Hereeeeeeeeee 2 " + domj);
+
+            $(".expand-task-assignment-timeline").remove();
+            $("#task-assignment-timeline").remove();
+            $("#pokemon").append(domj.abcd);
+        }
+    });
+  });
+}
+
 var taskSummaryMetricsTableArray = [];
 var taskSummaryMetricsTableCurrentStateArray = [];
 var taskSummaryMetricsDataTable;

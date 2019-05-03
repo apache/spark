@@ -23,12 +23,19 @@ import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, Response}
 
+import org.apache.spark.SparkConf
+
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.status.AppStatusUtils
+import org.apache.spark.status.api.v1.TaskData
 import org.apache.spark.ui.scope.RDDOperationGraph
+import org.apache.spark.internal.config.UI._
+
+import scala.collection.mutable.HashSet
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
@@ -253,7 +260,7 @@ private[spark] object UIUtils extends Logging {
             <ul class="nav">{header}</ul>
           </div>
         </div>
-        <div class="container-fluid">
+        <div class="container-fluid" id="pokemon">
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: bottom; display: inline-block;">
@@ -548,5 +555,234 @@ private[spark] object UIUtils extends Logging {
 
   def buildErrorResponse(status: Response.Status, msg: String): Response = {
     Response.status(status).entity(msg).`type`(MediaType.TEXT_PLAIN).build()
+  }
+
+  def makeTimeline(
+    tasks: Seq[TaskData],
+    currentTime: Long,
+    page: Int,
+    pageSize: Int,
+    totalPages: Int,
+    stageId: Int,
+    stageAttemptId: Int,
+    totalTasks: Int,
+    conf: SparkConf): Seq[Node] = {
+    val executorsSet = new HashSet[(String, String)]
+    var minLaunchTime = Long.MaxValue
+    var maxFinishTime = Long.MinValue
+
+    val MAX_TIMELINE_TASKS = conf.get(UI_TIMELINE_TASKS_MAXIMUM)
+    val TIMELINE_LEGEND = {
+      <div class="legend-area">
+        <svg>
+          {
+          val legendPairs = List(("scheduler-delay-proportion", "Scheduler Delay"),
+            ("deserialization-time-proportion", "Task Deserialization Time"),
+            ("shuffle-read-time-proportion", "Shuffle Read Time"),
+            ("executor-runtime-proportion", "Executor Computing Time"),
+            ("shuffle-write-time-proportion", "Shuffle Write Time"),
+            ("serialization-time-proportion", "Result Serialization Time"),
+            ("getting-result-time-proportion", "Getting Result Time"))
+
+          legendPairs.zipWithIndex.map {
+            case ((classAttr, name), index) =>
+              <rect x={5 + (index / 3) * 210 + "px"} y={10 + (index % 3) * 15 + "px"}
+                    width="10px" height="10px" class={classAttr}></rect>
+                <text x={25 + (index / 3) * 210 + "px"}
+                      y={20 + (index % 3) * 15 + "px"}>{name}</text>
+          }
+          }
+        </svg>
+      </div>
+    }
+    val executorsArrayStr =
+      tasks.sortBy(-_.launchTime.getTime()).take(MAX_TIMELINE_TASKS).map { taskInfo =>
+        val executorId = taskInfo.executorId
+        val host = taskInfo.host
+        executorsSet += ((executorId, host))
+
+        val launchTime = taskInfo.launchTime.getTime()
+        val finishTime = taskInfo.duration.map(taskInfo.launchTime.getTime() + _)
+          .getOrElse(currentTime)
+        val totalExecutionTime = finishTime - launchTime
+        minLaunchTime = launchTime.min(minLaunchTime)
+        maxFinishTime = finishTime.max(maxFinishTime)
+
+        def toProportion(time: Long) = time.toDouble / totalExecutionTime * 100
+
+        val metricsOpt = taskInfo.taskMetrics
+        val shuffleReadTime =
+          metricsOpt.map(_.shuffleReadMetrics.fetchWaitTime).getOrElse(0L)
+        val shuffleReadTimeProportion = toProportion(shuffleReadTime)
+        val shuffleWriteTime =
+          (metricsOpt.map(_.shuffleWriteMetrics.writeTime).getOrElse(0L) / 1e6).toLong
+        val shuffleWriteTimeProportion = toProportion(shuffleWriteTime)
+
+        val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
+        val serializationTimeProportion = toProportion(serializationTime)
+        val deserializationTime = metricsOpt.map(_.executorDeserializeTime).getOrElse(0L)
+        val deserializationTimeProportion = toProportion(deserializationTime)
+        val gettingResultTime = AppStatusUtils.gettingResultTime(taskInfo)
+        val gettingResultTimeProportion = toProportion(gettingResultTime)
+        val schedulerDelay = AppStatusUtils.schedulerDelay(taskInfo)
+        val schedulerDelayProportion = toProportion(schedulerDelay)
+
+        val executorOverhead = serializationTime + deserializationTime
+        val executorRunTime = if (taskInfo.duration.isDefined) {
+          totalExecutionTime - executorOverhead - gettingResultTime
+        } else {
+          metricsOpt.map(_.executorRunTime).getOrElse(
+            totalExecutionTime - executorOverhead - gettingResultTime)
+        }
+        val executorComputingTime = executorRunTime - shuffleReadTime - shuffleWriteTime
+        val executorComputingTimeProportion =
+          math.max(100 - schedulerDelayProportion - shuffleReadTimeProportion -
+            shuffleWriteTimeProportion - serializationTimeProportion -
+            deserializationTimeProportion - gettingResultTimeProportion, 0)
+
+        val schedulerDelayProportionPos = 0
+        val deserializationTimeProportionPos =
+          schedulerDelayProportionPos + schedulerDelayProportion
+        val shuffleReadTimeProportionPos =
+          deserializationTimeProportionPos + deserializationTimeProportion
+        val executorRuntimeProportionPos =
+          shuffleReadTimeProportionPos + shuffleReadTimeProportion
+        val shuffleWriteTimeProportionPos =
+          executorRuntimeProportionPos + executorComputingTimeProportion
+        val serializationTimeProportionPos =
+          shuffleWriteTimeProportionPos + shuffleWriteTimeProportion
+        val gettingResultTimeProportionPos =
+          serializationTimeProportionPos + serializationTimeProportion
+
+        val index = taskInfo.index
+        val attempt = taskInfo.attempt
+
+        val svgTag =
+          if (totalExecutionTime == 0) {
+            // SPARK-8705: Avoid invalid attribute error in JavaScript if execution time is 0
+            """<svg class="task-assignment-timeline-duration-bar"></svg>"""
+          } else {
+            s"""<svg class="task-assignment-timeline-duration-bar">
+               |<rect class="scheduler-delay-proportion"
+               |x="$schedulerDelayProportionPos%" y="0px" height="26px"
+               |width="$schedulerDelayProportion%"></rect>
+               |<rect class="deserialization-time-proportion"
+               |x="$deserializationTimeProportionPos%" y="0px" height="26px"
+               |width="$deserializationTimeProportion%"></rect>
+               |<rect class="shuffle-read-time-proportion"
+               |x="$shuffleReadTimeProportionPos%" y="0px" height="26px"
+               |width="$shuffleReadTimeProportion%"></rect>
+               |<rect class="executor-runtime-proportion"
+               |x="$executorRuntimeProportionPos%" y="0px" height="26px"
+               |width="$executorComputingTimeProportion%"></rect>
+               |<rect class="shuffle-write-time-proportion"
+               |x="$shuffleWriteTimeProportionPos%" y="0px" height="26px"
+               |width="$shuffleWriteTimeProportion%"></rect>
+               |<rect class="serialization-time-proportion"
+               |x="$serializationTimeProportionPos%" y="0px" height="26px"
+               |width="$serializationTimeProportion%"></rect>
+               |<rect class="getting-result-time-proportion"
+               |x="$gettingResultTimeProportionPos%" y="0px" height="26px"
+               |width="$gettingResultTimeProportion%"></rect></svg>""".stripMargin
+          }
+        val timelineObject =
+          s"""
+             |{
+             |'className': 'task task-assignment-timeline-object',
+             |'group': '$executorId',
+             |'content': '<div class="task-assignment-timeline-content"
+             |data-toggle="tooltip" data-placement="top"
+             |data-html="true" data-container="body"
+             |data-title="${s"Task " + index + " (attempt " + attempt + ")"}<br>
+             |Status: ${taskInfo.status}<br>
+             |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
+             |${
+            if (!taskInfo.duration.isDefined) {
+              s"""<br>Finish Time: ${UIUtils.formatDate(new Date(finishTime))}"""
+            } else {
+              ""
+            }
+          }
+             |<br>Scheduler Delay: $schedulerDelay ms
+             |<br>Task Deserialization Time: ${UIUtils.formatDuration(deserializationTime)}
+             |<br>Shuffle Read Time: ${UIUtils.formatDuration(shuffleReadTime)}
+             |<br>Executor Computing Time: ${UIUtils.formatDuration(executorComputingTime)}
+             |<br>Shuffle Write Time: ${UIUtils.formatDuration(shuffleWriteTime)}
+             |<br>Result Serialization Time: ${UIUtils.formatDuration(serializationTime)}
+             |<br>Getting Result Time: ${UIUtils.formatDuration(gettingResultTime)}">
+             |$svgTag',
+             |'start': new Date($launchTime),
+             |'end': new Date($finishTime)
+             |}
+             |""".stripMargin.replaceAll("""[\r\n]+""", " ")
+        timelineObject
+      }.mkString("[", ",", "]")
+
+    val groupArrayStr = executorsSet.map {
+      case (executorId, host) =>
+        s"""
+            {
+              'id': '$executorId',
+              'content': '$executorId / $host',
+            }
+          """
+    }.mkString("[", ",", "]")
+
+    <span class="expand-task-assignment-timeline">
+      <span class="expand-task-assignment-timeline-arrow arrow-closed"></span>
+      <a>Event Timeline</a>
+    </span> ++
+      <div id="task-assignment-timeline" class="collapsed">
+        {
+        if (MAX_TIMELINE_TASKS < tasks.size) {
+          <strong>
+            This page has more than the maximum number of tasks that can be shown in the
+            visualization! Only the most recent {MAX_TIMELINE_TASKS} tasks
+            (of {tasks.size} total) are shown.
+          </strong>
+        } else {
+          Seq.empty
+        }
+        }
+        <div class="control-panel">
+          <div id="task-assignment-timeline-zoom-lock">
+            <input type="checkbox"></input>
+            <span>Enable zooming</span>
+          </div>
+          <div>
+            <form id={s"form-event-timeline-page"}
+                  method="get"
+                  action=""
+                  class="form-inline pull-right"
+                  style="margin-bottom: 0px;"
+                  onsubmit="submitEventTimelineForm(event)">
+              <label>Tasks: {totalTasks}. {totalPages} Pages. Jump to</label>
+              <input type="hidden" name="id" value={stageId.toString} />
+              <input type="hidden" name="attempt" value={stageAttemptId.toString} />
+              <input type="hidden" name="totalTasks" value={totalTasks.toString} />
+              <input type="text"
+                     name="task.eventTimelinePageNumber"
+                     id={s"form-event-timeline-page-no"}
+                     value={page.toString} class="span1" />
+
+              <label>. Show </label>
+              <input type="text"
+                     id={s"form-event-timeline-page-size"}
+                     name="task.eventTimelinePageSize"
+                     value={pageSize.toString}
+                     class="span1" />
+              <label>items in a page.</label>
+
+              <button type="submit" class="btn">Go</button>
+            </form>
+          </div>
+        </div>
+        {TIMELINE_LEGEND}
+      </div> ++
+      <script type="text/javascript">
+        {Unparsed(s"drawTaskAssignmentTimeline(" +
+        s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
+        s"${UIUtils.getTimeZoneOffset()})")}
+      </script>
   }
 }
