@@ -185,7 +185,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("findMatchingToken with non-matching tokens should return None") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       nonMatchingTargetServersRegex)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
@@ -198,7 +198,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("findMatchingToken with one matching token should return cluster configuration") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
     addTokenToUGI(tokenService1)
@@ -208,10 +208,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("findMatchingToken with multiple matching tokens should throw exception") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier2.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
     addTokenToUGI(tokenService1)

@@ -128,7 +128,7 @@ private[spark] object KafkaTokenUtil extends Logging {
         adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
       } else {
         logDebug("Using ticket cache for login.")
-        val jaasParams = getTicketCacheJaasParams(sparkConf, clusterConf)
+        val jaasParams = getTicketCacheJaasParams(clusterConf)
         adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
       }
     }
@@ -186,9 +186,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     params
   }
 
-  private def getTicketCacheJaasParams(
-      sparkConf: SparkConf,
-      clusterConf: KafkaTokenClusterConf): String = {
+  private def getTicketCacheJaasParams(clusterConf: KafkaTokenClusterConf): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required

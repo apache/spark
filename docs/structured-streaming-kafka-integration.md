@@ -676,7 +676,7 @@ This way the application can be configured via Spark parameters and may not need
 configuration (Spark can use Kafka's dynamic JAAS configuration feature). For further information
 about delegation tokens, see [Kafka delegation token docs](http://kafka.apache.org/documentation/#security_delegation_token).
 
-The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.clusters.${cluster}.bootstrap.servers` is set,
+The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.clusters.${cluster}.auth.bootstrap.servers` is set,
 Spark considers the following log in options, in order of preference:
 - **JAAS login configuration**, please see example below.
 - **Keytab file**, such as,
@@ -684,13 +684,13 @@ Spark considers the following log in options, in order of preference:
       ./bin/spark-submit \
           --keytab <KEYTAB_FILE> \
           --principal <PRINCIPAL> \
-          --conf spark.kafka.clusters.${cluster}.bootstrap.servers=<KAFKA_SERVERS> \
+          --conf spark.kafka.clusters.${cluster}.auth.bootstrap.servers=<KAFKA_SERVERS> \
           ...
 
 - **Kerberos credential cache**, such as,
 
       ./bin/spark-submit \
-          --conf spark.kafka.clusters.${cluster}.bootstrap.servers=<KAFKA_SERVERS> \
+          --conf spark.kafka.clusters.${cluster}.auth.bootstrap.servers=<KAFKA_SERVERS> \
           ...
 
 The Kafka delegation token provider can be turned off by setting `spark.security.credentials.kafka.enabled` to `false` (default: `true`).
@@ -706,7 +706,12 @@ Delegation token uses `SCRAM` login module for authentication and because of tha
 `spark.kafka.clusters.${cluster}.sasl.token.mechanism` (default: `SCRAM-SHA-512`) has to be configured. Also, this parameter
 must match with Kafka broker configuration.
 
-When delegation token is available on an executor it can be overridden with JAAS login configuration.
+When delegation token is available on an executor Spark considers the following log in options, in order of preference:
+- **JAAS login configuration**, please see example below.
+- **Delegation token**, please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code> parameter for further details.
+
+When none of the above applies then unsecure connection assumed.
+
 
 #### Configuration
 
@@ -715,7 +720,7 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
-    <td><code>spark.kafka.clusters.${cluster}.bootstrap.servers</code></td>
+    <td><code>spark.kafka.clusters.${cluster}.auth.bootstrap.servers</code></td>
     <td>None</td>
     <td>
       A list of coma separated host/port pairs to use for establishing the initial connection

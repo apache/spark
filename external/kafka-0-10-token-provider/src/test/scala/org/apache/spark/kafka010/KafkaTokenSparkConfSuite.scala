@@ -47,11 +47,11 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
     val thrown = intercept[NoSuchElementException] {
       KafkaTokenSparkConf.getClusterConfig(sparkConf, "invalid")
     }
-    assert(thrown.getMessage contains "spark.kafka.clusters.invalid.bootstrap.servers")
+    assert(thrown.getMessage contains "spark.kafka.clusters.invalid.auth.bootstrap.servers")
   }
 
   test("getClusterConfig should return entry with defaults") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
 
     val clusterConfig = KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)
     assert(clusterConfig.identifier === identifier1)
@@ -69,7 +69,7 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("getClusterConfig should return entry overwrite defaults") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       targetServersRegex)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.security.protocol", securityProtocol)
@@ -106,8 +106,8 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("getAllClusterConfigs should return multiple entries") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.bootstrap.servers", bootStrapServers)
-    sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier2.auth.bootstrap.servers", bootStrapServers)
 
     val clusterConfigs = KafkaTokenSparkConf.getAllClusterConfigs(sparkConf)
     assert(clusterConfigs.size === 2)

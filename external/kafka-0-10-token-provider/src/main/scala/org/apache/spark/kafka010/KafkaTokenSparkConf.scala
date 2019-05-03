@@ -62,9 +62,9 @@ private [kafka010] object KafkaTokenSparkConf extends Logging {
     val result = KafkaTokenClusterConf(
       identifier,
       sparkClusterConf
-        .getOrElse(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
+        .getOrElse(s"auth.${CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG}",
           throw new NoSuchElementException(
-            s"${configPrefix}${CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG}")),
+            s"${configPrefix}auth.${CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG}")),
       sparkClusterConf.getOrElse("target.bootstrap.servers.regex",
         KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX),
       sparkClusterConf.getOrElse(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SASL_SSL.name),

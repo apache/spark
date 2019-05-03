@@ -81,7 +81,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     )
     setSparkEnv(
       Map(
-        s"spark.kafka.clusters.$identifier.bootstrap.servers" -> bootStrapServers
+        s"spark.kafka.clusters.$identifier.auth.bootstrap.servers" -> bootStrapServers
       )
     )
     addTokenToUGI(tokenService)
@@ -103,7 +103,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     )
     setSparkEnv(
       Map(
-        s"spark.kafka.clusters.$identifier.bootstrap.servers" -> bootStrapServers,
+        s"spark.kafka.clusters.$identifier.auth.bootstrap.servers" -> bootStrapServers,
         s"spark.kafka.clusters.$identifier.sasl.token.mechanism" -> "intentionally_invalid"
       )
     )
