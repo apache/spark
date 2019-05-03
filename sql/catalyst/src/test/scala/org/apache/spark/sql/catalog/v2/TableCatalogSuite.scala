@@ -170,26 +170,25 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(exc.message.contains("not found"))
   }
 
-  test("refreshTable") {
+  test("invalidateTable") {
     val catalog = newCatalog()
 
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
-    val refreshed = catalog.refreshTable(testIdent)
+    catalog.invalidateTable(testIdent)
 
-    assert(table.name == refreshed.name)
-    assert(table.schema == refreshed.schema)
-    assert(table.properties == refreshed.properties)
+    val loaded = catalog.loadTable(testIdent)
+
+    assert(table.name == loaded.name)
+    assert(table.schema == loaded.schema)
+    assert(table.properties == loaded.properties)
   }
 
-  test("refreshTable: table does not exist") {
+  test("invalidateTable: table does not exist") {
     val catalog = newCatalog()
 
-    val exc = intercept[NoSuchTableException] {
-      catalog.refreshTable(testIdent)
-    }
+    assert(catalog.tableExists(testIdent) === false)
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    catalog.invalidateTable(testIdent)
   }
 
   test("alterTable: add property") {
@@ -494,6 +493,25 @@ class TableCatalogSuite extends SparkFunSuite {
 
     val newPointStruct = new StructType().add("first", DoubleType).add("y", DoubleType)
     val expectedSchema = schema.add("point", newPointStruct)
+
+    assert(updated.schema == expectedSchema)
+  }
+
+  test("alterTable: rename struct column") {
+    val catalog = newCatalog()
+
+    val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
+    val tableSchema = schema.add("point", pointStruct)
+
+    val table = catalog.createTable(testIdent, tableSchema, Array.empty, emptyProps)
+
+    assert(table.schema == tableSchema)
+
+    val updated = catalog.alterTable(testIdent,
+      TableChange.renameColumn(Array("point"), "p"))
+
+    val newPointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
+    val expectedSchema = schema.add("p", newPointStruct)
 
     assert(updated.schema == expectedSchema)
   }

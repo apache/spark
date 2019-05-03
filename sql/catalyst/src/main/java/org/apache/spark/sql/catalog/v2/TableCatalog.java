@@ -32,6 +32,8 @@ import java.util.Map;
 public interface TableCatalog extends CatalogPlugin {
   /**
    * List the tables in a namespace from the catalog.
+   * <p>
+   * If the catalog supports views, this must return identifiers for only tables and not views.
    *
    * @param namespace a multi-part namespace
    * @return an array of Identifiers for tables
@@ -41,29 +43,32 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
    *
    * @param ident a table identifier
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist.
+   * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
   /**
-   * Refresh table metadata for {@link Identifier identifier}.
+   * Invalidate cached table metadata for an {@link Identifier identifier}.
    * <p>
-   * If the table is already loaded or cached, drop cached data and reload it. If the table is not
-   * already loaded, load it and update caches with the new version.
+   * If the table is already loaded or cached, drop cached data. If the table does not exist or is
+   * not cached, do nothing. Calling this method should not query remote services.
    *
    * @param ident a table identifier
-   * @return the table's current metadata
-   * @throws NoSuchTableException If the table doesn't exist.
    */
-  default Table refreshTable(Identifier ident) throws NoSuchTableException {
-    return loadTable(ident);
+  default void invalidateTable(Identifier ident) {
   }
 
   /**
    * Test whether a table exists using an {@link Identifier identifier} from the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must return false.
    *
    * @param ident a table identifier
    * @return true if the table exists, false otherwise
@@ -99,11 +104,14 @@ public interface TableCatalog extends CatalogPlugin {
    * <p>
    * Implementations may reject the requested changes. If any change is rejected, none of the
    * changes should be applied to the table.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
    *
    * @param ident a table identifier
    * @param changes changes to apply to the table
    * @return updated metadata for the table
-   * @throws NoSuchTableException If the table doesn't exist.
+   * @throws NoSuchTableException If the table doesn't exist or is a view
    * @throws IllegalArgumentException If any change is rejected by the implementation.
    */
   Table alterTable(
@@ -112,6 +120,9 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Drop a table in the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must not drop the view and must return false.
    *
    * @param ident a table identifier
    * @return true if a table was deleted, false if no table exists for the identifier

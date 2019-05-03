@@ -115,7 +115,7 @@ public interface TableChange {
    * Create a TableChange for renaming a field.
    * <p>
    * The name is used to find the field to rename. The new name will replace the leaf field name.
-   * For example, renameColumn("a.b.c", "x") should produce column a.b.x.
+   * For example, renameColumn(["a", "b", "c"], "x") should produce column a.b.x.
    * <p>
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
