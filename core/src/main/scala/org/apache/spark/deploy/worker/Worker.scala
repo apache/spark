@@ -100,18 +100,9 @@ private[deploy] class Worker(
   // TTL for app folders/data;  after TTL expires it will be cleaned up
   private val APP_DATA_RETENTION_SECONDS = conf.get(APP_DATA_RETENTION)
 
-  // Whether or not cleanup the non-shuffle files on executor exits.
-  private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
+  // Whether or not cleanup the non-shuffle service served files on executor exits.
+  private val CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     conf.get(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT)
-
-  val EXTERNAL_SHUFFLE_SERVICE_ENABLED = conf.get(config.SHUFFLE_SERVICE_ENABLED)
-
-  if (CLEANUP_NON_SHUFFLE_FILES_ENABLED && EXTERNAL_SHUFFLE_SERVICE_ENABLED) {
-    logWarning("Both 'spark.storage.cleanupFilesAfterExecutorExit' and " +
-      "'spark.shuffle.service.enabled' are switched on. But with SPARK-25888 the external " +
-      "shuffle service able to serve disk persisted RDD blocks. So to keep benefiting from " +
-      "SPARK-25888 the cleanup only will be triggered after the application is stopped.")
-  }
 
   private var master: Option[RpcEndpointRef] = None
 
@@ -760,7 +751,7 @@ private[deploy] class Worker(
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
 
-          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED && !EXTERNAL_SHUFFLE_SERVICE_ENABLED) {
+          if (CLEANUP_FILES_AFTER_EXECUTOR_EXIT) {
             shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
           }
         case None =>

@@ -98,8 +98,26 @@ public class TestShuffleDataContext {
   /** Creates spill file(s) within the local dirs. */
   public void insertSpillData() throws IOException {
     String filename = "temp_local_" + UUID.randomUUID();
-    OutputStream dataStream = null;
+    insertFile(filename);
+  }
 
+  public void insertBroadcastData() throws IOException {
+    String filename = "broadcast_12_"  + UUID.randomUUID();
+    insertFile(filename);
+  }
+
+  public void insertTempShuffleData() throws IOException {
+    String filename = "temp_shuffle_"  + UUID.randomUUID();
+    insertFile(filename);
+  }
+
+  public void insertCachedRddData() throws IOException {
+    String filename = "rdd_12_34";
+    insertFile(filename);
+  }
+
+  private void insertFile(String filename) throws IOException {
+    OutputStream dataStream = null;
     try {
       dataStream = new FileOutputStream(
         ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename));

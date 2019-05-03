@@ -449,7 +449,7 @@ class BlockManagerMasterEndpoint(
       locations.remove(blockManagerId)
     }
 
-    if (storageLevel.useDisk && externalShuffleServiceEnabled) {
+    if (blockId.isRDD && storageLevel.useDisk && externalShuffleServiceEnabled) {
       val externalShuffleServiceId = externalShuffleServiceIdOnHost(blockManagerId)
       if (storageLevel.isValid) {
         locations.add(externalShuffleServiceId)

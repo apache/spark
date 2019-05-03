@@ -299,7 +299,7 @@ package object config {
 
   private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
-      .doc("Whether or not cleanup the non-shuffle files on executor exits.")
+      .doc("Whether or not cleanup the non-shuffle and non-RDD files on executor exits.")
       .booleanConf
       .createWithDefault(true)
 

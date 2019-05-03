@@ -32,7 +32,7 @@ import static org.junit.Assert.assertTrue;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
-public class NonShuffleFilesCleanupSuite {
+public class CleanupNonShuffleServiceServedFilesSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
   private Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
@@ -40,17 +40,17 @@ public class NonShuffleFilesCleanupSuite {
   private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
   @Test
-  public void cleanupOnRemovedExecutorWithShuffleFiles() throws IOException {
+  public void cleanupOnRemovedExecutorWithFilesToKeep() throws IOException {
     cleanupOnRemovedExecutor(true);
   }
 
   @Test
-  public void cleanupOnRemovedExecutorWithoutShuffleFiles() throws IOException {
+  public void cleanupOnRemovedExecutorWithoutFilesToKeep() throws IOException {
     cleanupOnRemovedExecutor(false);
   }
 
-  private void cleanupOnRemovedExecutor(boolean withShuffleFiles) throws IOException {
-    TestShuffleDataContext dataContext = initDataContext(withShuffleFiles);
+  private void cleanupOnRemovedExecutor(boolean withFilesToKeep) throws IOException {
+    TestShuffleDataContext dataContext = initDataContext(withFilesToKeep);
 
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
@@ -61,17 +61,17 @@ public class NonShuffleFilesCleanupSuite {
   }
 
   @Test
-  public void cleanupUsesExecutorWithShuffleFiles() throws IOException {
+  public void cleanupUsesExecutorWithFilesToKeep() throws IOException {
     cleanupUsesExecutor(true);
   }
 
   @Test
-  public void cleanupUsesExecutorWithoutShuffleFiles() throws IOException {
+  public void cleanupUsesExecutorWithoutFilesToKeep() throws IOException {
     cleanupUsesExecutor(false);
   }
 
-  private void cleanupUsesExecutor(boolean withShuffleFiles) throws IOException {
-    TestShuffleDataContext dataContext = initDataContext(withShuffleFiles);
+  private void cleanupUsesExecutor(boolean withFilesToKeep) throws IOException {
+    TestShuffleDataContext dataContext = initDataContext(withFilesToKeep);
 
     AtomicBoolean cleanupCalled = new AtomicBoolean(false);
 
@@ -89,18 +89,18 @@ public class NonShuffleFilesCleanupSuite {
   }
 
   @Test
-  public void cleanupOnlyRemovedExecutorWithShuffleFiles() throws IOException {
+  public void cleanupOnlyRemovedExecutorWithFilesToKeep() throws IOException {
     cleanupOnlyRemovedExecutor(true);
   }
 
   @Test
-  public void cleanupOnlyRemovedExecutorWithoutShuffleFiles() throws IOException {
+  public void cleanupOnlyRemovedExecutorWithoutFilesToKeep() throws IOException {
     cleanupOnlyRemovedExecutor(false);
   }
 
-  private void cleanupOnlyRemovedExecutor(boolean withShuffleFiles) throws IOException {
-    TestShuffleDataContext dataContext0 = initDataContext(withShuffleFiles);
-    TestShuffleDataContext dataContext1 = initDataContext(withShuffleFiles);
+  private void cleanupOnlyRemovedExecutor(boolean withFilesToKeep) throws IOException {
+    TestShuffleDataContext dataContext0 = initDataContext(withFilesToKeep);
+    TestShuffleDataContext dataContext1 = initDataContext(withFilesToKeep);
 
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
@@ -127,17 +127,17 @@ public class NonShuffleFilesCleanupSuite {
   }
 
   @Test
-  public void cleanupOnlyRegisteredExecutorWithShuffleFiles() throws IOException {
+  public void cleanupOnlyRegisteredExecutorWithFilesToKeep() throws IOException {
     cleanupOnlyRegisteredExecutor(true);
   }
 
   @Test
-  public void cleanupOnlyRegisteredExecutorWithoutShuffleFiles() throws IOException {
+  public void cleanupOnlyRegisteredExecutorWithoutFilesToKeep() throws IOException {
     cleanupOnlyRegisteredExecutor(false);
   }
 
-  private void cleanupOnlyRegisteredExecutor(boolean withShuffleFiles) throws IOException {
-    TestShuffleDataContext dataContext = initDataContext(withShuffleFiles);
+  private void cleanupOnlyRegisteredExecutor(boolean withFilesToKeep) throws IOException {
+    TestShuffleDataContext dataContext = initDataContext(withFilesToKeep);
 
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
@@ -156,18 +156,15 @@ public class NonShuffleFilesCleanupSuite {
     }
   }
 
-  private static FilenameFilter filter = new FilenameFilter() {
-    @Override
-    public boolean accept(File dir, String name) {
-      // Don't delete shuffle data or shuffle index files.
-      return !name.endsWith(".index") && !name.endsWith(".data");
-    }
+  private static FilenameFilter filter = (dir, name) -> {
+    // Don't delete shuffle data or shuffle index files.
+    return !name.endsWith(".index") && !name.endsWith(".data") && !name.startsWith("rdd_");
   };
 
-  private static boolean assertOnlyShuffleDataInDir(File[] dirs) {
+  private static boolean assertOnlyFilesToKeepInDir(File[] dirs) {
     for (File dir : dirs) {
       assertTrue(dir.getName() + " wasn't cleaned up", !dir.exists() ||
-        dir.listFiles(filter).length == 0 || assertOnlyShuffleDataInDir(dir.listFiles()));
+        dir.listFiles(filter).length == 0 || assertOnlyFilesToKeepInDir(dir.listFiles()));
     }
     return true;
   }
@@ -175,47 +172,33 @@ public class NonShuffleFilesCleanupSuite {
   private static void assertCleanedUp(TestShuffleDataContext dataContext) {
     for (String localDir : dataContext.localDirs) {
       File[] dirs = new File[] {new File(localDir)};
-      assertOnlyShuffleDataInDir(dirs);
+      assertOnlyFilesToKeepInDir(dirs);
     }
   }
 
-  private static TestShuffleDataContext initDataContext(boolean withShuffleFiles)
-      throws IOException {
-    if (withShuffleFiles) {
-      return initDataContextWithShuffleFiles();
-    } else {
-      return initDataContextWithoutShuffleFiles();
-    }
-  }
-
-  private static TestShuffleDataContext initDataContextWithShuffleFiles() throws IOException {
-    TestShuffleDataContext dataContext = createDataContext();
-    createShuffleFiles(dataContext);
-    createNonShuffleFiles(dataContext);
-    return dataContext;
-  }
-
-  private static TestShuffleDataContext initDataContextWithoutShuffleFiles() throws IOException {
-    TestShuffleDataContext dataContext = createDataContext();
-    createNonShuffleFiles(dataContext);
-    return dataContext;
-  }
-
-  private static TestShuffleDataContext createDataContext() {
+  private static TestShuffleDataContext initDataContext(boolean withFilesToKeep)
+    throws IOException {
     TestShuffleDataContext dataContext = new TestShuffleDataContext(10, 5);
     dataContext.create();
+    if (withFilesToKeep) {
+      createFilesToKeep(dataContext);
+    } else {
+      createRemovableTestFiles(dataContext);
+    }
     return dataContext;
   }
 
-  private static void createShuffleFiles(TestShuffleDataContext dataContext) throws IOException {
+  private static void createFilesToKeep(TestShuffleDataContext dataContext) throws IOException {
     Random rand = new Random(123);
     dataContext.insertSortShuffleData(rand.nextInt(1000), rand.nextInt(1000), new byte[][] {
         "ABC".getBytes(StandardCharsets.UTF_8),
         "DEF".getBytes(StandardCharsets.UTF_8)});
+    dataContext.insertCachedRddData();
   }
 
-  private static void createNonShuffleFiles(TestShuffleDataContext dataContext) throws IOException {
-    // Create spill file(s)
+  private static void createRemovableTestFiles(TestShuffleDataContext dataContext) throws IOException {
     dataContext.insertSpillData();
+    dataContext.insertBroadcastData();
+    dataContext.insertTempShuffleData();
   }
 }
