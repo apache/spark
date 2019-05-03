@@ -715,6 +715,7 @@ object MimaExcludes {
     Seq(
       ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
       ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
+      ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
       ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
