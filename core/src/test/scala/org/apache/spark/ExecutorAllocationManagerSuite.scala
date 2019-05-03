@@ -272,6 +272,11 @@ class ExecutorAllocationManagerSuite
   test("ignore task end events from completed stages") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
+
+    // We simulate having a stage fail, but with tasks still running.  Then another attempt for
+    // that stage is started, and we get task completions from the first stage attempt.  Make sure
+    // the value of `totalTasksRunning` is consistent as tasks finish from both attempts (we only
+    // count tasks from the active attempt)
     val stage = createStageInfo(0, 5)
     post(sc.listenerBus, SparkListenerStageSubmitted(stage))
     val taskInfo1 = createTaskInfo(0, 0, "executor-1")
@@ -279,22 +284,30 @@ class ExecutorAllocationManagerSuite
     post(sc.listenerBus, SparkListenerTaskStart(0, 0, taskInfo1))
     post(sc.listenerBus, SparkListenerTaskStart(0, 0, taskInfo2))
 
+    // the first attempt finishes (eg. with a fetch failure).  The tasks haven't completed yet, but
+    // we ignore the running tasks.
     post(sc.listenerBus, SparkListenerStageCompleted(stage))
 
-    val attemptStage = createStageInfo(stage.stageId, 5, attemptId = 1)
-    post(sc.listenerBus, SparkListenerStageSubmitted(attemptStage))
+    // There are still two tasks that belong to the zombie stage running.
+    // totalRunningTasks only computes the running task of the active stage
+    assert(totalRunningTasks(manager) === 0)
 
+    // submit another attempt for the stage.  We may get some task completions from the
+    // first attempt, but they are ignored.
+    val stageAttempt1 = createStageInfo(stage.stageId, 5, attemptId = 1)
+    post(sc.listenerBus, SparkListenerStageSubmitted(stageAttempt1))
+    post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, Success, taskInfo1, null))
+    assert(totalRunningTasks(manager) === 0)
     val attemptTaskInfo1 = createTaskInfo(3, 0, "executor-1")
     val attemptTaskInfo2 = createTaskInfo(4, 1, "executor-1")
-    post(sc.listenerBus, SparkListenerTaskStart(0, 0, taskInfo1))
-    post(sc.listenerBus, SparkListenerTaskStart(0, 0, taskInfo2))
-
-    post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, Success, taskInfo1, null))
-    post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, Success, taskInfo2, null))
-
+    post(sc.listenerBus, SparkListenerTaskStart(0, 1, attemptTaskInfo1))
+    post(sc.listenerBus, SparkListenerTaskStart(0, 1, attemptTaskInfo2))
+    assert(totalRunningTasks(manager) === 2)
     post(sc.listenerBus, SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo1, null))
+    assert(totalRunningTasks(manager) === 1)
+    post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, Success, taskInfo2, null))
+    assert(totalRunningTasks(manager) === 1)
     post(sc.listenerBus, SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo2, null))
-
     assert(totalRunningTasks(manager) === 0)
   }
 

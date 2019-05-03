@@ -648,6 +648,7 @@ private[spark] class ExecutorAllocationManager(
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
     // Number of running tasks per stage including speculative tasks.
     // Should be 0 when no stages are active.
+    // Ignore running-but-zombie stage attempts.
     private val stageIdToNumRunningTask = new mutable.HashMap[Int, Int]
     private val activeStageIdToStageAttemptId = new mutable.HashMap[Int, Int]
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
@@ -762,9 +763,9 @@ private[spark] class ExecutorAllocationManager(
       val stageId = taskEnd.stageId
       val stageAttemptId = taskEnd.stageAttemptId
       allocationManager.synchronized {
-        if (stageIdToNumRunningTask.contains(stageId)
-          && activeStageIdToStageAttemptId.contains(stageId)
-          && activeStageIdToStageAttemptId(stageId) == stageAttemptId) {
+        if (stageIdToNumRunningTask.contains(stageId) &&
+            activeStageIdToStageAttemptId.contains(stageId) &&
+            activeStageIdToStageAttemptId(stageId) == stageAttemptId) {
           stageIdToNumRunningTask(stageId) -= 1
         }
         // If the executor is no longer running any scheduled tasks, mark it as idle
@@ -842,7 +843,8 @@ private[spark] class ExecutorAllocationManager(
     }
 
     /**
-     * The number of tasks currently running across all stages.
+     * The number of tasks currently running across all active stages.
+     * Ignore running-but-zombie stage attempts
      */
     def totalRunningTasks(): Int = {
       stageIdToNumRunningTask.values.sum
