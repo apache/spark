@@ -19,8 +19,9 @@ import datetime
 import shutil
 import tempfile
 import time
+import unittest
 
-from pyspark.sql import Row
+from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import lit
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, UTCOffsetTimezone
@@ -125,6 +126,12 @@ class SerdeTests(ReusedSQLTestCase):
                 [bytearray(b'')]]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
+
+    def test_int_array_serialization(self):
+        # Note that this test seems dependent on parallelism.
+        data = self.spark.sparkContext.parallelize([[1, 2, 3, 4]] * 100, numSlices=12)
+        df = self.spark.createDataFrame(data, "array<integer>")
+        self.assertEqual(len(list(filter(lambda r: None in r.value, df.collect()))), 0)
 
 
 if __name__ == "__main__":

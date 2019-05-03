@@ -435,7 +435,10 @@ class BatchedSerializer(Serializer):
                 yield items
 
     def dump_stream(self, iterator, stream):
-        self.serializer.dump_stream(self._batched(iterator), stream)
+        a = list(self._batched(iterator))
+        for i in a:
+            print(i)
+        self.serializer.dump_stream(a, stream)
 
     def load_stream(self, stream):
         return chain.from_iterable(self._load_stream_without_unbatching(stream))
