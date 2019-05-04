@@ -17,14 +17,11 @@
 
 package org.apache.spark.util.kvstore;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -109,13 +106,25 @@ public class InMemoryStore implements KVStore {
   public <T> KVStoreView<T> view(Class<T> type){
     InstanceList list = data.get(type);
     return list != null ? list.view(type)
-      : new InMemoryView<>(type, Collections.<T>emptyList(), null);
+      : new InMemoryView<>(type, Collections.emptyList(), null);
   }
 
   @Override
   public void close() {
     metadata = null;
     data.clear();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Override
+  public <T> boolean removeAllByKeys(Class<T> klass, String index, Collection keys) {
+    InstanceList list = data.get(klass);
+
+    if (list != null) {
+      return list.countingRemoveAllByKeys(index, keys) > 0;
+    } else {
+      return false;
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -126,14 +135,61 @@ public class InMemoryStore implements KVStore {
     return (Comparable<Object>) in;
   }
 
+  /**
+   * Encapsulates ConcurrentHashMap so that the typing in and out of the map strictly maps a
+   * class of type T to an InstanceList of type T.
+   */
+  private static class InMemoryLists {
+    private ConcurrentMap<Class<?>, InstanceList> data = new ConcurrentHashMap<>();
+
+    @SuppressWarnings("unchecked")
+    public <T> InstanceList get(Class<T> key) {
+      return (InstanceList)data.get(key);
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> void write(T value) throws Exception {
+      InstanceList list = data.computeIfAbsent(value.getClass(), InstanceList::new);
+      list.put(value);
+    }
+
+    public void clear() {
+      data.clear();
+    }
+  }
+
   private static class InstanceList {
+
+    private static class CountingRemoveIfForEach<T> implements BiConsumer<Comparable<Object>, T> {
+      ConcurrentMap<Comparable<Object>, T> data;
+      Predicate<? super T> filter;
+      int count = 0;
+
+      CountingRemoveIfForEach(
+          ConcurrentMap<Comparable<Object>, T> data,
+          Predicate<? super T> filter) {
+        this.data = data;
+        this.filter = filter;
+      }
+
+      public void accept(Comparable<Object> key, T value) {
+        // To address https://bugs.openjdk.java.net/browse/JDK-8078645 which affects remove() on
+        // all iterators of concurrent maps, and specifically makes countingRemoveIf difficult to
+        // implement correctly against the values() iterator, we use forEach instead....
+        if (filter.test(value)) {
+          if (data.remove(key, value)) {
+            count++;
+          }
+        }
+      }
+    }
 
     private final KVTypeInfo ti;
     private final KVTypeInfo.Accessor naturalKey;
     private final ConcurrentMap<Comparable<Object>, Object> data;
 
-    private InstanceList(Class<?> type) throws Exception {
-      this.ti = new KVTypeInfo(type);
+    private InstanceList(Class<?> klass) {
+      this.ti = new KVTypeInfo(klass);
       this.naturalKey = ti.getAccessor(KVIndex.NATURAL_INDEX_NAME);
       this.data = new ConcurrentHashMap<>();
     }
@@ -146,12 +202,24 @@ public class InMemoryStore implements KVStore {
       return data.get(asKey(key));
     }
 
+    // Note: removeIf returns a boolean if any element has been removed.
+    // While debugging this code, it was handy to have the count of elements
+    // removed, rather than an indicator of whether something has been
+    // removed, and a count is no more complicated than a boolean so I've
+    // retained that behavior here, although there is no current requirement.
+    @SuppressWarnings("unchecked")
+    int countingRemoveAllByKeys(String index, Collection keys) {
+      Predicate filter = getPredicate(ti.getAccessor(index), keys);
+      CountingRemoveIfForEach callback = new CountingRemoveIfForEach(data, filter);
+
+      data.forEach(callback);
+      return callback.count;
+    }
+
     public void put(Object value) throws Exception {
       Preconditions.checkArgument(ti.type().equals(value.getClass()),
         "Unexpected type: %s", value.getClass());
-      if (data.put(asKey(naturalKey.get(value)), value) == null) {
-        size++;
-      }
+      data.put(asKey(naturalKey.get(value)), value);
     }
 
     public void delete(Object key) {
@@ -169,6 +237,30 @@ public class InMemoryStore implements KVStore {
       return new InMemoryView<>(type, all, ti);
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T> Predicate<? super T> getPredicate(
+        KVTypeInfo.Accessor getter,
+        Collection keys) {
+      if (Comparable.class.isAssignableFrom(getter.getType())) {
+        HashSet set = new HashSet(keys);
+
+        return (value) -> set.contains(keyFromValue(getter, value));
+      } else {
+        HashSet<Comparable> set = new HashSet<>(keys.size());
+        for (Object key : keys) {
+          set.add(asKey(key));
+        }
+        return (value) -> set.contains(asKey(keyFromValue(getter, value)));
+      }
+    }
+
+    private static Object keyFromValue(KVTypeInfo.Accessor getter, Object value) {
+      try {
+        return getter.get(value);
+      } catch (ReflectiveOperationException e) {
+        throw new RuntimeException(e);
+      }
+    }
   }
 
   private static class InMemoryView<T> extends KVStoreView<T> {
@@ -190,34 +282,30 @@ public class InMemoryStore implements KVStore {
         return new InMemoryIterator<>(elements.iterator());
       }
 
-      try {
-        KVTypeInfo.Accessor getter = index != null ? ti.getAccessor(index) : null;
-        int modifier = ascending ? 1 : -1;
+      KVTypeInfo.Accessor getter = index != null ? ti.getAccessor(index) : null;
+      int modifier = ascending ? 1 : -1;
 
-        final List<T> sorted = copyElements();
-        Collections.sort(sorted, (e1, e2) -> modifier * compare(e1, e2, getter));
-        Stream<T> stream = sorted.stream();
+      final List<T> sorted = copyElements();
+      sorted.sort((e1, e2) -> modifier * compare(e1, e2, getter));
+      Stream<T> stream = sorted.stream();
 
-        if (first != null) {
-          stream = stream.filter(e -> modifier * compare(e, getter, first) >= 0);
-        }
-
-        if (last != null) {
-          stream = stream.filter(e -> modifier * compare(e, getter, last) <= 0);
-        }
-
-        if (skip > 0) {
-          stream = stream.skip(skip);
-        }
-
-        if (max < sorted.size()) {
-          stream = stream.limit((int) max);
-        }
-
-        return new InMemoryIterator<>(stream.iterator());
-      } catch (Exception e) {
-        throw Throwables.propagate(e);
+      if (first != null) {
+        stream = stream.filter(e -> modifier * compare(e, getter, first) >= 0);
       }
+
+      if (last != null) {
+        stream = stream.filter(e -> modifier * compare(e, getter, last) <= 0);
+      }
+
+      if (skip > 0) {
+        stream = stream.skip(skip);
+      }
+
+      if (max < sorted.size()) {
+        stream = stream.limit((int) max);
+      }
+
+      return new InMemoryIterator<>(stream.iterator());
     }
 
     /**
@@ -243,16 +331,16 @@ public class InMemoryStore implements KVStore {
           diff = compare(e1, natural, natural.get(e2));
         }
         return diff;
-      } catch (Exception e) {
-        throw Throwables.propagate(e);
+      } catch (ReflectiveOperationException e) {
+        throw new RuntimeException(e);
       }
     }
 
     private int compare(T e1, KVTypeInfo.Accessor getter, Object v2) {
       try {
         return asKey(getter.get(e1)).compareTo(asKey(v2));
-      } catch (Exception e) {
-        throw Throwables.propagate(e);
+      } catch (ReflectiveOperationException e) {
+        throw new RuntimeException(e);
       }
     }
 

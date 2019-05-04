@@ -19,10 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -198,6 +195,26 @@ public class LevelDB implements KVStore {
         }
       }
     };
+  }
+
+  @Override
+  public <T> boolean removeAllByKeys(
+      Class<T> klass,
+      String index,
+      Collection keys) throws Exception {
+    LevelDBTypeInfo.Index naturalIndex = getTypeInfo(klass).naturalIndex();
+    boolean removed = false;
+    KVStoreView<T> view = view(klass).index(index);
+
+    for (Object key : keys) {
+      for (T value: view.first(key).last(key)) {
+        Object itemKey = naturalIndex.getValue(value);
+        delete(klass, itemKey);
+        removed = true;
+      }
+    }
+
+    return removed;
   }
 
   @Override

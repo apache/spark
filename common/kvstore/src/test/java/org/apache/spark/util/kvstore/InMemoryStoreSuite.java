@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.util.HashSet;
 import java.util.NoSuchElementException;
 
 import org.junit.Test;
@@ -130,6 +131,48 @@ public class InMemoryStoreSuite {
     store.write(o);
     assertEquals(o, store.read(ArrayKeyIndexType.class, o.key));
     assertEquals(o, store.view(ArrayKeyIndexType.class).index("id").first(o.id).iterator().next());
+  }
+
+  @Test
+  public void testRemoveAll() throws Exception {
+    KVStore store = new InMemoryStore();
+
+    for (int i = 0; i < 2; i++) {
+      for (int j = 0; j < 2; j++) {
+        ArrayKeyIndexType o = new ArrayKeyIndexType();
+        o.key = new int[] { i, j, 0 };
+        o.id = new String[] { "things" };
+        store.write(o);
+
+        o = new ArrayKeyIndexType();
+        o.key = new int[] { i, j, 1 };
+        o.id = new String[] { "more things" };
+        store.write(o);
+      }
+    }
+
+    ArrayKeyIndexType o = new ArrayKeyIndexType();
+    o.key = new int[] { 2, 2, 2 };
+    o.id = new String[] { "things" };
+    store.write(o);
+
+    assertEquals(9, store.count(ArrayKeyIndexType.class));
+
+    HashSet set = new HashSet();
+    set.add(new int[] {0, 0, 0});
+    set.add(new int[] { 2, 2, 2 });
+    store.removeAllByKeys(ArrayKeyIndexType.class, KVIndex.NATURAL_INDEX_NAME, set);
+    assertEquals(7, store.count(ArrayKeyIndexType.class));
+
+    set.clear();
+    set.add(new String[] { "things" });
+    store.removeAllByKeys(ArrayKeyIndexType.class, "id", set);
+    assertEquals(4, store.count(ArrayKeyIndexType.class));
+
+    set.clear();
+    set.add(new String[] { "more things" });
+    store.removeAllByKeys(ArrayKeyIndexType.class, "id", set);
+    assertEquals(0, store.count(ArrayKeyIndexType.class));
   }
 
   @Test

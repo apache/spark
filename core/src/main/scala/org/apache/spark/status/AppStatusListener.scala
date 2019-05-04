@@ -1144,8 +1144,7 @@ private[spark] class AppStatusListener(
       s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
     }
 
-    def stageKey(stageId: Int, attemptId: Int): Long =
-      stageId.toLong << 32 | (attemptId.toLong & 0x00000000ffffffffL)
+    logDebug(s"Cleanup stages ${stages.size} for total count of $count")
 
     val stageKeys = stages.map { s =>
       val key = Array(s.info.stageId, s.info.attemptId)
@@ -1172,28 +1171,20 @@ private[spark] class AppStatusListener(
       }
 
       cleanupCachedQuantiles(key)
-      stageKey(s.info.stageId, s.info.attemptId)
-    }.toSet
-
-    // We don't care about the index, so I use the easiest-to-sort index we have.  Ideally
-    // we'd be able to get an unsorted view, or even better, have a way to multiDelete based on
-    // partial identity match to a set of values, but for now, this avoids n^2 behavior, at least,
-    // and the nlogn behavior of the sort is as cheap as possible....
-    val execSummaries = kvstore.view(classOf[ExecutorStageSummaryWrapper]).asScala
-
-    execSummaries.foreach { e =>
-      if (stageKeys.contains(stageKey(e.stageId, e.stageAttemptId))) {
-        kvstore.delete(e.getClass(), e.id)
-      }
+      key
     }
+
+    // Delete summaries in one pass, as deleting them for each stage is slow
+    val totalSummariesDeleted = kvstore.removeAllByKeys(
+      classOf[ExecutorStageSummaryWrapper],
+      "stage",
+      stageKeys)
 
     // Delete tasks for all stages in one pass, as deleting them for each stage individually is slow
-    val tasks = kvstore.view(classOf[TaskDataWrapper]).asScala
-    tasks.foreach { t =>
-      if (stageKeys.contains(stageKey(t.stageId, t.stageAttemptId))) {
-        kvstore.delete(t.getClass(), t.taskId)
-      }
-    }
+    kvstore.removeAllByKeys(
+      classOf[TaskDataWrapper],
+      TaskIndexNames.STAGE,
+      stageKeys)
   }
 
   private def cleanupTasks(stage: LiveStage): Unit = {

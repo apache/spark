@@ -17,9 +17,11 @@
 
 package org.apache.spark.status
 
+import java.util.Collection
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import com.google.common.util.concurrent.MoreExecutors
@@ -126,9 +128,9 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
     write(value)
 
     if (checkTriggers && !stopped) {
-      triggers.get(value.getClass()).map { latchedList =>
+      triggers.get(value.getClass).map { latchedList =>
         WriteQueueResult(latchedList.fireOnce { list =>
-          val count = store.count(value.getClass())
+          val count = store.count(value.getClass)
           list.foreach { t =>
             if (count > t.threshold) {
               t.action(count)
@@ -140,6 +142,12 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
       WriteSkippedQueue
     }
   }
+
+  def removeAllByKeys[T](klass: Class[T], index: String, keys: Iterable[_]): Boolean =
+    removeAllByKeys(klass, index, keys.asJavaCollection)
+
+  override def removeAllByKeys[T](klass: Class[T], index: String, keys: Collection[_]): Boolean =
+    store.removeAllByKeys(klass, index, keys)
 
   override def delete(klass: Class[_], naturalKey: Any): Unit = store.delete(klass, naturalKey)
 
