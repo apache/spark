@@ -539,6 +539,38 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  test("Option pathGlobFilter: filter files correctly") {
+    withTempPath { path =>
+      val dataDir = path.getCanonicalPath
+      Seq("foo").toDS().write.text(dataDir)
+      Seq("bar").toDS().write.mode("append").orc(dataDir)
+      val df = spark.read.option("pathGlobFilter", "*.txt").text(dataDir)
+      checkAnswer(df, Row("foo"))
+
+      // Both glob pattern in option and path should be effective to filter files.
+      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*.orc")
+      checkAnswer(df2, Seq.empty)
+
+      val df3 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*xt")
+      checkAnswer(df3, Row("foo"))
+    }
+  }
+
+  test("Option pathGlobFilter: simple extension filtering should contains partition info") {
+    withTempPath { path =>
+      val input = Seq(("foo", 1), ("oof", 2)).toDF("a", "b")
+      input.write.partitionBy("b").text(path.getCanonicalPath)
+      Seq("bar").toDS().write.mode("append").orc(path.getCanonicalPath + "/b=1")
+
+      // If we use glob pattern in the path, the partition column won't be shown in the result.
+      val df = spark.read.text(path.getCanonicalPath + "/*/*.txt")
+      checkAnswer(df, input.select("a"))
+
+      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(path.getCanonicalPath)
+      checkAnswer(df2, input)
+    }
+  }
+
   test("Return correct results when data columns overlap with partition columns") {
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>
