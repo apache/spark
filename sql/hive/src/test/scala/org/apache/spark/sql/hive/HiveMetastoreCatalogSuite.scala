@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types._
 
@@ -275,29 +274,25 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
   }
 
-  test("Write table write info to metastore") {
-    withTable("t", "tmp_view") {
+  test("Set the bucketed data source table SerDe correctly") {
+    val provider = "parquet"
+    withTable("t") {
       spark.sql(
-        """
+        s"""
           |CREATE TABLE t (c1 INT, c2 INT)
-          |USING parquet
+          |USING $provider
           |CLUSTERED BY (c1)
           |SORTED BY (c1)
           |INTO 2 BUCKETS
         """.stripMargin)
-      val tableIdentifier = TableIdentifier("t", Some("default"))
 
-      val beforeInsertData = sessionState.catalog.getTableMetadata(tableIdentifier)
-      assert(beforeInsertData.properties.get("last_updated_engine").isEmpty)
-      assert(beforeInsertData.properties.get("last_updated_version").isEmpty)
+      val metadata = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
+      assert(metadata.properties.get("bucketing_version") === Some("spark"))
 
-      spark.range(4).selectExpr("id as c1", "id as c2").createTempView("temp_view")
-      sql("INSERT OVERWRITE TABLE t SELECT c1, c2 FROM temp_view")
-
-      assert(spark.table("t").count() > 0)
-      val afterInsertData = sessionState.catalog.getTableMetadata(tableIdentifier)
-      assert(afterInsertData.properties.get("last_updated_engine") === Some("Spark"))
-      assert(afterInsertData.properties.get("last_updated_version") === Some(SPARK_VERSION_SHORT))
+      val hiveSerDe = HiveSerDe.sourceToSerDe(provider).get
+      assert(metadata.storage.serde === hiveSerDe.serde)
+      assert(metadata.storage.inputFormat === hiveSerDe.inputFormat)
+      assert(metadata.storage.outputFormat === hiveSerDe.outputFormat)
     }
   }
 }

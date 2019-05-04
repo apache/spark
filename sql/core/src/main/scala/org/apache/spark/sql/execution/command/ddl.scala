@@ -548,7 +548,6 @@ case class AlterTableDropPartitionCommand(
       retainData = retainData)
 
     CommandUtils.updateTableStats(sparkSession, table)
-    CommandUtils.updateTableWriteInfo(sparkSession, table)
 
     Seq.empty[Row]
   }
@@ -799,7 +798,6 @@ case class AlterTableSetLocationCommand(
     }
 
     CommandUtils.updateTableStats(sparkSession, table)
-    CommandUtils.updateTableWriteInfo(sparkSession, table)
     Seq.empty[Row]
   }
 }

@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 
-import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -158,17 +157,6 @@ object CommandUtils extends Logging {
       }
     }
     newStats
-  }
-
-  // The metastore may be used for different computing engines, such as Hive, Presto and Impala.
-  // We cannot guarantee that the data we write is compatible with other computing engines. Write
-  // the write information of this data to metadata so that each engine decides compatibility itself
-  def updateTableWriteInfo(sparkSession: SparkSession, table: CatalogTable): Unit = {
-    val props = table.properties ++
-      Map("last_updated_engine" -> "Spark",
-        "last_updated_version" -> SPARK_VERSION_SHORT,
-        "last_updated_time" -> (System.currentTimeMillis() / 1000).toString)
-    sparkSession.sessionState.catalog.alterTable(table.copy(properties = props))
   }
 
   /**

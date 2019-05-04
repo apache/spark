@@ -358,12 +358,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             "Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
-      // our bucketing is un-compatible with hive(different hash function)
-      case _ if table.bucketSpec.nonEmpty =>
+      // our bucketing is un-compatible with hive(different hash function).
+      // but downstream(Hive/Presto) still can read it as not bucketed table.
+      // We set the SerDe correctly and bucketing_version to spark.
+      // The downstream decides how to read it by themselves, a similar implementation:
+      // https://github.com/prestosql/presto/pull/512
+      case Some(serde) if table.bucketSpec.nonEmpty =>
         val message =
           s"Persisting bucketed data source table $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
-        (None, message)
+        tableProperties.put("bucketing_version", "spark")
+        (Some(newHiveCompatibleMetastoreTable(serde)), message)
 
       case Some(serde) =>
         val message =

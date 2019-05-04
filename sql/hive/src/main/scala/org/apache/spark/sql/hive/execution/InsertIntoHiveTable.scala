@@ -108,7 +108,6 @@ case class InsertIntoHiveTable(
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
 
     CommandUtils.updateTableStats(sparkSession, table)
-    CommandUtils.updateTableWriteInfo(sparkSession, table)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which
