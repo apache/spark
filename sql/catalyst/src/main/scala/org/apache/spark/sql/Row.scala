@@ -59,8 +59,18 @@ object Row {
    */
   @deprecated("This method is deprecated and will be removed in future versions.", "3.0.0")
   def merge(rows: Row*): Row = {
-    // TODO: Improve the performance of this if used in performance critical part.
-    new GenericRow(rows.flatMap(_.toSeq).toArray)
+    var elementNumber = 0
+    for (row <- rows)
+      elementNumber += row.length
+    val allValues = new Array[Any](elementNumber)
+    var arrayPos = 0
+    for (row <- rows) {
+      for (rowIndex <- (0 until row.length)) {
+        allValues.update(arrayPos, row.get(rowIndex))
+        arrayPos += 1
+      }
+    }
+    new GenericRow(allValues)
   }
 
   /** Returns an empty row. */
