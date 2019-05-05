@@ -443,8 +443,8 @@ object PowerIterationClustering extends Logging {
   }
 
   /**
-    * Forces materialization of a Graph by iterating its RDDs.
-    */
+   * Forces materialization of a Graph by iterating its RDDs.
+   */
   private def materialize(g: Graph[_, _]): Unit = {
     g.edges.foreachPartition(_ => {})
   }
