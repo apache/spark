@@ -192,7 +192,37 @@ private[spark] class BlockManager(
     new ExternalShuffleClient(transConf, securityManager,
       securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
   } else {
-    blockTransferService
+    val nettyTransfererName = classOf[
+        org.apache.spark.network.netty.NettyBlockTransferService].getName
+    val blockTransfererName =
+      conf.get("spark.shuffle.blockTransferService", nettyTransfererName)
+    if (blockTransfererName == nettyTransfererName) {
+      blockTransferService
+    } else {
+      // This leaves us space to extend the existing BlockTransferService, or plug in a new one
+      instantiateClass(blockTransfererName)
+    }
+  }
+
+  // Create an instance of the class with the given name, possibly initializing it with our conf or
+  // the Spark native BlockTransferService
+  private def instantiateClass[T](className: String): T = {
+    val cls = Utils.classForName(className)
+    // Look for a constructor taking a SparkConf and a BlockTransferService, then one taking just
+    // SparkConf, then one taking no arguments
+    try {
+      cls.getConstructor(classOf[SparkConf], classOf[BlockTransferService])
+          .newInstance(conf, blockTransferService)
+          .asInstanceOf[T]
+    } catch {
+      case _: NoSuchMethodException =>
+        try {
+          cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
+        } catch {
+          case _: NoSuchMethodException =>
+            cls.getConstructor().newInstance().asInstanceOf[T]
+        }
+    }
   }
 
   // Max number of failures before this block manager refreshes the block locations from the driver
