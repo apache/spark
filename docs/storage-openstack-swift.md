@@ -22,7 +22,7 @@ Spark's support for Hadoop InputFormat allows it to process data in OpenStack Sw
 same URI formats as in Hadoop. You can specify a path in Swift as input through a 
 URI of the form <code>swift://container.PROVIDER/path</code>. You will also need to set your 
 Swift security credentials, through <code>core-site.xml</code> or via
-<code>SparkContext.hadoopConfiguration</code>.
+<code>SparkContext.getHadoopConf.get</code>.
 The current Swift driver requires Swift to use the Keystone authentication method, or
 its Rackspace-specific predecessor.
 
@@ -150,4 +150,4 @@ Notice that
 <code>core-site.xml</code> is not always a good approach.
 We suggest to keep those parameters in <code>core-site.xml</code> for testing purposes when running Spark
 via <code>spark-shell</code>.
-For job submissions they should be provided via <code>sparkContext.hadoopConfiguration</code>.
+For job submissions they should be provided via <code>sparkContext.getHadoopConf.get</code>.

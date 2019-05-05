@@ -54,7 +54,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
 
     testDir = Utils.createTempDir().getAbsolutePath
     fsTestDir = new Path(testDir)
-    fs = fsTestDir.getFileSystem(sparkContext.hadoopConfiguration)
+    fs = fsTestDir.getFileSystem(sparkContext.getHadoopConf.get)
 
     val year2014Dir = new File(testDir, "year=2014")
     year2014Dir.mkdir()

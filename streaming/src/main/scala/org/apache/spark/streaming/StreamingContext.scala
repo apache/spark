@@ -126,7 +126,7 @@ class StreamingContext private[streaming] (
   def this(path: String, sparkContext: SparkContext) = {
     this(
       sparkContext,
-      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).orNull,
+      CheckpointReader.read(path, sparkContext.conf, sparkContext.getHadoopConf.get).orNull,
       null)
   }
 
@@ -237,7 +237,7 @@ class StreamingContext private[streaming] (
   def checkpoint(directory: String) {
     if (directory != null) {
       val path = new Path(directory)
-      val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+      val fs = path.getFileSystem(sparkContext.getHadoopConf.get)
       fs.mkdirs(path)
       val fullPath = fs.getFileStatus(path).getPath().toString
       sc.setCheckpointDir(fullPath)
@@ -434,7 +434,7 @@ class StreamingContext private[streaming] (
   def binaryRecordsStream(
       directory: String,
       recordLength: Int): DStream[Array[Byte]] = withNamedScope("binary records stream") {
-    val conf = _sc.hadoopConfiguration
+    val conf = _sc.getHadoopConf.get
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
       directory, FileInputDStream.defaultFilter: Path => Boolean, newFilesOnly = true, conf)

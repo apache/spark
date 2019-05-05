@@ -93,7 +93,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       s" same as number of block Ids (${_blockIds.length})")
 
   // Hadoop configuration is not serializable, so broadcast it as a serializable.
-  @transient private val hadoopConfig = sc.hadoopConfiguration
+  @transient private val hadoopConfig = sc.getHadoopConf.get
   private val broadcastedHadoopConf = new SerializableConfiguration(hadoopConfig)
 
   override def isValid(): Boolean = true

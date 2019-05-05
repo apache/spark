@@ -47,20 +47,6 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
-  test("withHadoopConf") {
-    val conf = new SparkConf().setAppName("test").setMaster("local")
-    sc = new SparkContext(conf)
-    sc.setHadoopConf("key", "value") // global
-    SparkContext.withHadoopConf(Map("k1" -> "v1", "k2" -> "v2")) { // temp
-      val rdd = sc.parallelize(Range.apply(0, 10), 2)
-      val arr = rdd.take(2)
-      // scalastyle:off
-      println(arr.head)
-      println(arr.last)
-      // scalastyle:on
-    }
-  }
-
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
     val conf = new SparkConf().setAppName("test").setMaster("local")

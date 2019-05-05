@@ -138,7 +138,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("SPARK-15887: hive-site.xml should be loaded") {
     val session = SparkSession.builder().master("local").getOrCreate()
     assert(session.sessionState.newHadoopConf().get("hive.in.test") == "true")
-    assert(session.sparkContext.hadoopConfiguration.get("hive.in.test") == "true")
+    assert(session.sparkContext.getHadoopConf.get.get("hive.in.test") == "true")
   }
 
   test("SPARK-15991: Set global Hadoop conf") {
@@ -146,10 +146,10 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     val mySpecialKey = "my.special.key.15991"
     val mySpecialValue = "msv"
     try {
-      session.sparkContext.hadoopConfiguration.set(mySpecialKey, mySpecialValue)
+      session.sparkContext.getHadoopConf.get.set(mySpecialKey, mySpecialValue)
       assert(session.sessionState.newHadoopConf().get(mySpecialKey) == mySpecialValue)
     } finally {
-      session.sparkContext.hadoopConfiguration.unset(mySpecialKey)
+      session.sparkContext.getHadoopConf.get.unset(mySpecialKey)
     }
   }
 }

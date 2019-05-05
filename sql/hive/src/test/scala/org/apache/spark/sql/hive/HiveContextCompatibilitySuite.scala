@@ -32,7 +32,7 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
     super.beforeAll()
     sc = SparkContext.getOrCreate(new SparkConf().setMaster("local").setAppName("test"))
     HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true).foreach { case (k, v) =>
-      sc.hadoopConfiguration.set(k, v)
+      sc.getHadoopConf.get.set(k, v)
     }
     hc = new HiveContext(sc)
   }

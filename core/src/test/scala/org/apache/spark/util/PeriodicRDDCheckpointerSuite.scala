@@ -126,7 +126,7 @@ private object PeriodicRDDCheckpointerSuite {
     //       Instead, we check for the presence of the checkpoint files.
     //       This test should continue to work even after this rdd.isCheckpointed issue
     //       is fixed (though it can then be simplified and not look for the files).
-    val hadoopConf = rdd.sparkContext.hadoopConfiguration
+    val hadoopConf = rdd.sparkContext.getHadoopConf.get
     rdd.getCheckpointFile.foreach { checkpointFile =>
       val path = new Path(checkpointFile)
       val fs = path.getFileSystem(hadoopConf)

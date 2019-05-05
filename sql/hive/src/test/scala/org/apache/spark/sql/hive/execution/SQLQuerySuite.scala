@@ -1642,7 +1642,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val path = new Path(
       new Path(s"file:$tempDir"),
       "drop_database_removes_partition_dirs_table2")
-    val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+    val fs = path.getFileSystem(sparkContext.getHadoopConf.get)
     // The partition dir is not empty.
     assert(fs.listStatus(new Path(path, "part=1")).nonEmpty)
 
@@ -1690,7 +1690,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("select '1' as part, key, value from src")
     )
     val path = new Path(new Path(s"file:$tempDir"), "drop_table_removes_partition_dirs_table2")
-    val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+    val fs = path.getFileSystem(sparkContext.getHadoopConf.get)
     // The partition dir is not empty.
     assert(fs.listStatus(new Path(path, "part=1")).nonEmpty)
 

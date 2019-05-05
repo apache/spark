@@ -58,7 +58,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       new HiveMetastoreCatalog(session),
       functionRegistry,
       conf,
-      SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
+      SessionState.newHadoopConf(session.sparkContext.getHadoopConf.get, conf),
       sqlParser,
       resourceLoader)
     parentState.foreach(_.catalog.copyStateTo(catalog))

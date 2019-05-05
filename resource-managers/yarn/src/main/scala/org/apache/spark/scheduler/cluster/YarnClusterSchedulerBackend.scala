@@ -36,10 +36,10 @@ private[spark] class YarnClusterSchedulerBackend(
   }
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
-    YarnContainerInfoHelper.getLogUrls(sc.hadoopConfiguration, container = None)
+    YarnContainerInfoHelper.getLogUrls(sc.getHadoopConf.get, container = None)
   }
 
   override def getDriverAttributes: Option[Map[String, String]] = {
-    YarnContainerInfoHelper.getAttributes(sc.hadoopConfiguration, container = None)
+    YarnContainerInfoHelper.getAttributes(sc.getHadoopConf.get, container = None)
   }
 }

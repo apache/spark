@@ -54,13 +54,13 @@ private[sql] class SharedState(
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
       logInfo(s"loading hive config file: $configFile")
-      sparkContext.hadoopConfiguration.addResource(configFile)
+      sparkContext.getHadoopConf.addResource(configFile)
     }
 
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkContext.conf.remove("hive.metastore.warehouse.dir")
     // Set the Hive metastore warehouse path to the one we use
-    val hiveWarehouseDir = sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir")
+    val hiveWarehouseDir = sparkContext.getHadoopConf.get("hive.metastore.warehouse.dir")
     if (hiveWarehouseDir != null && !sparkContext.conf.contains(WAREHOUSE_PATH.key)) {
       // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
       // we will respect the value of hive.metastore.warehouse.dir.
@@ -77,7 +77,7 @@ private[sql] class SharedState(
       val sparkWarehouseDir = sparkContext.conf.get(WAREHOUSE_PATH)
       logInfo(s"Setting hive.metastore.warehouse.dir ('$hiveWarehouseDir') to the value of " +
         s"${WAREHOUSE_PATH.key} ('$sparkWarehouseDir').")
-      sparkContext.hadoopConfiguration.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
+      sparkContext.getHadoopConf.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
       sparkWarehouseDir
     }
   }
@@ -88,7 +88,7 @@ private[sql] class SharedState(
   // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
   private val (conf, hadoopConf) = {
     val confClone = sparkContext.conf.clone()
-    val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
+    val hadoopConfClone = new Configuration(sparkContext.getHadoopConf.get)
     // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
     // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
     // `SharedState` instance. This will be done only once then shared across `SparkSession`s

@@ -27,7 +27,7 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkFiles, TestUtils}
+import org.apache.spark.{SparkContext, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -1173,18 +1173,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         assert(spark.table("with_parts").filter($"p" === 2).collect().head == Row(1, 2))
       }
 
-      // Turn off style check since the following test is to modify hadoop configuration on purpose.
-      // scalastyle:off hadoopconfiguration
-      val hadoopConf = spark.sparkContext.hadoopConfiguration
-      // scalastyle:on hadoopconfiguration
-
-      val originalValue = hadoopConf.get(modeConfKey, "nonstrict")
-      try {
-        hadoopConf.set(modeConfKey, "nonstrict")
+      SparkContext.withHadoopConf((modeConfKey, "nonstrict")) {
         sql("INSERT OVERWRITE TABLE with_parts partition(p) select 3, 4")
         assert(spark.table("with_parts").filter($"p" === 4).collect().head == Row(3, 4))
-      } finally {
-        hadoopConf.set(modeConfKey, originalValue)
       }
     }
   }

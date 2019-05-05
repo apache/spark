@@ -600,8 +600,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
-  def hadoopConfiguration(): Configuration = {
-    sc.hadoopConfiguration
+  def getHadoopConf(): Configuration = {
+    sc.getHadoopConf.get
   }
 
   /**

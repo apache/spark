@@ -293,7 +293,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
       if (corruptPartitionerFile) {
         // Overwrite the partitioner file with garbage data
         val checkpointDir = new Path(rddWithPartitioner.getCheckpointFile.get)
-        val fs = checkpointDir.getFileSystem(sc.hadoopConfiguration)
+        val fs = checkpointDir.getFileSystem(sc.getHadoopConf.get)
         val partitionerFile = fs.listStatus(checkpointDir)
             .find(_.getPath.getName.contains("partitioner"))
             .map(_.getPath)
@@ -601,7 +601,7 @@ class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
       assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
 
       val checkpointPath = new Path(rdd.getCheckpointFile.get)
-      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+      val fs = checkpointPath.getFileSystem(sc.getHadoopConf.get)
       val checkpointFile =
         fs.listStatus(checkpointPath).map(_.getPath).find(_.getName.startsWith("part-")).get
 

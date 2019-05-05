@@ -772,7 +772,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
-    Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
+    Some(new HadoopDelegationTokenManager(conf, sc.getHadoopConf.get, driverEndpoint))
   }
 
   private def numExecutors(): Int = {

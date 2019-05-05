@@ -150,16 +150,16 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
-  <check customId="hadoopconfiguration" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">spark(.sqlContext)?.sparkContext.hadoopConfiguration</parameter></parameters>
+  <check customId="getHadoopConf" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">spark(.sqlContext)?.sparkContext.getHadoopConf</parameter></parameters>
     <customMessage><![CDATA[
-      Are you sure that you want to use sparkContext.hadoopConfiguration? In most cases, you should use
+      Are you sure that you want to use sparkContext.getHadoopConf.get? In most cases, you should use
       spark.sessionState.newHadoopConf() instead, so that the hadoop configurations specified in Spark session
       configuration will come into effect.
-      If you must use sparkContext.hadoopConfiguration, wrap the code block with
-      // scalastyle:off hadoopconfiguration
-      spark.sparkContext.hadoopConfiguration...
-      // scalastyle:on hadoopconfiguration
+      If you must use sparkContext.getHadoopConf.get, wrap the code block with
+      // scalastyle:off getHadoopConf
+      spark.sparkContext.getHadoopConf.get...
+      // scalastyle:on getHadoopConf
     ]]></customMessage>
   </check>
 

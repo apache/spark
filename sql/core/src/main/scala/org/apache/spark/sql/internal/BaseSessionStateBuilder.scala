@@ -145,7 +145,7 @@ abstract class BaseSessionStateBuilder(
       () => session.sharedState.globalTempViewManager,
       functionRegistry,
       conf,
-      SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
+      SessionState.newHadoopConf(session.sparkContext.getHadoopConf.get, conf),
       sqlParser,
       resourceLoader)
     parentState.foreach(_.catalog.copyStateTo(catalog))

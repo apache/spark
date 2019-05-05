@@ -2283,7 +2283,7 @@ class HiveDDLSuite
 
       case "parquet" =>
         val footer = ParquetFileReader.readFooter(
-          sparkContext.hadoopConfiguration, new Path(maybeFile.get.getPath), NO_FILTER)
+          sparkContext.getHadoopConf.get, new Path(maybeFile.get.getPath), NO_FILTER)
         footer.getBlocks.get(0).getColumns.get(0).getCodec.toString
     }
 

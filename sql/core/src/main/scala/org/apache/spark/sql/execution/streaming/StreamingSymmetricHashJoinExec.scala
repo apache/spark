@@ -161,7 +161,7 @@ case class StreamingSymmetricHashJoinExec(
   private val storeConf = new StateStoreConf(sqlContext.conf)
   private val hadoopConfBcast = sparkContext.broadcast(
     new SerializableConfiguration(SessionState.newHadoopConf(
-      sparkContext.hadoopConfiguration, sqlContext.conf)))
+      sparkContext.getHadoopConf.get, sqlContext.conf)))
 
   val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
   val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)

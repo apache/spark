@@ -433,7 +433,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     sc = new SparkContext("local", "test", myConf)
     val logDirUri = logDir.toURI
     val logDirPath = new Path(logDirUri)
-    val fs = FileSystem.get(logDirUri, sc.hadoopConfiguration)
+    val fs = FileSystem.get(logDirUri, sc.getHadoopConf.get)
 
     def listDir(dir: Path): Seq[FileStatus] = {
       val statuses = fs.listStatus(dir)

@@ -258,7 +258,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
         val sparkContext = ssc.sparkContext
-        val hc = sparkContext.hadoopConfiguration
+        val hc = sparkContext.getHadoopConf.get
         val fs = FileSystem.get(testPath.toUri, hc)
 
         fs.delete(testPath, true)

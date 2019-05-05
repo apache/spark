@@ -17,6 +17,9 @@
 
 package org.apache.spark.ml.image
 
+import java.lang.{Double => JDouble, Long => JLong}
+
+import scala.language.existentials
 import scala.util.Random
 
 import org.apache.commons.io.FilenameUtils
@@ -24,6 +27,7 @@ import org.apache.hadoop.conf.{Configuration, Configured}
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 
 private object RecursiveFlag {
@@ -37,19 +41,7 @@ private object RecursiveFlag {
    */
   def withRecursiveFlag[T](value: Boolean, spark: SparkSession)(f: => T): T = {
     val flagName = FileInputFormat.INPUT_DIR_RECURSIVE
-    // scalastyle:off hadoopconfiguration
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
-    // scalastyle:on hadoopconfiguration
-    val old = Option(hadoopConf.get(flagName))
-    hadoopConf.set(flagName, value.toString)
-    try f finally {
-      // avoid false positive of DLS_DEAD_LOCAL_STORE_IN_RETURN by SpotBugs
-      if (old.isDefined) {
-        hadoopConf.set(flagName, old.get)
-      } else {
-        hadoopConf.unset(flagName)
-      }
-    }
+    SparkContext.withHadoopConf(flagName -> value.toString)(f)
   }
 }
 
@@ -99,21 +91,14 @@ private object SamplePathFilter {
     val sampleImages = sampleRatio < 1
     if (sampleImages) {
       val flagName = FileInputFormat.PATHFILTER_CLASS
-      // scalastyle:off hadoopconfiguration
-      val hadoopConf = spark.sparkContext.hadoopConfiguration
-      // scalastyle:on hadoopconfiguration
-      val old = hadoopConf.getClass(flagName, null)
-      hadoopConf.setDouble(SamplePathFilter.ratioParam, sampleRatio)
-      hadoopConf.setLong(SamplePathFilter.seedParam, seed)
-      hadoopConf.setClass(flagName, classOf[SamplePathFilter], classOf[PathFilter])
-      try f finally {
-        hadoopConf.unset(SamplePathFilter.ratioParam)
-        hadoopConf.unset(SamplePathFilter.seedParam)
-        old match {
-          case null => hadoopConf.unset(flagName)
-          case v => hadoopConf.setClass(flagName, v, classOf[PathFilter])
-        }
+      SparkContext.withHadoopConf(
+          SamplePathFilter.ratioParam -> JDouble.toString(sampleRatio),
+          SamplePathFilter.seedParam -> JLong.toString(seed),
+          flagName -> classOf[SamplePathFilter].getName)
+      {
+        f
       }
+
     } else {
       f
     }

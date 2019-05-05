@@ -78,7 +78,7 @@ private[spark] class NodeIdCache(
   private val canCheckpoint = nodeIdsForInstances.sparkContext.getCheckpointDir.nonEmpty
 
   // Hadoop Configuration for deleting checkpoints as needed
-  private val hadoopConf = nodeIdsForInstances.sparkContext.hadoopConfiguration
+  private val hadoopConf = nodeIdsForInstances.sparkContext.getHadoopConf.get
 
   /**
    * Update the node index values in the cache.
