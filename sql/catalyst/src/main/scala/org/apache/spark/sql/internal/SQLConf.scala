@@ -934,6 +934,11 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val DELETE_CHECKPOINT_LOCATION = buildConf("spark.sql.streaming.delete.checkpointLocation")
+    .doc("whether to delete checkpoint when streaming is stoped.")
+    .booleanConf
+    .createWithDefault(false)
+
   val FORCE_DELETE_TEMP_CHECKPOINT_LOCATION =
     buildConf("spark.sql.streaming.forceDeleteTempCheckpointLocation")
       .doc("When true, enable temporary checkpoint locations force delete.")
@@ -1801,6 +1806,8 @@ class SQLConf extends Serializable with Logging {
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
+
+  def isDeleteCheckpoint: Option[Boolean] = getConf(DELETE_CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
