@@ -221,6 +221,42 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
+  test("Do not generate redundant aliases if parent nested field is aliased too") {
+    val nestedRelation = LocalRelation('a.struct('b.struct('c.int,
+      'd.struct('f.int, 'g.int), 'e.int)))
+
+    val first = GetStructField('a, 0, Some("b"))
+    val second = Add(
+      GetStructField(
+        GetStructField('a, 0, Some("b")), 0, Some("c")),
+      Literal(1))
+    val last = GetStructField(
+      GetStructField(
+        GetStructField('a, 0, Some("b")), 1, Some("d")), 0, Some("f"))
+
+    val query = nestedRelation
+      .limit(5)
+      .select(first, second, last)
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    val expected = nestedRelation
+      .select(first.as(aliases(0)))
+      .limit(5)
+      .select($"${aliases(0)}".as("a.b"),
+        Add(
+          GetStructField($"${aliases(0)}", 0, Some("c")),
+          Literal(1)).as("(a.b.c + 1)"),
+        GetStructField(
+          GetStructField($"${aliases(0)}", 1, Some("d")), 0, Some("f")).as("a.b.d.f"))
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
+
   private def collectGeneratedAliases(query: LogicalPlan): ArrayBuffer[String] = {
     val aliases = ArrayBuffer[String]()
     query.transformAllExpressions {
