@@ -226,14 +226,10 @@ class PowerIterationClustering private[clustering] (
    */
   private def pic(w: Graph[Double, Double]): PowerIterationClusteringModel = {
     val v = powerIter(w, maxIterations)
-    val kMeansModel = kMeans(v, k)
-    val assignments = kMeansModel.mapPartitions({ iter =>
-      iter.map { case (id, cluster) =>
-        Assignment(id, cluster)
-      }
-    }, preservesPartitioning = true).cache()
-    assignments.count()
-    kMeansModel.unpersist()
+    val assignments = kMeans(v, k).map {
+      case (id, cluster) => Assignment(id, cluster)
+    }
+
     new PowerIterationClusteringModel(k, assignments)
   }
 }
@@ -305,7 +301,7 @@ object PowerIterationClustering extends Logging {
         /* useDst */ false,
         /* useEdge */ true))
     materialize(graph)
-    gA.unpersist(true)
+    gA.unpersist()
 
     graph
   }
@@ -330,8 +326,8 @@ object PowerIterationClustering extends Logging {
     val v0 = r.mapValues(x => x / sum)
     val graph = Graph(VertexRDD(v0), g.edges)
     materialize(graph)
-    g.unpersist(true)
-    r.unpersist(true)
+    g.unpersist()
+    r.unpersist()
     graph
   }
 
@@ -349,7 +345,7 @@ object PowerIterationClustering extends Logging {
     val v0 = g.vertices.mapValues(_ / sum)
     val graph = Graph(VertexRDD(v0), g.edges)
     materialize(graph)
-    g.unpersist(true)
+    g.unpersist()
     graph
   }
 
@@ -430,14 +426,13 @@ object PowerIterationClustering extends Logging {
    */
   private[clustering]
   def kMeans(v: VertexRDD[Double], k: Int): VertexRDD[Int] = {
-    val points = v.mapValues(x => Vectors.dense(x)).cache()
+    val points = v.mapValues(Vectors.dense(_)).cache()
     val model = new KMeans()
       .setK(k)
       .setSeed(0L)
       .run(points.values)
 
-    val predict = points.mapValues(p => model.predict(p)).cache()
-    predict.count()
+    val predict = points.mapValues(model.predict(_))
     points.unpersist()
     predict
   }
