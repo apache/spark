@@ -212,7 +212,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       recoverFromCheckpointLocation: Boolean,
       trigger: Trigger,
       triggerClock: Clock): StreamingQueryWrapper = {
-    var deleteCheckpointOnStop = false
+    var deleteCheckpointOnStop = sparkSession.sessionState.conf.isDeleteCheckpoint.getOrElse(false)
     val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
       new Path(userSpecified).toUri.toString
     }.orElse {
