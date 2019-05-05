@@ -442,7 +442,9 @@ object MimaExcludes {
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>
         !cls.fullName.startsWith("org.sparkproject.jpmml") &&
-          !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
+          !cls.fullName.startsWith("org.sparkproject.dmg.pmml") &&
+          !cls.fullName.startsWith("org.spark_project.jpmml") &&
+          !cls.fullName.startsWith("org.spark_project.dmg.pmml")
       case _ => true
     }
   )
