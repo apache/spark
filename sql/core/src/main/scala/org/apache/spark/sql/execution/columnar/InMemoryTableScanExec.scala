@@ -37,7 +37,12 @@ case class InMemoryTableScanExec(
   extends LeafExecNode with ColumnarBatchScan {
 
   override val nodeName: String = {
-    s"Scan in memory table ${relation.cacheBuilder.tableName.map(_.replace("`", "")).getOrElse("")}"
+    relation.cacheBuilder.tableName match {
+      case Some(tableName) =>
+        s"Scan in memory table ${tableName.replace("`", "")}"
+      case _ =>
+        super.nodeName
+    }
   }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
