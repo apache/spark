@@ -276,12 +276,12 @@ class EpochCoordinatorSuite
 
   private def verifyCommit(epoch: Long): Unit = {
     orderVerifier.verify(writeSupport).commit(eqTo(epoch), any())
-    orderVerifier.verify(query).commit(epoch)
+    orderVerifier.verify(query).commit(epoch, EpochStats(epoch, 1, 1, 1))
   }
 
   private def verifyNoCommitFor(epoch: Long): Unit = {
     verify(writeSupport, never()).commit(eqTo(epoch), any())
-    verify(query, never()).commit(epoch)
+    verify(query, never()).commit(epoch, EpochStats(epoch, 1, 1, 1))
   }
 
   private def verifyCommitsInOrderOf(epochs: Seq[Long]): Unit = {
