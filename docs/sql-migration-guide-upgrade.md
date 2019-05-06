@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading From Spark SQL 2.4 to 3.0
 
-  - Since Spark 3.0, we upgraded the built-in Hive to 2.3 for hadoop-3.x. This upgrade fixes some Hive issues:
+  - Since Spark 3.0, we upgraded the built-in Hive to 2.3 when enabling the Hadoop 3.2+ profile. This upgrade fixes some Hive issues:
 
      - [HIVE-6727](https://issues.apache.org/jira/browse/HIVE-6727): Table level stats for external tables are set incorrectly.
 
