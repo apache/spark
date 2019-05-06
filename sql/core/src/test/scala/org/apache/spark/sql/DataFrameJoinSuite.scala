@@ -117,6 +117,17 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         .collect().toSeq)
   }
 
+  test("join - self join auto resolve ambiguity with case insensitivity") {
+    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.join(df, df("key") === df("Key")),
+      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
+
+    checkAnswer(
+      df.join(df.filter($"value" === "2"), df("key") === df("Key")),
+      Row(2, "2", 2, "2") :: Nil)
+  }
+
   test("SPARK-27547: join - self join without manual alias") {
     val df1 = spark.range(3)
     val df2 = df1.filter($"id" > 0)

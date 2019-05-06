@@ -93,8 +93,7 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
             if (id == ref.datasetId) {
               if (ref.colPos < 0 || ref.colPos >= child.output.length) {
                 logWarning("[BUG] Hit an invalid Dataset column reference: " + ref)
-              }
-              if (colRefToActualCol.contains(ref)) {
+              } else if (colRefToActualCol.contains(ref)) {
                 ambiguousColRefs += ref
                 colRefToActualCol.remove(ref)
               } else {

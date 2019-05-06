@@ -1332,7 +1332,7 @@ class Dataset[T] private[sql](
       val metadata = new MetadataBuilder()
         .withMetadata(a.metadata)
         .putLong(Dataset.ID_PREFIX, id)
-        .putLong(Dataset.COL_POS_PREFIX, logicalPlan.output.indexOf(a))
+        .putLong(Dataset.COL_POS_PREFIX, logicalPlan.output.indexWhere(a.semanticEquals))
         .build()
       a.withMetadata(metadata)
     case _ => expr
