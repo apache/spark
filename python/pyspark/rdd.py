@@ -169,7 +169,7 @@ def _local_iterator_from_socket(sock_info, serializer):
                 write_int(1, self._sockfile)
                 self._sockfile.flush()
 
-                # If response is 1, then there is a partition to read
+                # If response is 1 then there is a partition to read, if 0 then fully consumed
                 self._read_status = read_int(self._sockfile)
                 if self._read_status == 1:
 

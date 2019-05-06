@@ -734,7 +734,7 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Yeah")
 
     def test_to_local_iterator_failure(self):
-        # SPARK-27548 toLocalIterator tasks failure not propagated to driver
+        # SPARK-27548 toLocalIterator task failure not propagated to Python driver
 
         def fail(_):
             raise RuntimeError("local iterator error")
@@ -753,11 +753,12 @@ class RDDTests(ReusedPySparkTestCase):
                 raise RuntimeError("This should not be hit")
             return x
 
-        rdd = self.sc.range(10, numSlices=4).map(fail_last)
+        rdd = self.sc.range(12, numSlices=4).map(fail_last)
         it = rdd.toLocalIterator()
 
-        # Only consume 3 elements in first partition, this should not trigger an error
-        for i in range(3):
+        # Only consume first 4 elements from partitions 1 and 2, this should not collect the last
+        # partition which would trigger the error
+        for i in range(4):
             self.assertEqual(i, next(it))
 
 
