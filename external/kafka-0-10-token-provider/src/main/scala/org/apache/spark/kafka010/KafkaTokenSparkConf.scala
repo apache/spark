@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 
 private[spark] case class KafkaTokenClusterConf(
     identifier: String,
-    bootstrapServers: String,
+    authBootstrapServers: String,
     targetServersRegex: String,
     securityProtocol: String,
     kerberosServiceName: String,
@@ -38,7 +38,7 @@ private[spark] case class KafkaTokenClusterConf(
     tokenMechanism: String) {
   override def toString: String = s"KafkaTokenClusterConf{" +
     s"identifier=$identifier, " +
-    s"bootstrapServers=$bootstrapServers, " +
+    s"authBootstrapServers=$authBootstrapServers, " +
     s"targetServersRegex=$targetServersRegex, " +
     s"securityProtocol=$securityProtocol, " +
     s"kerberosServiceName=$kerberosServiceName, " +
@@ -65,7 +65,7 @@ private [kafka010] object KafkaTokenSparkConf extends Logging {
         .getOrElse(s"auth.${CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG}",
           throw new NoSuchElementException(
             s"${configPrefix}auth.${CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG}")),
-      sparkClusterConf.getOrElse("target.bootstrap.servers.regex",
+      sparkClusterConf.getOrElse(s"target.${CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG}.regex",
         KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX),
       sparkClusterConf.getOrElse(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SASL_SSL.name),
       sparkClusterConf.getOrElse(SaslConfigs.SASL_KERBEROS_SERVICE_NAME,

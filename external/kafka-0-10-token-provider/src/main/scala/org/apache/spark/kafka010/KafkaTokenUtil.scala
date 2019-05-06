@@ -89,7 +89,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     val adminClientProperties = new ju.Properties
 
     adminClientProperties.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
-      clusterConf.bootstrapServers)
+      clusterConf.authBootstrapServers)
 
     adminClientProperties.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG,
       clusterConf.securityProtocol)

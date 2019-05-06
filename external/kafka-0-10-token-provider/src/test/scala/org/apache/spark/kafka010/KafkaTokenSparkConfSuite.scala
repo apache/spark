@@ -25,7 +25,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
   private val identifier1 = "cluster1"
   private val identifier2 = "cluster2"
-  private val bootStrapServers = "127.0.0.1:0"
+  private val authBootStrapServers = "127.0.0.1:0"
   private val targetServersRegex = "127.0.0.*:0"
   private val securityProtocol = SSL.name
   private val kerberosServiceName = "kafka1"
@@ -51,11 +51,11 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("getClusterConfig should return entry with defaults") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", authBootStrapServers)
 
     val clusterConfig = KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)
     assert(clusterConfig.identifier === identifier1)
-    assert(clusterConfig.bootstrapServers === bootStrapServers)
+    assert(clusterConfig.authBootstrapServers === authBootStrapServers)
     assert(clusterConfig.targetServersRegex === KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX)
     assert(clusterConfig.securityProtocol === SASL_SSL.name)
     assert(clusterConfig.kerberosServiceName ===
@@ -69,7 +69,7 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("getClusterConfig should return entry overwrite defaults") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", authBootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       targetServersRegex)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.security.protocol", securityProtocol)
@@ -84,7 +84,7 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     val clusterConfig = KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)
     assert(clusterConfig.identifier === identifier1)
-    assert(clusterConfig.bootstrapServers === bootStrapServers)
+    assert(clusterConfig.authBootstrapServers === authBootStrapServers)
     assert(clusterConfig.targetServersRegex === targetServersRegex)
     assert(clusterConfig.securityProtocol === securityProtocol)
     assert(clusterConfig.kerberosServiceName === kerberosServiceName)
@@ -101,18 +101,18 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("getAllClusterConfigs should return empty list with malformed configuration") {
-    sparkConf.set(s"spark.kafka.clusters.", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.", authBootStrapServers)
     assert(KafkaTokenSparkConf.getAllClusterConfigs(sparkConf).isEmpty)
   }
 
   test("getAllClusterConfigs should return multiple entries") {
-    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
-    sparkConf.set(s"spark.kafka.clusters.$identifier2.auth.bootstrap.servers", bootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", authBootStrapServers)
+    sparkConf.set(s"spark.kafka.clusters.$identifier2.auth.bootstrap.servers", authBootStrapServers)
 
     val clusterConfigs = KafkaTokenSparkConf.getAllClusterConfigs(sparkConf)
     assert(clusterConfigs.size === 2)
     clusterConfigs.foreach { clusterConfig =>
-      assert(clusterConfig.bootstrapServers === bootStrapServers)
+      assert(clusterConfig.authBootstrapServers === authBootStrapServers)
       assert(clusterConfig.targetServersRegex === KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX)
       assert(clusterConfig.securityProtocol === SASL_SSL.name)
       assert(clusterConfig.kerberosServiceName ===
