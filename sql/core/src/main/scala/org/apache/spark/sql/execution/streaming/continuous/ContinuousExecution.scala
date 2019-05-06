@@ -25,6 +25,7 @@ import java.util.function.UnaryOperator
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -50,12 +51,14 @@ class ContinuousExecution(
     deleteCheckpointOnStop: Boolean)
   extends StreamExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink.asInstanceOf[BaseStreamingSink],
-    trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
+    trigger, triggerClock, outputMode, deleteCheckpointOnStop) with ContinuousProgressReporter {
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
 
   // For use only in test harnesses.
   private[sql] var currentEpochCoordinatorId: String = _
+
+  protected var epochEndpoint: RpcEndpointRef = _
 
   // Throwable that caused the execution to fail
   private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
@@ -179,7 +182,7 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    reportTimeTaken("queryPlanning") {
+    recordTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
         sparkSessionForQuery,
         withNewSources,
@@ -212,7 +215,7 @@ class ContinuousExecution(
       trigger.asInstanceOf[ContinuousTrigger].intervalMs.toString)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
-    val epochEndpoint = EpochCoordinatorRef.create(
+    epochEndpoint = EpochCoordinatorRef.create(
       logicalPlan.write,
       stream,
       this,
@@ -252,7 +255,7 @@ class ContinuousExecution(
       epochUpdateThread.start()
 
       updateStatusMessage("Running")
-      reportTimeTaken("runContinuous") {
+      recordTimeTaken("runContinuous") {
         SQLExecution.withNewExecutionId(sparkSessionForQuery, lastExecution) {
           lastExecution.executedPlan.execute()
         }
@@ -326,36 +329,38 @@ class ContinuousExecution(
    * Mark the specified epoch as committed. All readers must have reported end offsets for the epoch
    * before this is called.
    */
-  def commit(epoch: Long): Unit = {
-    updateStatusMessage(s"Committing epoch $epoch")
-
+  def commit(epoch: Long, epochStats: EpochStats): Unit = {
     assert(sources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
 
-    synchronized {
-      // Record offsets before updating `committedOffsets`
-      recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
-      if (queryExecutionThread.isAlive) {
-        commitLog.add(epoch, CommitMetadata())
-        val offset =
-          sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
-        committedOffsets ++= Seq(sources(0) -> offset)
-        sources(0).commit(offset.asInstanceOf[v2.reader.streaming.Offset])
-      } else {
-        return
+    updateStatusMessage(s"Committing epoch $epoch")
+    reportTimeTaken("walCommit", epoch) {
+      synchronized {
+        // Record offsets before updating `committedOffsets`
+        recordTriggerOffsets(from = committedOffsets, to = availableOffsets, epoch)
+        if (queryExecutionThread.isAlive) {
+          commitLog.add(epoch, CommitMetadata())
+          val offset =
+            sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
+          committedOffsets ++= Seq(sources(0) -> offset)
+          sources(0).commit(offset.asInstanceOf[v2.reader.streaming.Offset])
+        } else {
+          return
+        }
+      }
+
+      // Since currentBatchId increases independently in cp mode, the current committed epoch may
+      // be far behind currentBatchId. It is not safe to discard the metadata with thresholdBatchId
+      // computed based on currentBatchId. As minLogEntriesToMaintain is used to keep the minimum
+      // number of batches that must be retained and made recoverable, so we should keep the
+      // specified number of metadata that have been committed.
+      if (minLogEntriesToMaintain <= epoch) {
+        offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
+        commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
       }
     }
 
-    // Since currentBatchId increases independently in cp mode, the current committed epoch may
-    // be far behind currentBatchId. It is not safe to discard the metadata with thresholdBatchId
-    // computed based on currentBatchId. As minLogEntriesToMaintain is used to keep the minimum
-    // number of batches that must be retained and made recoverable, so we should keep the
-    // specified number of metadata that have been committed.
-    if (minLogEntriesToMaintain <= epoch) {
-      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
-      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
-    }
-
+    finishTrigger(true, epoch, epochStats)
     awaitProgressLock.lock()
     try {
       awaitProgressLockCondition.signalAll()

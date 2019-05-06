@@ -267,7 +267,7 @@ class EpochCoordinatorSuite
 
   private def reportPartitionOffset(partitionId: Int, epoch: Long): Unit = {
     val dummyOffset: PartitionOffset = mock[PartitionOffset]
-    epochCoordinator.send(ReportPartitionOffset(partitionId, epoch, dummyOffset))
+    epochCoordinator.send(ReportPartitionOffset(partitionId, epoch, dummyOffset, 0L))
   }
 
   private def makeSynchronousCall(): Unit = {

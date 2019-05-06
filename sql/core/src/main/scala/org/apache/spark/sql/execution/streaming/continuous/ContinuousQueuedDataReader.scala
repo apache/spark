@@ -70,6 +70,8 @@ class ContinuousQueuedDataReader(
   dataReaderThread.setDaemon(true)
   dataReaderThread.start()
 
+  private var numRowsInEpoch = 0L
+
   context.addTaskCompletionListener[Unit](_ => {
     this.close()
   })
@@ -113,9 +115,11 @@ class ContinuousQueuedDataReader(
     currentEntry match {
       case EpochMarker =>
         epochCoordEndpoint.send(ReportPartitionOffset(
-          partitionIndex, EpochTracker.getCurrentEpoch.get, currentOffset))
+          partitionIndex, EpochTracker.getCurrentEpoch.get, currentOffset, numRowsInEpoch))
+        numRowsInEpoch = 0L
         null
       case ContinuousRow(row, offset) =>
+        numRowsInEpoch += 1L
         currentOffset = offset
         row
     }

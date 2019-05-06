@@ -46,7 +46,7 @@ class MicroBatchExecution(
     deleteCheckpointOnStop: Boolean)
   extends StreamExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
-    trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
+    trigger, triggerClock, outputMode, deleteCheckpointOnStop) with MicroBatchProgressReporter {
 
   @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
 

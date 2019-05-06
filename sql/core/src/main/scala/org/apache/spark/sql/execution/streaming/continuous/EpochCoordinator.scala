@@ -51,7 +51,7 @@ private[sql] case object StopContinuousExecutionWrites extends EpochCoordinatorM
  * has acknowledged these messages.
  */
 private[sql] case class SetReaderPartitions(numPartitions: Int) extends EpochCoordinatorMessage
-case class SetWriterPartitions(numPartitions: Int) extends EpochCoordinatorMessage
+private[sql] case class SetWriterPartitions(numPartitions: Int) extends EpochCoordinatorMessage
 
 // Partition task messages
 /**
@@ -71,8 +71,8 @@ private[sql] case class CommitPartitionEpoch(
 private[sql] case class ReportPartitionOffset(
     partitionId: Int,
     epoch: Long,
-    offset: PartitionOffset) extends EpochCoordinatorMessage
-
+    offset: PartitionOffset,
+    numRows: Long) extends EpochCoordinatorMessage
 
 /** Helper object used to create reference to [[EpochCoordinator]]. */
 private[sql] object EpochCoordinatorRef extends Logging {
@@ -139,6 +139,8 @@ private[continuous] class EpochCoordinator(
   // (epoch, partition) -> offset
   private val partitionOffsets =
     mutable.Map[(Long, Int), PartitionOffset]()
+  private val partitionInputRows =
+    mutable.Map[(Long, Int), Long]()
 
   private var lastCommittedEpoch = startEpoch - 1
   // Remembers epochs that have to wait for previous epochs to be committed first.
@@ -181,6 +183,7 @@ private[continuous] class EpochCoordinator(
         }
         for (k <- partitionOffsets.keys.filter { case (e, _) => e < lastCommittedEpoch }) {
           partitionOffsets.remove(k)
+          partitionInputRows.remove(k)
         }
       }
     }
@@ -201,8 +204,15 @@ private[continuous] class EpochCoordinator(
       s"and is ready to be committed. Committing epoch $epoch.")
     // Sequencing is important here. We must commit to the writer before recording the commit
     // in the query, or we will end up dropping the commit if we restart in the middle.
-    writeSupport.commit(epoch, messages.toArray)
-    query.commit(epoch)
+    query.reportTimeTaken("writerCommit", epoch) {
+      writeSupport.commit(epoch, messages.toArray)
+    }
+    query.commit(epoch, createEpochStats(epoch))
+  }
+
+  private def createEpochStats(epoch: Long): EpochStats = {
+    val inputRows = partitionInputRows.filter(_._1._1 == epoch).values.sum
+    EpochStats(epoch, inputRows, numReaderPartitions, numWriterPartitions)
   }
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -218,8 +228,9 @@ private[continuous] class EpochCoordinator(
         checkProcessingQueueBoundaries()
       }
 
-    case ReportPartitionOffset(partitionId, epoch, offset) =>
+    case ReportPartitionOffset(partitionId, epoch, offset, numRows) =>
       partitionOffsets.put((epoch, partitionId), offset)
+      partitionInputRows.put((epoch, partitionId), numRows)
       val thisEpochOffsets =
         partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
       if (thisEpochOffsets.size == numReaderPartitions) {
@@ -268,3 +279,9 @@ private[continuous] class EpochCoordinator(
       context.reply(())
   }
 }
+
+private[sql] case class EpochStats(
+    epoch: Long,
+    inputRows: Long,
+    numReaderPartitions: Int,
+    numWriterPartitions: Int) extends Serializable
