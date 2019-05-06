@@ -41,7 +41,7 @@ private[hive] trait HiveClient {
 
   /**
    * Return the associated Hive SessionState of this [[HiveClientImpl]]
-   * @return [[Any]] not SessionState to avoid linkage error
+   * @return `Any` not SessionState to avoid linkage error
    */
   def getState: Any
 
@@ -76,7 +76,7 @@ private[hive] trait HiveClient {
   /** Return whether a table/view with the specified name exists. */
   def tableExists(dbName: String, tableName: String): Boolean
 
-  /** Returns the specified table, or throws [[NoSuchTableException]]. */
+  /** Returns the specified table, or throws `NoSuchTableException`. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
   }
@@ -166,7 +166,7 @@ private[hive] trait HiveClient {
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit
 
-  /** Returns the specified partition, or throws [[NoSuchPartitionException]]. */
+  /** Returns the specified partition, or throws `NoSuchPartitionException`. */
   final def getPartition(
       dbName: String,
       tableName: String,

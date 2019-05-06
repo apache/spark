@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.util.concurrent.TimeUnit._
+import java.time.LocalDate
 
 import scala.collection.mutable
 
@@ -58,20 +58,19 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val currentDate = {
-      val dateExpr = CurrentDate()
-      val date = dateExpr.eval(EmptyRow).asInstanceOf[Int]
-      Literal.create(date, dateExpr.dataType)
-    }
-    val currentTimestamp = {
-      val timeExpr = CurrentTimestamp()
-      val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
-      Literal.create(timestamp, timeExpr.dataType)
-    }
+    val currentDates = mutable.Map.empty[String, Literal]
+    val timeExpr = CurrentTimestamp()
+    val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
+    val currentTime = Literal.create(timestamp, timeExpr.dataType)
 
     plan transformAllExpressions {
-      case CurrentDate() => currentDate
-      case CurrentTimestamp() => currentTimestamp
+      case CurrentDate(Some(timeZoneId)) =>
+        currentDates.getOrElseUpdate(timeZoneId, {
+          Literal.create(
+            LocalDate.now(DateTimeUtils.getZoneId(timeZoneId)),
+            DateType)
+        })
+      case CurrentTimestamp() => currentTime
     }
   }
 }

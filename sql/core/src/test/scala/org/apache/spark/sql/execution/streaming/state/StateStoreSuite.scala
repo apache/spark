@@ -416,7 +416,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
     }
 
-    val timeoutDuration = 60 seconds
+    val timeoutDuration = 1.minute
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>

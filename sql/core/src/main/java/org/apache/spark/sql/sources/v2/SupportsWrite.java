@@ -22,7 +22,7 @@ import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
- * An internal base interface of mix-in interfaces for writable {@link Table}. This adds
+ * A mix-in interface of {@link Table}, to indicate that it's writable. This adds
  * {@link #newWriteBuilder(CaseInsensitiveStringMap)} that is used to create a write
  * for batch or streaming.
  */

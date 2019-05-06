@@ -35,9 +35,10 @@ case class CSVScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     dataSchema: StructType,
-    readSchema: StructType,
+    readDataSchema: StructType,
+    readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends TextBasedFileScan(sparkSession, fileIndex, readSchema, options) {
+  extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
 
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
     options.asScala.toMap,
@@ -53,8 +54,8 @@ case class CSVScan(
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 
-    if (readSchema.length == 1 &&
-      readSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+    if (readDataSchema.length == 1 &&
+      readDataSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
       throw new AnalysisException(
         "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
           "referenced columns only include the internal corrupt record column\n" +
@@ -72,7 +73,9 @@ case class CSVScan(
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
+    // The partition values are already truncated in `FileScan.partitions`.
+    // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, fileIndex.partitionSchema, readSchema, parsedOptions)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
   }
 }

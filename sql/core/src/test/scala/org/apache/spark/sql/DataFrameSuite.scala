@@ -762,22 +762,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("inputFiles") {
-    withTempDir { dir =>
-      val df = Seq((1, 22)).toDF("a", "b")
+    Seq("csv", "").foreach { useV1List =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1List) {
+        withTempDir { dir =>
+          val df = Seq((1, 22)).toDF("a", "b")
 
-      val parquetDir = new File(dir, "parquet").getCanonicalPath
-      df.write.parquet(parquetDir)
-      val parquetDF = spark.read.parquet(parquetDir)
-      assert(parquetDF.inputFiles.nonEmpty)
+          val parquetDir = new File(dir, "parquet").getCanonicalPath
+          df.write.parquet(parquetDir)
+          val parquetDF = spark.read.parquet(parquetDir)
+          assert(parquetDF.inputFiles.nonEmpty)
 
-      val jsonDir = new File(dir, "json").getCanonicalPath
-      df.write.json(jsonDir)
-      val jsonDF = spark.read.json(jsonDir)
-      assert(parquetDF.inputFiles.nonEmpty)
+          val csvDir = new File(dir, "csv").getCanonicalPath
+          df.write.json(csvDir)
+          val csvDF = spark.read.json(csvDir)
+          assert(csvDF.inputFiles.nonEmpty)
 
-      val unioned = jsonDF.union(parquetDF).inputFiles.sorted
-      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
-      assert(unioned === allFiles)
+          val unioned = csvDF.union(parquetDF).inputFiles.sorted
+          val allFiles = (csvDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
+          assert(unioned === allFiles)
+        }
+      }
     }
   }
 

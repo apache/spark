@@ -237,7 +237,7 @@ LDA supports different inference algorithms via `setOptimizer` function.
 on the likelihood function and yields comprehensive results, while
 `OnlineLDAOptimizer` uses iterative mini-batch sampling for [online
 variational
-inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf)
+inference](https://mimno.infosci.cornell.edu/info6150/readings/HoffmanBleiBach2010b.pdf)
 and is generally memory friendly.
 
 LDA takes in a collection of documents as vectors of word counts and the

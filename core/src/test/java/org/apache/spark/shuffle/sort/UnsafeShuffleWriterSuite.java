@@ -101,7 +101,7 @@ public class UnsafeShuffleWriterSuite {
     partitionSizesInMergedFile = null;
     spillFilesCreated.clear();
     conf = new SparkConf()
-      .set("spark.buffer.pageSize", "1m")
+      .set(package$.MODULE$.BUFFER_PAGESIZE().key(), "1m")
       .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
     taskMetrics = new TaskMetrics();
     memoryManager = new TestMemoryManager(conf);

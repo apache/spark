@@ -21,7 +21,7 @@ import java.io.File
 
 import org.scalatest.Suite
 
-import org.apache.spark.{DebugFilesystem, SparkConf, SparkContext}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkContext, TestUtils}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.ml.{Model, PredictionModel, Transformer}
 import org.apache.spark.ml.linalg.Vector
@@ -129,21 +129,17 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     expectedMessagePart : String,
     firstResultCol: String) {
 
-    def hasExpectedMessage(exception: Throwable): Boolean =
-      exception.getMessage.contains(expectedMessagePart) ||
-        (exception.getCause != null && exception.getCause.getMessage.contains(expectedMessagePart))
-
     withClue(s"""Expected message part "${expectedMessagePart}" is not found in DF test.""") {
       val exceptionOnDf = intercept[Throwable] {
         testTransformerOnDF(dataframe, transformer, firstResultCol)(_ => Unit)
       }
-      assert(hasExpectedMessage(exceptionOnDf))
+      TestUtils.assertExceptionMsg(exceptionOnDf, expectedMessagePart)
     }
     withClue(s"""Expected message part "${expectedMessagePart}" is not found in stream test.""") {
       val exceptionOnStreamData = intercept[Throwable] {
         testTransformerOnStreamData(dataframe, transformer, firstResultCol)(_ => Unit)
       }
-      assert(hasExpectedMessage(exceptionOnStreamData))
+      TestUtils.assertExceptionMsg(exceptionOnStreamData, expectedMessagePart)
     }
   }
 

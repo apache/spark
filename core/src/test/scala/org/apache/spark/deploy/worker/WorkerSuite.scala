@@ -228,7 +228,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     testCleanupFilesWithConfig(false)
   }
 
-  private def testCleanupFilesWithConfig(value: Boolean) = {
+  private def testCleanupFilesWithConfig(value: Boolean): Unit = {
     val conf = new SparkConf().set(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT, value)
 
     val cleanupCalled = new AtomicBoolean(false)
@@ -257,7 +257,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     testWorkDirCleanupAndRemoveMetadataWithConfig(false)
   }
 
-  private def testWorkDirCleanupAndRemoveMetadataWithConfig(dbCleanupEnabled: Boolean) = {
+  private def testWorkDirCleanupAndRemoveMetadataWithConfig(dbCleanupEnabled: Boolean): Unit = {
     val conf = new SparkConf().set("spark.shuffle.service.db.enabled", dbCleanupEnabled.toString)
     conf.set("spark.worker.cleanup.appDataTtl", "60")
     conf.set("spark.shuffle.service.enabled", "true")
@@ -282,7 +282,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     }
     executorDir.setLastModified(System.currentTimeMillis - (1000 * 120))
     worker.receive(WorkDirCleanup)
-    eventually(timeout(1000.milliseconds), interval(10.milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(!executorDir.exists())
       assert(cleanupCalled.get() == dbCleanupEnabled)
     }

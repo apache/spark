@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.MapData
-import org.apache.spark.sql.types.MapType
 
 /**
  * Simplify redundant [[CreateNamedStructLike]], [[CreateArray]] and [[CreateMap]] expressions.
@@ -63,16 +59,6 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           Literal(null, ga.dataType)
         }
       case GetMapValue(CreateMap(elems), key) => CaseKeyWhen(key, elems)
-      // The case below happens when the map is foldable, but the key is not, so ConstantFolding
-      // converts the map in a Literal, but the GetMapValue is still there since the key is not
-      // foldable. It cannot happen in any other case.
-      case GetMapValue(Literal(map: MapData, MapType(kt, vt, _)), key) if !key.foldable =>
-        val elems = new mutable.ListBuffer[Literal]
-        map.foreach(kt, vt, (key, value) => {
-          elems.append(Literal(key, kt))
-          elems.append(Literal(value, vt))
-        })
-        CaseKeyWhen(key, elems.result())
     }
   }
 }
