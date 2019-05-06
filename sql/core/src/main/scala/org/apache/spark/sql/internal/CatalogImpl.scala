@@ -501,7 +501,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       // uncache the logical plan.
       sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
 
-      // recache with the same name.
+      // recache with the same name and cache level.
       sparkSession.sharedState.cacheManager.cacheQuery(table, cacheName, cacheLevel)
     }
   }
