@@ -50,7 +50,7 @@ class ContinuousExecution(
     extraOptions: Map[String, String],
     deleteCheckpointOnStop: Boolean)
   extends StreamExecution(
-    sparkSession, name, checkpointRoot, analyzedPlan, sink.asInstanceOf[BaseStreamingSink],
+    sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) with ContinuousProgressReporter {
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
@@ -267,9 +267,9 @@ class ContinuousExecution(
       }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
-          state.get() == RECONFIGURING =>
+        state.get() == RECONFIGURING =>
         logInfo(s"Query $id ignoring exception from reconfiguring: $t")
-        // interrupted by reconfiguration - swallow exception so we can restart the query
+      // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
       // The above execution may finish before getting interrupted, for example, a Spark job having
       // 0 partitions will complete immediately. Then the interrupted status will sneak here.

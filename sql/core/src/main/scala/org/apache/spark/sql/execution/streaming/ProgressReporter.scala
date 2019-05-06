@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalP
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
+import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.sources.v2.reader.streaming.SparkDataStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -42,7 +44,7 @@ import org.apache.spark.util.Clock
 trait ProgressReporter extends Logging {
 
   case class ExecutionStats(
-    inputRows: Map[BaseStreamingSource, Long],
+    inputRows: Map[SparkDataStream, Long],
     stateOperators: Seq[StateOperatorProgress],
     eventTimeStats: Map[String, String])
 
@@ -53,10 +55,10 @@ trait ProgressReporter extends Logging {
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
-  protected def newData: Map[BaseStreamingSource, LogicalPlan]
+  protected def newData: Map[SparkDataStream, LogicalPlan]
   protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
-  protected def sources: Seq[BaseStreamingSource]
-  protected def sink: BaseStreamingSink
+  protected def sources: Seq[SparkDataStream]
+  protected def sink: Table
   protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
@@ -167,7 +169,7 @@ trait ProgressReporter extends Logging {
   }
 
   protected def extractSourceToNumInputRows(extraInfos: Option[Any] = None)
-      : Map[BaseStreamingSource, Long]
+    : Map[SparkDataStream, Long]
 
   /** Extract statistics about stateful operators from the executed query plan. */
   protected def extractStateOperatorMetrics(hasNewData: Boolean): Seq[StateOperatorProgress] = {
