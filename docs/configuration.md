@@ -1961,26 +1961,26 @@ available resources efficiently to get better performance. Prior to Spark 3.0, t
 to all roles of Spark, such as driver, executor, worker and master. From Spark 3.0, we can configure threads in 
 finer granularity starting from driver and executor. Take RPC module as example in below table. For other modules,
 like shuffle, just replace "rpc" with "shuffle" in the property names except 
-spark.{driver|executor}.rpc.netty.dispatcher.numThreads, which is only for RPC module.
+<code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code>, which is only for RPC module.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td>spark.{driver|executor}.rpc.io.serverThreads</td>
+  <td><code>spark.{driver|executor}.rpc.io.serverThreads</code></td>
   <td>
     Fall back on spark.rpc.io.serverThreads
   </td>
   <td>Number of threads used in the server thread pool</td>
 </tr>
 <tr>
-  <td>spark.{driver|executor}.rpc.io.clientThreads</td>
+  <td><code>spark.{driver|executor}.rpc.io.clientThreads</code></td>
   <td>
     Fall back on spark.rpc.io.clientThreads
   </td>
   <td>Number of threads used in the client thread pool</td>
 </tr>
 <tr>
-  <td>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</td>
+  <td><code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code></td>
   <td>
     Fall back on spark.rpc.netty.dispatcher.numThreads
   </td>

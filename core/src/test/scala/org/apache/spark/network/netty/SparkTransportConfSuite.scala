@@ -23,7 +23,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.NettyUtils
 
-class SparkTransportConfSuite extends SparkFunSuite with MockitoSugar with Matchers{
+class SparkTransportConfSuite extends SparkFunSuite with MockitoSugar {
   val module = "rpc"
   val serThreads = "serverThreads"
   val cliThreads = "clientThreads"
@@ -35,8 +35,8 @@ class SparkTransportConfSuite extends SparkFunSuite with MockitoSugar with Match
     val expected = NettyUtils.defaultNumThreads(numUsableCores)
     val serActual = sparkTransportConf.get(s"spark.$module.io.$serThreads", "")
     val cliActual = sparkTransportConf.get(s"spark.$module.io.$cliThreads", "")
-    serActual should equal(expected.toString)
-    cliActual should equal(expected.toString)
+    assert(serActual == expected.toString)
+    assert(cliActual == expected.toString)
   }
 
   test("module value is get when role is not set") {
@@ -49,11 +49,12 @@ class SparkTransportConfSuite extends SparkFunSuite with MockitoSugar with Match
     val sparkTransportConf = SparkTransportConf.fromSparkConf(conf, module, numUsableCores, None)
     val serActual = sparkTransportConf.get(s"spark.$module.io.$serThreads", "")
     val cliActual = sparkTransportConf.get(s"spark.$module.io.$cliThreads", "")
-    serActual should equal(serExpected)
-    cliActual should equal(cliExpected)
+    assert(serActual == serExpected)
+    assert(cliActual == cliExpected)
   }
 
-  test("role value is get when role is set") {
+  test("role value is get when role is set. " +
+    "And module value is get when role other than mine is set") {
     val role = Some("driver")
     val numUsableCores = 10
     val serModule = "7"
@@ -68,27 +69,14 @@ class SparkTransportConfSuite extends SparkFunSuite with MockitoSugar with Match
     val sparkTransportConf = SparkTransportConf.fromSparkConf(conf, module, numUsableCores, role)
     val serActual = sparkTransportConf.get(s"spark.$module.io.$serThreads", "")
     val cliActual = sparkTransportConf.get(s"spark.$module.io.$cliThreads", "")
-    serActual should equal(serExpected)
-    cliActual should equal(cliExpected)
-  }
+    assert(serActual == serExpected)
+    assert(cliActual == cliExpected)
 
-  test("module value is get when role other than mine is set") {
-    val role = Some("driver")
-    val otherRole = "executor"
-    val numUsableCores = 10
-    val serExpected = "7"
-    val cliExpected = "5"
-    val serRole = "8"
-    val cliRole = "6"
-    val conf = new SparkConf()
-      .set(s"spark.$module.io.$serThreads", serExpected)
-      .set(s"spark.$module.io.$cliThreads", cliExpected)
-      .set(s"spark.$otherRole.$module.io.$serThreads", serRole)
-      .set(s"spark.$otherRole.$module.io.$cliThreads", cliRole)
-    val sparkTransportConf = SparkTransportConf.fromSparkConf(conf, module, numUsableCores, role)
-    val serActual = sparkTransportConf.get(s"spark.$module.io.$serThreads", "")
-    val cliActual = sparkTransportConf.get(s"spark.$module.io.$cliThreads", "")
-    serActual should equal(serExpected)
-    cliActual should equal(cliExpected)
+    val exeRole = Some("executor")
+    val sparkTransConfExe = SparkTransportConf.fromSparkConf(conf, module, numUsableCores, exeRole)
+    val serActualExe = sparkTransConfExe.get(s"spark.$module.io.$serThreads", "")
+    val cliActualExe = sparkTransConfExe.get(s"spark.$module.io.$cliThreads", "")
+    assert(serActualExe == serModule)
+    assert(cliActualExe == cliModule)
   }
 }

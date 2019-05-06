@@ -48,9 +48,9 @@ private[netty] class NettyRpcEnv(
     host: String,
     securityManager: SecurityManager,
     numUsableCores: Int) extends RpcEnv(conf) with Logging {
-  val role = conf.get(EXECUTOR_ID).map { id =>
+  val role = conf.get(EXECUTOR_ID).flatMap { id =>
     if (id == SparkContext.DRIVER_IDENTIFIER) Some("driver") else Some("executor")
-  }.getOrElse(None)
+  }
 
   private[netty] val transportConf = SparkTransportConf.fromSparkConf(
     conf.clone.set(RPC_IO_NUM_CONNECTIONS_PER_PEER, 1),
