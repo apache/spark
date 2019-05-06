@@ -22,7 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, SparkDataStream}
 import org.apache.spark.sql.streaming.{SinkProgress, SourceProgress, StreamingQueryProgress}
 
 trait MicroBatchProgressReporter extends ProgressReporter {
@@ -30,8 +30,8 @@ trait MicroBatchProgressReporter extends ProgressReporter {
   private val currentDurationsMs = new mutable.HashMap[String, Long]()
   private val recordDurationMs = new mutable.HashMap[String, Long]()
 
-  private var currentTriggerStartOffsets: Map[BaseStreamingSource, String] = _
-  private var currentTriggerEndOffsets: Map[BaseStreamingSource, String] = _
+  private var currentTriggerStartOffsets: Map[SparkDataStream, String] = _
+  private var currentTriggerEndOffsets: Map[SparkDataStream, String] = _
 
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
@@ -118,9 +118,9 @@ trait MicroBatchProgressReporter extends ProgressReporter {
 
   /** Extract number of input sources for each streaming source in plan */
   protected def extractSourceToNumInputRows(t: Option[Any] = None)
-      : Map[BaseStreamingSource, Long] = {
+      : Map[SparkDataStream, Long] = {
 
-    def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
+    def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
       tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
 
@@ -141,7 +141,7 @@ trait MicroBatchProgressReporter extends ProgressReporter {
       val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
         case s: MicroBatchScanExec =>
           val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = s.stream.asInstanceOf[BaseStreamingSource]
+          val source = s.stream.asInstanceOf[SparkDataStream]
           source -> numRows
       }
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))

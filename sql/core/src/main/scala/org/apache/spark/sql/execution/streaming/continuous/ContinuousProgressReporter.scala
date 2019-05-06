@@ -22,7 +22,8 @@ import scala.collection.mutable
 
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.execution.streaming.{BaseStreamingSource, ProgressReporter, StreamProgress}
+import org.apache.spark.sql.execution.streaming.{ ProgressReporter, StreamProgress}
+import org.apache.spark.sql.sources.v2.reader.streaming.SparkDataStream
 import org.apache.spark.sql.streaming.{SinkProgress, SourceProgress, StreamingQueryProgress}
 
 trait ContinuousProgressReporter extends ProgressReporter {
@@ -35,10 +36,10 @@ trait ContinuousProgressReporter extends ProgressReporter {
     new mutable.HashMap[Long, (Long, mutable.HashMap[String, Long])]()
   private val recordDurationMs = new mutable.HashMap[String, Long]()
 
-  private val currentTriggerStartOffsets: mutable.HashMap[Long, Map[BaseStreamingSource, String]] =
-    new mutable.HashMap[Long, Map[BaseStreamingSource, String]]()
-  private val currentTriggerEndOffsets: mutable.HashMap[Long, Map[BaseStreamingSource, String]] =
-    new mutable.HashMap[Long, Map[BaseStreamingSource, String]]()
+  private val currentTriggerStartOffsets: mutable.HashMap[Long, Map[SparkDataStream, String]] =
+    new mutable.HashMap[Long, Map[SparkDataStream, String]]()
+  private val currentTriggerEndOffsets: mutable.HashMap[Long, Map[SparkDataStream, String]] =
+    new mutable.HashMap[Long, Map[SparkDataStream, String]]()
 
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
@@ -129,7 +130,7 @@ trait ContinuousProgressReporter extends ProgressReporter {
   }
 
   protected def extractSourceToNumInputRows(t: Option[Any] = None)
-      : Map[BaseStreamingSource, Long] = {
+      : Map[SparkDataStream, Long] = {
     require(t.isDefined && t.get.isInstanceOf[EpochStats])
     Map(sources(0) -> t.get.asInstanceOf[EpochStats].inputRows)
   }

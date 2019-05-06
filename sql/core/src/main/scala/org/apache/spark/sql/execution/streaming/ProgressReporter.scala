@@ -169,7 +169,7 @@ trait ProgressReporter extends Logging {
   }
 
   protected def extractSourceToNumInputRows(extraInfos: Option[Any] = None)
-    : Map[SparkDataStream, Long]
+     : Map[SparkDataStream, Long]
 
   /** Extract statistics about stateful operators from the executed query plan. */
   protected def extractStateOperatorMetrics(hasNewData: Boolean): Seq[StateOperatorProgress] = {
