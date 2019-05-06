@@ -68,7 +68,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         val parsedResources = backend.parseResources(Some(f1))
       }.getMessage()
 
-      assert(error.contains("Exception parsing the resources passed"))
+      assert(error.contains("Exception parsing the resources in"))
     }
   }
 

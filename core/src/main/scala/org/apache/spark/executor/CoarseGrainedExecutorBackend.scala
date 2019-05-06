@@ -82,15 +82,31 @@ private[spark] class CoarseGrainedExecutorBackend(
     }(ThreadUtils.sameThread)
   }
 
+  // we only support converting from units that are byte based, this will
+  // either convert it to bytes or just return the count if the units can't be
+  // parsed as bytes.
+  private def tryConvertUnitsToBytes(count: String, units: String): Long = {
+    try {
+        Utils.byteStringAsBytes(count + units)
+    } catch {
+      case e: NumberFormatException =>
+        // Ignore units not of byte types and just use count
+        logWarning(s"Illegal resource unit type, spark only " +
+          s"supports conversion of byte types, units: $units, " +
+          s"ignoring the type and using the raw count.", e)
+        count.toLong
+    }
+  }
+
   // Check that the executor resources at startup will satisfy the user specified task
-  // requirements (spark.taks.resource.*) and that they match the executor configs
+  // requirements (spark.task.resource.*) and that they match the executor configs
   // specified by the user (spark.executor.resource.*) to catch mismatches between what
   // the user requested and what resource manager gave or what the discovery script found.
   private def checkExecResourcesMeetTaskRequirements(
       taskResourceConfigs: Array[(String, String)],
       actualExecResources: Map[String, ResourceInformation]): Unit = {
 
-    // get just the of resource name to count
+    // get just the map of resource name to count
     val taskResourcesAndCounts = taskResourceConfigs.
       withFilter { case (k, v) => k.endsWith(SPARK_RESOURCE_COUNT_POSTFIX)}.
       map { case (k, v) => (k.dropRight(SPARK_RESOURCE_COUNT_POSTFIX.size), v)}
@@ -114,19 +130,11 @@ private[spark] class CoarseGrainedExecutorBackend(
                 s"and executor startup config but the user specified executor resource " +
                 s"config is missing the units config - see ${userExecUnitsConfigName}.")
             }
-            try {
-              val execCountWithUnits =
-                Utils.byteStringAsBytes(execResourceInfo.count.toString + execResourceInfo.units)
-              val taskCountWithUnits = Utils.byteStringAsBytes(taskCount + taskUnits.get)
-              ResourceRealCounts(execCountWithUnits, taskCountWithUnits)
-            } catch {
-              case e: NumberFormatException =>
-                // Ignore units not of byte types and just use count
-                logWarning(s"Illegal resource unit type, spark only " +
-                  s"supports conversion of byte types, units: $execResourceInfo.units, " +
-                  s"ignoring the type and using the raw count.", e)
-                ResourceRealCounts(execResourceInfo.count, taskCount.toLong)
-            }
+            val execCountWithUnits =
+              tryConvertUnitsToBytes(execResourceInfo.count.toString, execResourceInfo.units)
+            val taskCountWithUnits =
+              tryConvertUnitsToBytes(taskCount, taskUnits.get)
+            ResourceRealCounts(execCountWithUnits, taskCountWithUnits)
           } else {
             throw new SparkException(
               s"Resource: $rName has an executor units config: ${execResourceInfo.units}, but " +
@@ -153,17 +161,7 @@ private[spark] class CoarseGrainedExecutorBackend(
             s"via config: $userExecCountConfigName, but required " +
             s"by the task, please fix your configuration"))
         val execConfigCountWithUnits = if (userExecConfigUnits.nonEmpty) {
-          val count = try {
-            Utils.byteStringAsBytes(userExecConfigCount + userExecConfigUnits.get)
-          } catch {
-            case e: NumberFormatException =>
-              // Ignore units not of byte types and just use count
-              logWarning(s"Illegal resource unit type, spark only " +
-                s"supports conversion of byte types, units: $userExecConfigUnits, " +
-                s"ignoring the type and using the raw count.", e)
-              userExecConfigCount.toLong
-          }
-          count
+          tryConvertUnitsToBytes(userExecConfigCount, userExecConfigUnits.get)
         } else {
           userExecConfigCount.toLong
         }
@@ -191,7 +189,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         } catch {
           case e @ (_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
             throw new SparkException(
-              s"Exception parsing the resources passed in: $SPARK_TASK_RESOURCE_PREFIX", e)
+              s"Exception parsing the resources in $resourceFileStr", e)
         } finally {
           source.close()
         }
