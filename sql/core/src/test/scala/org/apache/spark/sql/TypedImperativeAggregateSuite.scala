@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
+import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, ImplicitCastInputTypes, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
@@ -210,6 +211,20 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(query, expected)
   }
 
+  test("SPARK-27207: Ensure aggregate buffers are initialized again for SortBasedAggregate") {
+    withSQLConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold" -> "5") {
+      val df = data.toDF("value", "key").coalesce(2)
+      val query = df.groupBy($"key").agg(typedMax2($"value"), count($"value"), typedMax2($"value"))
+      val expected = data.groupBy(_._2).toSeq.map { group =>
+        val (key, values) = group
+        val valueMax = values.map(_._1).max
+        val countValue = values.size
+        Row(key, valueMax, countValue, valueMax)
+      }
+      checkAnswer(query, expected)
+    }
+  }
+
   private def typedMax(column: Column): Column = {
     val max = TypedMax(column.expr, nullable = false)
     Column(max.toAggregateExpression())
@@ -217,6 +232,11 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
   private def nullableTypedMax(column: Column): Column = {
     val max = TypedMax(column.expr, nullable = true)
+    Column(max.toAggregateExpression())
+  }
+
+  private def typedMax2(column: Column): Column = {
+    val max = TypedMax2(column.expr, nullable = false)
     Column(max.toAggregateExpression())
   }
 }
@@ -253,6 +273,88 @@ object TypedImperativeAggregateSuite {
     }
 
     override def merge(bufferMax: MaxValue, inputMax: MaxValue): MaxValue = {
+      if (inputMax.value > bufferMax.value) {
+        bufferMax.value = inputMax.value
+        bufferMax.isValueSet = bufferMax.isValueSet || inputMax.isValueSet
+      }
+      bufferMax
+    }
+
+    override def eval(bufferMax: MaxValue): Any = {
+      if (nullable && bufferMax.isValueSet == false) {
+        null
+      } else {
+        bufferMax.value
+      }
+    }
+
+    override lazy val deterministic: Boolean = true
+
+    override def children: Seq[Expression] = Seq(child)
+
+    override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
+
+    override def dataType: DataType = IntegerType
+
+    override def withNewMutableAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
+      copy(mutableAggBufferOffset = newOffset)
+
+    override def withNewInputAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
+      copy(inputAggBufferOffset = newOffset)
+
+    override def serialize(buffer: MaxValue): Array[Byte] = {
+      val out = new ByteArrayOutputStream()
+      val stream = new DataOutputStream(out)
+      stream.writeBoolean(buffer.isValueSet)
+      stream.writeInt(buffer.value)
+      out.toByteArray
+    }
+
+    override def deserialize(storageFormat: Array[Byte]): MaxValue = {
+      val in = new ByteArrayInputStream(storageFormat)
+      val stream = new DataInputStream(in)
+      val isValueSet = stream.readBoolean()
+      val value = stream.readInt()
+      new MaxValue(value, isValueSet)
+    }
+  }
+
+  /**
+    * Calculate the max value with object aggregation buffer. This stores class MaxValue
+    * in aggregation buffer.
+    */
+  private case class TypedMax2(
+    child: Expression,
+    nullable: Boolean = false,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes {
+
+
+    var maxValueBuffer: MaxValue = null
+    override def createAggregationBuffer(): MaxValue = {
+      // Returns Int.MinValue if all inputs are null
+      maxValueBuffer = new MaxValue(Int.MinValue)
+      maxValueBuffer
+    }
+
+    override def update(buffer: MaxValue, input: InternalRow): MaxValue = {
+      child.eval(input) match {
+        case inputValue: Int =>
+          if (inputValue > buffer.value) {
+            buffer.value = inputValue
+            buffer.isValueSet = true
+          }
+        case null => // skip
+      }
+      buffer
+    }
+
+    override def merge(bufferMax: MaxValue, inputMax: MaxValue): MaxValue = {
+      // The below if condition will throw a Null Pointer Exception if initialize() is not called
+      if (maxValueBuffer.isValueSet) {
+        // do nothing
+      }
       if (inputMax.value > bufferMax.value) {
         bufferMax.value = inputMax.value
         bufferMax.isValueSet = bufferMax.isValueSet || inputMax.isValueSet

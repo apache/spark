@@ -49,16 +49,6 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       (2: Integer) -> null,
       (3: Integer) -> null
     ).toDF("key", "value").repartition(2).createOrReplaceTempView("t")
-    Seq(
-      (0: Integer) -> "val_0",
-      (1: Integer) -> "val_1",
-      (2: Integer) -> "val_2",
-      (3: Integer) -> "val_3",
-      (4: Integer) -> "val_4",
-      (5: Integer) -> "val_5",
-      (6: Integer) -> null,
-      (7: Integer) -> null
-    ).toDF("key", "value").repartition(2).createOrReplaceTempView("t2")
   }
 
   protected override def afterAll(): Unit = {
@@ -130,26 +120,6 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           Row(1, Row(50, 0))
         ))
       }
-    }
-  }
-
-  test("SPARK-27207: customized Hive UDAF with two aggregation buffers for Sort" +
-      " Based Aggregation") {
-    withSQLConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold" -> "2") {
-      val df = sql("SELECT key % 2, mock2(value) FROM t2 GROUP BY key % 2")
-
-      val aggs = df.queryExecution.executedPlan.collect {
-        case agg: ObjectHashAggregateExec => agg
-      }
-
-      // There should be two aggregate operators, one for partial aggregation, and the other for
-      // global aggregation.
-      assert(aggs.length == 2)
-
-      checkAnswer(df, Seq(
-        Row(0, Row(3, 1)),
-        Row(1, Row(3, 1))
-      ))
     }
   }
 
