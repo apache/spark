@@ -60,7 +60,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * eg.
  * {{{
  *   SELECT * FROM table WHERE i = 5 AND j = i + 3             =>  ... WHERE i = 5 AND j = 8
- *   SELECT * FROM table WHERE abs(i) = 5 AND j <= abs(i) + 3  =>  ... WHERE i = 5 AND j <= 8
+ *   SELECT * FROM table WHERE abs(i) = 5 AND j <= abs(i) + 3  =>  ... WHERE abs(i) = 5 AND j <= 8
  * }}}
  *
  * Approach used:
@@ -398,8 +398,6 @@ object SimplifyBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
     case q: LogicalPlan => q transformExpressionsUp {
       // True with equality
       case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
-//      case a EqualNullSafe b if a.foldable && !a.nullable || b.foldable && !b.nullable =>
-//        EqualTo(a, b)
       case a EqualTo b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
       case a GreaterThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) =>
         TrueLiteral
