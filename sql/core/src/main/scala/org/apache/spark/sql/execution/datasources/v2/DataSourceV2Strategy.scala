@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.Locale
+
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.command.InsertIntoDataSourceV2RelationCommand
+import org.apache.spark.sql.execution.command.{DDLUtils, InsertIntoDataSourceV2DirCommand, InsertIntoDataSourceV2RelationCommand}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -191,5 +196,19 @@ case class DataSourceV2Analysis(conf: SQLConf) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoTable(r: DataSourceV2Relation, parts, query, overwrite, _) =>
       InsertIntoDataSourceV2RelationCommand(r, query, parts, overwrite)
+
+    case i @ InsertIntoDir(_, storage, provider, query, overwrite)
+        if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
+      val sparkSession = SparkSession.getActiveSession.get
+      val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+      if (DataSourceV2Utils.shouldWriteWithV2(
+        sparkSession, Some(query.schema), provider.get, pathOption.toMap)) {
+        val outputPath = new Path(storage.locationUri.get)
+        if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
+
+        InsertIntoDataSourceV2DirCommand(storage, provider.get, query, overwrite)
+      } else {
+        i
+      }
   }
 }

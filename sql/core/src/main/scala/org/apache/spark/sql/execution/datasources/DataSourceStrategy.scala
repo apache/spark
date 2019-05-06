@@ -143,13 +143,20 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         parts, query, overwrite, false) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
-    case InsertIntoDir(_, storage, provider, query, overwrite)
+    case i @ InsertIntoDir(_, storage, provider, query, overwrite)
         if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
 
-      val outputPath = new Path(storage.locationUri.get)
-      if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
+      val sparkSession = SparkSession.getActiveSession.get
+      val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+      if (!DataSourceV2Utils.shouldWriteWithV2(
+        sparkSession, Some(query.schema), provider.get, pathOption.toMap)) {
+        val outputPath = new Path(storage.locationUri.get)
+        if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
 
-      InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
+        InsertIntoDataSourceV1DirCommand(storage, provider.get, query, overwrite)
+      } else {
+        i
+      }
 
     case i @ InsertIntoTable(
         l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, query, overwrite, _) =>
