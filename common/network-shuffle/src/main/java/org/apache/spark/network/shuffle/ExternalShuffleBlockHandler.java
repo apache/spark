@@ -228,7 +228,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
         final int[] rddAndSplitIds = rddAndSplitIds(blockIds);
         size = rddAndSplitIds.length;
-        blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId,
+        blockDataForIndexFn = index -> blockManager.getRddBlockData(appId, execId,
           rddAndSplitIds[index], rddAndSplitIds[index + 1]);
       } else {
         throw new IllegalArgumentException("Unexpected block id format: " + blockIds[0]);

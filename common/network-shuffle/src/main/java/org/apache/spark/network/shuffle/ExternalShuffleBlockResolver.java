@@ -179,7 +179,7 @@ public class ExternalShuffleBlockResolver {
     return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
   }
 
-  public ManagedBuffer getBlockData(
+  public ManagedBuffer getRddBlockData(
       String appId,
       String execId,
       int rddId,
@@ -313,10 +313,9 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executor, int rddId, int splitIndex) {
     File file = getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "rdd_" + rddId + "_" + splitIndex);
-    long length = file.length();
     ManagedBuffer res = null;
     if (file.exists()) {
-      res = new FileSegmentManagedBuffer(conf, file, 0, length);
+      res = new FileSegmentManagedBuffer(conf, file, 0, file.length());
     }
     return res;
   }

@@ -94,13 +94,13 @@ public class ExternalShuffleBlockHandlerSuite {
 
   @Test
   public void testOpenDiskPersistedRDDBlocks() {
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0)).thenReturn(blockMarkers[0]);
-    when(blockResolver.getBlockData("app0", "exec1", 0, 1)).thenReturn(blockMarkers[1]);
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 0)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 1)).thenReturn(blockMarkers[1]);
 
     checkOpenBlocksReceive(new String[] { "rdd_0_0", "rdd_0_1" }, blockMarkers);
 
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0);
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 1);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
     verifyOpenBlockLatencyMetrics();
   }
 
@@ -110,15 +110,15 @@ public class ExternalShuffleBlockHandlerSuite {
       new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
       null
     };
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0))
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 0))
       .thenReturn(blockMarkersWithMissingBlock[0]);
-    when(blockResolver.getBlockData("app0", "exec1", 0, 1))
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 1))
       .thenReturn(null);
 
     checkOpenBlocksReceive(new String[] { "rdd_0_0", "rdd_0_1" }, blockMarkersWithMissingBlock);
 
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0);
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 1);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
   }
 
   private void checkOpenBlocksReceive(String[] blockIds, ManagedBuffer[] blockMarkers) {
