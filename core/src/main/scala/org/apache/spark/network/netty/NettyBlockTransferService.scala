@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty
 
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.{HashMap => JHashMap, Map => JMap}
 
@@ -27,6 +28,7 @@ import scala.reflect.ClassTag
 import com.codahale.metrics.{Metric, MetricSet}
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.ExecutorDeadException
 import org.apache.spark.internal.config
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
@@ -36,8 +38,10 @@ import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockFetcher}
 import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.BlockManagerMessages.IsExecutorAlive
 import org.apache.spark.util.Utils
 
 /**
@@ -49,7 +53,8 @@ private[spark] class NettyBlockTransferService(
     bindAddress: String,
     override val hostName: String,
     _port: Int,
-    numCores: Int)
+    numCores: Int,
+    driverEndPointRef: RpcEndpointRef = null)
   extends BlockTransferService {
 
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
@@ -112,8 +117,19 @@ private[spark] class NettyBlockTransferService(
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
-          new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
-            transportConf, tempFileManager).start()
+          try {
+            new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
+              transportConf, tempFileManager).start()
+          } catch {
+            case e: IOException =>
+              assert(driverEndPointRef != null)
+              if (driverEndPointRef.askSync[Boolean](IsExecutorAlive(execId))) {
+                throw e
+              } else {
+                throw new ExecutorDeadException(s"The relative remote executor(Id: $execId), " +
+                  "which maintains the block data to fetch is dead.")
+              }
+          }
         }
       }
 
