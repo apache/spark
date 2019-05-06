@@ -183,6 +183,9 @@ class PowerIterationClustering private[clustering] (
       case "random" => randomInit(w)
       case "degree" => initDegreeVector(w)
     }
+    // Materialized the graph w0 in randomInit/initDegreeVector, hence we can unpersist w.
+    materialize(w0)
+    w.unpersist()
     pic(w0)
   }
 
@@ -205,7 +208,11 @@ class PowerIterationClustering private[clustering] (
       case "random" => randomInit(w)
       case "degree" => initDegreeVector(w)
     }
-    pic(w0)
+
+   // Materialized the graph w0 in randomInit/initDegreeVector, hence we can unpersist w.
+   materialize(w0)
+   w.unpersist()
+   pic(w0)
   }
 
   /**
@@ -326,7 +333,6 @@ object PowerIterationClustering extends Logging {
     val v0 = r.mapValues(x => x / sum)
     val graph = Graph(VertexRDD(v0), g.edges)
     materialize(graph)
-    g.unpersist()
     r.unpersist()
     graph
   }
@@ -345,7 +351,6 @@ object PowerIterationClustering extends Logging {
     val v0 = g.vertices.mapValues(_ / sum)
     val graph = Graph(VertexRDD(v0), g.edges)
     materialize(graph)
-    g.unpersist()
     graph
   }
 
@@ -414,8 +419,13 @@ object PowerIterationClustering extends Logging {
       v.unpersist()
       prevDelta = delta
     }
+    val eigenVectorRDD = curG.vertices.cache()
+    // materialize the eigen vector RDD and unpersist the graph
+    eigenVectorRDD.count()
+    curG.vertices.unpersist()
     curG.edges.unpersist()
-    curG.vertices
+
+    eigenVectorRDD
   }
 
   /**
