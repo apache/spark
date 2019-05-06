@@ -1032,14 +1032,14 @@ private[spark] class TaskSetManager(
       return false
     }
     var foundTasks = false
-    val minFinishedForSpeculation = (speculationQuantile * numTasks).floor.toInt
+    val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
 
     // It's possible that a task is marked as completed by the scheduler, then the size of
     // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
     // tasks that are submitted by this `TaskSetManager` and are completed successfully.
     val numSuccessfulTasks = successfulTaskDurations.size()
-    if (numSuccessfulTasks >= minFinishedForSpeculation && numSuccessfulTasks > 0) {
+    if (numSuccessfulTasks >= minFinishedForSpeculation) {
       val time = clock.getTimeMillis()
       val medianDuration = successfulTaskDurations.median
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
