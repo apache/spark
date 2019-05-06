@@ -120,7 +120,6 @@ you can use:
 
 <div data-lang="r"  markdown="1">
 {% include_example load_with_path_glob_filter r/RSparkSQLExample.R %}
-
 </div>
 </div>
 
