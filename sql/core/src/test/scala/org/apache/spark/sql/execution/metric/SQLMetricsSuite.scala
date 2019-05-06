@@ -574,4 +574,14 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       )
     }
   }
+
+  test("InMemoryTableScan should show the table name on UI") {
+    withView("inMemoryTable") {
+      sql("CREATE TEMPORARY VIEW inMemoryTable as select 1 as c1")
+      sql("CACHE TABLE inMemoryTable")
+      testSparkPlanMetrics(spark.table("inMemoryTable"), 1, Map(
+        0L -> (("Scan in memory table inMemoryTable", Map.empty)))
+      )
+    }
+  }
 }
