@@ -88,12 +88,14 @@ case class DataSource(
     partitionColumns: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty,
-    catalogTable: Option[CatalogTable] = None) extends Logging {
+    catalogTable: Option[CatalogTable] = None,
+    existingProviderClass: Option[Class[_]] = None) extends Logging {
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
   lazy val providingClass: Class[_] = {
-    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+    val cls = existingProviderClass.getOrElse(
+      DataSource.lookupDataSource(className, sparkSession.sessionState.conf))
     // `providingClass` is used for resolving data source relation for catalog tables.
     // As now catalog for data source V2 is under development, here we fall back all the
     // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.

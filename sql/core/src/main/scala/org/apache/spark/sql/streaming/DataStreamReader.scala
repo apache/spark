@@ -158,8 +158,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         "read files of Hive data source directly.")
     }
 
-    val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
-      getConstructor().newInstance()
+    val cls = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf)
+    val ds = cls.getConstructor().newInstance()
     // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
     // We can't be sure at this point whether we'll actually want to use V2, since we don't know the
     // writer or whether the query is continuous.
@@ -167,7 +167,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
-      options = extraOptions.toMap)
+      options = extraOptions.toMap,
+      existingProviderClass = Some(cls))
     val v1Relation = ds match {
       case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
       case _ => None

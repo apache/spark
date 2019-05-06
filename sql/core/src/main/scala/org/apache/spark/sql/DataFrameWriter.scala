@@ -306,14 +306,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // Streaming also uses the data source V2 API. So it may be that the data source implements
         // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
         // as though it's a V1 source.
-        case _ => saveToV1Source()
+        case _ => saveToV1Source(cls)
       }
     } else {
-      saveToV1Source()
+      saveToV1Source(cls)
     }
   }
 
-  private def saveToV1Source(): Unit = {
+  private def saveToV1Source(existingCls: Class[_]): Unit = {
     if (SparkSession.active.sessionState.conf.getConf(
       SQLConf.LEGACY_PASS_PARTITION_BY_AS_OPTIONS)) {
       partitioningColumns.foreach { columns =>
@@ -328,7 +328,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+        options = extraOptions.toMap,
+        existingProviderClass = Some(existingCls)).planForWriting(mode, df.logicalPlan)
     }
   }
 

@@ -226,14 +226,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _: SupportsRead if table.supports(BATCH_READ) =>
           Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
 
-        case _ => loadV1Source(paths: _*)
+        case _ => loadV1Source(cls, paths: _*)
       }
     } else {
-      loadV1Source(paths: _*)
+      loadV1Source(cls, paths: _*)
     }
   }
 
-  private def loadV1Source(paths: String*) = {
+  private def loadV1Source(existingCls: Class[_], paths: String*) = {
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
@@ -241,7 +241,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         paths = paths,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = extraOptions.toMap).resolveRelation())
+        options = extraOptions.toMap,
+        existingProviderClass = Some(existingCls)).resolveRelation())
   }
 
   /**

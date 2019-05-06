@@ -312,10 +312,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         provider.getTable(dsOptions) match {
           case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
             table.asInstanceOf[BaseStreamingSink]
-          case _ => createV1Sink()
+          case _ => createV1Sink(cls)
         }
       } else {
-        createV1Sink()
+        createV1Sink(cls)
       }
 
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
@@ -331,12 +331,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def createV1Sink(): BaseStreamingSink = {
+  private def createV1Sink(existingCls: Class[_]): BaseStreamingSink = {
     val ds = DataSource(
       df.sparkSession,
       className = source,
       options = extraOptions.toMap,
-      partitionColumns = normalizedParCols.getOrElse(Nil))
+      partitionColumns = normalizedParCols.getOrElse(Nil),
+      existingProviderClass = Some(existingCls))
     ds.createSink(outputMode)
   }
 
