@@ -173,10 +173,10 @@ object ExplainCommand {
    * run through the analyzer and optimizer when this command is actually run.
    */
   def apply(
-    logicalPlan: LogicalPlan,
-    extended: Boolean,
-    codegen: Boolean,
-    cost: Boolean): ExplainCommand = {
+      logicalPlan: LogicalPlan,
+      extended: Boolean,
+      codegen: Boolean,
+      cost: Boolean): ExplainCommand = {
     val sparkSession = SparkSession.active
 
     val queryExecution =
@@ -196,8 +196,8 @@ object ExplainCommand {
    * This is mainly used for tests.
    */
   def apply(
-    logicalPlan: LogicalPlan,
-    extended: Boolean): ExplainCommand = {
+      logicalPlan: LogicalPlan,
+      extended: Boolean): ExplainCommand = {
     ExplainCommand(logicalPlan, extended, codegen = false, cost = false)
   }
 }
