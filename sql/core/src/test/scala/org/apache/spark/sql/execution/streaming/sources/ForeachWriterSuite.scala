@@ -19,16 +19,18 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable
-
-import org.scalatest.BeforeAndAfter
-
-import org.apache.spark.SparkException
-import org.apache.spark.sql.ForeachWriter
+import org.apache.spark.{SparkException, _}
+import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{count, window}
-import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest, StreamingQueryException}
+import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
+import org.apache.spark.sql.{ForeachWriter, SparkSession}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{spy, when}
+import org.scalatest.BeforeAndAfter
+
+import scala.collection.mutable
 
 class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
 
@@ -154,6 +156,8 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
       val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
       assert(errorEvent.error.get.isInstanceOf[RuntimeException])
       assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
+      // 'close' shouldn't be called with abort message if close with error has been called
+      assert(allEvents(0).size == 3)
     }
   }
 
@@ -283,6 +287,70 @@ object ForeachWriterSuite {
 
   def clear(): Unit = {
     _allEvents.clear()
+  }
+}
+
+class ForeachWriterAbortSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+  import testImplicits._
+
+  var mockOutputCommitCoordinator: OutputCommitCoordinator = null
+
+  override protected def sparkConf = {
+    new SparkConf()
+        .setMaster("local[2]")
+        .setAppName(classOf[ForeachWriterAbortSuite].getSimpleName)
+        .set("spark.hadoop.outputCommitCoordination.enabled", "true")
+  }
+
+  override protected def createSparkSession: TestSparkSession = {
+    SparkSession.cleanupAnyExistingSession()
+    val sc = new SparkContext(sparkConf) {
+      override private[spark] def createSparkEnv(
+                                                    conf: SparkConf,
+                                                    isLocal: Boolean,
+                                                    listenerBus: LiveListenerBus): SparkEnv = {
+        mockOutputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
+        // Use Mockito.spy() to maintain the default infrastructure everywhere else.
+        // This mocking allows us to control the coordinator responses in test cases.
+        SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
+          SparkContext.numDriverCores(master), Some(mockOutputCommitCoordinator))
+      }
+    }
+
+    new TestSparkSession(sc)
+  }
+
+  testQuietly("foreach with abort") {
+    when(mockOutputCommitCoordinator.canCommit(any(), any(), any(), any()))
+        .thenThrow(new RuntimeException("ForeachSinkSuite error"))
+
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+      val query = input.toDS().repartition(1).writeStream
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .foreach(new TestForeachWriter()).start()
+      input.addData(1, 2, 3, 4)
+
+      // Error in `process` should fail the Spark job
+      val e = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getCause.getCause.getMessage === "ForeachSinkSuite error")
+      assert(query.isActive === false)
+
+      val allEvents = ForeachWriterSuite.allEvents()
+      assert(allEvents.size === 1)
+      assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
+      for (i <- 1 to 4) {
+        assert(allEvents(0)(i) === ForeachWriterSuite.Process(value = i))
+      }
+
+      // `close` should be called with the abort error message
+      val errorEvent = allEvents(0)(5).asInstanceOf[ForeachWriterSuite.Close]
+      assert(errorEvent.error.get.isInstanceOf[RuntimeException])
+      assert(errorEvent.error.get.getMessage.contains("aborted"))
+    }
   }
 }
 
