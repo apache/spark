@@ -184,8 +184,8 @@ object SQLConf {
   val OPTIMIZER_PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.optimizer.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
-      "plan after a rule is applied. The value can be 'trace', 'debug', 'info', 'warn', or " +
-      "'error'. The default log level is 'trace'.")
+      "plan after a rule or batch is applied. The value can be 'trace', 'debug', 'info', " +
+      "'warn', or 'error'. The default log level is 'trace'.")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValue(logLevel => Set("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(logLevel),
@@ -195,9 +195,15 @@ object SQLConf {
 
   val OPTIMIZER_PLAN_CHANGE_LOG_RULES = buildConf("spark.sql.optimizer.planChangeLog.rules")
     .internal()
-    .doc("If this configuration is set, the optimizer will only log plan changes caused by " +
-      "applying the rules specified in this configuration. The value can be a list of rule " +
-      "names separated by comma.")
+    .doc("Configures a list of rules to be logged in the optimizer, in which the rules are " +
+      "specified by their rule names and separated by comma.")
+    .stringConf
+    .createOptional
+
+  val OPTIMIZER_PLAN_CHANGE_LOG_BATCHES = buildConf("spark.sql.optimizer.planChangeLog.batches")
+    .internal()
+    .doc("Configures a list of batches to be logged in the optimizer, in which the batches " +
+      "are specified by their batch names and separated by comma.")
     .stringConf
     .createOptional
 
@@ -399,7 +405,7 @@ object SQLConf {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(ParquetOutputTimestampType.values.map(_.toString))
-    .createWithDefault(ParquetOutputTimestampType.INT96.toString)
+    .createWithDefault(ParquetOutputTimestampType.TIMESTAMP_MICROS.toString)
 
   val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
     .doc(s"(Deprecated since Spark 2.3, please set ${PARQUET_OUTPUT_TIMESTAMP_TYPE.key}.) " +
@@ -1320,12 +1326,20 @@ object SQLConf {
 
   val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
-      .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas, " +
-        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame, " +
-        "and createDataFrame when its input is an R DataFrame. " +
+      .doc("When true, make use of Apache Arrow for columnar data transfers." +
+        "In case of PySpark, " +
+        "1. pyspark.sql.DataFrame.toPandas " +
+        "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
-        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
+        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType." +
+
+        "In case of SparkR," +
+        "1. createDataFrame when its input is an R DataFrame " +
+        "2. collect " +
+        "3. dapply " +
+        "4. gapply " +
+        "The following data types are unsupported: " +
+        "FloatType, BinaryType, ArrayType, StructType and MapType.")
       .booleanConf
       .createWithDefault(false)
 
@@ -1480,7 +1494,7 @@ object SQLConf {
       " register class names for which data source V2 write paths are disabled. Writes from these" +
       " sources will fall back to the V1 sources.")
     .stringConf
-    .createWithDefault("csv,orc,text")
+    .createWithDefault("csv,json,orc,text")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1537,7 +1551,7 @@ object SQLConf {
       .internal()
       .doc("Prune nested fields from a logical relation's output which are unnecessary in " +
         "satisfying a query. This optimization allows columnar file format readers to avoid " +
-        "reading unnecessary nested column data. Currently Parquet and ORC v1 are the " +
+        "reading unnecessary nested column data. Currently Parquet and ORC are the " +
         "data sources that implement this optimization.")
       .booleanConf
       .createWithDefault(false)
@@ -1673,6 +1687,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_PASS_PARTITION_BY_AS_OPTIONS =
+    buildConf("spark.sql.legacy.sources.write.passPartitionByAsOptions")
+      .internal()
+      .doc("Whether to pass the partitionBy columns as options in DataFrameWriter. " +
+        "Data source V1 now silently drops partitionBy columns for non-file-format sources; " +
+        "turning the flag on provides a way for these sources to see these partitionBy columns.")
+      .booleanConf
+      .createWithDefault(false)
+
   val NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE =
     buildConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue")
       .internal()
@@ -1721,6 +1744,14 @@ object SQLConf {
          "and from_utc_timestamp() functions.")
     .booleanConf
     .createWithDefault(false)
+
+  val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
+    .doc("The max length of a file that can be read by the binary file data source. " +
+      "Spark will fail fast and not attempt to read the file if its length exceeds this value. " +
+      "The theoretical max is Int.MaxValue, though VMs might implement a smaller max.")
+    .internal()
+    .intConf
+    .createWithDefault(Int.MaxValue)
 }
 
 /**
@@ -1754,6 +1785,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerPlanChangeLogLevel: String = getConf(OPTIMIZER_PLAN_CHANGE_LOG_LEVEL)
 
   def optimizerPlanChangeRules: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_RULES)
+
+  def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
@@ -2110,9 +2143,12 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
-  def userV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
+  def continuousStreamingExecutorPollIntervalMs: Long =
+    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
-  def userV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
+  def useV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
+
+  def useV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 

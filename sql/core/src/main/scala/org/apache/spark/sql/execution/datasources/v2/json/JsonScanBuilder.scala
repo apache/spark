@@ -14,16 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution.datasources.v2.json
 
-package org.apache.spark.sql.execution.streaming;
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
+import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.sources.v2.reader.Scan
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/**
- * The shared interface between V1 streaming sources and V2 streaming readers.
- *
- * This is a temporary interface for compatibility during migration. It should not be implemented
- * directly, and will be removed in future versions.
- */
-public interface BaseStreamingSource {
-  /** Stop this source and free any resources it has allocated. */
-  void stop();
+class JsonScanBuilder (
+    sparkSession: SparkSession,
+    fileIndex: PartitioningAwareFileIndex,
+    schema: StructType,
+    dataSchema: StructType,
+    options: CaseInsensitiveStringMap)
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
+  override def build(): Scan = {
+    JsonScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options)
+  }
 }

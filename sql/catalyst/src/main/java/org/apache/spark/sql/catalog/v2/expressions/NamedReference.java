@@ -15,21 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.catalog.v2.expressions;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.reader.Scan;
-import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.annotation.Experimental;
 
 /**
- * An empty mix-in interface for {@link Table}, to indicate this table supports streaming scan with
- * micro-batch mode.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsRead#newScanBuilder(CaseInsensitiveStringMap)} must return a {@link ScanBuilder}
- * that builds {@link Scan} with {@link Scan#toMicroBatchStream(String)} implemented.
- * </p>
+ * Represents a field or column reference in the public logical expression API.
  */
-@Evolving
-public interface SupportsMicroBatchRead extends SupportsRead { }
+@Experimental
+public interface NamedReference extends Expression {
+  /**
+   * Returns the referenced field name as an array of String parts.
+   * <p>
+   * Each string in the returned array represents a field name.
+   */
+  String[] fieldNames();
+}

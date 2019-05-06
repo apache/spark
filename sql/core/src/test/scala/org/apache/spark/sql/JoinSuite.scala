@@ -21,7 +21,6 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-import scala.language.existentials
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -50,8 +49,9 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     assert(planned.size === 1)
   }
 
-  def assertJoin(pair: (String, Class[_])): Any = {
-    val (sqlString, c) = pair
+  def assertJoin(pair: (String, Class[_ <: BinaryExecNode])): Any = {
+    val sqlString = pair._1
+    val c = pair._2
     val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {

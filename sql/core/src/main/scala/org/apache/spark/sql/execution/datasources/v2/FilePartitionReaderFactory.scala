@@ -27,7 +27,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
     val iter = filePartition.files.toIterator.map { file =>
-      new PartitionedFileReader(file, buildReader(file))
+      PartitionedFileReader(file, buildReader(file))
     }
     new FilePartitionReader[InternalRow](iter)
   }
@@ -36,7 +36,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
     val iter = filePartition.files.toIterator.map { file =>
-      new PartitionedFileReader(file, buildColumnarReader(file))
+      PartitionedFileReader(file, buildColumnarReader(file))
     }
     new FilePartitionReader[ColumnarBatch](iter)
   }
@@ -49,7 +49,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
 }
 
 // A compound class for combining file and its corresponding reader.
-private[v2] class PartitionedFileReader[T](
+private[v2] case class PartitionedFileReader[T](
     file: PartitionedFile,
     reader: PartitionReader[T]) extends PartitionReader[T] {
   override def next(): Boolean = reader.next()

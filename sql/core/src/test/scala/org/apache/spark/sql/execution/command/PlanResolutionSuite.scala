@@ -65,6 +65,26 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
+  test("create table - partitioned by transforms") {
+    val transforms = Seq(
+        "bucket(16, b)", "years(ts)", "months(ts)", "days(ts)", "hours(ts)", "foo(a, 'bar', 34)",
+        "bucket(32, b), days(ts)")
+    transforms.foreach { transform =>
+      val query =
+        s"""
+           |CREATE TABLE my_tab(a INT, b STRING) USING parquet
+           |PARTITIONED BY ($transform)
+           """.stripMargin
+
+      val ae = intercept[AnalysisException] {
+        parseAndResolve(query)
+      }
+
+      assert(ae.message
+          .contains(s"Transforms cannot be converted to partition columns: $transform"))
+    }
+  }
+
   test("create table - with bucket") {
     val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
         "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"

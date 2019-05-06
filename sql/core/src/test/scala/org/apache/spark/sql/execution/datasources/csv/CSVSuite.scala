@@ -2052,4 +2052,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
     checkAnswer(rows, expectedRows)
   }
+
+  test("SPARK-27512: Decimal type inference should not handle ',' for backward compatibility") {
+    assert(spark.read
+      .option("delimiter", "|")
+      .option("inferSchema", "true")
+      .csv(Seq("1,2").toDS).schema.head.dataType === StringType)
+  }
 }

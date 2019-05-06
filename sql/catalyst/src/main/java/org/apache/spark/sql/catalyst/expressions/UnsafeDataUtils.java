@@ -14,14 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.expressions;
 
-package org.apache.spark.sql.execution.streaming;
+import org.apache.spark.unsafe.Platform;
 
 /**
- * The shared interface between V1 and V2 streaming sinks.
- *
- * This is a temporary interface for compatibility during migration. It should not be implemented
- * directly, and will be removed in future versions.
+ * General utilities available for unsafe data
  */
-public interface BaseStreamingSink {
+final class UnsafeDataUtils {
+
+  private UnsafeDataUtils() {
+  }
+
+  public static byte[] getBytes(Object baseObject, long baseOffset, int sizeInBytes) {
+    if (baseObject instanceof byte[]
+      && baseOffset == Platform.BYTE_ARRAY_OFFSET
+      && (((byte[]) baseObject).length == sizeInBytes)) {
+      return (byte[]) baseObject;
+    }
+    byte[] bytes = new byte[sizeInBytes];
+    Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET,
+      sizeInBytes);
+    return bytes;
+  }
 }
