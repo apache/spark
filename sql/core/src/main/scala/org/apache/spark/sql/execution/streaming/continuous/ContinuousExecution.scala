@@ -49,7 +49,7 @@ class ContinuousExecution(
     extraOptions: Map[String, String],
     deleteCheckpointOnStop: Boolean)
   extends StreamExecution(
-    sparkSession, name, checkpointRoot, analyzedPlan, sink.asInstanceOf[BaseStreamingSink],
+    sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
