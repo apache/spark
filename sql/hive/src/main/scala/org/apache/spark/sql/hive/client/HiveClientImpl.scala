@@ -710,6 +710,8 @@ private[hive] class HiveClientImpl(
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
+   * Since upgrading the built-in Hive to 2.3, hive-llap-client is needed when
+   * running MapReduce jobs with `runHive`.
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
     logDebug(s"Running hiveql '$cmd'")
@@ -920,11 +922,10 @@ private[hive] object HiveClientImpl {
   }
 
   private def toInputFormat(name: String) =
-    Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
+    Utils.classForName[org.apache.hadoop.mapred.InputFormat[_, _]](name)
 
   private def toOutputFormat(name: String) =
-    Utils.classForName(name)
-      .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
+    Utils.classForName[org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]](name)
 
   /**
    * Converts the native table metadata representation format CatalogTable to Hive's Table.

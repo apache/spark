@@ -161,6 +161,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       "input to function coalesce should all be the same type")
     assertError(Coalesce(Nil), "function coalesce requires at least one argument")
     assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
+    assertError(new XxHash64(Nil), "function xxhash64 requires at least one argument")
     assertError(Explode('intField),
       "input to function explode should be array or map type")
     assertError(PosExplode('intField),

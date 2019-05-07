@@ -16,9 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set -x
+set -ex
 TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
-MVN="$TEST_ROOT_DIR/build/mvn"
 UNPACKED_SPARK_TGZ="$TEST_ROOT_DIR/target/spark-dist-unpacked"
 IMAGE_TAG_OUTPUT_FILE="$TEST_ROOT_DIR/target/image-tag.txt"
 DEPLOY_MODE="minikube"
@@ -61,15 +60,6 @@ while (( "$#" )); do
 done
 
 rm -rf "$UNPACKED_SPARK_TGZ"
-
-MVN_SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
-    | grep -v "INFO"\
-    | grep -v "WARNING"\
-    | tail -n 1)
-
-export SCALA_VERSION=${SCALA_VERSION:=$MVN_SCALA_VERSION}
-export SPARK_SCALA_VERSION=${SPARK_SCALA_VERSION:=$SCALA_VERSION}
-
 if [[ $SPARK_TGZ == "N/A" && $IMAGE_TAG == "N/A" ]];
 then
   # If there is no spark image tag to test with and no src dir, build from current
@@ -95,8 +85,8 @@ then
   # Build PySpark image
   LANGUAGE_BINDING_BUILD_ARGS="-p $DOCKER_FILE_BASE_PATH/bindings/python/Dockerfile"
 
-  # Build SparkR image
-  #LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
+  # Build SparkR image -- disabled since this fails, re-enable as part of SPARK-25152
+  # LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
 
   case $DEPLOY_MODE in
     cloud)

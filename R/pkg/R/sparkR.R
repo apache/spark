@@ -269,7 +269,7 @@ sparkR.sparkContext <- function(
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                list(spark.executor.memory="4g"),
 #'                c("one.jar", "two.jar", "three.jar"),
-#'                c("com.databricks:spark-avro_2.11:2.0.1"))
+#'                c("com.databricks:spark-avro_2.12:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0

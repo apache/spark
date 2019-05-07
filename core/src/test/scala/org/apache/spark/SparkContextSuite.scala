@@ -710,6 +710,27 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       assert(runningTaskIds.isEmpty)
     }
   }
+
+  test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
+    val FAIL_REASON = s"${CPUS_PER_TASK.key} must be <="
+    Seq(
+      ("local", 2, None),
+      ("local[2]", 3, None),
+      ("local[2, 1]", 3, None),
+      ("spark://test-spark-cluster", 2, Option(1)),
+      ("local-cluster[1, 1, 1000]", 2, Option(1)),
+      ("yarn", 2, Option(1))
+    ).foreach { case (master, cpusPerTask, executorCores) =>
+      val conf = new SparkConf()
+      conf.set(CPUS_PER_TASK, cpusPerTask)
+      executorCores.map(executorCores => conf.set(EXECUTOR_CORES, executorCores))
+      val ex = intercept[SparkException] {
+        sc = new SparkContext(master, "test", conf)
+      }
+      assert(ex.getMessage.contains(FAIL_REASON))
+      resetSparkContext()
+    }
+  }
 }
 
 object SparkContextSuite {

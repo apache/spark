@@ -58,15 +58,18 @@ abstract class PartitioningAwareFileIndex(
 
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+    def isNonEmptyFile(f: FileStatus): Boolean = {
+      isDataPath(f.getPath) && f.getLen > 0
+    }
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      PartitionDirectory(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
+      PartitionDirectory(InternalRow.empty, allFiles().filter(isNonEmptyFile)) :: Nil
     } else {
       prunePartitions(partitionFilters, partitionSpec()).map {
         case PartitionPath(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(f => isDataPath(f.getPath))
+              existingDir.filter(isNonEmptyFile)
 
             case None =>
               // Directory does not exist, or has no children files
@@ -89,7 +92,7 @@ abstract class PartitioningAwareFileIndex(
     if (partitionSpec().partitionColumns.isEmpty) {
       // For each of the root input paths, get the list of files inside them
       rootPaths.flatMap { path =>
-        // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+        // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
         val fs = path.getFileSystem(hadoopConf)
         val qualifiedPathPre = fs.makeQualified(path)
         val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
@@ -203,7 +206,7 @@ abstract class PartitioningAwareFileIndex(
 
       case None =>
         rootPaths.map { path =>
-          // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+          // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
           val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
           if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }

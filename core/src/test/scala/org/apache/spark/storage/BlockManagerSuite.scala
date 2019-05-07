@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.RandomUtils
@@ -275,19 +275,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     master.removeBlock("a2-to-remove")
     master.removeBlock("a3-to-remove")
 
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(!store.hasLocalBlock("a1-to-remove"))
       master.getLocations("a1-to-remove") should have size 0
     }
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(!store.hasLocalBlock("a2-to-remove"))
       master.getLocations("a2-to-remove") should have size 0
     }
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(store.hasLocalBlock("a3-to-remove"))
       master.getLocations("a3-to-remove") should have size 0
     }
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       val memStatus = master.getMemoryStatus.head._2
       memStatus._1 should equal (40000L)
       memStatus._2 should equal (40000L)
@@ -305,15 +305,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle("nonrddblock", a3, StorageLevel.MEMORY_ONLY)
     master.removeRdd(0, blocking = false)
 
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       store.getSingleAndReleaseLock(rdd(0, 0)) should be (None)
       master.getLocations(rdd(0, 0)) should have size 0
     }
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       store.getSingleAndReleaseLock(rdd(0, 1)) should be (None)
       master.getLocations(rdd(0, 1)) should have size 0
     }
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       store.getSingleAndReleaseLock("nonrddblock") should not be (None)
       master.getLocations("nonrddblock") should have size (1)
     }
@@ -378,7 +378,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // remove broadcast 1 block from both the stores asynchronously
     // and verify all broadcast 1 blocks have been removed
     master.removeBroadcast(1, removeFromMaster = true, blocking = false)
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(!driverStore.hasLocalBlock(broadcast1BlockId))
       assert(!executorStore.hasLocalBlock(broadcast1BlockId))
     }
@@ -386,7 +386,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // remove broadcast 2 from both the stores asynchronously
     // and verify all broadcast 2 blocks have been removed
     master.removeBroadcast(2, removeFromMaster = true, blocking = false)
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(!driverStore.hasLocalBlock(broadcast2BlockId))
       assert(!driverStore.hasLocalBlock(broadcast2BlockId2))
       assert(!executorStore.hasLocalBlock(broadcast2BlockId))
@@ -905,7 +905,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
 
     // Make sure get a1 doesn't hang and returns None.
-    failAfter(1 second) {
+    failAfter(1.second) {
       assert(store.getSingleAndReleaseLock("a1").isEmpty, "a1 should not be in store")
     }
   }

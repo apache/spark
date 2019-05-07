@@ -46,7 +46,10 @@ class ObjectSerializerPruningSuite extends PlanTest {
       ArrayType(IntegerType),
       StructType.fromDDL("a int, b int"),
       ArrayType(StructType.fromDDL("a int, b int, c string")),
-      StructType.fromDDL("a struct<a:int, b:int>, b int")
+      StructType.fromDDL("a struct<a:int, b:int>, b int"),
+      MapType(IntegerType, StructType.fromDDL("a int, b int, c string")),
+      MapType(StructType.fromDDL("a struct<a:int, b:int>, b int"), IntegerType),
+      MapType(StructType.fromDDL("a int, b int"), StructType.fromDDL("c long, d string"))
     )
 
     val expectedTypes = Seq(
@@ -55,7 +58,11 @@ class ObjectSerializerPruningSuite extends PlanTest {
       Seq(StructType.fromDDL("a int, b int")),
       Seq(StructType.fromDDL("a int, b int, c string")),
       Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
-        StructType.fromDDL("a int, b int"))
+        StructType.fromDDL("a int, b int")),
+      Seq(StructType.fromDDL("a int, b int, c string")),
+      Seq(StructType.fromDDL("a struct<a:int, b:int>, b int"),
+        StructType.fromDDL("a int, b int")),
+      Seq(StructType.fromDDL("a int, b int"), StructType.fromDDL("c long, d string"))
     )
 
     dataTypes.zipWithIndex.foreach { case (dt, idx) =>

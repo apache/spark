@@ -144,7 +144,7 @@ object StringUtils extends Logging {
         logWarning(
           "Truncated the string representation of a plan since it was too long. The " +
             s"plan had length ${length} and the maximum is ${maxLength}. This behavior " +
-            "can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
+            s"can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
         val truncateMsg = if (maxLength == 0) {
           s"Truncated plan of $length characters"
         } else {

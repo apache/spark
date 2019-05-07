@@ -21,19 +21,29 @@ import java.io.File
 import java.net.URI
 
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
+import org.apache.spark.util.KnownSizeEstimation
 
 class FileIndexSuite extends SharedSQLContext {
+
+  private class TestInMemoryFileIndex(
+      spark: SparkSession,
+      path: Path,
+      fileStatusCache: FileStatusCache = NoopCache)
+      extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
+    def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+    def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
+    def leafFileStatuses: Iterable[FileStatus] = leafFiles.values
+  }
 
   test("InMemoryFileIndex: leaf files are qualified paths") {
     withTempDir { dir =>
@@ -41,10 +51,7 @@ class FileIndexSuite extends SharedSQLContext {
       stringToFile(file, "text")
 
       val path = new Path(file.getCanonicalPath)
-      val catalog = new InMemoryFileIndex(spark, Seq(path), Map.empty, None) {
-        def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-        def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-      }
+      val catalog = new TestInMemoryFileIndex(spark, path)
       assert(catalog.leafFilePaths.forall(p => p.toString.startsWith("file:/")))
       assert(catalog.leafDirPaths.forall(p => p.toString.startsWith("file:/")))
     }
@@ -288,11 +295,7 @@ class FileIndexSuite extends SharedSQLContext {
       val fileStatusCache = FileStatusCache.getOrCreate(spark)
       val dirPath = new Path(dir.getAbsolutePath)
       val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
-      val catalog =
-        new InMemoryFileIndex(spark, Seq(dirPath), Map.empty, None, fileStatusCache) {
-          def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-          def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-        }
+      val catalog = new TestInMemoryFileIndex(spark, dirPath, fileStatusCache)
 
       val file = new File(dir, "text.txt")
       stringToFile(file, "text")
@@ -342,10 +345,7 @@ class FileIndexSuite extends SharedSQLContext {
         val file = new File(dir, "text.txt")
         stringToFile(file, "text")
 
-        val inMemoryFileIndex = new InMemoryFileIndex(
-          spark, Seq(new Path(file.getCanonicalPath)), Map.empty, None) {
-          def leafFileStatuses = leafFiles.values
-        }
+        val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
         val blockLocations = inMemoryFileIndex.leafFileStatuses.flatMap(
           _.asInstanceOf[LocatedFileStatus].getBlockLocations)
 

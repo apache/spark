@@ -37,8 +37,9 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -194,12 +195,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val useV1Sources =
-      sparkSession.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
+      sparkSession.sessionState.conf.useV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
     val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     val cls = lookupCls.newInstance() match {
       case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
         useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
-        f.fallBackFileFormat
+        f.fallbackFileFormat
       case _ => lookupCls
     }
 
@@ -213,16 +214,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         val objectMapper = new ObjectMapper()
         Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
-      // TODO SPARK-27113: remove this option.
-      val checkFilesExistsOpt = "check_files_exist" -> "true"
-      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption + checkFilesExistsOpt
+
+      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val table = userSpecifiedSchema match {
         case Some(schema) => provider.getTable(dsOptions, schema)
         case _ => provider.getTable(dsOptions)
       }
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       table match {
-        case _: SupportsBatchRead =>
+        case _: SupportsRead if table.supports(BATCH_READ) =>
           Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
 
         case _ => loadV1Source(paths: _*)
@@ -678,7 +679,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param path input path
    * @since 1.5.0
-   * @note Currently, this method can only be used after enabling Hive support.
    */
   def orc(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
@@ -690,7 +690,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param paths input paths
    * @since 2.0.0
-   * @note Currently, this method can only be used after enabling Hive support.
    */
   @scala.annotation.varargs
   def orc(paths: String*): DataFrame = format("orc").load(paths: _*)

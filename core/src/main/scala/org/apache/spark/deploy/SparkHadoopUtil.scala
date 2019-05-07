@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Comparator, Date, Locale}
+import java.util.{Arrays, Date, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -270,11 +270,8 @@ private[spark] class SparkHadoopUtil extends Logging {
             name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
           }
         })
-      Arrays.sort(fileStatuses, new Comparator[FileStatus] {
-        override def compare(o1: FileStatus, o2: FileStatus): Int = {
-          Longs.compare(o1.getModificationTime, o2.getModificationTime)
-        }
-      })
+      Arrays.sort(fileStatuses, (o1: FileStatus, o2: FileStatus) =>
+        Longs.compare(o1.getModificationTime, o2.getModificationTime))
       fileStatuses
     } catch {
       case NonFatal(e) =>
@@ -465,7 +462,7 @@ private[spark] object SparkHadoopUtil {
   // scalastyle:on line.size.limit
   def createNonECFile(fs: FileSystem, path: Path): FSDataOutputStream = {
     try {
-      // Use reflection as this uses apis only avialable in hadoop 3
+      // Use reflection as this uses APIs only available in Hadoop 3
       val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
       // the builder api does not resolve relative paths, nor does it create parent dirs, while
       // the old api does.

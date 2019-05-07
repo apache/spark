@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import java.util
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.python.PythonForeachWriter
-import org.apache.spark.sql.sources.v2.{SupportsStreamingWrite, Table}
+import org.apache.spark.sql.sources.v2.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
@@ -39,11 +43,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class ForeachWriterTable[T](
     writer: ForeachWriter[T],
     converter: Either[ExpressionEncoder[T], InternalRow => T])
-  extends Table with SupportsStreamingWrite {
+  extends Table with SupportsWrite {
 
   override def name(): String = "ForeachSink"
 
   override def schema(): StructType = StructType(Nil)
+
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(TableCapability.STREAMING_WRITE).asJava
+  }
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new WriteBuilder with SupportsTruncate {

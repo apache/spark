@@ -44,17 +44,16 @@ sealed trait TimestampFormatter extends Serializable {
 
 class Iso8601TimestampFormatter(
     pattern: String,
-    timeZone: TimeZone,
+    zoneId: ZoneId,
     locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
-  private val timeZoneId = timeZone.toZoneId
 
   override def parse(s: String): Long = {
     val parsed = formatter.parse(s)
     val parsedZoneId = parsed.query(TemporalQueries.zone())
-    val zoneId = if (parsedZoneId == null) timeZoneId else parsedZoneId
-    val zonedDateTime = toZonedDateTime(parsed, zoneId)
+    val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
+    val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
     val epochSeconds = zonedDateTime.toEpochSecond
     val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
@@ -63,7 +62,7 @@ class Iso8601TimestampFormatter(
 
   override def format(us: Long): String = {
     val instant = DateTimeUtils.microsToInstant(us)
-    formatter.withZone(timeZoneId).format(instant)
+    formatter.withZone(zoneId).format(instant)
   }
 }
 
@@ -73,10 +72,10 @@ class Iso8601TimestampFormatter(
  * output trailing zeros in the fraction. For example, the timestamp `2019-03-05 15:00:01.123400` is
  * formatted as the string `2019-03-05 15:00:01.1234`.
  *
- * @param timeZone the time zone in which the formatter parses or format timestamps
+ * @param zoneId the time zone identifier in which the formatter parses or format timestamps
  */
-class FractionTimestampFormatter(timeZone: TimeZone)
-  extends Iso8601TimestampFormatter("", timeZone, TimestampFormatter.defaultLocale) {
+class FractionTimestampFormatter(zoneId: ZoneId)
+  extends Iso8601TimestampFormatter("", zoneId, TimestampFormatter.defaultLocale) {
 
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
@@ -86,19 +85,19 @@ object TimestampFormatter {
   val defaultPattern: String = "yyyy-MM-dd HH:mm:ss"
   val defaultLocale: Locale = Locale.US
 
-  def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
-    new Iso8601TimestampFormatter(format, timeZone, locale)
+  def apply(format: String, zoneId: ZoneId, locale: Locale): TimestampFormatter = {
+    new Iso8601TimestampFormatter(format, zoneId, locale)
   }
 
-  def apply(format: String, timeZone: TimeZone): TimestampFormatter = {
-    apply(format, timeZone, defaultLocale)
+  def apply(format: String, zoneId: ZoneId): TimestampFormatter = {
+    apply(format, zoneId, defaultLocale)
   }
 
-  def apply(timeZone: TimeZone): TimestampFormatter = {
-    apply(defaultPattern, timeZone, defaultLocale)
+  def apply(zoneId: ZoneId): TimestampFormatter = {
+    apply(defaultPattern, zoneId, defaultLocale)
   }
 
-  def getFractionFormatter(timeZone: TimeZone): TimestampFormatter = {
-    new FractionTimestampFormatter(timeZone)
+  def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {
+    new FractionTimestampFormatter(zoneId)
   }
 }

@@ -136,7 +136,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assertCached(df2)
 
     // udf has been evaluated during caching, and thus should not be re-evaluated here
-    failAfter(2 seconds) {
+    failAfter(2.seconds) {
       df2.collect()
     }
 
@@ -197,7 +197,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     val df4 = df1.groupBy('a).agg(sum('b)).agg(sum("sum(b)"))
     assertCached(df4)
     // reuse loaded cache
-    failAfter(3 seconds) {
+    failAfter(3.seconds) {
       checkDataset(df4, Row(10))
     }
 

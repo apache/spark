@@ -39,6 +39,7 @@ __all__ = ['Binarizer',
            'IDF', 'IDFModel',
            'Imputer', 'ImputerModel',
            'IndexToString',
+           'Interaction',
            'MaxAbsScaler', 'MaxAbsScalerModel',
            'MinHashLSH', 'MinHashLSHModel',
            'MinMaxScaler', 'MinMaxScalerModel',
@@ -1225,6 +1226,59 @@ class ImputerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         which are used to replace the missing values in the input DataFrame.
         """
         return self._call_java("surrogateDF")
+
+
+@inherit_doc
+class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, JavaMLWritable):
+    """
+    Implements the feature interaction transform. This transformer takes in Double and Vector type
+    columns and outputs a flattened vector of their feature interactions. To handle interaction,
+    we first one-hot encode any nominal features. Then, a vector of the feature cross-products is
+    produced.
+
+    For example, given the input feature values `Double(2)` and `Vector(3, 4)`, the output would be
+    `Vector(6, 8)` if all input features were numeric. If the first feature was instead nominal
+    with four categories, the output would then be `Vector(0, 0, 0, 0, 3, 4, 0, 0)`.
+
+    >>> df = spark.createDataFrame([(0.0, 1.0), (2.0, 3.0)], ["a", "b"])
+    >>> interaction = Interaction(inputCols=["a", "b"], outputCol="ab")
+    >>> interaction.transform(df).show()
+    +---+---+-----+
+    |  a|  b|   ab|
+    +---+---+-----+
+    |0.0|1.0|[0.0]|
+    |2.0|3.0|[6.0]|
+    +---+---+-----+
+    ...
+    >>> interactionPath = temp_path + "/interaction"
+    >>> interaction.save(interactionPath)
+    >>> loadedInteraction = Interaction.load(interactionPath)
+    >>> loadedInteraction.transform(df).head().ab == interaction.transform(df).head().ab
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    @keyword_only
+    def __init__(self, inputCols=None, outputCol=None):
+        """
+        __init__(self, inputCols=None, outputCol=None):
+        """
+        super(Interaction, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Interaction", self.uid)
+        self._setDefault()
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, inputCols=None, outputCol=None):
+        """
+        setParams(self, inputCols=None, outputCol=None)
+        Sets params for this Interaction.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
 
 
 @inherit_doc
@@ -3064,24 +3118,24 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     +----+--------------------+
     |word|              vector|
     +----+--------------------+
-    |   a|[0.09461779892444...|
-    |   b|[1.15474212169647...|
-    |   c|[-0.3794820010662...|
+    |   a|[0.09511678665876...|
+    |   b|[-1.2028766870498...|
+    |   c|[0.30153277516365...|
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)
-    [(u'b', 0.25053444504737854), (u'c', -0.6980510950088501)]
+    [(u'b', 0.015859870240092278), (u'c', -0.5680795907974243)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
     |word|similarity|
     +----+----------+
-    |   b|   0.25053|
-    |   c|  -0.69805|
+    |   b|   0.01586|
+    |   c|  -0.56808|
     +----+----------+
     ...
     >>> model.transform(doc).head().model
-    DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])
+    DenseVector([-0.4833, 0.1855, -0.273, -0.0509, -0.4769])
     >>> word2vecPath = temp_path + "/word2vec"
     >>> word2Vec.save(word2vecPath)
     >>> loadedWord2Vec = Word2Vec.load(word2vecPath)

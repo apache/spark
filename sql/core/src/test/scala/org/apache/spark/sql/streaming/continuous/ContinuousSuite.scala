@@ -57,7 +57,6 @@ class ContinuousSuiteBase extends StreamTest {
   protected val longContinuousTrigger = Trigger.Continuous("1 hour")
 
   override protected val defaultTrigger = Trigger.Continuous(100)
-  override protected val defaultUseV2Sink = true
 }
 
 class ContinuousSuite extends ContinuousSuiteBase {
@@ -239,7 +238,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .load()
       .select('value)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 10)),
@@ -257,7 +256,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .load()
       .select('value)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 10)),
@@ -274,7 +273,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .load()
       .select('value)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(Trigger.Continuous(1012)),
       AwaitEpoch(2),
       StopStream,
@@ -365,7 +364,7 @@ class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
         .load()
         .select('value)
 
-      testStream(df, useV2Sink = true)(
+      testStream(df)(
         StartStream(Trigger.Continuous(1)),
         ExpectFailure[IllegalStateException] { e =>
           e.getMessage.contains("queue has exceeded its maximum")

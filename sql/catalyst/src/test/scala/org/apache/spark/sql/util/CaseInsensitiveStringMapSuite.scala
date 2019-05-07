@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.util
 
+import java.util
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
@@ -25,9 +27,16 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
 
   test("put and get") {
     val options = CaseInsensitiveStringMap.empty()
-    options.put("kEy", "valUE")
-    assert(options.get("key") == "valUE")
-    assert(options.get("KEY") == "valUE")
+    intercept[UnsupportedOperationException] {
+      options.put("kEy", "valUE")
+    }
+  }
+
+  test("clear") {
+    val options = new CaseInsensitiveStringMap(Map("kEy" -> "valUE").asJava)
+    intercept[UnsupportedOperationException] {
+      options.clear()
+    }
   }
 
   test("key and value set") {
@@ -78,6 +87,22 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
 
     intercept[NumberFormatException]{
       options.getDouble("foo", 0.1d)
+    }
+  }
+
+  test("asCaseSensitiveMap") {
+    val originalMap = new util.HashMap[String, String] {
+      put("Foo", "Bar")
+      put("OFO", "ABR")
+      put("OoF", "bar")
+    }
+
+    val options = new CaseInsensitiveStringMap(originalMap)
+    val caseSensitiveMap = options.asCaseSensitiveMap
+    assert(caseSensitiveMap.equals(originalMap))
+    // The result of `asCaseSensitiveMap` is read-only.
+    intercept[UnsupportedOperationException] {
+      caseSensitiveMap.put("kEy", "valUE")
     }
   }
 }

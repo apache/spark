@@ -40,12 +40,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
 class KubernetesSuite extends SparkFunSuite
-    with BeforeAndAfterAll with BeforeAndAfter
-//    with BasicTestsSuite
-    with DecommissionSuite
-//    with SecretsTestsSuite
-//    with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with Logging with Eventually with Matchers {
+  with BeforeAndAfterAll with BeforeAndAfter with DecommissionSuite with BasicTestsSuite
+  with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite
+  with PodTemplateSuite with PVTestsSuite with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
@@ -120,9 +117,9 @@ class KubernetesSuite extends SparkFunSuite
     sparkHomeDir = Paths.get(sparkDirProp)
     require(sparkHomeDir.toFile.isDirectory,
       s"No directory found for spark home specified at $sparkHomeDir.")
-    image = testImageRef("spark")
-    pyImage = testImageRef("spark-py")
-    rImage = testImageRef("spark-r")
+    image = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_JVM, "spark"))
+    pyImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_PYTHON, "spark-py"))
+    rImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_R, "spark-r"))
 
     val scalaVersion = scala.util.Properties.versionNumberString
       .split("\\.")
@@ -180,6 +177,29 @@ class KubernetesSuite extends SparkFunSuite
       executorPodChecker,
       appLocator,
       isJVM)
+  }
+
+  protected def runDFSReadWriteAndVerifyCompletion(
+      wordCount: Int,
+      appResource: String = containerLocalSparkDistroExamplesJar,
+      driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
+      executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
+      appArgs: Array[String] = Array.empty[String],
+      appLocator: String = appLocator,
+      isJVM: Boolean = true,
+      interval: Option[PatienceConfiguration.Interval] = None): Unit = {
+    runSparkApplicationAndVerifyCompletion(
+      appResource,
+      SPARK_DFS_READ_WRITE_TEST,
+      Seq(s"Success! Local Word Count $wordCount and " +
+    s"DFS Word Count $wordCount agree."),
+      appArgs,
+      driverPodChecker,
+      executorPodChecker,
+      appLocator,
+      isJVM,
+      None,
+      interval)
   }
 
   protected def runSparkRemoteCheckAndVerifyCompletion(
@@ -246,6 +266,7 @@ class KubernetesSuite extends SparkFunSuite
       appLocator: String,
       isJVM: Boolean,
       pyFiles: Option[String] = None,
+      interval: Option[PatienceConfiguration.Interval] = None,
       decomissioningTest: Boolean = false): Unit = {
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
@@ -321,6 +342,7 @@ class KubernetesSuite extends SparkFunSuite
         }
       })
 
+    val patienceInterval = interval.getOrElse(INTERVAL)
     println("Running spark job.")
     SparkAppLauncher.launch(
       appArguments,
@@ -342,7 +364,7 @@ class KubernetesSuite extends SparkFunSuite
     println("Done driver pod check")
     // If we're testing decomissioning we delete all the executors, but we should have
     // an executor at some point.
-    Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
+    Eventually.eventually(POD_RUNNING_TIMEOUT, patienceInterval) {
       println(s"Driver podcheck iteration non empty: ${execPods.values.nonEmpty} with ${execPods}")
       execPods.values.nonEmpty should be (true)
     }
@@ -351,7 +373,7 @@ class KubernetesSuite extends SparkFunSuite
       // Sleep a small interval to ensure everything is registered.
       Thread.sleep(100)
       // Wait for the executors to become ready
-      Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
+      Eventually.eventually(POD_RUNNING_TIMEOUT, patienceInterval) {
         val anyReadyPods = ! execPods.map{
           case (name, resource) =>
             (name, resource.getMetadata().getNamespace())
@@ -367,7 +389,7 @@ class KubernetesSuite extends SparkFunSuite
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
     println(s"Close to the end exec pods are $execPods")
-    Eventually.eventually(TIMEOUT, INTERVAL) {
+    Eventually.eventually(TIMEOUT, patienceInterval) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
@@ -467,6 +489,7 @@ class KubernetesSuite extends SparkFunSuite
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
+  val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))

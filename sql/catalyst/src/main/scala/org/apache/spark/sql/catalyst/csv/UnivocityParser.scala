@@ -76,7 +76,7 @@ class UnivocityParser(
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
-    options.timeZone,
+    options.zoneId,
     options.locale)
   private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
 
@@ -166,7 +166,7 @@ class UnivocityParser(
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
-    case udt: UserDefinedType[_] => (datum: String) =>
+    case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
     // We don't actually hit this exception though, we keep it for understandability
