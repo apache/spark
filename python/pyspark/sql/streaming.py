@@ -775,9 +775,6 @@ class DataStreamWriter(object):
             * ``timeZone``: sets the string that indicates a timezone to be used to format
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
-            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
-                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
-                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
         """
@@ -792,9 +789,6 @@ class DataStreamWriter(object):
             * ``timeZone``: sets the string that indicates a timezone to be used to format
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
-            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
-                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
-                It does not change the behavior of partition discovery.
 
        .. note:: Evolving.
         """
