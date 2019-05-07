@@ -72,7 +72,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
     predictionAndLabels.map { case (pred, lab) =>
       val labSet = lab.toSet
       val k = math.max(pred.length, labSet.size)
-      averagePrecision(pred, lab, k)
+      averagePrecision(pred, labSet, k)
     }.mean()
   }
 
@@ -87,7 +87,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab) =>
-      averagePrecision(pred, lab, k)
+      averagePrecision(pred, lab.toSet, k)
     }.mean()
   }
 
@@ -101,22 +101,20 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @param k use the top k predicted ranking, must be positive
    * @return average precision at first k ranking positions
    */
-  private def averagePrecision(pred: Array[T], lab: Array[T], k: Int): Double = {
-    val labSet = lab.toSet
-
-    if (labSet.nonEmpty) {
+  private def averagePrecision(pred: Array[T], lab: Set[T], k: Int): Double = {
+    if (lab.nonEmpty) {
       var i = 0
       var cnt = 0
       var precSum = 0.0
       val n = math.min(k, pred.length)
       while (i < n) {
-        if (labSet.contains(pred(i))) {
+        if (lab.contains(pred(i))) {
           cnt += 1
           precSum += cnt.toDouble / (i + 1)
         }
         i += 1
       }
-      precSum / math.min(labSet.size, k)
+      precSum / math.min(lab.size, k)
     } else {
       logWarning("Empty ground truth set, check input data")
       0.0
