@@ -65,21 +65,6 @@ abstract class InsertIntoDataSourceDirCommand(
   protected def write(sparkSession: SparkSession, pathOption: Option[(String, String)]): Unit
 }
 
-object InsertIntoDataSourceDirCommand {
-  def apply(
-      storage: CatalogStorageFormat,
-      provider: String,
-      query: LogicalPlan,
-      overwrite: Boolean): InsertIntoDataSourceDirCommand = {
-    val sparkSession = SparkSession.getActiveSession.get
-    // Create the relation based on the input logical plan: `query`.
-    val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
-    if (DataSourceV2Utils.shouldWriteWithV2(
-      sparkSession, Some(query.schema), provider, pathOption.toMap)) {
-      InsertIntoDataSourceV2DirCommand
-    }
-  }
-}
 /**
  * Write the result of a query to a data source V1 directory.
  */
