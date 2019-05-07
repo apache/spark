@@ -224,19 +224,32 @@ trait ConstraintHelper {
           if planEqual(a, d) && (planEqual(b, c) || valueLessThanOrEqual(b, c)) =>
           Literal.FalseLiteral
 
-        case c EqualTo d if planEqual(b, d) && planEqual(a, c) => Literal.FalseLiteral
-        case c EqualTo d if planEqual(b, c) && planEqual(a, d) => Literal.FalseLiteral
-        case c EqualTo d if planEqual(a, c) && planEqual(b, d) => Literal.FalseLiteral
-        case c EqualTo d if planEqual(a, d) && planEqual(b, c) => Literal.FalseLiteral
+       case c EqualTo d if planEqual(b, d) && (planEqual(a, c) || valueLessThanOrEqual(c, a)) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(b, c) && (planEqual(a, d) || valueLessThanOrEqual(d, a)) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(a, c) && (planEqual(b, d) || valueLessThanOrEqual(b, d)) =>
+          Literal.FalseLiteral
+        case c EqualTo d if planEqual(a, d) && (planEqual(b, c) || valueLessThanOrEqual(b, c)) =>
+          Literal.FalseLiteral
 
-        case c EqualNullSafe d if planEqual(b, d) =>
-          if (planEqual(a, c)) Literal.FalseLiteral else EqualTo(c, d)
-        case c EqualNullSafe d if planEqual(b, c) =>
-          if (planEqual(a, d)) Literal.FalseLiteral else EqualTo(c, d)
-        case c EqualNullSafe d if planEqual(a, c) =>
-          if (planEqual(b, d)) Literal.FalseLiteral else EqualTo(c, d)
-        case c EqualNullSafe d if planEqual(a, d) =>
-          if (planEqual(b, c)) Literal.FalseLiteral else EqualTo(c, d)
+        case c EqualNullSafe d
+          if planEqual(b, d) && (planEqual(a, c) || valueLessThanOrEqual(c, a)) =>
+          Literal.FalseLiteral
+        case c EqualNullSafe d
+          if planEqual(b, c) && (planEqual(a, d) || valueLessThanOrEqual(d, a)) =>
+          Literal.FalseLiteral
+        case c EqualNullSafe d
+          if planEqual(a, c) && (planEqual(b, d) || valueLessThanOrEqual(b, d)) =>
+          Literal.FalseLiteral
+        case c EqualNullSafe d
+          if planEqual(a, d) && (planEqual(b, c) || valueLessThanOrEqual(b, c)) =>
+          Literal.FalseLiteral
+
+        case c EqualNullSafe d if planEqual(b, d) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(b, c) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(a, c) => EqualTo(c, d)
+        case c EqualNullSafe d if planEqual(a, d) => EqualTo(c, d)
       }
       case a LessThanOrEqual b => expression transformUp {
         case c LessThan d if planEqual(b, d) && valueLessThan(c, a) =>
@@ -262,6 +275,16 @@ trait ConstraintHelper {
           Literal.FalseLiteral
         case c LessThanOrEqual d if planEqual(a, d) && (planEqual(b, c) || valueEqual(b, c)) =>
           EqualTo(c, d)
+
+        case c EqualTo d if planEqual(b, d) && valueLessThan(c, a) => Literal.FalseLiteral
+        case c EqualTo d if planEqual(b, c) && valueLessThan(d, a) => Literal.FalseLiteral
+        case c EqualTo d if planEqual(a, c) && valueLessThan(b, d) => Literal.FalseLiteral
+        case c EqualTo d if planEqual(a, d) && valueLessThan(b, c) => Literal.FalseLiteral
+
+        case c EqualNullSafe d if planEqual(b, d) && valueLessThan(c, a) => Literal.FalseLiteral
+        case c EqualNullSafe d if planEqual(b, c) && valueLessThan(d, a) => Literal.FalseLiteral
+        case c EqualNullSafe d if planEqual(a, c) && valueLessThan(b, d) => Literal.FalseLiteral
+        case c EqualNullSafe d if planEqual(a, d) && valueLessThan(b, c) => Literal.FalseLiteral
 
         case c EqualNullSafe d if planEqual(b, d) => EqualTo(c, d)
         case c EqualNullSafe d if planEqual(b, c) => EqualTo(c, d)
