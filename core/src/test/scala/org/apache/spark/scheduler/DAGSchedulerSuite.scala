@@ -157,8 +157,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
     override def killAllTaskAttempts(
       stageId: Int, interruptThread: Boolean, reason: String): Unit = {}
-    override def notifyPartitionCompletion(
-        stageId: Int, partitionId: Int, taskDuration: Long): Unit = {
+    override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
       taskSets.filter(_.stageId == stageId).lastOption.foreach { ts =>
         val tasks = ts.tasks.filter(_.partitionId == partitionId)
         assert(tasks.length == 1)
@@ -668,8 +667,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
           stageId: Int, interruptThread: Boolean, reason: String): Unit = {
         throw new UnsupportedOperationException
       }
-      override def notifyPartitionCompletion(
-          stageId: Int, partitionId: Int, taskDuration: Long): Unit = {
+      override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {
         throw new UnsupportedOperationException
       }
       override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
