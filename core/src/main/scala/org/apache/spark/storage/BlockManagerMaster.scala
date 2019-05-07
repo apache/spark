@@ -223,7 +223,8 @@ class BlockManagerMaster(
   }
 
   /**
-   * Find out if the executor has cached blocks which are only available via this executor.
+   * Find out if the executor has cached blocks which are not available via the external shuffle
+   * service.
    * This method does not consider broadcast blocks, since they are not reported the master.
    */
   def hasExclusiveCachedBlocks(executorId: String): Boolean = {

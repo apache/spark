@@ -548,8 +548,8 @@ private[spark] class BlockManagerInfo(
   private val _blocks = new JHashMap[BlockId, BlockStatus]
 
   /**
-   * Cached blocks held exclusively by this BlockManager. This does not include broadcast blocks
-   * and local disk persisted blocks when external shuffle service is enabled.
+   * Cached blocks which are not available via the external shuffle service.
+   * This does not include broadcast blocks.
    */
   private val _exclusiveCachedBlocks = new mutable.HashSet[BlockId]
 

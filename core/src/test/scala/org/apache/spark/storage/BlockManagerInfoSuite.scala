@@ -63,21 +63,6 @@ class BlockManagerInfoSuite extends SparkFunSuite {
     }
   }
 
-  testWithShuffleServiceOnOff("RDD block with MEMORY_AND_DISK") { (svcEnabled, bmInfo) =>
-    val rddId: BlockId = RDDBlockId(0, 0)
-    bmInfo.updateBlockInfo(
-      rddId, StorageLevel.MEMORY_AND_DISK, memSize = 200, diskSize = 400)
-    assert(bmInfo.blocks.asScala ===
-      Map(rddId -> BlockStatus(StorageLevel.MEMORY_AND_DISK, 0, 400)))
-    val exclusiveCachedBlocksForOneMemoryOnly = if (svcEnabled) Set() else Set(rddId)
-    assert(bmInfo.exclusiveCachedBlocks === exclusiveCachedBlocksForOneMemoryOnly)
-    assert(bmInfo.remainingMem === 29800)
-    if (svcEnabled) {
-      assert(bmInfo.externalShuffleServiceBlockStatus.get.asScala ===
-        Map(rddId -> BlockStatus(StorageLevel.MEMORY_AND_DISK, 0, 400)))
-    }
-  }
-
   testWithShuffleServiceOnOff("RDD block with DISK_ONLY") { (svcEnabled, bmInfo) =>
     val rddId: BlockId = RDDBlockId(0, 0)
     bmInfo.updateBlockInfo(rddId, StorageLevel.DISK_ONLY, memSize = 0, diskSize = 200)
