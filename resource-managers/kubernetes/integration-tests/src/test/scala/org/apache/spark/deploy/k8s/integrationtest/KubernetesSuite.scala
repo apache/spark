@@ -256,6 +256,7 @@ class KubernetesSuite extends SparkFunSuite
     }
   }
 
+  // scalastyle:off argcount
   protected def runSparkApplicationAndVerifyCompletion(
       appResource: String,
       mainClass: String,
@@ -268,6 +269,7 @@ class KubernetesSuite extends SparkFunSuite
       pyFiles: Option[String] = None,
       interval: Option[PatienceConfiguration.Interval] = None,
       decomissioningTest: Boolean = false): Unit = {
+    // scalastyle:on argcount
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
@@ -312,7 +314,7 @@ class KubernetesSuite extends SparkFunSuite
           action match {
             case Action.MODIFIED =>
               execPods(name) = resource
-            case Action.ADDED  =>
+            case Action.ADDED =>
               println(s"Add event received for $name.")
               execPods(name) = resource
               // If testing decomissioning delete the first with a delay after it starts
