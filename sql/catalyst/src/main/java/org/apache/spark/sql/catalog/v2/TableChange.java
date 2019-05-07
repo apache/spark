@@ -138,7 +138,7 @@ public interface TableChange {
    * @param newDataType the new data type
    * @return a TableChange for the update
    */
-  static TableChange updateColumn(String[] fieldNames, DataType newDataType) {
+  static TableChange updateColumnType(String[] fieldNames, DataType newDataType) {
     return new UpdateColumnType(fieldNames, newDataType, true);
   }
 
@@ -153,7 +153,10 @@ public interface TableChange {
    * @param newDataType the new data type
    * @return a TableChange for the update
    */
-  static TableChange updateColumn(String[] fieldNames, DataType newDataType, boolean isNullable) {
+  static TableChange updateColumnType(
+      String[] fieldNames,
+      DataType newDataType,
+      boolean isNullable) {
     return new UpdateColumnType(fieldNames, newDataType, isNullable);
   }
 
@@ -168,7 +171,7 @@ public interface TableChange {
    * @param newComment the new comment
    * @return a TableChange for the update
    */
-  static TableChange updateComment(String[] fieldNames, String newComment) {
+  static TableChange updateColumnComment(String[] fieldNames, String newComment) {
     return new UpdateColumnComment(fieldNames, newComment);
   }
 

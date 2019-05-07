@@ -359,7 +359,7 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val updated = catalog.alterTable(testIdent, TableChange.updateColumn(Array("id"), LongType))
+    val updated = catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType))
 
     val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
     assert(updated.schema == expectedSchema)
@@ -376,7 +376,7 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(table.schema == originalSchema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.updateColumn(Array("id"), LongType, true))
+      TableChange.updateColumnType(Array("id"), LongType, true))
 
     val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
     assert(updated.schema == expectedSchema)
@@ -390,7 +390,7 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(table.schema == schema)
 
     val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.updateColumn(Array("id"), LongType, false))
+      catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType, false))
     }
 
     assert(exc.getMessage.contains("Cannot change optional column to required"))
@@ -406,7 +406,7 @@ class TableCatalogSuite extends SparkFunSuite {
 
     val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent,
-        TableChange.updateColumn(Array("missing_col"), LongType))
+        TableChange.updateColumnType(Array("missing_col"), LongType))
     }
 
     assert(exc.getMessage.contains("missing_col"))
@@ -421,7 +421,7 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(table.schema == schema)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.updateComment(Array("id"), "comment text"))
+      TableChange.updateColumnComment(Array("id"), "comment text"))
 
     val expectedSchema = new StructType()
         .add("id", IntegerType, nullable = true, "comment text")
@@ -436,14 +436,14 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    catalog.alterTable(testIdent, TableChange.updateComment(Array("id"), "comment text"))
+    catalog.alterTable(testIdent, TableChange.updateColumnComment(Array("id"), "comment text"))
 
     val expectedSchema = new StructType()
         .add("id", IntegerType, nullable = true, "replacement comment")
         .add("data", StringType)
 
     val updated = catalog.alterTable(testIdent,
-      TableChange.updateComment(Array("id"), "replacement comment"))
+      TableChange.updateColumnComment(Array("id"), "replacement comment"))
 
     assert(updated.schema == expectedSchema)
   }
@@ -457,7 +457,7 @@ class TableCatalogSuite extends SparkFunSuite {
 
     val exc = intercept[IllegalArgumentException] {
       catalog.alterTable(testIdent,
-        TableChange.updateComment(Array("missing_col"), "comment"))
+        TableChange.updateColumnComment(Array("missing_col"), "comment"))
     }
 
     assert(exc.getMessage.contains("missing_col"))

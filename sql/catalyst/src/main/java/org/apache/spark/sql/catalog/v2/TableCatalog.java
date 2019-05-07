@@ -28,6 +28,12 @@ import java.util.Map;
 
 /**
  * Catalog methods for working with Tables.
+ * <p>
+ * TableCatalog implementations may be case sensitive or case insensitive. Spark will pass
+ * {@link Identifier table identifiers} without modification. Field names passed to
+ * {@link #alterTable(Identifier, TableChange...)} will be normalized to match the case used in the
+ * table schema when updating, renaming, or dropping existing columns when catalyst analysis is case
+ * insensitive.
  */
 public interface TableCatalog extends CatalogPlugin {
   /**
