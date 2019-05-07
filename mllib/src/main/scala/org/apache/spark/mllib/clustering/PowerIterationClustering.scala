@@ -184,7 +184,6 @@ class PowerIterationClustering private[clustering] (
       case "degree" => initDegreeVector(w)
     }
     // Materialized the graph w0 in randomInit/initDegreeVector, hence we can unpersist w.
-    materialize(w0)
     w.unpersist()
     pic(w0)
   }
@@ -210,7 +209,6 @@ class PowerIterationClustering private[clustering] (
     }
 
    // Materialized the graph w0 in randomInit/initDegreeVector, hence we can unpersist w.
-   materialize(w0)
    w.unpersist()
    pic(w0)
   }
