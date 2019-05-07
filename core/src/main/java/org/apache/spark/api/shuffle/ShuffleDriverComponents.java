@@ -15,25 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.api.shuffle;
 
-import org.apache.spark.annotation.Experimental;
+import java.io.IOException;
+import java.util.Map;
 
-/**
- * Base class of the public logical expression API.
- */
-@Experimental
-<<<<<<< HEAD:sql/catalyst/src/main/java/org/apache/spark/sql/connector/expressions/Expression.java
-public interface Expression {
+public interface ShuffleDriverComponents {
+
   /**
-   * Format the expression as a human readable SQL-like string.
+   * @return additional SparkConf values necessary for the executors.
    */
-  String describe();
-=======
-public interface ShuffleDataIO {
-  String SHUFFLE_SPARK_CONF_PREFIX = "spark.shuffle.plugin.";
+  Map<String, String> initializeApplication();
 
-  ShuffleDriverComponents driver();
-  ShuffleExecutorComponents executor();
->>>>>>> ab9131d66a... [SPARK-25299] Driver lifecycle api (#533):core/src/main/java/org/apache/spark/api/shuffle/ShuffleDataIO.java
+  void cleanupApplication() throws IOException;
+
+  void removeShuffleData(int shuffleId, boolean blocking) throws IOException;
 }

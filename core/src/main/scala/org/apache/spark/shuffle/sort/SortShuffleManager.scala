@@ -19,6 +19,8 @@ package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.shuffle._
@@ -220,7 +222,12 @@ private[spark] object SortShuffleManager extends Logging {
       classOf[ShuffleDataIO], Seq(configuredPluginClasses), conf)
     require(maybeIO.size == 1, s"Failed to load plugins of type $configuredPluginClasses")
     val executorComponents = maybeIO.head.executor()
-    executorComponents.initializeExecutor(conf.getAppId, SparkEnv.get.executorId)
+    val extraConfigs = conf.getAllWithPrefix(ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX)
+        .toMap
+    executorComponents.initializeExecutor(
+      conf.getAppId,
+      SparkEnv.get.executorId,
+      extraConfigs.asJava)
     executorComponents
   }
 }
