@@ -2143,9 +2143,6 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
-  def continuousStreamingExecutorPollIntervalMs: Long =
-    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
-
   def useV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
 
   def useV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
