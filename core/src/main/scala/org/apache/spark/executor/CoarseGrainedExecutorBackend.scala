@@ -91,9 +91,9 @@ private[spark] class CoarseGrainedExecutorBackend(
     } catch {
       case e: NumberFormatException =>
         // Ignore units not of byte types and just use count
-        logWarning(s"Illegal resource unit type, spark only " +
+        logWarning("Illegal resource unit type, spark only " +
           s"supports conversion of byte types, units: $units, " +
-          s"ignoring the type and using the raw count.", e)
+          "ignoring the type and using the raw count.", e)
         count.toLong
     }
   }
