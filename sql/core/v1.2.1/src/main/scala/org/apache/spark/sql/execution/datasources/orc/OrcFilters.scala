@@ -229,22 +229,22 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       getPredicateLeafType(dataTypeMap(attribute))
 
     import org.apache.spark.sql.sources._
-    expression match {
+    def updateBuilder(subexpression: Filter): Unit = subexpression match {
       case And(left, right) =>
         builder.startAnd()
-        createBuilder(dataTypeMap, left, builder)
-        createBuilder(dataTypeMap, right, builder)
+        updateBuilder(left)
+        updateBuilder(right)
         builder.end()
 
       case Or(left, right) =>
         builder.startOr()
-        createBuilder(dataTypeMap, left, builder)
-        createBuilder(dataTypeMap, right, builder)
+        updateBuilder(left)
+        updateBuilder(right)
         builder.end()
 
       case Not(child) =>
         builder.startNot()
-        createBuilder(dataTypeMap, child, builder)
+        updateBuilder(child)
         builder.end()
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
@@ -293,6 +293,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
       case _ => builder.startAnd().literal(TruthValue.YES).end()
     }
+
+    updateBuilder(expression)
+    builder
   }
 }
 
