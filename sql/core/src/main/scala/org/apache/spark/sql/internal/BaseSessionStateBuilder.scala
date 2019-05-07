@@ -87,7 +87,7 @@ abstract class BaseSessionStateBuilder(
   protected lazy val conf: SQLConf = {
     parentState.map { s =>
       val cloned = s.conf.clone()
-      if (session.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
+      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
         mergeSparkConf(cloned, session.sparkContext.conf)
       }
       cloned
