@@ -29,7 +29,7 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
-import org.apache.spark.storage.{RDDInfo, StorageLevel}
+import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
@@ -507,18 +507,16 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
 
   import LiveEntityHelpers._
 
-  var storageLevel: String = weakIntern(info.storageLevel.description)
   var memoryUsed = 0L
   var diskUsed = 0L
-  var storageInfo: StorageLevel = info.storageLevel
 
   private val partitions = new HashMap[String, LiveRDDPartition]()
   private val partitionSeq = new RDDPartitionSeq()
 
   private val distributions = new HashMap[String, LiveRDDDistribution]()
 
-  def setStorageLevel(level: String): Unit = {
-    this.storageLevel = weakIntern(level)
+  def storageLevel: String = {
+    weakIntern(info.storageLevel.description)
   }
 
   def partition(blockName: String): LiveRDDPartition = {
