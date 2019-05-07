@@ -48,7 +48,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   // avoid downloading Spark of different versions in each run.
   private val sparkTestingDir = new File("/tmp/test-spark")
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-  private val releaseMirror = "https://dist.apache.org/repos/dist/release/spark/"
 
   override def afterAll(): Unit = {
     try {
@@ -71,7 +70,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
           case _: Exception => None
         }
       }
-    val sites = mirrors.distinct :+ "https://archive.apache.org/dist" :+ releaseMirror
+    val sites =
+      mirrors.distinct :+ "https://archive.apache.org/dist" :+ PROCESS_TABLES.releaseMirror
     logInfo(s"Trying to download Spark $version from $sites")
     for (site <- sites) {
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
@@ -211,6 +211,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+  val releaseMirror = "https://dist.apache.org/repos/dist/release/spark/"
   // Tests the latest version of every release line.
   val testingVersions: Seq[String] = {
     import scala.io.Source
