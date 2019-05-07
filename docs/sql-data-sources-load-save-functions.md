@@ -102,7 +102,7 @@ To load a CSV file you can use:
 </div>
 </div>
 
-To load files with paths matching a given glob pattern recursively while keeping the behavior of partition discovery,
+To load files with paths matching a given glob pattern while keeping the behavior of partition discovery,
 you can use:
 
 <div class="codetabs">

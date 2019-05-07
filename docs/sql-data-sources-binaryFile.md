@@ -29,13 +29,15 @@ It produces a DataFrame with the following columns and possibly partition column
 * `content`: BinaryType
 
 To read whole binary files, you need to specify the data source `format` as `binaryFile`.
-For example, the following code reads all the files from the input directory:
+To load files with paths matching a given glob pattern while keeping the behavior of partition discovery,
+you can use the general data source option `pathGlobFilter`.
+For example, the following code reads all PNG files from the input directory:
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 
-spark.read.format("binaryFile").load("/path/to/data")
+spark.read.format("binaryFile").option("pathGlobFilter", "*.png").load("/path/to/data")
 
 {% endhighlight %}
 </div>
@@ -43,21 +45,21 @@ spark.read.format("binaryFile").load("/path/to/data")
 <div data-lang="java" markdown="1">
 {% highlight java %}
 
-spark.read().format("binaryFile").load("/path/to/data");
+spark.read().format("binaryFile").option("pathGlobFilter", "*.png").load("/path/to/data");
 
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
-spark.read.format("binaryFile").load("/path/to/data")
+spark.read.format("binaryFile").option("pathGlobFilter", "*.png").load("/path/to/data")
 
 {% endhighlight %}
 </div>
 <div data-lang="r" markdown="1">
 {% highlight r %}
 
-read.df("/path/to/data", source = "binaryFile")
+read.df("/path/to/data", source = "binaryFile", pathGlobFilter = "*.png")
 
 {% endhighlight %}
 </div>
