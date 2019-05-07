@@ -417,13 +417,10 @@ object PowerIterationClustering extends Logging {
       v.unpersist()
       prevDelta = delta
     }
-    val eigenVectorRDD = curG.vertices.cache()
-    // materialize the eigen vector RDD and unpersist the graph
-    eigenVectorRDD.count()
-    curG.vertices.unpersist()
+
     curG.edges.unpersist()
 
-    eigenVectorRDD
+    curG.vertices
   }
 
   /**
