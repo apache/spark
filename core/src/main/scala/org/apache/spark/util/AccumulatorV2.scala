@@ -268,7 +268,7 @@ private[spark] object AccumulatorContext extends Logging {
       // Since we are storing weak references, warn when the underlying data is not valid.
       val acc = ref.get
       if (acc eq null) {
-        logWarning(s"Attempted to access garbage collected accumulator $id")
+        logInfo(s"Attempted to access garbage collected accumulator $id")
       }
       Option(acc)
     }
