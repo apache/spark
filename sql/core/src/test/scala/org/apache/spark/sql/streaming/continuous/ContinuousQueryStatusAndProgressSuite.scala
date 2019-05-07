@@ -34,7 +34,7 @@ class ContinuousQueryStatusAndProgressSuite extends ContinuousSuiteBase {
     }
 
     val trigger = Trigger.Continuous(100)
-    testStream(input.toDF(), useV2Sink = true)(
+    testStream(input.toDF())(
       StartStream(trigger),
       Execute(assertStatus),
       AddData(input, 0, 1, 2),

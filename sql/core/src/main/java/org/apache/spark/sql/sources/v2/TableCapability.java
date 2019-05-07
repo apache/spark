@@ -34,6 +34,16 @@ public enum TableCapability {
   BATCH_READ,
 
   /**
+   * Signals that the table supports reads in micro-batch streaming execution mode.
+   */
+  MICRO_BATCH_READ,
+
+  /**
+   * Signals that the table supports reads in continuous streaming execution mode.
+   */
+  CONTINUOUS_READ,
+
+  /**
    * Signals that the table supports append writes in batch execution mode.
    * <p>
    * Tables that return this capability must support appending data and may also support additional
@@ -41,6 +51,15 @@ public enum TableCapability {
    * {@link #OVERWRITE_DYNAMIC}.
    */
   BATCH_WRITE,
+
+  /**
+   * Signals that the table supports append writes in streaming execution mode.
+   * <p>
+   * Tables that return this capability must support appending data and may also support additional
+   * write modes, like {@link #TRUNCATE}, {@link #OVERWRITE_BY_FILTER}, and
+   * {@link #OVERWRITE_DYNAMIC}.
+   */
+  STREAMING_WRITE,
 
   /**
    * Signals that the table can be truncated in a write operation.

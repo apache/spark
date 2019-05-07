@@ -772,4 +772,14 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(Seq(0.0f, 0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, Double.NaN)), 2)
     )
   }
+
+  test("SPARK-27581: DataFrame countDistinct(\"*\") shouldn't fail with AnalysisException") {
+    val df = sql("select id % 100 from range(100000)")
+    val distinctCount1 = df.select(expr("count(distinct(*))"))
+    val distinctCount2 = df.select(countDistinct("*"))
+    checkAnswer(distinctCount1, distinctCount2)
+
+    val countAndDistinct = df.select(count("*"), countDistinct("*"))
+    checkAnswer(countAndDistinct, Row(100000, 100))
+  }
 }
