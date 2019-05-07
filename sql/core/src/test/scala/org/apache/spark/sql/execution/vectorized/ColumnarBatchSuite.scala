@@ -33,7 +33,7 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -974,9 +974,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
         allocate(capacity, field.dataType, memMode)
       }
       val batch = new ColumnarBatch(columns.toArray)
+      val rowView = new ColumnarBatchRowView(batch)
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 0)
-      assert(batch.rowIterator().hasNext == false)
+      assert(rowView.rowIterator().hasNext == false)
 
       // Add a row [1, 1.1, NULL]
       columns(0).putInt(0, 1)
@@ -988,8 +989,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       // Verify the results of the row.
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 1)
-      assert(batch.rowIterator().hasNext)
-      assert(batch.rowIterator().hasNext)
+      assert(rowView.rowIterator().hasNext)
+      assert(rowView.rowIterator().hasNext)
 
       assert(columns(0).getInt(0) == 1)
       assert(columns(0).isNullAt(0) == false)
@@ -999,7 +1000,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
-      val it = batch.rowIterator()
+      val it = rowView.rowIterator()
       assert(it.hasNext())
       val row = it.next()
       assert(row.getInt(0) == 1)
@@ -1046,7 +1047,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       // Verify
       assert(batch.numRows() == 3)
-      val it2 = batch.rowIterator()
+      val it2 = rowView.rowIterator()
       rowEquals(it2.next(), Row(null, 2.2, 2, "abc"))
       rowEquals(it2.next(), Row(3, null, 3, ""))
       rowEquals(it2.next(), Row(4, 4.4, 4, "world"))
@@ -1143,7 +1144,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(batch.numRows() == 2)
       assert(batch.numCols() == 5)
 
-      val it = batch.rowIterator()
+      val it = new ColumnarBatchRowView(batch).rowIterator()
       val referenceIt = rows.iterator
       while (it.hasNext) {
         compareStruct(schema, it.next(), referenceIt.next(), 0)
@@ -1185,7 +1186,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         val batch = ColumnVectorUtils.toBatch(schema, memMode, rows.iterator.asJava)
         assert(batch.numRows() == NUM_ROWS)
 
-        val it = batch.rowIterator()
+        val it = new ColumnarBatchRowView(batch).rowIterator()
         val referenceIt = rows.iterator
         var k = 0
         while (it.hasNext) {
@@ -1252,7 +1253,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     assert(batch.numCols() == 2)
     assert(batch.numRows() == 11)
 
-    val rowIter = batch.rowIterator().asScala
+    val rowIter = new ColumnarBatchRowView(batch).rowIterator().asScala
     rowIter.zipWithIndex.foreach { case (row, i) =>
       if (i == 10) {
         assert(row.isNullAt(0))

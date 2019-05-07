@@ -28,8 +28,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.arrow.ArrowUtils
+import org.apache.spark.sql.execution.vectorized.ColumnarBatchRowView
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
  * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
@@ -154,7 +155,7 @@ case class FlatMapGroupsInPandasExec(
         val outputVectors = output.indices.map(structVector.getChild)
         val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
         flattenedBatch.setNumRows(batch.numRows())
-        flattenedBatch.rowIterator.asScala
+        new ColumnarBatchRowView(flattenedBatch).rowIterator.asScala
       }.map(unsafeProj)
     }
   }

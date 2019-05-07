@@ -28,6 +28,7 @@ import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatchRowView
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
@@ -204,7 +205,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
               while (reader.nextBatch()) {
-                val it = batch.rowIterator()
+                val it = new ColumnarBatchRowView(batch).rowIterator()
                 while (it.hasNext) {
                   val record = it.next()
                   if (!record.isNullAt(0)) aggregateValue(record)
@@ -459,7 +460,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()
               while (reader.nextBatch()) {
-                val rowIterator = batch.rowIterator()
+                val rowIterator = new ColumnarBatchRowView(batch).rowIterator()
                 while (rowIterator.hasNext) {
                   val row = rowIterator.next()
                   val value = row.getUTF8String(0)

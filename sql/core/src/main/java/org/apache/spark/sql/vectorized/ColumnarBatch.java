@@ -16,24 +16,16 @@
  */
 package org.apache.spark.sql.vectorized;
 
-import java.util.*;
-
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.execution.vectorized.MutableColumnarRow;
 
 /**
- * This class wraps multiple ColumnVectors as a row-wise table. It provides a row view of this
- * batch so that Spark can access the data row by row. Instance of it is meant to be reused during
- * the entire data loading process.
+ * This class wraps multiple {@link ColumnVector}s as a table-like data batch. Instance of it is
+ * meant to be reused during the entire data loading process.
  */
 @Evolving
 public final class ColumnarBatch {
   private int numRows;
   private final ColumnVector[] columns;
-
-  // Staging row returned from `getRow`.
-  private final MutableColumnarRow row;
 
   /**
    * Called to close all the columns in this batch. It is not valid to access the data after
@@ -43,36 +35,6 @@ public final class ColumnarBatch {
     for (ColumnVector c: columns) {
       c.close();
     }
-  }
-
-  /**
-   * Returns an iterator over the rows in this batch.
-   */
-  public Iterator<InternalRow> rowIterator() {
-    final int maxRows = numRows;
-    final MutableColumnarRow row = new MutableColumnarRow(columns);
-    return new Iterator<InternalRow>() {
-      int rowId = 0;
-
-      @Override
-      public boolean hasNext() {
-        return rowId < maxRows;
-      }
-
-      @Override
-      public InternalRow next() {
-        if (rowId >= maxRows) {
-          throw new NoSuchElementException();
-        }
-        row.rowId = rowId++;
-        return row;
-      }
-
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException();
-      }
-    };
   }
 
   /**
@@ -98,16 +60,13 @@ public final class ColumnarBatch {
   public ColumnVector column(int ordinal) { return columns[ordinal]; }
 
   /**
-   * Returns the row in this batch at `rowId`. Returned row is reused across calls.
+   * Returns all the columns of this batch.
    */
-  public InternalRow getRow(int rowId) {
-    assert(rowId >= 0 && rowId < numRows);
-    row.rowId = rowId;
-    return row;
+  public ColumnVector[] columns() {
+    return columns;
   }
 
   public ColumnarBatch(ColumnVector[] columns) {
     this.columns = columns;
-    this.row = new MutableColumnarRow(columns);
   }
 }

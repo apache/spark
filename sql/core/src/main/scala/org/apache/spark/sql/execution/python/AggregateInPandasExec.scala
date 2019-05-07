@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.arrow.ArrowUtils
+import org.apache.spark.sql.execution.vectorized.ColumnarBatchRowView
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -146,7 +147,7 @@ case class AggregateInPandasExec(
       val joined = new JoinedRow
       val resultProj = UnsafeProjection.create(resultExpressions, joinedAttributes)
 
-      columnarBatchIter.map(_.rowIterator.next()).map { aggOutputRow =>
+      columnarBatchIter.map(new ColumnarBatchRowView(_).getRow(0)).map { aggOutputRow =>
         val leftRow = queue.remove()
         val joinedRow = joined(leftRow, aggOutputRow)
         resultProj(joinedRow)

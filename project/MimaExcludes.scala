@@ -321,7 +321,11 @@ object MimaExcludes {
 
     // [SPARK-26616][MLlib] Expose document frequency in IDFModel
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.feature.IDFModel.this"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.feature.IDF#DocumentFrequencyAggregator.idf")
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.feature.IDF#DocumentFrequencyAggregator.idf"),
+
+    // [SPARK-27650][SQL] sepate the row iterator functionality from ColumnarBatch
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.vectorized.ColumnarBatch.getRow"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.vectorized.ColumnarBatch.rowIterator")
   )
 
   // Exclude rules for 2.4.x

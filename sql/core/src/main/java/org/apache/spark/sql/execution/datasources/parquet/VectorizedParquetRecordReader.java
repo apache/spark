@@ -30,10 +30,7 @@ import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
-import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
-import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.execution.vectorized.*;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -104,6 +101,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private ColumnarBatch columnarBatch;
 
+  private ColumnarBatchRowView rowView;
+
   private WritableColumnVector[] columnVectors;
 
   /**
@@ -168,7 +167,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   @Override
   public Object getCurrentValue() {
     if (returnColumnarBatch) return columnarBatch;
-    return columnarBatch.getRow(batchIdx - 1);
+    return rowView.getRow(batchIdx - 1);
   }
 
   @Override
@@ -202,6 +201,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       columnVectors = OnHeapColumnVector.allocateColumns(capacity, batchSchema);
     }
     columnarBatch = new ColumnarBatch(columnVectors);
+    rowView = new ColumnarBatchRowView(columnarBatch);
     if (partitionColumns != null) {
       int partitionIdx = sparkSchema.fields().length;
       for (int i = 0; i < partitionColumns.fields().length; i++) {

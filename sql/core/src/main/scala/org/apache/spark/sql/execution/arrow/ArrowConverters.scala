@@ -33,6 +33,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.vectorized.ColumnarBatchRowView
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.{ByteBufferOutputStream, Utils}
@@ -172,7 +173,7 @@ private[sql] object ArrowConverters {
 
         val batch = new ColumnarBatch(columns)
         batch.setNumRows(root.getRowCount)
-        batch.rowIterator().asScala
+        new ColumnarBatchRowView(batch).rowIterator().asScala
       }
     }
   }

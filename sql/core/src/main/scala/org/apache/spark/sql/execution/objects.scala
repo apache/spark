@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.python.BatchIterator
 import org.apache.spark.sql.execution.r.ArrowRRunner
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
+import org.apache.spark.sql.execution.vectorized.ColumnarBatchRowView
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.GroupStateTimeout
 import org.apache.spark.sql.types._
@@ -247,17 +248,17 @@ case class MapPartitionsInRWithArrowExec(
 
         private var currentIter = if (columnarBatchIter.hasNext) {
           val batch = columnarBatchIter.next()
-          val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+          val actualDataTypes = batch.columns().map(_.dataType()).toSeq
           assert(outputTypes == actualDataTypes, "Invalid schema from dapply(): " +
             s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
-          batch.rowIterator.asScala
+          new ColumnarBatchRowView(batch).rowIterator.asScala
         } else {
           Iterator.empty
         }
 
         override def hasNext: Boolean = currentIter.hasNext || {
           if (columnarBatchIter.hasNext) {
-            currentIter = columnarBatchIter.next().rowIterator.asScala
+            currentIter = new ColumnarBatchRowView(columnarBatchIter.next()).rowIterator.asScala
             hasNext
           } else {
             false
@@ -587,7 +588,9 @@ case class FlatMapGroupsInRWithArrowExec(
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
       val columnarBatchIter = runner.compute(groupedByRKey, -1)
       val outputProject = UnsafeProjection.create(output, output)
-      columnarBatchIter.flatMap(_.rowIterator().asScala).map(outputProject)
+      columnarBatchIter
+        .flatMap(new ColumnarBatchRowView(_).rowIterator().asScala)
+        .map(outputProject)
     }
   }
 }

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.arrow.ArrowUtils
+import org.apache.spark.sql.execution.vectorized.ColumnarBatchRowView
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -101,17 +102,17 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
       private var currentIter = if (columnarBatchIter.hasNext) {
         val batch = columnarBatchIter.next()
-        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+        val actualDataTypes = batch.columns().map(_.dataType()).toSeq
         assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
           s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
-        batch.rowIterator.asScala
+        new ColumnarBatchRowView(batch).rowIterator().asScala
       } else {
         Iterator.empty
       }
 
       override def hasNext: Boolean = currentIter.hasNext || {
         if (columnarBatchIter.hasNext) {
-          currentIter = columnarBatchIter.next().rowIterator.asScala
+          currentIter = new ColumnarBatchRowView(columnarBatchIter.next()).rowIterator.asScala
           hasNext
         } else {
           false

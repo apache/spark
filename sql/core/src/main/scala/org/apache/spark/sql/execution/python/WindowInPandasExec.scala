@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.arrow.ArrowUtils
+import org.apache.spark.sql.execution.vectorized.ColumnarBatchRowView
 import org.apache.spark.sql.execution.window._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -394,11 +395,13 @@ case class WindowInPandasExec(
 
       val joined = new JoinedRow
 
-      windowFunctionResult.flatMap(_.rowIterator.asScala).map { windowOutput =>
-        val leftRow = queue.remove()
-        val joinedRow = joined(leftRow, windowOutput)
-        resultProj(joinedRow)
-      }
+      windowFunctionResult
+        .flatMap(new ColumnarBatchRowView(_).rowIterator.asScala)
+        .map { windowOutput =>
+          val leftRow = queue.remove()
+          val joinedRow = joined(leftRow, windowOutput)
+          resultProj(joinedRow)
+        }
     }
   }
 }
