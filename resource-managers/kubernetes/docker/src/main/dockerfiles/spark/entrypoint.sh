@@ -95,3 +95,9 @@ esac
 
 # Execute the container CMD under tini for better hygiene
 exec /sbin/tini -s -- "${CMD[@]}"
+
+# Print out the termination log as we exit
+sleep 1
+echo "Finished. Termination log:"
+cat /dev/termination-log
+sleep 1
