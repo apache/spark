@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
-import scala.collection.mutable.{ArrayBuffer, Stack}
+import scala.collection.mutable.{ArrayBuffer, Map, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -94,12 +94,16 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    *         1. Option[Expression]: optional changed condition after traversal
    *         2. Seq[(Expression, Literal)]: propagated mapping of expression => constant
    */
-  private def traverse(expression: Expression): (Expression, Seq[(Expression, Literal)]) =
+  private def traverse(expression: Expression): (Expression, Map[Expression, Literal]) =
     expression match {
-      case e @ EqualTo(left, right: Literal) if e.deterministic => (e, Seq((left, right)))
-      case e @ EqualTo(left: Literal, right) if e.deterministic => (e, Seq((right, left)))
-      case e @ EqualNullSafe(left, right: Literal) if e.deterministic => (e, Seq((left, right)))
-      case e @ EqualNullSafe(left: Literal, right) if e.deterministic => (e, Seq((right, left)))
+      case e @ EqualTo(left, right: Literal) if e.deterministic =>
+        (e, Map(left.canonicalized -> right))
+      case e @ EqualTo(left: Literal, right) if e.deterministic =>
+        (e, Map(right.canonicalized -> left))
+      case e @ EqualNullSafe(left, right: Literal) if e.deterministic =>
+        (e, Map(left.canonicalized -> right))
+      case e @ EqualNullSafe(left: Literal, right) if e.deterministic =>
+        (e, Map(right.canonicalized -> left))
       case a @ And(left, right) =>
         val (newLeft, equalityPredicatesLeft) = traverse(left)
         val replacedRight = replaceConstants(right, equalityPredicatesLeft)
@@ -110,7 +114,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           And(replacedNewLeft, replacedNewRight)
         }
-        (newAnd, equalityPredicatesLeft ++ equalityPredicatesRight)
+        (newAnd, equalityPredicatesLeft ++= equalityPredicatesRight)
       case o @ Or(left, right) =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
         val (newLeft, _) = traverse(left)
@@ -121,7 +125,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
           Or(newLeft, newRight)
         }
 
-        (newOr, Seq.empty)
+        (newOr, Map.empty)
       case n @ Not(child) =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
         val (newChild, _) = traverse(child)
@@ -130,14 +134,16 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           Not(newChild)
         }
-        (newNot, Seq.empty)
-      case _ => (expression, Seq.empty)
+        (newNot, Map.empty)
+      case _ => (expression, Map.empty)
     }
 
-  private def replaceConstants(expression: Expression, constants: Seq[(Expression, Literal)]) =
-    constants.foldLeft(expression)((e, constant) => e transformUp {
-      case e if e.canonicalized == constant._1.canonicalized => constant._2
-    })
+  private def replaceConstants(
+      expression: Expression,
+      constants: Map[Expression, Literal]) =
+    expression transformUp {
+      case e if constants.contains(e.canonicalized) => constants(e.canonicalized)
+    }
 }
 
 /**
