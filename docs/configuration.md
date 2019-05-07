@@ -1968,30 +1968,28 @@ like shuffle, just replace "rpc" with "shuffle" in the property names except
 <tr>
   <td><code>spark.{driver|executor}.rpc.io.serverThreads</code></td>
   <td>
-    Fall back on spark.rpc.io.serverThreads
+    Fall back on <code>spark.rpc.io.serverThreads</code>
   </td>
   <td>Number of threads used in the server thread pool</td>
 </tr>
 <tr>
   <td><code>spark.{driver|executor}.rpc.io.clientThreads</code></td>
   <td>
-    Fall back on spark.rpc.io.clientThreads
+    Fall back on <code>spark.rpc.io.clientThreads</code>
   </td>
   <td>Number of threads used in the client thread pool</td>
 </tr>
 <tr>
   <td><code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code></td>
   <td>
-    Fall back on spark.rpc.netty.dispatcher.numThreads
+    Fall back on <code>spark.rpc.netty.dispatcher.numThreads</code>
   </td>
   <td>Number of threads used in RPC message dispatcher thread pool</td>
 </tr>
 </table>
 
-The default values of spark.rpc.io.serverThreads, spark.rpc.io.clientThreads and spark.rpc.netty.dispatcher.numThreads
-are same. It's <br>
-number of CPU cores if specified. Otherwise, the available processors to the JVM. In either cases, the default value 
-is limited to <code>org.apache.spark.network.util.NettyUtils.MAX_DEFAULT_NETTY_THREADS</code>.
+The default value for number of thread-related config keys is the minimum of the number of cores requested for 
+the driver or executor, or, in the absence of that value, the number of cores available for the JVM (with a hardcoded upper limit of 8).
 
     
 ### Security

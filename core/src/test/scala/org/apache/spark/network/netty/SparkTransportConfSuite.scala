@@ -53,8 +53,7 @@ class SparkTransportConfSuite extends SparkFunSuite with MockitoSugar {
     assert(cliActual == cliExpected)
   }
 
-  test("role value is get when role is set. " +
-    "And module value is get when role other than mine is set") {
+  test("use correct configuration when both module and role configs are present") {
     val role = Some("driver")
     val numUsableCores = 10
     val serModule = "7"
