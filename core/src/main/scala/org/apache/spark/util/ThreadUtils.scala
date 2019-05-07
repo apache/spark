@@ -134,7 +134,8 @@ private[spark] object ThreadUtils {
    */
   def runInNewThread[T](
       threadName: String,
-      isDaemon: Boolean = true)(body: => T): T = {
+      isDaemon: Boolean = true,
+      isJoin: Boolean = true)(body: => T): T = {
     @volatile var exception: Option[Throwable] = None
     @volatile var result: T = null.asInstanceOf[T]
 
@@ -150,7 +151,9 @@ private[spark] object ThreadUtils {
     }
     thread.setDaemon(isDaemon)
     thread.start()
-    thread.join()
+    if (isJoin) {
+      thread.join()
+    }
 
     exception match {
       case Some(realException) =>

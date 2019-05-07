@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.hadoop.hive.common.StatsSetupConst
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql._
@@ -1414,6 +1415,46 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val catalogStats = catalogTable.stats.get
       assert(catalogStats.sizeInBytes > 0)
       assert(catalogStats.rowCount.isEmpty)
+    }
+  }
+
+  test("Incorrect statistics fallback to HDFS for size estimation and persistent to metastore") {
+    withTempDir { dir =>
+      spark.range(5).write.mode(SaveMode.Overwrite).parquet(dir.getCanonicalPath)
+      val dataSize = dir.listFiles.filter(!_.getName.endsWith(".crc")).map(_.length).sum
+      Seq(false, true).foreach { persistent =>
+        withSQLConf(
+          SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true",
+          SQLConf.ENABLE_PERSISTENT_STATS_AFTER_FALL_BACK.key -> persistent.toString) {
+          withTable("t1") {
+            sql(
+              s"""
+                 |CREATE EXTERNAL TABLE t1 (id BIGINT)
+                 |STORED AS PARQUET
+                 |LOCATION '${dir.getCanonicalPath}'
+                 |TBLPROPERTIES (
+                 |  'rawDataSize' = '-1',
+                 |  'numFiles' = '0',
+                 |  'totalSize' = '0',
+                 |  'COLUMN_STATS_ACCURATE' = 'false',
+                 |  'numRows' = '-1'
+                 |)
+                 """.stripMargin)
+            assert(sql("DESC FORMATTED t1").filter("col_name = 'Statistics'").collect().isEmpty)
+            spark.table("t1").collect()
+            if (persistent) {
+              eventually(timeout(30.seconds)) {
+                val stats = sql("DESC FORMATTED t1").filter("col_name = 'Statistics'").collect()
+                assert(stats === Seq(Row("Statistics", s"$dataSize bytes", "")))
+              }
+            } else {
+              eventually(timeout(30.seconds)) {
+                assert(sql("DESC FORMATTED t1").filter("col_name = 'Statistics'").collect().isEmpty)
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.util.ThreadUtils
 
 
 /**
@@ -117,19 +118,29 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
     case relation: HiveTableRelation
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
-      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+      val sessionState = session.sessionState
+      val sizeInBytes = if (sessionState.conf.fallBackToHdfsForStatsEnabled) {
         try {
-          val hadoopConf = session.sessionState.newHadoopConf()
+          val hadoopConf = sessionState.newHadoopConf()
           val tablePath = new Path(table.location)
           val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-          fs.getContentSummary(tablePath).getLength
+          val newSize = fs.getContentSummary(tablePath).getLength
+
+          if (sessionState.conf.persistentStatsAfterFallBackEnabled) {
+            val threadName = s"update-${table.identifier.unquotedString}-stats"
+            ThreadUtils.runInNewThread(threadName, isJoin = false) {
+              val newStats = CatalogStatistics(sizeInBytes = newSize)
+              sessionState.catalog.alterTableStats(table.identifier, Some(newStats))
+            }
+          }
+          newSize
         } catch {
           case e: IOException =>
             logWarning("Failed to get table size from hdfs.", e)
-            session.sessionState.conf.defaultSizeInBytes
+            sessionState.conf.defaultSizeInBytes
         }
       } else {
-        session.sessionState.conf.defaultSizeInBytes
+        sessionState.conf.defaultSizeInBytes
       }
 
       val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))

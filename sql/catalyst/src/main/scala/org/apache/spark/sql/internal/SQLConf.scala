@@ -1162,6 +1162,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENABLE_PERSISTENT_STATS_AFTER_FALL_BACK =
+    buildConf("spark.sql.statistics.persistentStatsAfterFallBack")
+      .doc("Persistent the table statistics to metadata after fall back to hdfs." +
+        s"This configuration only has an effect when '${ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key}' " +
+        "is enabled.")
+      .booleanConf
+      .createWithDefault(false)
+
   val DEFAULT_SIZE_IN_BYTES = buildConf("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
@@ -2078,6 +2086,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
+
+  def persistentStatsAfterFallBackEnabled: Boolean =
+    getConf(ENABLE_PERSISTENT_STATS_AFTER_FALL_BACK)
 
   def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES)
 
