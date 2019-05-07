@@ -39,7 +39,7 @@ case class InMemoryTableScanExec(
   override val nodeName: String = {
     relation.cacheBuilder.tableName match {
       case Some(_) =>
-        "Scan " + relation.cacheBuilder.cachedColumnBuffers.name
+        "Scan " + relation.cacheBuilder.cachedName
       case _ =>
         super.nodeName
     }

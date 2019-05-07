@@ -575,7 +575,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
-  test("InMemoryTableScan show the table name on UI if possible") {
+  test("InMemoryTableScan shows the table name on UI if possible") {
     // Show table name on UI
     withView("inMemoryTable", "```a``b```") {
       sql("CREATE TEMPORARY VIEW inMemoryTable AS SELECT 1 AS c1")
