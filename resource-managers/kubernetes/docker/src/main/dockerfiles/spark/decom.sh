@@ -18,16 +18,22 @@
 #
 
 
-set -x
+set -ex
 export LOG=/dev/termination-log
 echo "hi"
 echo "Starting decom adventures" > ${LOG} || echo "logging is hard"
 date | tee -a ${LOG}
+# TODO(holden): Fix this PID extraction
 WORKER_PID=$(ps axf | grep java |grep org.apache.spark.executor.CoarseGrainedExecutorBackend | grep -v grep)
 echo "Using worker pid $WORKER_PID" | tee -a ${LOG}
 kill -s SIGPWR ${WORKER_PID} | tee -a ${LOG}
-killall -s SIGPWR java  | tee -a ${LOG}
-wait ${WORKER_PID} | tee -a ${LOG}
-sleep 30 | tee -a ${LOG}
+echo "Waiting for worker pid to exit"
+date
+timeout 60 tail --pid=${WORKER_PID} -f /dev/null | tee -a ${LOG}
+date
+sleep 60 | tee -a ${LOG}
+date
 echo "Done" | tee -a ${LOG}
 date | tee -a ${LOG}
+echo "Term log was:"
+cat $LOG
