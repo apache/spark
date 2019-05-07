@@ -330,10 +330,11 @@ class ContinuousExecution(
    * before this is called.
    */
   def commit(epoch: Long, epochStats: EpochStats): Unit = {
+    updateStatusMessage(s"Committing epoch $epoch")
+
     assert(sources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
 
-    updateStatusMessage(s"Committing epoch $epoch")
     reportTimeTaken("walCommit", epoch) {
       synchronized {
         // Record offsets before updating `committedOffsets`

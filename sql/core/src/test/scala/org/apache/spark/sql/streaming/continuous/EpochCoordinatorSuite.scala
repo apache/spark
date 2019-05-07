@@ -76,7 +76,7 @@ class EpochCoordinatorSuite
     // so that mocks would have been acted upon by the time verification happens
     makeSynchronousCall()
 
-    verifyCommit(1)
+    verifyCommit(1, EpochStats(1, 0, 2, 3))
   }
 
   test("single epoch, all but one writer partition has committed") {
@@ -90,7 +90,7 @@ class EpochCoordinatorSuite
 
     makeSynchronousCall()
 
-    verifyNoCommitFor(1)
+    verifyNoCommitFor(1, EpochStats(1, 0, 2, 3))
   }
 
   test("single epoch, all but one reader partition has reported an offset") {
@@ -104,7 +104,7 @@ class EpochCoordinatorSuite
 
     makeSynchronousCall()
 
-    verifyNoCommitFor(1)
+    verifyNoCommitFor(1, EpochStats(1, 0, 2, 3))
   }
 
   test("consequent epochs, messages for epoch (k + 1) arrive after messages for epoch k") {
@@ -123,7 +123,7 @@ class EpochCoordinatorSuite
 
     makeSynchronousCall()
 
-    verifyCommitsInOrderOf(List(1, 2))
+    verifyCommitsInOrderOf(List(1, 2), 2, 2)
   }
 
   test("consequent epochs, a message for epoch k arrives after messages for epoch (k + 1)") {
@@ -144,7 +144,7 @@ class EpochCoordinatorSuite
 
     makeSynchronousCall()
 
-    verifyCommitsInOrderOf(List(1, 2))
+    verifyCommitsInOrderOf(List(1, 2), 2, 2)
   }
 
   test("several epochs, messages arrive in order 1 -> 3 -> 4 -> 2") {
@@ -165,7 +165,7 @@ class EpochCoordinatorSuite
 
     makeSynchronousCall()
 
-    verifyCommitsInOrderOf(List(1, 2, 3, 4))
+    verifyCommitsInOrderOf(List(1, 2, 3, 4), 1, 1)
   }
 
   test("several epochs, messages arrive in order 1 -> 3 -> 5 -> 4 -> 2") {
@@ -189,7 +189,7 @@ class EpochCoordinatorSuite
 
     makeSynchronousCall()
 
-    verifyCommitsInOrderOf(List(1, 2, 3, 4, 5))
+    verifyCommitsInOrderOf(List(1, 2, 3, 4, 5), 1, 1)
   }
 
   test("several epochs, max epoch backlog reached by partitionOffsets") {
@@ -205,7 +205,7 @@ class EpochCoordinatorSuite
     makeSynchronousCall()
 
     for (i <- 1 to epochBacklogQueueSize + 1) {
-      verifyNoCommitFor(i)
+      verifyNoCommitFor(i, EpochStats(i, 0, 1, 1))
     }
     verifyStoppedWithException("Size of the partition offset queue has exceeded its maximum")
   }
@@ -223,7 +223,7 @@ class EpochCoordinatorSuite
     makeSynchronousCall()
 
     for (i <- 1 to epochBacklogQueueSize + 1) {
-      verifyNoCommitFor(i)
+      verifyNoCommitFor(i, EpochStats(i, 0, 1, 1))
     }
     verifyStoppedWithException("Size of the partition commit queue has exceeded its maximum")
   }
@@ -247,7 +247,7 @@ class EpochCoordinatorSuite
     makeSynchronousCall()
 
     for (i <- 1 to epochBacklogQueueSize + 2) {
-      verifyNoCommitFor(i)
+      verifyNoCommitFor(i, EpochStats(i, 0, 2, 2))
     }
     verifyStoppedWithException("Size of the epoch queue has exceeded its maximum")
   }
@@ -274,18 +274,18 @@ class EpochCoordinatorSuite
     epochCoordinator.askSync[Long](GetCurrentEpoch)
   }
 
-  private def verifyCommit(epoch: Long): Unit = {
+  private def verifyCommit(epoch: Long, epochStats: EpochStats): Unit = {
     orderVerifier.verify(writeSupport).commit(eqTo(epoch), any())
-    orderVerifier.verify(query).commit(epoch, EpochStats(epoch, 1, 1, 1))
+    orderVerifier.verify(query).commit(epoch, epochStats)
   }
 
-  private def verifyNoCommitFor(epoch: Long): Unit = {
+  private def verifyNoCommitFor(epoch: Long, epochStats: EpochStats): Unit = {
     verify(writeSupport, never()).commit(eqTo(epoch), any())
-    verify(query, never()).commit(epoch, EpochStats(epoch, 1, 1, 1))
+    verify(query, never()).commit(epoch, epochStats)
   }
 
-  private def verifyCommitsInOrderOf(epochs: Seq[Long]): Unit = {
-    epochs.foreach(verifyCommit)
+  private def verifyCommitsInOrderOf(epochs: Seq[Long], numReader: Int, numWriter: Int): Unit = {
+    epochs.foreach(epoch => verifyCommit(epoch, EpochStats(epoch, 0, numReader, numWriter)))
   }
 
   private def verifyStoppedWithException(msg: String): Unit = {

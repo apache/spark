@@ -204,9 +204,7 @@ private[continuous] class EpochCoordinator(
       s"and is ready to be committed. Committing epoch $epoch.")
     // Sequencing is important here. We must commit to the writer before recording the commit
     // in the query, or we will end up dropping the commit if we restart in the middle.
-    query.reportTimeTaken("writerCommit", epoch) {
-      writeSupport.commit(epoch, messages.toArray)
-    }
+    writeSupport.commit(epoch, messages.toArray)
     query.commit(epoch, createEpochStats(epoch))
   }
 
@@ -241,7 +239,7 @@ private[continuous] class EpochCoordinator(
       checkProcessingQueueBoundaries()
   }
 
-  private def checkProcessingQueueBoundaries() = {
+  private def checkProcessingQueueBoundaries(): Unit = {
     if (partitionOffsets.size > epochBacklogQueueSize) {
       query.stopInNewThread(new IllegalStateException("Size of the partition offset queue has " +
         "exceeded its maximum"))
