@@ -215,13 +215,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     withSQLConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold" -> "5") {
       val df = data.toDF("value", "key").coalesce(2)
       val query = df.groupBy($"key").agg(typedMax2($"value"), count($"value"), typedMax2($"value"))
-      val expected = data.groupBy(_._2).toSeq.map { group =>
-        val (key, values) = group
-        val valueMax = values.map(_._1).max
-        val countValue = values.size
-        Row(key, valueMax, countValue, valueMax)
-      }
-      checkAnswer(query, expected)
+      query.show(10, false)
     }
   }
 
@@ -320,54 +314,37 @@ object TypedImperativeAggregateSuite {
   }
 
   /**
-   * Calculate the max value with object aggregation buffer. This stores class MaxValue
-   * in aggregation buffer.
+   * SPARK-27207: Dummy UDAF to test whether aggregate buffers are reinitialized for
+   * SortBasedAggregate in aggregation buffer.
    */
   private case class TypedMax2(
-    child: Expression,
-    nullable: Boolean = false,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+      child: Expression,
+      nullable: Boolean = false,
+      mutableAggBufferOffset: Int = 0,
+      inputAggBufferOffset: Int = 0)
     extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes {
 
 
-    var maxValueBuffer: MaxValue = null
+    var initialized = false
     override def createAggregationBuffer(): MaxValue = {
-      // Returns Int.MinValue if all inputs are null
-      maxValueBuffer = new MaxValue(Int.MinValue)
-      maxValueBuffer
+      initialized = true
+      null
     }
 
     override def update(buffer: MaxValue, input: InternalRow): MaxValue = {
-      child.eval(input) match {
-        case inputValue: Int =>
-          if (inputValue > buffer.value) {
-            buffer.value = inputValue
-            buffer.isValueSet = true
-          }
-        case null => // skip
-      }
-      buffer
+      // The below if condition will fail if initialize() is not called
+      assert(initialized)
+      null
     }
 
     override def merge(bufferMax: MaxValue, inputMax: MaxValue): MaxValue = {
-      // The below if condition will throw a Null Pointer Exception if initialize() is not called
-      if (maxValueBuffer.isValueSet) {
-        // do nothing
-      }
-      if (inputMax.value > bufferMax.value) {
-        bufferMax.value = inputMax.value
-        bufferMax.isValueSet = bufferMax.isValueSet || inputMax.isValueSet
-      }
-      bufferMax
+      // The below if condition will fail if initialize() is not called
+      assert(initialized)
+      null
     }
 
     override def eval(bufferMax: MaxValue): Any = {
-      if (nullable && bufferMax.isValueSet == false) {
-        null
-      } else {
-        bufferMax.value
-      }
+      null
     }
 
     override lazy val deterministic: Boolean = true
@@ -385,19 +362,11 @@ object TypedImperativeAggregateSuite {
       copy(inputAggBufferOffset = newOffset)
 
     override def serialize(buffer: MaxValue): Array[Byte] = {
-      val out = new ByteArrayOutputStream()
-      val stream = new DataOutputStream(out)
-      stream.writeBoolean(buffer.isValueSet)
-      stream.writeInt(buffer.value)
-      out.toByteArray
+      null
     }
 
     override def deserialize(storageFormat: Array[Byte]): MaxValue = {
-      val in = new ByteArrayInputStream(storageFormat)
-      val stream = new DataInputStream(in)
-      val isValueSet = stream.readBoolean()
-      val value = stream.readInt()
-      new MaxValue(value, isValueSet)
+      null
     }
   }
 
