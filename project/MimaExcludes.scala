@@ -441,7 +441,9 @@ object MimaExcludes {
     // [SPARK-15526][ML][FOLLOWUP] Make JPMML provided scope to avoid including unshaded JARs
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>
-        !cls.fullName.startsWith("org.spark_project.jpmml") &&
+        !cls.fullName.startsWith("org.sparkproject.jpmml") &&
+          !cls.fullName.startsWith("org.sparkproject.dmg.pmml") &&
+          !cls.fullName.startsWith("org.spark_project.jpmml") &&
           !cls.fullName.startsWith("org.spark_project.dmg.pmml")
       case _ => true
     }
@@ -716,6 +718,7 @@ object MimaExcludes {
       ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
       ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
       ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
+      ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
