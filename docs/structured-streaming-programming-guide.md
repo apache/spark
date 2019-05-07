@@ -541,6 +541,8 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
         <br/>
+        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If `latestFirst` is set to `true` and `maxFilesPerTrigger` is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.
+        <br/>
         "file:///dataset.txt"<br/>
         "s3://a/dataset.txt"<br/>
         "s3n://a/b/dataset.txt"<br/>
