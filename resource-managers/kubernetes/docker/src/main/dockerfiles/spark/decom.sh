@@ -27,7 +27,7 @@ WORKER_PID=$(ps axf | grep java |grep org.apache.spark.executor.CoarseGrainedExe
 echo "Using worker pid $WORKER_PID" | tee -a ${LOG}
 kill -s SIGPWR ${WORKER_PID} | tee -a ${LOG}
 killall -s SIGPWR java  | tee -a ${LOG}
-waitpid ${WORKER_PID} | tee -a ${LOG}
+wait ${WORKER_PID} | tee -a ${LOG}
 sleep 30 | tee -a ${LOG}
 echo "Done" | tee -a ${LOG}
 date | tee -a ${LOG}
