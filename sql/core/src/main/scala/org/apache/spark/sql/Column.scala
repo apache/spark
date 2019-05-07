@@ -48,6 +48,15 @@ private[sql] object Column {
       case expr => toPrettySQL(expr)
     }
   }
+
+  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
+    val metadataWithoutId = new MetadataBuilder()
+      .withMetadata(a.metadata)
+      .remove(Dataset.ID_PREFIX)
+      .remove(Dataset.COL_POS_PREFIX)
+      .build()
+    a.withMetadata(metadataWithoutId)
+  }
 }
 
 /**
@@ -144,11 +153,16 @@ class Column(val expr: Expression) extends Logging {
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.semanticEquals(this.expr)
+    case that: Column => that.normalizedExpr().equals(this.normalizedExpr())
     case _ => false
   }
 
-  override def hashCode: Int = this.expr.semanticHash()
+  override def hashCode: Int = this.normalizedExpr().hashCode()
+
+  private def normalizedExpr(): Expression = expr match {
+    case a: AttributeReference => Column.stripColumnReferenceMetadata(a)
+    case _ => expr
+  }
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)

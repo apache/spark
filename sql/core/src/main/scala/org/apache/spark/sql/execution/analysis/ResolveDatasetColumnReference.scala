@@ -20,13 +20,12 @@ package org.apache.spark.sql.execution.analysis
 import scala.collection.mutable
 import scala.util.Try
 
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.MetadataBuilder
 
 /**
  * Resolves the Dataset column reference by traversing the query plan and finding the plan subtree
@@ -52,15 +51,6 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
     ColumnReference(
       a.metadata.getLong(Dataset.ID_PREFIX),
       a.metadata.getLong(Dataset.COL_POS_PREFIX).toInt)
-  }
-
-  private def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
-    val metadataWithoutId = new MetadataBuilder()
-      .withMetadata(a.metadata)
-      .remove(Dataset.ID_PREFIX)
-      .remove(Dataset.COL_POS_PREFIX)
-      .build()
-    a.withMetadata(metadataWithoutId)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -116,7 +106,7 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
 
           // Remove the special metadata from this `AttributeReference`, as the column reference
           // resolving is done.
-          stripColumnReferenceMetadata(actualCol)
+          Column.stripColumnReferenceMetadata(actualCol)
       }
     }
   }
