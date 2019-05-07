@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.util
-
 import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
+import org.apache.orc.storage.ql.io.sarg.SearchArgument.TruthValue
 import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
@@ -152,29 +151,14 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    createBuilder(
-      dataTypeMap,
-      new OrcConvertibilityChecker(dataTypeMap),
-      expression,
-      builder,
-      canPartialPushDownConjuncts = true)
+    trimNonConvertibleSubtrees(dataTypeMap, expression, canPartialPushDownConjuncts = true)
+        .map(createBuilder(dataTypeMap, _, builder))
   }
 
-  /**
-   * @param dataTypeMap a map from the attribute name to its data type.
-   * @param expression the input filter predicates.
-   * @param builder the input SearchArgument.Builder.
-   * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
-   *                                    down safely. Pushing ONLY one side of AND down is safe to
-   *                                    do at the top level or none of its ancestors is NOT and OR.
-   * @return the builder so far.
-   */
-  private def createBuilder(
+  private def trimNonConvertibleSubtrees(
       dataTypeMap: Map[String, DataType],
-      orcConvertibilityChecker: OrcConvertibilityChecker,
       expression: Filter,
-      builder: Builder,
-      canPartialPushDownConjuncts: Boolean): Option[Builder] = {
+      canPartialPushDownConjuncts: Boolean): Option[Filter] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
 
@@ -182,43 +166,16 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
     expression match {
       case And(left, right) =>
-        // At here, it is not safe to just convert one side and remove the other side
-        // if we do not understand what the parent filters are.
-        //
-        // Here is an example used to explain the reason.
-        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
-        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
-        // NOT(a = 2), which will generate wrong results.
-        //
-        // Pushing one side of AND down is only safe to do at the top level or in the child
-        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
-        // can be safely removed.
-        val leftIsConvertible = orcConvertibilityChecker.isConvertible(
-          left,
-          canPartialPushDownConjuncts
-        )
-        val rightIsConvertible = orcConvertibilityChecker.isConvertible(
-          right,
-          canPartialPushDownConjuncts
-        )
-        (leftIsConvertible, rightIsConvertible) match {
-          case (true, true) =>
-            for {
-              lhs <- createBuilder(dataTypeMap, orcConvertibilityChecker, left,
-                builder.startAnd(), canPartialPushDownConjuncts)
-              rhs <- createBuilder(dataTypeMap, orcConvertibilityChecker, right,
-                lhs, canPartialPushDownConjuncts)
-            } yield rhs.end()
-
-          case (true, false) if canPartialPushDownConjuncts =>
-            createBuilder(dataTypeMap, orcConvertibilityChecker, left,
-              builder, canPartialPushDownConjuncts)
-
-          case (false, true) if canPartialPushDownConjuncts =>
-            createBuilder(dataTypeMap, orcConvertibilityChecker, right,
-              builder, canPartialPushDownConjuncts)
-
-          case _ => None
+        val lhs = trimNonConvertibleSubtrees(dataTypeMap, left, canPartialPushDownConjuncts = true)
+        val rhs = trimNonConvertibleSubtrees(dataTypeMap, right, canPartialPushDownConjuncts = true)
+        if (lhs.isDefined && rhs.isDefined) {
+          Some(And(lhs.get, rhs.get))
+        } else {
+          if (canPartialPushDownConjuncts && (lhs.isDefined || rhs.isDefined)) {
+            lhs.orElse(rhs)
+          } else {
+            None
+          }
         }
 
       case Or(left, right) =>
@@ -233,183 +190,109 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         // The predicate can be converted as
         // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
         // As per the logical in And predicate, we can push down (a1 OR b1).
-        val leftIsConvertible = orcConvertibilityChecker.isConvertible(
-          left,
-          canPartialPushDownConjuncts
-        )
-        val rightIsConvertible = orcConvertibilityChecker.isConvertible(
-          right,
-          canPartialPushDownConjuncts
-        )
         for {
-          _ <- Option(leftIsConvertible && rightIsConvertible).filter(identity)
-          lhs <- createBuilder(dataTypeMap, orcConvertibilityChecker, left,
-            builder.startOr(), canPartialPushDownConjuncts)
-          rhs <- createBuilder(dataTypeMap, orcConvertibilityChecker, right,
-            lhs, canPartialPushDownConjuncts)
-        } yield rhs.end()
+          lhs: Filter <-
+            trimNonConvertibleSubtrees(dataTypeMap, left, canPartialPushDownConjuncts)
+          rhs: Filter <-
+            trimNonConvertibleSubtrees(dataTypeMap, right, canPartialPushDownConjuncts)
+        } yield Or(lhs, rhs)
 
       case Not(child) =>
-        for {
-          negate <- createBuilder(dataTypeMap, orcConvertibilityChecker,
-            child, builder.startNot(), canPartialPushDownConjuncts = false)
-            if orcConvertibilityChecker.isConvertible(child, canPartialPushDownConjuncts = false)
-        } yield negate.end()
+        val filteredSubtree =
+          trimNonConvertibleSubtrees(dataTypeMap, child, canPartialPushDownConjuncts = false)
+        filteredSubtree.map(Not(_))
 
-      // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
-      // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
-      // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
-
-      case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().equals(quotedName, getType(attribute), castedValue).end())
-
+      case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) => Some(expression)
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end())
-
+        Some(expression)
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end())
-
+        Some(expression)
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end())
-
+        Some(expression)
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end())
-
+        Some(expression)
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end())
-
-      case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        Some(builder.startAnd().isNull(quotedName, getType(attribute)).end())
-
-      case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        Some(builder.startNot().isNull(quotedName, getType(attribute)).end())
-
-      case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
-        val quotedName = quoteAttributeNameIfNeeded(attribute)
-        val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
-        Some(builder.startAnd().in(quotedName, getType(attribute),
-          castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
+        Some(expression)
+      case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) => Some(expression)
+      case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) => Some(expression)
+      case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) => Some(expression)
 
       case _ => None
     }
   }
-}
 
-/**
- * Helper class for efficiently checking whether a `Filter` and its children can be converted to
- * ORC `SearchArgument`s. The `isConvertible` method has a constant amortized complexity for
- * checking whether a node from a Filter expression is convertible to an ORC `SearchArgument`.
- * The additional memory is O(N) in the size of the whole `Filter` being checked due to the use
- * of a hash map that possibly has an entry for each subnode in the filter.
- *
- * @param dataTypeMap a map from the attribute name to its data type.
- */
-private class OrcConvertibilityChecker(dataTypeMap: Map[String, DataType]) {
+  private def createBuilder(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      builder: Builder): Builder = {
+    def getType(attribute: String): PredicateLeaf.Type =
+      getPredicateLeafType(dataTypeMap(attribute))
 
-  // Here, we only need the hash map to be based on the identity of the `Filter` and not on object
-  // equality. This ensures that the complexity for accessing the hash map is constant (with the
-  // only necessary step being to compute the identity hash code of the `Filter`) instead of
-  // linear (which would be the case if we were computing the `Filter` hash code based on all of
-  // its children).
-  private val convertibilityCache = new util.IdentityHashMap[Filter, Boolean]
-
-  /**
-   * Checks if a given expression from a Filter is convertible.
-   *
-   * The result for a given expression within a Filter will never change, so we memoize the
-   * results in the `convertibilityCache`. This means that the overall complexity for checking
-   * all nodes in a `Filter` is:
-   * - a total of one pass across the whole Filter tree is made when nodes are checked for
-   *   convertibility for the first time.
-   * - when checked for a second, etc. time, the result has already been memoized in the cache
-   *   and thus the check has a constant time.
-   *
-   * @param expression the input filter predicates.
-   * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
-   *                                    down safely. Pushing ONLY one side of AND down is safe to
-   *                                    do at the top level or none of its ancestors is NOT and OR.
-   */
-  def isConvertible(expression: Filter, canPartialPushDownConjuncts: Boolean): Boolean = {
-    // The value of `canPartialPushDownConjuncts` will always be the same for invocations on the
-    // `expression`. Thus, we don't need to add that as part of the memoization key.
-    if (convertibilityCache.containsKey(expression)) {
-      convertibilityCache.get(expression)
-    } else {
-      val result = isConvertibleImpl(expression, canPartialPushDownConjuncts)
-      convertibilityCache.put(expression, result)
-      result
-    }
-  }
-
-  /**
-   * This method duplicates the logic from `OrcFilters.createBuilder` that is related to checking
-   * if a given part of the filter is actually convertible to an ORC `SearchArgument`.
-   */
-  private def isConvertibleImpl(
-    expression: Filter,
-    canPartialPushDownConjuncts: Boolean
-  ): Boolean = {
     import org.apache.spark.sql.sources._
-    import OrcFilters._
-
     expression match {
       case And(left, right) =>
-        // At here, it is not safe to just convert one side and remove the other side
-        // if we do not understand what the parent filters are.
-        //
-        // Here is an example used to explain the reason.
-        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
-        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
-        // NOT(a = 2), which will generate wrong results.
-        //
-        // Pushing one side of AND down is only safe to do at the top level or in the child
-        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
-        // can be safely removed.
-        val leftIsConvertible = isConvertible(left, canPartialPushDownConjuncts)
-        val rightIsConvertible = isConvertible(right, canPartialPushDownConjuncts)
-        // NOTE: If we can use partial predicates here, we only need one of the children to
-        // be convertible to be able to convert the parent. Otherwise, we need both to be
-        // convertible.
-        if (canPartialPushDownConjuncts) {
-          leftIsConvertible || rightIsConvertible
-        } else {
-          leftIsConvertible && rightIsConvertible
-        }
+        builder.startAnd()
+        createBuilder(dataTypeMap, left, builder)
+        createBuilder(dataTypeMap, right, builder)
+        builder.end()
 
       case Or(left, right) =>
-        val leftIsConvertible = isConvertible(left, node.canPartialPushDownConjuncts)
-        val rightIsConvertible = isConvertible(right, node.canPartialPushDownConjuncts)
-        leftIsConvertible && rightIsConvertible
+        builder.startOr()
+        createBuilder(dataTypeMap, left, builder)
+        createBuilder(dataTypeMap, right, builder)
+        builder.end()
 
       case Not(child) =>
-        val childIsConvertible = isConvertible(child, canPartialPushDownConjuncts = false)
-        childIsConvertible
+        builder.startNot()
+        createBuilder(dataTypeMap, child, builder)
+        builder.end()
 
-      case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
-      case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
-      case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
-      case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
-      case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
-      case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
-      case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) => true
-      case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) => true
-      case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) => true
+      case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        builder.startAnd().equals(quotedName, getType(attribute), castedValue).end()
 
-      case _ => false
+      case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end()
+
+      case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end()
+
+      case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end()
+
+      case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end()
+
+      case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end()
+
+      case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        builder.startAnd().isNull(quotedName, getType(attribute)).end()
+
+      case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        builder.startNot().isNull(quotedName, getType(attribute)).end()
+
+      case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
+        builder.startAnd().in(quotedName, getType(attribute),
+          castedValues.map(_.asInstanceOf[AnyRef]): _*).end()
+
+      case _ => builder.startAnd().literal(TruthValue.YES).end()
     }
   }
 }
+
