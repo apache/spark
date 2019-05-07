@@ -61,7 +61,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         val expectedWaitTime = clock.getTimeMillis() + advancedTime
         clock.advance(advancedTime)
         // Make sure ExecutorAllocationManager.manageAllocation is called
-        eventually(timeout(10 seconds)) {
+        eventually(timeout(10.seconds)) {
           assert(clock.isStreamWaitingAt(expectedWaitTime))
         }
         body

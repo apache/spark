@@ -24,7 +24,6 @@ import java.util.{Collections, Map => JMap, Properties, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
-import scala.language.postfixOps
 import scala.util.Random
 
 import kafka.api.Request
@@ -138,7 +137,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
 
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(1.minute)) {
       assert(zkUtils.getAllBrokersInCluster().nonEmpty, "Broker was not up in 60 seconds")
     }
   }
@@ -414,7 +413,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
       topic: String,
       numPartitions: Int,
       servers: Seq[KafkaServer]) {
-    eventually(timeout(60.seconds), interval(200.millis)) {
+    eventually(timeout(1.minute), interval(200.milliseconds)) {
       try {
         verifyTopicDeletion(topic, numPartitions, servers)
       } catch {
@@ -439,7 +438,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
       case _ =>
         false
     }
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(1.minute)) {
       assert(isPropagated, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
   }
@@ -448,7 +447,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
    * Wait until the latest offset of the given `TopicPartition` is not less than `offset`.
    */
   def waitUntilOffsetAppears(topicPartition: TopicPartition, offset: Long): Unit = {
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(1.minute)) {
       val currentOffset = getLatestOffsets(Set(topicPartition.topic)).get(topicPartition)
       assert(currentOffset.nonEmpty && currentOffset.get >= offset)
     }

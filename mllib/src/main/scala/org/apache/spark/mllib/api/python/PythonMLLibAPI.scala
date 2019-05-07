@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
@@ -1348,6 +1347,10 @@ private[spark] abstract class SerDeBase {
       val unpickle = new Unpickler
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
+        // `Opcodes.MEMOIZE` of Protocol 4 (Python 3.4+) will store objects in internal map
+        // of `Unpickler`. This map is cleared when calling `Unpickler.close()`. Pyrolite
+        // doesn't clear it up, so we manually clear it.
+        unpickle.close()
         if (batched) {
           obj match {
             case list: JArrayList[_] => list.asScala

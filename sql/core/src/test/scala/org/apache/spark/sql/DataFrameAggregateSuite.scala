@@ -720,7 +720,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(testData.groupBy(col("key")).toString.contains(
       "[grouping expressions: [key], value: [key: int, value: string], type: GroupBy]"))
     assert(testData.groupBy(current_date()).toString.contains(
-      "grouping expressions: [current_date()], value: [key: int, value: string], " +
+      "grouping expressions: [current_date(None)], value: [key: int, value: string], " +
         "type: GroupBy]"))
   }
 
@@ -771,5 +771,15 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       df.groupBy("arr", "stru", "arrOfStru").count(),
       Row(Seq(0.0f, 0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, Double.NaN)), 2)
     )
+  }
+
+  test("SPARK-27581: DataFrame countDistinct(\"*\") shouldn't fail with AnalysisException") {
+    val df = sql("select id % 100 from range(100000)")
+    val distinctCount1 = df.select(expr("count(distinct(*))"))
+    val distinctCount2 = df.select(countDistinct("*"))
+    checkAnswer(distinctCount1, distinctCount2)
+
+    val countAndDistinct = df.select(count("*"), countDistinct("*"))
+    checkAnswer(countAndDistinct, Row(100000, 100))
   }
 }

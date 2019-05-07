@@ -125,7 +125,9 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
       > SELECT _FUNC_();
        46707d92-02f4-4817-8116-a4c3b23e6266
   """,
-  note = "The function is non-deterministic.")
+  note = """
+    The function is non-deterministic.
+  """)
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
     with ExpressionWithRandomSeed {

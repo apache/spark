@@ -29,9 +29,10 @@ case class CSVScanBuilder(
     fileIndex: PartitioningAwareFileIndex,
     schema: StructType,
     dataSchema: StructType,
-    options: CaseInsensitiveStringMap) extends FileScanBuilder(schema) {
+    options: CaseInsensitiveStringMap)
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
   override def build(): Scan = {
-    CSVScan(sparkSession, fileIndex, dataSchema, readSchema, options)
+    CSVScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options)
   }
 }

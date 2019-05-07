@@ -164,8 +164,8 @@ class KryoSerializer(conf: SparkConf)
         }
         // Allow the user to register their own classes by setting spark.kryo.registrator.
         userRegistrators
-          .map(Utils.classForName(_, noSparkClassLoader = true).getConstructor().
-            newInstance().asInstanceOf[KryoRegistrator])
+          .map(Utils.classForName[KryoRegistrator](_, noSparkClassLoader = true).
+            getConstructor().newInstance())
           .foreach { reg => reg.registerClasses(kryo) }
       } catch {
         case e: Exception =>
@@ -213,6 +213,10 @@ class KryoSerializer(conf: SparkConf)
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
     Seq(
+      "org.apache.spark.sql.catalyst.expressions.UnsafeRow",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeArrayData",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeMapData",
+
       "org.apache.spark.ml.attribute.Attribute",
       "org.apache.spark.ml.attribute.AttributeGroup",
       "org.apache.spark.ml.attribute.BinaryAttribute",

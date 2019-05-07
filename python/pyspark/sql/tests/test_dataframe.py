@@ -581,14 +581,15 @@ class DataFrameTests(ReusedSQLTestCase):
 
     # Regression test for SPARK-23360
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_create_dateframe_from_pandas_with_dst(self):
+    def test_create_dataframe_from_pandas_with_dst(self):
         import pandas as pd
+        from pandas.util.testing import assert_frame_equal
         from datetime import datetime
 
         pdf = pd.DataFrame({'time': [datetime(2015, 10, 31, 22, 30)]})
 
         df = self.spark.createDataFrame(pdf)
-        self.assertPandasEqual(pdf, df.toPandas())
+        assert_frame_equal(pdf, df.toPandas())
 
         orig_env_tz = os.environ.get('TZ', None)
         try:
@@ -597,7 +598,7 @@ class DataFrameTests(ReusedSQLTestCase):
             time.tzset()
             with self.sql_conf({'spark.sql.session.timeZone': tz}):
                 df = self.spark.createDataFrame(pdf)
-                self.assertPandasEqual(pdf, df.toPandas())
+                assert_frame_equal(pdf, df.toPandas())
         finally:
             del os.environ['TZ']
             if orig_env_tz is not None:

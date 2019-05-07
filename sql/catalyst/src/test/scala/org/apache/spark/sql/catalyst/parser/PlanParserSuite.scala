@@ -132,15 +132,19 @@ class PlanParserSuite extends AnalysisTest {
       table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10",
-      "Multi-select queries cannot have a FROM clause in their individual SELECT statements")
+      "This select statement can not have FROM cause as its already specified upfront")
     intercept(
       "from a select * from b",
-      "Individual select statement can not have FROM cause as its already specified in " +
-        "the outer query block")
+      "This select statement can not have FROM cause as its already specified upfront")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(
         table("a").where('s < 10).select(star()).insertInto("tbl2")))
+    assertEqual(
+      "select * from (from a select * select *)",
+      table("a").select(star())
+        .union(table("a").select(star()))
+        .as("__auto_generated_subquery_name").select(star()))
   }
 
   test("query organization") {

@@ -958,7 +958,9 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
       > SELECT _FUNC_(array(1, 20, null, 3));
        [20,null,3,1]
   """,
-  note = "The function is non-deterministic.",
+  note = """
+    The function is non-deterministic.
+  """,
   since = "2.4.0")
 case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   extends UnaryExpression with ExpectsInputTypes with Stateful with ExpressionWithRandomSeed {
@@ -1042,7 +1044,9 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
        [3,4,1,2]
   """,
   since = "1.5.0",
-  note = "Reverse logic for arrays is available since 2.4.0."
+  note = """
+    Reverse logic for arrays is available since 2.4.0.
+  """
 )
 case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -2056,7 +2060,9 @@ case class ElementAt(left: Expression, right: Expression)
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
        [1,2,3,4,5,6]
   """,
-  note = "Concat logic for arrays is available since 2.4.0.")
+  note = """
+    Concat logic for arrays is available since 2.4.0.
+  """)
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)

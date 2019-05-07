@@ -671,21 +671,28 @@ object CoalesceExec {
 }
 
 /**
- * Physical plan for a subquery.
+ * Parent class for different types of subquery plans
  */
-case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
-
-  override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"))
+abstract class BaseSubqueryExec extends SparkPlan {
+  def name: String
+  def child: SparkPlan
 
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+}
 
-  override def doCanonicalize(): SparkPlan = child.canonicalized
+/**
+ * Physical plan for a subquery.
+ */
+case class SubqueryExec(name: String, child: SparkPlan)
+  extends BaseSubqueryExec with UnaryExecNode {
+
+  override lazy val metrics = Map(
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"))
 
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {
@@ -709,6 +716,10 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
     }(SubqueryExec.executionContext)
   }
 
+  protected override def doCanonicalize(): SparkPlan = {
+    SubqueryExec("Subquery", child.canonicalized)
+  }
+
   protected override def doPrepare(): Unit = {
     relationFuture
   }
@@ -725,4 +736,24 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 object SubqueryExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+}
+
+/**
+ * A wrapper for reused [[BaseSubqueryExec]].
+ */
+case class ReusedSubqueryExec(child: BaseSubqueryExec)
+  extends BaseSubqueryExec with LeafExecNode {
+
+  override def name: String = child.name
+
+  override def output: Seq[Attribute] = child.output
+  override def doCanonicalize(): SparkPlan = child.canonicalized
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  protected override def doPrepare(): Unit = child.prepare()
+
+  protected override def doExecute(): RDD[InternalRow] = child.execute()
+
+  override def executeCollect(): Array[InternalRow] = child.executeCollect()
 }

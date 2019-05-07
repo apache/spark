@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.orc;
 
 import java.math.BigDecimal;
 
-import org.apache.orc.storage.ql.exec.vector.*;
+import org.apache.hadoop.hive.ql.exec.vector.*;
 
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;

@@ -22,7 +22,7 @@ import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
- * An internal base interface of mix-in interfaces for readable {@link Table}. This adds
+ * A mix-in interface of {@link Table}, to indicate that it's readable. This adds
  * {@link #newScanBuilder(CaseInsensitiveStringMap)} that is used to create a scan for batch,
  * micro-batch, or continuous processing.
  */

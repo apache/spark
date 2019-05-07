@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.util.concurrent.TimeUnit.MILLISECONDS
-
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 class ComputeCurrentTimeSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -52,9 +51,9 @@ class ComputeCurrentTimeSuite extends PlanTest {
   test("analyzer should replace current_date with literals") {
     val in = Project(Seq(Alias(CurrentDate(), "a")(), Alias(CurrentDate(), "b")()), LocalRelation())
 
-    val min = MILLISECONDS.toDays(System.currentTimeMillis())
+    val min = DateTimeUtils.millisToDays(System.currentTimeMillis())
     val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
-    val max = MILLISECONDS.toDays(System.currentTimeMillis())
+    val max = DateTimeUtils.millisToDays(System.currentTimeMillis())
 
     val lits = new scala.collection.mutable.ArrayBuffer[Int]
     plan.transformAllExpressions { case e: Literal =>

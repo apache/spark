@@ -15,20 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.execution.datasources.orc
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
+import org.apache.spark.sql.internal.SQLConf
 
-/**
- * An empty mix-in interface for {@link Table}, to indicate this table supports streaming write.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap)} must return a
- * {@link WriteBuilder} with {@link WriteBuilder#buildForStreaming()} implemented.
- * </p>
- */
-@Evolving
-public interface SupportsStreamingWrite extends SupportsWrite, BaseStreamingSink { }
+class OrcV1SchemaPruningSuite extends SchemaPruningSuite {
+  override protected val dataSourceName: String = "orc"
+  override protected val vectorizedReaderEnabledKey: String =
+    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
+}
