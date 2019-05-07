@@ -38,8 +38,8 @@ case class InMemoryTableScanExec(
 
   override val nodeName: String = {
     relation.cacheBuilder.tableName match {
-      case Some(tableName) =>
-        s"Scan in memory table ${tableName.replace("`", "")}"
+      case Some(_) =>
+        "Scan " + relation.cacheBuilder.cachedColumnBuffers.name
       case _ =>
         super.nodeName
     }
