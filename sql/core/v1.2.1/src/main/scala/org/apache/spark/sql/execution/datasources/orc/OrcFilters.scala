@@ -225,14 +225,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           trimNonConvertibleSubtreesImpl(dataTypeMap, left, canPartialPushDownConjuncts = true)
         val rhs =
           trimNonConvertibleSubtreesImpl(dataTypeMap, right, canPartialPushDownConjuncts = true)
-        if (lhs.isDefined && rhs.isDefined) {
-          Some(And(lhs.get, rhs.get))
-        } else {
-          if (canPartialPushDownConjuncts && (lhs.isDefined || rhs.isDefined)) {
-            lhs.orElse(rhs)
-          } else {
-            None
-          }
+        (lhs, rhs) match {
+          case (Some(l), Some(r)) => Some(And(l, r))
+          case (Some(_), None) if canPartialPushDownConjuncts => lhs
+          case (None, Some(_)) if canPartialPushDownConjuncts => rhs
+          case _ => None
         }
 
       case Or(left, right) =>
