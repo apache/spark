@@ -49,8 +49,8 @@ import org.apache.spark.sql.types._
  * child is inconvertible.  Alas, `b.startAnd()` call can't be rolled back, and `b` is inconsistent
  * now.
  *
- * The workaround employed here is that, for `And`/`Or`/`Not`, we explicitly check if the children
- * are convertible, and only do the actual conversion when the children are proven to be
+ * The workaround employed here is to trim the Spark filters before trying to convert them. This
+ * way, we can only do the actual conversion on the part of the Filter that is known to be
  * convertible.
  *
  * P.S.: Hive seems to use `SearchArgument` together with `ExprNodeGenericFuncDesc` only.  Usage of
@@ -169,6 +169,14 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         .map(createBuilder(dataTypeMap, _, builder))
   }
 
+  /**
+   * Transforms a `Filter` by removing all subtrees that are not convertible to an ORC
+   * SearchArgument.
+   *
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the input filter predicates.
+   * @return A TrimmedFilter that wraps the transformed `Filter`.
+   */
   private def trimNonConvertibleSubtrees(
       dataTypeMap: Map[String, DataType],
       expression: Filter): Option[TrimmedFilter] = {
@@ -176,6 +184,18 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         .map(TrimmedFilter)
   }
 
+  /**
+   * Internal recursive implementation of the `trimNonConvertibleSubtrees` method. We use two
+   * separate methods here in order to avoid dealing with the wrapper `TrimmedFilter` classes
+   * in the recursive implementation here, and only wrap the final result in the outer function.
+   *
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the input filter predicates.
+   * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
+   *                                    down safely. Pushing ONLY one side of AND down is safe to
+   *                                    do at the top level or none of its ancestors is NOT and OR.
+   * @return the trimmed `Filter`.
+   */
   private def trimNonConvertibleSubtreesImpl(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
