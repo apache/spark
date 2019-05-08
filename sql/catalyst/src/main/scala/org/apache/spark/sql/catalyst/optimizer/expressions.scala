@@ -92,17 +92,17 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * @param expression expression to be traversed
    * @return A tuple including:
    *         1. Option[Expression]: optional changed condition after traversal
-   *         2. Seq[(Expression, Literal)]: propagated mapping of expression => constant
+   *         2. Map[Expression, Literal]: propagated mapping of expression => constant
    */
   private def traverse(expression: Expression): (Expression, Map[Expression, Literal]) =
     expression match {
-      case e @ EqualTo(left, right: Literal) if e.deterministic =>
+      case e @ EqualTo(left, right: Literal) if !left.foldable && left.deterministic =>
         (e, Map(left.canonicalized -> right))
-      case e @ EqualTo(left: Literal, right) if e.deterministic =>
+      case e @ EqualTo(left: Literal, right) if !right.foldable && right.deterministic =>
         (e, Map(right.canonicalized -> left))
-      case e @ EqualNullSafe(left, right: Literal) if e.deterministic =>
+      case e @ EqualNullSafe(left, right: Literal) if !left.foldable && left.deterministic =>
         (e, Map(left.canonicalized -> right))
-      case e @ EqualNullSafe(left: Literal, right) if e.deterministic =>
+      case e @ EqualNullSafe(left: Literal, right) if !right.foldable && right.deterministic =>
         (e, Map(right.canonicalized -> left))
       case a @ And(left, right) =>
         val (newLeft, equalityPredicatesLeft) = traverse(left)
