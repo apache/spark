@@ -66,7 +66,7 @@ public enum TableCapability {
    * <p>
    * Truncating a table removes all existing rows.
    * <p>
-   * See {@link org.apache.spark.sql.sources.v2.writer.SupportsTruncate}.
+   * See {@code org.apache.spark.sql.sources.v2.writer.SupportsTruncate}.
    */
   TRUNCATE,
 
@@ -74,7 +74,7 @@ public enum TableCapability {
    * Signals that the table can replace existing data that matches a filter with appended data in
    * a write operation.
    * <p>
-   * See {@link org.apache.spark.sql.sources.v2.writer.SupportsOverwrite}.
+   * See {@code org.apache.spark.sql.sources.v2.writer.SupportsOverwrite}.
    */
   OVERWRITE_BY_FILTER,
 
@@ -82,7 +82,7 @@ public enum TableCapability {
    * Signals that the table can dynamically replace existing data partitions with appended data in
    * a write operation.
    * <p>
-   * See {@link org.apache.spark.sql.sources.v2.writer.SupportsDynamicOverwrite}.
+   * See {@code org.apache.spark.sql.sources.v2.writer.SupportsDynamicOverwrite}.
    */
   OVERWRITE_DYNAMIC
 }

@@ -40,7 +40,7 @@ public class Expressions {
    * @param args expression arguments to the transform
    * @return a logical transform
    */
-  public Transform apply(String name, Expression... args) {
+  public static Transform apply(String name, Expression... args) {
     return LogicalExpressions.apply(name,
         JavaConverters.asScalaBuffer(Arrays.asList(args)).toSeq());
   }
@@ -51,7 +51,7 @@ public class Expressions {
    * @param name a column name
    * @return a named reference for the column
    */
-  public NamedReference column(String name) {
+  public static NamedReference column(String name) {
     return LogicalExpressions.reference(name);
   }
 
@@ -65,7 +65,7 @@ public class Expressions {
    * @param <T> the JVM type of the value
    * @return a literal expression for the value
    */
-  public <T> Literal<T> literal(T value) {
+  public static <T> Literal<T> literal(T value) {
     return LogicalExpressions.literal(value);
   }
 
@@ -81,7 +81,7 @@ public class Expressions {
    * @param columns input columns for the bucket transform
    * @return a logical bucket transform with name "bucket"
    */
-  public Transform bucket(int numBuckets, String... columns) {
+  public static Transform bucket(int numBuckets, String... columns) {
     return LogicalExpressions.bucket(numBuckets,
         JavaConverters.asScalaBuffer(Arrays.asList(columns)).toSeq());
   }
@@ -96,7 +96,7 @@ public class Expressions {
    * @param column an input column
    * @return a logical identity transform with name "identity"
    */
-  public Transform identity(String column) {
+  public static Transform identity(String column) {
     return LogicalExpressions.identity(column);
   }
 
@@ -110,7 +110,7 @@ public class Expressions {
    * @param column an input timestamp or date column
    * @return a logical yearly transform with name "years"
    */
-  public Transform years(String column) {
+  public static Transform years(String column) {
     return LogicalExpressions.years(column);
   }
 
@@ -125,7 +125,7 @@ public class Expressions {
    * @param column an input timestamp or date column
    * @return a logical monthly transform with name "months"
    */
-  public Transform months(String column) {
+  public static Transform months(String column) {
     return LogicalExpressions.months(column);
   }
 
@@ -140,7 +140,7 @@ public class Expressions {
    * @param column an input timestamp or date column
    * @return a logical daily transform with name "days"
    */
-  public Transform days(String column) {
+  public static Transform days(String column) {
     return LogicalExpressions.days(column);
   }
 
@@ -155,7 +155,7 @@ public class Expressions {
    * @param column an input timestamp column
    * @return a logical hourly transform with name "hours"
    */
-  public Transform hours(String column) {
+  public static Transform hours(String column) {
     return LogicalExpressions.hours(column);
   }
 
