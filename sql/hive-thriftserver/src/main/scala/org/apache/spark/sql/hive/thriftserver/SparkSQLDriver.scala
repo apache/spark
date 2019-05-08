@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 
@@ -60,9 +61,15 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
     // TODO unify the error code
     try {
       context.sparkContext.setJobDescription(command)
-      val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = SQLExecution.withNewExecutionId(context.sparkSession, execution) {
-        hiveResultString(execution.executedPlan)
+      val logicalPlan = context.sql(command).logicalPlan
+      val execution = context.sessionState.executePlan(logicalPlan)
+      logicalPlan match {
+        case _: LocalRelation =>
+          hiveResponse = hiveResultString(execution.executedPlan)
+        case _ =>
+          hiveResponse = SQLExecution.withNewExecutionId(context.sparkSession, execution) {
+            hiveResultString(execution.executedPlan)
+          }
       }
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
