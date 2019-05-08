@@ -138,4 +138,11 @@ object StaticSQLConf {
     .intConf
     .checkValue(_ >= 0, "Must be set greater or equal to zero")
     .createWithDefault(Int.MaxValue)
+
+  val SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS =
+    buildStaticConf("spark.sql.legacy.sessionInitWithConfigDefaults")
+      .doc("Flag to revert to legacy behavior where a cloned SparkSession receives SparkConf " +
+        "defaults, dropping any overrides in its parent SparkSession.")
+      .booleanConf
+      .createWithDefault(false)
 }
