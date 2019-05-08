@@ -64,10 +64,11 @@ class DoubleAccumulatorSource extends AccumulatorSource
  */
 @Experimental
 object LongAccumulatorSource {
-  def register(sc: SparkContext, accumulators: Map[String, LongAccumulator]): Unit = {
+  def register(sc: SparkContext, accumulators: Map[String, LongAccumulator]): Source = {
     val source = new LongAccumulatorSource
     source.register(accumulators)
     sc.env.metricsSystem.registerSource(source)
+    source
   }
 }
 
@@ -81,9 +82,10 @@ object LongAccumulatorSource {
  */
 @Experimental
 object DoubleAccumulatorSource {
-  def register(sc: SparkContext, accumulators: Map[String, DoubleAccumulator]): Unit = {
+  def register(sc: SparkContext, accumulators: Map[String, DoubleAccumulator]): Source = {
     val source = new DoubleAccumulatorSource
     source.register(accumulators)
     sc.env.metricsSystem.registerSource(source)
+    source
   }
 }

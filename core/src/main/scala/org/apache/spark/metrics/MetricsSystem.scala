@@ -166,9 +166,11 @@ private[spark] class MetricsSystem private (
   }
 
   def removeSource(source: Source) {
-    sources -= source
-    val regName = buildRegistryName(source)
-    registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
+    if (sources.contains(source)) {
+      sources -= source
+      val regName = buildRegistryName(source)
+      registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
+    }
   }
 
   private def registerSources() {

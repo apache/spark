@@ -20,13 +20,14 @@ package org.apache.spark.metrics
 import scala.collection.mutable.ArrayBuffer
 
 import com.codahale.metrics.MetricRegistry
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.master.MasterSource
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.Sink
-import org.apache.spark.metrics.source.{Source, StaticSources}
+import org.apache.spark.metrics.source.{LongAccumulatorSource, Source, StaticSources}
 
 class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
   var filePath: String = _
@@ -63,6 +64,24 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val source = new MasterSource(null)
     metricsSystem.registerSource(source)
     assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
+  }
+
+  test("MetricsSystem with sources remove") {
+    val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
+    metricsSystem.start()
+    val mockContext = mock(classOf[SparkContext])
+    val mockEnvironment = mock(classOf[SparkEnv])
+    when(mockEnvironment.metricsSystem) thenReturn (metricsSystem)
+    when(mockContext.env) thenReturn (mockEnvironment)
+    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+    val la = mockContext.longAccumulator
+    val laSource = LongAccumulatorSource.register(mockContext, Map("la"->la))
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
+    val notRegisteredSource = new LongAccumulatorSource
+    metricsSystem.removeSource(notRegisteredSource)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
+    metricsSystem.removeSource(laSource)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
   }
 
   test("MetricsSystem with Driver instance") {
