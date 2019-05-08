@@ -55,6 +55,9 @@ case class CachedRDDBuilder(
   val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
   val rowCountStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 
+  val cachedName = tableName.map(n => s"In-memory table $n")
+    .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
+
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
       synchronized {
@@ -130,9 +133,7 @@ case class CachedRDDBuilder(
       }
     }.persist(storageLevel)
 
-    cached.setName(
-      tableName.map(n => s"In-memory table $n")
-        .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024)))
+    cached.setName(cachedName)
     cached
   }
 }
