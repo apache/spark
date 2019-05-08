@@ -34,34 +34,34 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Replace an expensive array_overlap join with an equivalent equijoin.
  */
-object ArraysOverlapJoin extends Rule[LogicalPlan] {
-  private def makePrime(p: LogicalPlan, arr: Expression, alias: String, outerAlias: String) = {
-    p.generate(
-      Explode(arr),
-      alias = Some(alias)
-    ).select(
-      (p.output ++ Seq(UnresolvedAttribute(alias))): _*
-    ) as outerAlias
+object RewriteArraysOverlapJoin extends Rule[LogicalPlan] {
+  private def makePrime(p: LogicalPlan, arr: NamedExpression, alias: String) = {
+    val exploded = Alias(Explode(arr), alias)(explicitMetadata = Some(arr.metadata))
+    val generate = ExtractGenerator(
+      Project(p.output :+ exploded, p)
+    )
+    (generate, generate.output.last)
   }
+  
+  private def isIn(p: LogicalPlan, e: Expression) = p.output.map(_.expr).contains(e)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p @ Join(left, right, joinType, Some(ArraysOverlap(leftArray, rightArray))) =>
-      val (leftExplodeAlias, rightExplodeAlias) = ("explode_larr", "explode_rarr")
-      val (leftAlias, rightAlias) = ("__lp", "__rp")
-      val leftPrime = makePrime(left, leftArray, leftExplodeAlias, leftAlias)
-      val rightPrime = makePrime(right, rightArray, rightExplodeAlias, rightAlias)
-      val joined = leftPrime
-        .join(rightPrime, joinType, Some(leftExplodeAlias.attr === rightExplodeAlias.attr))
-      val dropped = joined
-        .select(
-          joined
-            .output
-            .filter(x => !Seq(leftExplodeAlias, rightExplodeAlias).contains(x.name))
-            .map(_.expr): _*
-          )
-      val res = Deduplicate(Nil, dropped)
-      println(res) // until I have this working, it is helpful to see the tree
-      res
+    case Join(left, right, joinType, Some(ArraysOverlap(arrA: NamedExpression, arrB: NamedExpression))) =>
+      val (leftArray, rightArray) =
+        if (isIn(left, arrA) && isIn(right, arrB)) {
+          (arrA, arrB)
+        } else { // other cases would be caught be the analyzer
+          (arrB, arrA)
+        }
+      val (leftAlias, rightAlias) = ("explode_larr", "explode_rarr")
+      val (leftPrime, leftExp) = makePrime(left, leftArray, leftAlias)
+      val (rightPrime, rightExp) = makePrime(right, rightArray, rightAlias)
+      val joined = Join(leftPrime, rightPrime, joinType, Some(leftExp === rightExp))
+      val dropped = Project(
+        Seq(left, right).flatMap(_.output.map(_.expr)).map { case e: NamedExpression => e },
+        joined
+      )
+      ReplaceDeduplicateWithAggregate(Deduplicate(Nil, dropped))
   }
 }
 
