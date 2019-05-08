@@ -106,12 +106,14 @@ class ConstantPropagationSuite extends PlanTest {
 
   test("equality predicates outside a `OR` can be propagated within a `OR`") {
     val query = testRelation
+      .select(columnA)
       .where(
         columnA === Literal(2) &&
           (columnA === Add(columnB, Literal(3)) || columnB === Literal(9)))
       .analyze
 
     val correctAnswer = testRelation
+      .select(columnA)
       .where(
         columnA === Literal(2) &&
           (Literal(2) === Add(columnB, Literal(3)) || columnB === Literal(9)))
@@ -151,10 +153,13 @@ class ConstantPropagationSuite extends PlanTest {
 
   test("conflicting equality predicates") {
     val query = testRelation
+      .select(columnA)
       .where(
         columnA === Literal(1) && columnA === Literal(2) && columnB === Add(columnA, Literal(3)))
 
-    val correctAnswer = testRelation.where(Literal.FalseLiteral).analyze
+    val correctAnswer = testRelation
+      .select(columnA)
+      .where(columnA === Literal(1) && columnA === Literal(2) && columnB === Literal(5)).analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }
