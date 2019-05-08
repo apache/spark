@@ -20,16 +20,12 @@ import java.util.{HashMap, List => JList, Locale}
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
 
-import scala.xml.Node
-
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.status.api.v1.StageStatus._
 import org.apache.spark.status.api.v1.TaskSorting._
 import org.apache.spark.ui.{SparkUI, UIUtils}
 import org.apache.spark.ui.jobs.ApiHelper._
-
-import org.json4s.Xml.toJson
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class StagesResource extends BaseAppResource {
