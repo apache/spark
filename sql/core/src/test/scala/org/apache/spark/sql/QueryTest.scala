@@ -210,9 +210,7 @@ abstract class QueryTest extends PlanTest {
    * Asserts that a given [[Dataset]] will be executed using the cache with the given name and
    * storage level.
    */
-  def assertCached(query: Dataset[_],
-                   cachedName: String,
-                   storageLevel: StorageLevel): Unit = {
+  def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
       val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
@@ -227,8 +225,7 @@ abstract class QueryTest extends PlanTest {
   /**
    * Asserts that a given [[Dataset]] will be executed using the cache with the given name
    */
-  def assertCached(query: Dataset[_],
-                   cachedName: String): Unit = {
+  def assertCached(query: Dataset[_], cachedName: String): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
       val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
