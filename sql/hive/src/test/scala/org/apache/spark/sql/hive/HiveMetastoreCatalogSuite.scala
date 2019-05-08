@@ -287,12 +287,25 @@ class DataSourceWithHiveMetastoreCatalogSuite
         """.stripMargin)
 
       val metadata = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
-      assert(metadata.properties.get("bucketing_version") === Some("spark"))
 
       val hiveSerDe = HiveSerDe.sourceToSerDe(provider).get
       assert(metadata.storage.serde === hiveSerDe.serde)
       assert(metadata.storage.inputFormat === hiveSerDe.inputFormat)
       assert(metadata.storage.outputFormat === hiveSerDe.outputFormat)
+
+      // It's a bucketed table at Spark side
+      assert(sql("DESC FORMATTED t").collect().containsSlice(
+        Seq(Row("Num Buckets", "2", ""), Row("Bucket Columns", "[`c1`]", ""))
+      ))
+
+      // It's not a bucketed table at Hive side
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
+      val hiveSide = client.runSqlHive("DESC FORMATTED t")
+      assert(hiveSide.contains("Num Buckets:        \t-1                  \t "))
+      assert(hiveSide.contains("Bucket Columns:     \t[]                  \t "))
+      assert(hiveSide.contains("\tspark.sql.sources.schema.numBuckets\t2                   "))
+      assert(hiveSide.contains("\tspark.sql.sources.schema.bucketCol.0\tc1                  "))
     }
   }
 }
