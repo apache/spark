@@ -440,10 +440,28 @@ class HiveDDLSuite
 
         val hiveTable =
           spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
+        assert(hiveTable.tableType == CatalogTableType.MANAGED)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
+        // The data are deleted since the table type is not EXTERNAL
+        assert(tmpDir.listFiles == null)
+
+        sql(
+          s"""
+             |create external table $tabName
+             |stored as parquet
+             |location '${tmpDir.toURI}'
+             |as select 1, '3'
+          """.stripMargin)
+
+        val hiveExtTable =
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        assert(hiveExtTable.tableType == CatalogTableType.EXTERNAL)
+
+        assert(tmpDir.listFiles.nonEmpty)
+        sql(s"DROP TABLE $tabName")
+        // The data are not deleted since the table type is EXTERNAL
         assert(tmpDir.listFiles.nonEmpty)
       }
     }

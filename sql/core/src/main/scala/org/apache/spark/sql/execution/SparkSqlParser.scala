@@ -988,9 +988,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
       compressed = false,
       properties = rowStorage.properties ++ fileStorage.properties)
-    // If location is defined, we'll assume this is an external table.
-    // Otherwise, we may accidentally delete existing data.
-    val tableType = if (external || location.isDefined) {
+    // If external is defined, we'll assume this is an external table.
+    // Otherwise, we may consider it as managed table where the data
+    // will be deleted on drop table command.
+    val tableType = if (external) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
