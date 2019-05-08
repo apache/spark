@@ -145,17 +145,38 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 
   /**
+   * A TrimmedFilter is a Filter that has been trimmed such that all the remaining nodes
+   * are convertible to ORC predicates.
+   *
+   * Since nothing in the underlying representation of the Filter is actually different from a
+   * regular Filter (the only difference is that we might remove some subtrees), this class is just
+   * a wrapper around a `Filter` value. The main benefits of using this class are readability
+   * and type safety (to signal that the respective functions only work with already trimmed
+   * filters).
+   *
+   * @param filter The underlying filter representation.
+   */
+  private case class TrimmedFilter(filter: Filter) extends AnyVal
+
+  /**
    * Build a SearchArgument and return the builder so far.
    */
   private def buildSearchArgument(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    trimNonConvertibleSubtrees(dataTypeMap, expression, canPartialPushDownConjuncts = true)
+    trimNonConvertibleSubtrees(dataTypeMap, expression)
         .map(createBuilder(dataTypeMap, _, builder))
   }
 
   private def trimNonConvertibleSubtrees(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter): Option[TrimmedFilter] = {
+    trimNonConvertibleSubtreesImpl(dataTypeMap, expression, canPartialPushDownConjuncts = true)
+        .map(TrimmedFilter)
+  }
+
+  private def trimNonConvertibleSubtreesImpl(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       canPartialPushDownConjuncts: Boolean): Option[Filter] = {
@@ -166,8 +187,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
     expression match {
       case And(left, right) =>
-        val lhs = trimNonConvertibleSubtrees(dataTypeMap, left, canPartialPushDownConjuncts = true)
-        val rhs = trimNonConvertibleSubtrees(dataTypeMap, right, canPartialPushDownConjuncts = true)
+        val lhs =
+          trimNonConvertibleSubtreesImpl(dataTypeMap, left, canPartialPushDownConjuncts = true)
+        val rhs =
+          trimNonConvertibleSubtreesImpl(dataTypeMap, right, canPartialPushDownConjuncts = true)
         if (lhs.isDefined && rhs.isDefined) {
           Some(And(lhs.get, rhs.get))
         } else {
@@ -192,14 +215,14 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         // As per the logical in And predicate, we can push down (a1 OR b1).
         for {
           lhs: Filter <-
-            trimNonConvertibleSubtrees(dataTypeMap, left, canPartialPushDownConjuncts)
+            trimNonConvertibleSubtreesImpl(dataTypeMap, left, canPartialPushDownConjuncts)
           rhs: Filter <-
-            trimNonConvertibleSubtrees(dataTypeMap, right, canPartialPushDownConjuncts)
+            trimNonConvertibleSubtreesImpl(dataTypeMap, right, canPartialPushDownConjuncts)
         } yield Or(lhs, rhs)
 
       case Not(child) =>
         val filteredSubtree =
-          trimNonConvertibleSubtrees(dataTypeMap, child, canPartialPushDownConjuncts = false)
+          trimNonConvertibleSubtreesImpl(dataTypeMap, child, canPartialPushDownConjuncts = false)
         filteredSubtree.map(Not(_))
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) => Some(expression)
@@ -223,7 +246,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
   private def createBuilder(
       dataTypeMap: Map[String, DataType],
-      expression: Filter,
+      expression: TrimmedFilter,
       builder: Builder): Builder = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
@@ -294,7 +317,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       case _ => builder.startAnd().literal(TruthValue.YES).end()
     }
 
-    updateBuilder(expression)
+    updateBuilder(expression.filter)
     builder
   }
 }
