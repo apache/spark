@@ -44,7 +44,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, SerializableConfiguration, SerializableJobConf, Utils}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.collection.{BitSet, CompactBuffer, OpenHashSet}
 
 /**
  * A Spark serializer that uses the <a href="https://code.google.com/p/kryo/">
@@ -213,6 +213,13 @@ class KryoSerializer(conf: SparkConf)
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
     Seq(
+      "org.apache.spark.graphx.Edge",
+      "org.apache.spark.graphx.EdgeDirection",
+      "org.apache.spark.graphx.PartitionStrategy",
+      "org.apache.spark.graphx.impl.EdgePartition",
+      "org.apache.spark.graphx.impl.VertexAttributeBlock",
+      "org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap",
+
       "org.apache.spark.sql.catalyst.expressions.UnsafeRow",
       "org.apache.spark.sql.catalyst.expressions.UnsafeArrayData",
       "org.apache.spark.sql.catalyst.expressions.UnsafeMapData",
@@ -488,7 +495,9 @@ private[serializer] object KryoSerializer {
     classOf[StorageLevel],
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
+    classOf[BitSet],
     classOf[CompactBuffer[_]],
+    classOf[OpenHashSet[_]],
     classOf[BlockManagerId],
     classOf[Array[Boolean]],
     classOf[Array[Byte]],

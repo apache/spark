@@ -17,9 +17,26 @@
 
 package org.apache.spark.graphx
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.serializer.KryoSerializer
 
 class EdgeSuite extends SparkFunSuite {
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    val edge1 = Edge(0L, 1L, 1)
+    val edge2 = Edge(1L, 2L, 2)
+
+    Seq(edge1, edge2).foreach { i =>
+      val i2 = ser.deserialize[Edge[Int]](ser.serialize(i))
+      assert(i === i2)
+    }
+  }
+
   test ("compare") {
     // descending order
     val testEdges: Array[Edge[Int]] = Array(
