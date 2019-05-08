@@ -140,7 +140,11 @@ public class ExpressionInfo {
         this(className, db, name, null, "", "", "", "", "");
     }
 
-    // This is to keep the original constructor just in case.
+    /**
+     * @deprecated This constructor is deprecated as of Spark 3.0. Use other constructors to fully
+     *   specify each argument for extended usage.
+     */
+    @Deprecated
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         // `arguments` and `examples` are concatenated for the extended description. So, here
         // simply pass the `extended` as `arguments` and an empty string for `examples`.

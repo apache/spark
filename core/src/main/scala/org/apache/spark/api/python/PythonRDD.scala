@@ -24,10 +24,6 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.concurrent.Promise
-import scala.concurrent.duration.Duration
-import scala.language.existentials
-import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -90,7 +86,7 @@ private[spark] case class PythonFunction(
 private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 
 /** Thrown for exceptions in user Python code. */
-private[spark] class PythonException(msg: String, cause: Exception)
+private[spark] class PythonException(msg: String, cause: Throwable)
   extends RuntimeException(msg, cause)
 
 /**
@@ -167,8 +163,63 @@ private[spark] object PythonRDD extends Logging {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
   }
 
+  /**
+   * A helper function to create a local RDD iterator and serve it via socket. Partitions are
+   * are collected as separate jobs, by order of index. Partition data is first requested by a
+   * non-zero integer to start a collection job. The response is prefaced by an integer with 1
+   * meaning partition data will be served, 0 meaning the local iterator has been consumed,
+   * and -1 meaining an error occurred during collection. This function is used by
+   * pyspark.rdd._local_iterator_from_socket().
+   *
+   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from these jobs, and the secret for authentication.
+   */
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
-    serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
+    val (port, secret) = SocketAuthServer.setupOneConnectionServer(
+        authHelper, "serve toLocalIterator") { s =>
+      val out = new DataOutputStream(s.getOutputStream)
+      val in = new DataInputStream(s.getInputStream)
+      Utils.tryWithSafeFinally {
+
+        // Collects a partition on each iteration
+        val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
+          rdd.sparkContext.runJob(rdd, (iter: Iterator[Any]) => iter.toArray, Seq(i)).head
+        }
+
+        // Read request for data and send next partition if nonzero
+        var complete = false
+        while (!complete && in.readInt() != 0) {
+          if (collectPartitionIter.hasNext) {
+            try {
+              // Attempt to collect the next partition
+              val partitionArray = collectPartitionIter.next()
+
+              // Send response there is a partition to read
+              out.writeInt(1)
+
+              // Write the next object and signal end of data for this iteration
+              writeIteratorToStream(partitionArray.toIterator, out)
+              out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+              out.flush()
+            } catch {
+              case e: SparkException =>
+                // Send response that an error occurred followed by error message
+                out.writeInt(-1)
+                writeUTF(e.getMessage, out)
+                complete = true
+            }
+          } else {
+            // Send response there are no more partitions to read and close
+            out.writeInt(0)
+            complete = true
+          }
+        }
+      } {
+        out.close()
+        in.close()
+      }
+    }
+    Array(port, secret)
   }
 
   def readRDDFromFile(
@@ -228,8 +279,8 @@ private[spark] object PythonRDD extends Logging {
       batchSize: Int): JavaRDD[Array[Byte]] = {
     val keyClass = Option(keyClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
     val valueClass = Option(valueClassMaybeNull).getOrElse("org.apache.hadoop.io.Text")
-    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
-    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
+    val kc = Utils.classForName[K](keyClass)
+    val vc = Utils.classForName[V](valueClass)
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
     val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(sc.hadoopConfiguration()))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
@@ -296,9 +347,9 @@ private[spark] object PythonRDD extends Logging {
       keyClass: String,
       valueClass: String,
       conf: Configuration): RDD[(K, V)] = {
-    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
-    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
-    val fc = Utils.classForName(inputFormatClass).asInstanceOf[Class[F]]
+    val kc = Utils.classForName[K](keyClass)
+    val vc = Utils.classForName[V](valueClass)
+    val fc = Utils.classForName[F](inputFormatClass)
     if (path.isDefined) {
       sc.sc.newAPIHadoopFile[K, V, F](path.get, fc, kc, vc, conf)
     } else {
@@ -365,9 +416,9 @@ private[spark] object PythonRDD extends Logging {
       keyClass: String,
       valueClass: String,
       conf: Configuration) = {
-    val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
-    val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
-    val fc = Utils.classForName(inputFormatClass).asInstanceOf[Class[F]]
+    val kc = Utils.classForName[K](keyClass)
+    val vc = Utils.classForName[V](valueClass)
+    val fc = Utils.classForName[F](inputFormatClass)
     if (path.isDefined) {
       sc.sc.hadoopFile(path.get, fc, kc, vc)
     } else {
@@ -425,29 +476,33 @@ private[spark] object PythonRDD extends Logging {
     PythonHadoopUtil.mergeConfs(baseConf, conf)
   }
 
-  private def inferKeyValueTypes[K, V](rdd: RDD[(K, V)], keyConverterClass: String = null,
-      valueConverterClass: String = null): (Class[_], Class[_]) = {
+  private def inferKeyValueTypes[K, V, KK, VV](rdd: RDD[(K, V)], keyConverterClass: String = null,
+      valueConverterClass: String = null): (Class[_ <: KK], Class[_ <: VV]) = {
     // Peek at an element to figure out key/value types. Since Writables are not serializable,
     // we cannot call first() on the converted RDD. Instead, we call first() on the original RDD
     // and then convert locally.
     val (key, value) = rdd.first()
-    val (kc, vc) = getKeyValueConverters(keyConverterClass, valueConverterClass,
-      new JavaToWritableConverter)
+    val (kc, vc) = getKeyValueConverters[K, V, KK, VV](
+      keyConverterClass, valueConverterClass, new JavaToWritableConverter)
     (kc.convert(key).getClass, vc.convert(value).getClass)
   }
 
-  private def getKeyValueTypes(keyClass: String, valueClass: String):
-      Option[(Class[_], Class[_])] = {
+  private def getKeyValueTypes[K, V](keyClass: String, valueClass: String):
+      Option[(Class[K], Class[V])] = {
     for {
       k <- Option(keyClass)
       v <- Option(valueClass)
     } yield (Utils.classForName(k), Utils.classForName(v))
   }
 
-  private def getKeyValueConverters(keyConverterClass: String, valueConverterClass: String,
-      defaultConverter: Converter[Any, Any]): (Converter[Any, Any], Converter[Any, Any]) = {
-    val keyConverter = Converter.getInstance(Option(keyConverterClass), defaultConverter)
-    val valueConverter = Converter.getInstance(Option(valueConverterClass), defaultConverter)
+  private def getKeyValueConverters[K, V, KK, VV](
+      keyConverterClass: String,
+      valueConverterClass: String,
+      defaultConverter: Converter[_, _]): (Converter[K, KK], Converter[V, VV]) = {
+    val keyConverter = Converter.getInstance(Option(keyConverterClass),
+      defaultConverter.asInstanceOf[Converter[K, KK]])
+    val valueConverter = Converter.getInstance(Option(valueConverterClass),
+      defaultConverter.asInstanceOf[Converter[V, VV]])
     (keyConverter, valueConverter)
   }
 
@@ -459,7 +514,7 @@ private[spark] object PythonRDD extends Logging {
                                keyConverterClass: String,
                                valueConverterClass: String,
                                defaultConverter: Converter[Any, Any]): RDD[(Any, Any)] = {
-    val (kc, vc) = getKeyValueConverters(keyConverterClass, valueConverterClass,
+    val (kc, vc) = getKeyValueConverters[K, V, Any, Any](keyConverterClass, valueConverterClass,
       defaultConverter)
     PythonHadoopUtil.convertRDD(rdd, kc, vc)
   }
@@ -470,7 +525,7 @@ private[spark] object PythonRDD extends Logging {
    * [[org.apache.hadoop.io.Writable]] types already, since Writables are not Java
    * `Serializable` and we can't peek at them. The `path` can be on any Hadoop file system.
    */
-  def saveAsSequenceFile[K, V, C <: CompressionCodec](
+  def saveAsSequenceFile[C <: CompressionCodec](
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       path: String,
@@ -489,7 +544,7 @@ private[spark] object PythonRDD extends Logging {
    * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
    * this RDD.
    */
-  def saveAsHadoopFile[K, V, F <: OutputFormat[_, _], C <: CompressionCodec](
+  def saveAsHadoopFile[F <: OutputFormat[_, _], C <: CompressionCodec](
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       path: String,
@@ -507,7 +562,7 @@ private[spark] object PythonRDD extends Logging {
     val codec = Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]])
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new JavaToWritableConverter)
-    val fc = Utils.classForName(outputFormatClass).asInstanceOf[Class[F]]
+    val fc = Utils.classForName[F](outputFormatClass)
     converted.saveAsHadoopFile(path, kc, vc, fc, new JobConf(mergedConf), codec = codec)
   }
 
@@ -520,7 +575,7 @@ private[spark] object PythonRDD extends Logging {
    * `confAsMap` is merged with the default Hadoop conf associated with the SparkContext of
    * this RDD.
    */
-  def saveAsNewAPIHadoopFile[K, V, F <: NewOutputFormat[_, _]](
+  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[_, _]](
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       path: String,
@@ -548,7 +603,7 @@ private[spark] object PythonRDD extends Logging {
    * (mapred vs. mapreduce). Keys/values are converted for output using either user specified
    * converters or, by default, [[org.apache.spark.api.python.JavaToWritableConverter]].
    */
-  def saveAsHadoopDataset[K, V](
+  def saveAsHadoopDataset(
       pyRDD: JavaRDD[Array[Byte]],
       batchSerialized: Boolean,
       confAsMap: java.util.HashMap[String, String],

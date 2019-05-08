@@ -65,12 +65,8 @@ private[kafka010] object CachedKafkaProducer extends Logging {
       .build[Seq[(String, Object)], Producer](cacheLoader)
 
   private def createKafkaProducer(producerConfiguration: ju.Map[String, Object]): Producer = {
-    val updatedKafkaProducerConfiguration =
-      KafkaConfigUpdater("executor", producerConfiguration.asScala.toMap)
-        .setAuthenticationConfigIfNeeded()
-        .build()
-    val kafkaProducer: Producer = new Producer(updatedKafkaProducerConfiguration)
-    logDebug(s"Created a new instance of KafkaProducer for $updatedKafkaProducerConfiguration.")
+    val kafkaProducer: Producer = new Producer(producerConfiguration)
+    logDebug(s"Created a new instance of KafkaProducer for $producerConfiguration.")
     kafkaProducer
   }
 
@@ -80,7 +76,11 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * one instance per specified kafkaParams.
    */
   private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object]): Producer = {
-    val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParams)
+    val updatedKafkaProducerConfiguration =
+      KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
+        .setAuthenticationConfigIfNeeded()
+        .build()
+    val paramsSeq: Seq[(String, Object)] = paramsToSeq(updatedKafkaProducerConfiguration)
     try {
       guavaCache.get(paramsSeq)
     } catch {

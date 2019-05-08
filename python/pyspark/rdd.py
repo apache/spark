@@ -39,9 +39,9 @@ else:
     from itertools import imap as map, ifilter as filter
 
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
-    BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
-    PickleSerializer, pack_long, AutoBatchedSerializer
+from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, NoOpSerializer, \
+    CartesianDeserializer, CloudPickleSerializer, PairDeserializer, PickleSerializer, \
+    UTF8Deserializer, pack_long, read_int, write_int
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -138,13 +138,67 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def _load_from_socket(sock_info, serializer):
+def _create_local_socket(sock_info):
     (sockfile, sock) = local_connect_and_auth(*sock_info)
-    # The RDD materialization time is unpredicable, if we set a timeout for socket reading
+    # The RDD materialization time is unpredictable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
+    return sockfile
+
+
+def _load_from_socket(sock_info, serializer):
+    sockfile = _create_local_socket(sock_info)
     # The socket will be automatically closed when garbage-collected.
     return serializer.load_stream(sockfile)
+
+
+def _local_iterator_from_socket(sock_info, serializer):
+
+    class PyLocalIterable(object):
+        """ Create a synchronous local iterable over a socket """
+
+        def __init__(self, _sock_info, _serializer):
+            self._sockfile = _create_local_socket(_sock_info)
+            self._serializer = _serializer
+            self._read_iter = iter([])  # Initialize as empty iterator
+            self._read_status = 1
+
+        def __iter__(self):
+            while self._read_status == 1:
+                # Request next partition data from Java
+                write_int(1, self._sockfile)
+                self._sockfile.flush()
+
+                # If response is 1 then there is a partition to read, if 0 then fully consumed
+                self._read_status = read_int(self._sockfile)
+                if self._read_status == 1:
+
+                    # Load the partition data as a stream and read each item
+                    self._read_iter = self._serializer.load_stream(self._sockfile)
+                    for item in self._read_iter:
+                        yield item
+
+                # An error occurred, read error message and raise it
+                elif self._read_status == -1:
+                    error_msg = UTF8Deserializer().loads(self._sockfile)
+                    raise RuntimeError("An error occurred while reading the next element from "
+                                       "toLocalIterator: {}".format(error_msg))
+
+        def __del__(self):
+            # If local iterator is not fully consumed,
+            if self._read_status == 1:
+                try:
+                    # Finish consuming partition data stream
+                    for _ in self._read_iter:
+                        pass
+                    # Tell Java to stop sending data and close connection
+                    write_int(0, self._sockfile)
+                    self._sockfile.flush()
+                except Exception:
+                    # Ignore any errors, socket is automatically closed when garbage-collected
+                    pass
+
+    return iter(PyLocalIterable(sock_info, serializer))
 
 
 def ignore_unicode_prefix(f):
@@ -2386,7 +2440,7 @@ class RDD(object):
         """
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
-        return _load_from_socket(sock_info, self._jrdd_deserializer)
+        return _local_iterator_from_socket(sock_info, self._jrdd_deserializer)
 
     def barrier(self):
         """

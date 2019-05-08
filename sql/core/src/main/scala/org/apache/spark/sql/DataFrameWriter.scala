@@ -248,7 +248,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val session = df.sparkSession
     val useV1Sources =
-      session.sessionState.conf.userV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
+      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
     val lookupCls = DataSource.lookupDataSource(source, session.sessionState.conf)
     val cls = lookupCls.newInstance() match {
       case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||

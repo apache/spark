@@ -2554,11 +2554,11 @@ spark.streams().awaitAnyTermination();   // block until any one of them terminat
 {% highlight python %}
 spark = ...  # spark session
 
-spark.streams().active  # get the list of currently active streaming queries
+spark.streams.active  # get the list of currently active streaming queries
 
-spark.streams().get(id)  # get a query object by its unique id
+spark.streams.get(id)  # get a query object by its unique id
 
-spark.streams().awaitAnyTermination()  # block until any one of them terminates
+spark.streams.awaitAnyTermination()  # block until any one of them terminates
 {% endhighlight %}
 
 </div>
@@ -2995,7 +2995,7 @@ the effect of the change is not well-defined. For all of them:
 
   - Changes to the user-defined foreach sink (that is, the `ForeachWriter` code) are allowed, but the semantics of the change depends on the code.
 
-- *Changes in projection / filter / map-like operations**: Some cases are allowed. For example:
+- *Changes in projection / filter / map-like operations*: Some cases are allowed. For example:
 
   - Addition / deletion of filters is allowed: `sdf.selectExpr("a")` to `sdf.where(...).selectExpr("a").filter(...)`.
 

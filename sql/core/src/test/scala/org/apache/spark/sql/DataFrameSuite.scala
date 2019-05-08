@@ -2144,10 +2144,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
       val captured = new ByteArrayOutputStream()
       Console.withOut(captured) {
-        df.explain()
+        df.explain(extended = true)
       }
       checkAnswer(df, spark.range(10).toDF)
-      assert(captured.toString().contains("Range (0, 10, step=1, splits=2)"))
+      val output = captured.toString
+      assert(output.contains(
+        """== Parsed Logical Plan ==
+          |'Project [*]
+          |+- 'UnresolvedRelation `tmp`""".stripMargin))
+      assert(output.contains(
+        """== Physical Plan ==
+          |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
     }
   }
 }
