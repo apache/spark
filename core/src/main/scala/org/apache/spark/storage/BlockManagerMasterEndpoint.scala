@@ -360,6 +360,8 @@ class BlockManagerMasterEndpoint(
   }
 
   private def externalShuffleServiceIdOnHost(blockManagerId: BlockManagerId): BlockManagerId = {
+    // we need to keep the executor ID of the original executor to let the shuffle service know
+    // which local directories should be used to look for the file
     BlockManagerId(blockManagerId.executorId, blockManagerId.host, externalShuffleServicePort)
   }
 

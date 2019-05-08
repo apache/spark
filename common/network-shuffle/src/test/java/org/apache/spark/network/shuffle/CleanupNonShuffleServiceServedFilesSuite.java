@@ -177,7 +177,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
   }
 
   private static TestShuffleDataContext initDataContext(boolean withFilesToKeep)
-    throws IOException {
+      throws IOException {
     TestShuffleDataContext dataContext = new TestShuffleDataContext(10, 5);
     dataContext.create();
     if (withFilesToKeep) {
@@ -193,7 +193,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     dataContext.insertSortShuffleData(rand.nextInt(1000), rand.nextInt(1000), new byte[][] {
         "ABC".getBytes(StandardCharsets.UTF_8),
         "DEF".getBytes(StandardCharsets.UTF_8)});
-    dataContext.insertCachedRddData();
+    dataContext.insertCachedRddData(12, 34, new byte[] { 42 });
   }
 
   private static void createRemovableTestFiles(TestShuffleDataContext dataContext)

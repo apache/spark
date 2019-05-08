@@ -111,17 +111,20 @@ public class TestShuffleDataContext {
     insertFile(filename);
   }
 
-  public void insertCachedRddData() throws IOException {
-    String filename = "rdd_12_34";
-    insertFile(filename);
+  public void insertCachedRddData(int rddId, int splitId, byte[] block) throws IOException {
+    String blockId = "rdd_" + rddId + "_" + splitId;
+    insertFile(blockId, block);
+  }
+  private void insertFile(String filename) throws IOException {
+    insertFile(filename, new byte[] { 42 });
   }
 
-  private void insertFile(String filename) throws IOException {
+  private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
     try {
       dataStream = new FileOutputStream(
         ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename));
-      dataStream.write(42);
+      dataStream.write(block);
     } finally {
       Closeables.close(dataStream, false);
     }
