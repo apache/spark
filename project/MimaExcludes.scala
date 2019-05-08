@@ -323,7 +323,7 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.feature.IDFModel.this"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.feature.IDF#DocumentFrequencyAggregator.idf"),
 
-    // [SPARK-27650][SQL] sepate the row iterator functionality from ColumnarBatch
+    // [SPARK-27650][SQL] separate the row iterator functionality from ColumnarBatch
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.vectorized.ColumnarBatch.getRow"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.vectorized.ColumnarBatch.rowIterator")
   )
