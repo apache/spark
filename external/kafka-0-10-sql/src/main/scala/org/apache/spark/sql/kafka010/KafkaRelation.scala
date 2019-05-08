@@ -22,7 +22,7 @@ import java.util.UUID
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Network._
+import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
