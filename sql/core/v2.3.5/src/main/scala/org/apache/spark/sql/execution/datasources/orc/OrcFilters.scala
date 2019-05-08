@@ -251,9 +251,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         } yield Or(lhs, rhs)
 
       case Not(child) =>
-        val filteredSubtree =
-          trimNonConvertibleSubtreesImpl(dataTypeMap, child, canPartialPushDownConjuncts = false)
-        filteredSubtree.map(Not(_))
+        trimNonConvertibleSubtreesImpl(dataTypeMap, child, canPartialPushDownConjuncts = false)
+            .map(Not)
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
       // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
