@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoSerializer
@@ -27,33 +29,19 @@ class EdgeSuite extends SparkFunSuite {
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
 
-    val edge1 = Edge(0L, 1L, true)
-    assert(edge1 == ser.deserialize[Edge[Boolean]](ser.serialize(edge1)))
-
-    val edge2 = Edge(0L, 1L, 1.toChar)
-    assert(edge2 == ser.deserialize[Edge[Char]](ser.serialize(edge2)))
-
-    val edge3 = Edge(0L, 1L, 1.toByte)
-    assert(edge3 == ser.deserialize[Edge[Byte]](ser.serialize(edge3)))
-
-    val edge4 = Edge(0L, 1L, 1)
-    assert(edge4 == ser.deserialize[Edge[Int]](ser.serialize(edge4)))
-
-    val edge5 = Edge(0L, 1L, 1L)
-    assert(edge5 == ser.deserialize[Edge[Long]](ser.serialize(edge5)))
-
-    val edge6 = Edge(0L, 1L, 1F)
-    assert(edge6 == ser.deserialize[Edge[Float]](ser.serialize(edge6)))
-
-    val edge7 = Edge(0L, 1L, 1D)
-    assert(edge7 == ser.deserialize[Edge[Double]](ser.serialize(edge7)))
-
-    val edge8 = Edge(0L, 1L, "1")
-    assert(edge8 == ser.deserialize[Edge[String]](ser.serialize(edge8)))
-
-    val edge9 = Edge(0L, 1L, null)
-    assert(edge9 == ser.deserialize[Edge[Null]](ser.serialize(edge9)))
+    check(Edge(0L, 1L, true))
+    check(Edge(0L, 1L, 1.toChar))
+    check(Edge(0L, 1L, 1.toByte))
+    check(Edge(0L, 1L, 1))
+    check(Edge(0L, 1L, 1L))
+    check(Edge(0L, 1L, 1F))
+    check(Edge(0L, 1L, 1D))
+    check(Edge(0L, 1L, "1"))
+    check(Edge(0L, 1L, null))
   }
 
   test ("compare") {

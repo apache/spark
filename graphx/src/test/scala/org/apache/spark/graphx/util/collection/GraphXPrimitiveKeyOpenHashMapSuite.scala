@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx.util.collection
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoSerializer
@@ -27,41 +29,37 @@ class GraphXPrimitiveKeyOpenHashMapSuite extends SparkFunSuite {
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
+    def check[K: ClassTag, V: ClassTag](t: GraphXPrimitiveKeyOpenHashMap[K, V]) {
+      assert(t.toMap ===
+        ser.deserialize[GraphXPrimitiveKeyOpenHashMap[K, V]](ser.serialize(t)).toMap)
+    }
 
-    val instance1 = new GraphXPrimitiveKeyOpenHashMap[Int, Int]
-    instance1.update(1, 1)
-    assert(instance1.toMap ==
-      ser.deserialize[GraphXPrimitiveKeyOpenHashMap[Int, Int]](ser.serialize(instance1)).toMap)
+    val map1 = new GraphXPrimitiveKeyOpenHashMap[Int, Int]
+    map1.update(1, 1)
+    check(map1)
 
-    val instance2 = new GraphXPrimitiveKeyOpenHashMap[Int, Long]
-    instance2.update(2, 2L)
-    assert(instance2.toMap ==
-      ser.deserialize[GraphXPrimitiveKeyOpenHashMap[Int, Long]](ser.serialize(instance2)).toMap)
+    val map2 = new GraphXPrimitiveKeyOpenHashMap[Int, Long]
+    map2.update(2, 2L)
+    check(map2)
 
-    val instance3 = new GraphXPrimitiveKeyOpenHashMap[Int, Double]
-    instance3.update(3, 3D)
-    assert(instance3.toMap ==
-      ser.deserialize[GraphXPrimitiveKeyOpenHashMap[Int, Double]](ser.serialize(instance3)).toMap)
+    val map3 = new GraphXPrimitiveKeyOpenHashMap[Int, Double]
+    map3.update(3, 3D)
+    check(map3)
 
-    val instance4 = new GraphXPrimitiveKeyOpenHashMap[Long, Int]
-    instance4.update(4L, 4)
-    assert(instance4.toMap ==
-      ser.deserialize[GraphXPrimitiveKeyOpenHashMap[Long, Int]](ser.serialize(instance4)).toMap)
+    val map4 = new GraphXPrimitiveKeyOpenHashMap[Long, Int]
+    map4.update(4L, 4)
+    check(map4)
 
-    val instance5 = new GraphXPrimitiveKeyOpenHashMap[Long, Long]
-    instance5.update(5L, 5L)
-    assert(instance5.toMap ==
-      ser.deserialize[GraphXPrimitiveKeyOpenHashMap[Long, Long]](ser.serialize(instance5)).toMap)
+    val map5 = new GraphXPrimitiveKeyOpenHashMap[Long, Long]
+    map5.update(5L, 5L)
+    check(map5)
 
-    val instance6 = new GraphXPrimitiveKeyOpenHashMap[Long, Double]
-    instance6.update(6L, 6D)
-    assert(instance6.toMap ==
-      ser.deserialize[GraphXPrimitiveKeyOpenHashMap[Long, Double]](ser.serialize(instance6)).toMap)
+    val map6 = new GraphXPrimitiveKeyOpenHashMap[Long, Double]
+    map6.update(6L, 6D)
+    check(map6)
 
-    val instance7 = new GraphXPrimitiveKeyOpenHashMap[String, String]
-    instance7.update("7", "7S")
-    assert(instance7.toMap ==
-      ser.deserialize[GraphXPrimitiveKeyOpenHashMap[String, String]](
-        ser.serialize(instance7)).toMap)
+    val map7 = new GraphXPrimitiveKeyOpenHashMap[String, String]
+    map7.update("7", "7S")
+    check(map7)
   }
 }
