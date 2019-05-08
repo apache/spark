@@ -140,6 +140,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 
     case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),
         insertedCols, parts, query, overwrite, false) if parts.isEmpty =>
+      // TODO Enhance insert into for non-hive source.
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
