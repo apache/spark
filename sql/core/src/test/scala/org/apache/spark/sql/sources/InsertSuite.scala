@@ -142,7 +142,8 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
       """.stripMargin)
     }.getMessage
-    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
+    assert(message.contains("the number of columns selected has 2 column(s) but " +
+      "the inserted data has 1 column(s)")
     )
   }
 

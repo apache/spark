@@ -219,7 +219,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Parameters used for writing query to a table:
    *   (tableIdentifier, partitionKeys, exists).
    */
-  type InsertTableParams = (TableIdentifier, Map[String, Option[String]], Boolean)
+  type InsertTableParams =
+    (TableIdentifier, Option[Seq[String]], Map[String, Option[String]], Boolean)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -241,11 +242,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     ctx match {
       case table: InsertIntoTableContext =>
-        val (tableIdent, partitionKeys, exists) = visitInsertIntoTable(table)
-        InsertIntoTable(UnresolvedRelation(tableIdent), partitionKeys, query, false, exists)
+        val (tableIdent, insertedCols, partitionKeys, exists) = visitInsertIntoTable(table)
+        InsertIntoTable(
+          UnresolvedRelation(tableIdent), insertedCols, partitionKeys, query, false, exists)
       case table: InsertOverwriteTableContext =>
-        val (tableIdent, partitionKeys, exists) = visitInsertOverwriteTable(table)
-        InsertIntoTable(UnresolvedRelation(tableIdent), partitionKeys, query, true, exists)
+        val (tableIdent, insertedCols, partitionKeys, exists) = visitInsertOverwriteTable(table)
+        InsertIntoTable(
+          UnresolvedRelation(tableIdent), insertedCols, partitionKeys, query, true, exists)
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
@@ -263,9 +266,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitInsertIntoTable(
       ctx: InsertIntoTableContext): InsertTableParams = withOrigin(ctx) {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
+    val insertedCols = Option(ctx.identifierList).map(visitIdentifierList)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
-    (tableIdent, partitionKeys, false)
+    (tableIdent, insertedCols, partitionKeys, false)
   }
 
   /**
@@ -283,7 +287,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
 
-    (tableIdent, partitionKeys, ctx.EXISTS() != null)
+    (tableIdent, None, partitionKeys, ctx.EXISTS() != null)
   }
 
   /**

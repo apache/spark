@@ -19,17 +19,19 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, Literal, NamedExpression, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{AtomicType, NullType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -340,24 +342,58 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
+      insertedCols: Option[Seq[String]],
       partColNames: Seq[String]): InsertIntoTable = {
 
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       insert.partition, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
+    val selectedCols = if (insertedCols == None) {
+      insert.table.output
+    } else {
+      val tableCols = insert.table.output.map(_.name)
+      val noexistsCols = insertedCols.get.filterNot(col => tableCols.contains(col))
+      if (noexistsCols.size > 0) {
+        throw new AnalysisException(s"Table $tblName does not exists these columns: $noexistsCols.")
+      }
+      insert.table.output.filter(a => insertedCols.get.contains(a.name))
+    }
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
-        s"$tblName requires that the data to be inserted have the same number of columns as the " +
-          s"target table: target table has ${insert.table.output.size} column(s) but the " +
-          s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
+        s"$tblName requires that the data to be inserted have the same number of columns as " +
+          s"the number of columns selected in the target table: the number of columns selected " +
+          s"has ${expectedColumns.length + staticPartCols.size} column(s) but the inserted data " +
+          s"has ${insert.query.output.length + staticPartCols.size} column(s), " +
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
+    val tableColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    val tableCols = tableColumns.map(_.name)
+    val filledQuery = if (insertedCols == None) {
+      insert.query
+    } else {
+      // Because `HiveFileFormat` writes data according to the index of columns which belongs
+      // target table, in order to align the data, we need to fill in some empty expressions.
+      val cols = insertedCols.get
+      val project = insert.query.asInstanceOf[Project]
+      val filledProjectList = ArrayBuffer.empty[NamedExpression]
+      var i = 0
+      tableCols.foreach { tableCol =>
+        if (cols.contains(tableCol)) {
+          filledProjectList += project.projectList(i)
+          i += 1
+        } else {
+          filledProjectList += Alias(Literal(null, NullType), "NULL")()
+        }
+      }
+      project.copy(projectList = filledProjectList.seq)
+    }
+
     val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
-      insert.query, expectedColumns, conf)
+      filledQuery, tableColumns, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
@@ -377,17 +413,19 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoTable(
+      table, insertedCols, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
-          preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
+          preprocess(
+            i, metadata.identifier.quotedString, insertedCols, metadata.partitionColumnNames)
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(i, tblName, h.partitionSchema.map(_.name))
+          preprocess(i, tblName, None, h.partitionSchema.map(_.name))
         case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(i, tblName, Nil)
+          preprocess(i, tblName, None, Nil)
         case _ => i
       }
   }
@@ -454,7 +492,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoTable(l @ LogicalRelation(relation, _, _, _), partition, query, _, _) =>
+      case InsertIntoTable(l @ LogicalRelation(relation, _, _, _), _, partition, query, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _, _) => src
@@ -476,7 +514,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           case _ => failAnalysis(s"$relation does not allow insertion.")
         }
 
-      case InsertIntoTable(t, _, _, _, _)
+      case InsertIntoTable(t, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||

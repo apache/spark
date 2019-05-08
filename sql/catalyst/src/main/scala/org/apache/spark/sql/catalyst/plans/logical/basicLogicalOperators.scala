@@ -482,6 +482,7 @@ object OverwritePartitionsDynamic {
  */
 case class InsertIntoTable(
     table: LogicalPlan,
+    insertedCols: Option[Seq[String]],
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
