@@ -289,6 +289,7 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Last]("last_value"),
     expression[Max]("max"),
+    expression[MaxBy]("max_by"),
     expression[Average]("mean"),
     expression[Min]("min"),
     expression[Percentile]("percentile"),
