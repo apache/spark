@@ -256,9 +256,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           trimNonConvertibleSubtreesImpl(dataTypeMap, child, canPartialPushDownConjuncts = false)
         filteredSubtree.map(Not(_))
 
-      // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
-      // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
-      // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) => Some(expression)
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         Some(expression)
@@ -317,45 +314,49 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         updateBuilder(child)
         builder.end()
 
-      case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+      // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
+      // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
+      // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+
+      case EqualTo(attribute, value) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         builder.startAnd().equals(quotedName, getType(attribute), castedValue).end()
 
-      case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+      case EqualNullSafe(attribute, value) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end()
 
-      case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+      case LessThan(attribute, value) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end()
 
-      case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+      case LessThanOrEqual(attribute, value) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end()
 
-      case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+      case GreaterThan(attribute, value) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end()
 
-      case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+      case GreaterThanOrEqual(attribute, value) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
         builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end()
 
-      case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
+      case IsNull(attribute) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         builder.startAnd().isNull(quotedName, getType(attribute)).end()
 
-      case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
+      case IsNotNull(attribute) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         builder.startNot().isNull(quotedName, getType(attribute)).end()
 
-      case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
+      case In(attribute, values) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
         builder.startAnd().in(quotedName, getType(attribute),

@@ -320,7 +320,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
               val filter =
                 Range(0, count).map(r => scala.util.Random.nextInt(numRows * distribution / 100))
               val whereExpr = s"value in(${filter.mkString(",")})"
-             val title = s"InSet -> InFilters (values count: $count, distribution: $distribution)"
+              val title = s"InSet -> InFilters (values count: $count, distribution: $distribution)"
               filterPushDownBenchmark(numRows, title, whereExpr)
             }
           }
@@ -418,24 +418,15 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       val columns = (1 to width).map(i => s"id c$i")
       val df = spark.range(1).selectExpr(columns: _*)
       Seq(25, 5000, 15000).foreach { numFilter =>
-        val whereExpression = (1 to numFilter)
-          .map {
-            i =>
-              EqualTo(
-                Literal(0),
-                AttributeReference(
-                  s"c1",
-                  IntegerType,
-                  nullable = true)()
-              ).asInstanceOf[Expression]
-          }
-          .foldLeft[Expression](Literal.FalseLiteral)((x, y) => Or(x, y))
+        val whereColumn = (1 to numFilter)
+            .map(i => col("c1") === lit(i))
+            .foldLeft(lit(false))(_ || _)
         val benchmark = new Benchmark(s"Select 1 row with $numFilter filters",
           numRows, minNumIters = 5, output = output)
         val name = s"Native ORC Vectorized (Pushdown)"
         benchmark.addCase(name) { _ =>
           OrcFilters.createFilter(df.schema,
-            DataSourceStrategy.translateFilter(whereExpression).toSeq)
+            DataSourceStrategy.translateFilter(whereColumn.expr).toSeq)
         }
         benchmark.run()
       }
