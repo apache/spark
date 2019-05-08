@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
-import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, ImplicitCastInputTypes, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
@@ -211,14 +210,6 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(query, expected)
   }
 
-  test("SPARK-27207: Ensure aggregate buffers are initialized again for SortBasedAggregate") {
-    withSQLConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold" -> "5") {
-      val df = data.toDF("value", "key").coalesce(2)
-      val query = df.groupBy($"key").agg(typedMax2($"value"), count($"value"), typedMax2($"value"))
-      query.show(10, false)
-    }
-  }
-
   private def typedMax(column: Column): Column = {
     val max = TypedMax(column.expr, nullable = false)
     Column(max.toAggregateExpression())
@@ -226,11 +217,6 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
   private def nullableTypedMax(column: Column): Column = {
     val max = TypedMax(column.expr, nullable = true)
-    Column(max.toAggregateExpression())
-  }
-
-  private def typedMax2(column: Column): Column = {
-    val max = TypedMax2(column.expr, nullable = false)
     Column(max.toAggregateExpression())
   }
 }
@@ -310,63 +296,6 @@ object TypedImperativeAggregateSuite {
       val isValueSet = stream.readBoolean()
       val value = stream.readInt()
       new MaxValue(value, isValueSet)
-    }
-  }
-
-  /**
-   * SPARK-27207: Dummy UDAF to test whether aggregate buffers are reinitialized for
-   * SortBasedAggregate in aggregation buffer.
-   */
-  private case class TypedMax2(
-      child: Expression,
-      nullable: Boolean = false,
-      mutableAggBufferOffset: Int = 0,
-      inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes {
-
-
-    var initialized = false
-    override def createAggregationBuffer(): MaxValue = {
-      initialized = true
-      null
-    }
-
-    override def update(buffer: MaxValue, input: InternalRow): MaxValue = {
-      // The below if condition will fail if initialize() is not called
-      assert(initialized)
-      null
-    }
-
-    override def merge(bufferMax: MaxValue, inputMax: MaxValue): MaxValue = {
-      // The below if condition will fail if initialize() is not called
-      assert(initialized)
-      null
-    }
-
-    override def eval(bufferMax: MaxValue): Any = {
-      null
-    }
-
-    override lazy val deterministic: Boolean = true
-
-    override def children: Seq[Expression] = Seq(child)
-
-    override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
-
-    override def dataType: DataType = IntegerType
-
-    override def withNewMutableAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
-      copy(mutableAggBufferOffset = newOffset)
-
-    override def withNewInputAggBufferOffset(newOffset: Int): TypedImperativeAggregate[MaxValue] =
-      copy(inputAggBufferOffset = newOffset)
-
-    override def serialize(buffer: MaxValue): Array[Byte] = {
-      null
-    }
-
-    override def deserialize(storageFormat: Array[Byte]): MaxValue = {
-      null
     }
   }
 
