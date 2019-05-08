@@ -76,7 +76,7 @@ class KafkaContinuousStream(
   }
 
   override def planInputPartitions(start: Offset): Array[InputPartition] = {
-    val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(start)
+    val oldStartPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
 
     val currentPartitionSet = offsetReader.fetchEarliestOffsets().keySet
     val newPartitions = currentPartitionSet.diff(oldStartPartitionOffsets.keySet)
