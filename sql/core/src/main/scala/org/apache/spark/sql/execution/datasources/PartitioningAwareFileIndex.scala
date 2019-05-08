@@ -56,6 +56,12 @@ abstract class PartitioningAwareFileIndex(
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
+  protected lazy val pathGlobFilter = parameters.get("pathGlobFilter").map(new GlobFilter(_))
+
+  protected def matchGlobPattern(file: FileStatus): Boolean = {
+    pathGlobFilter.forall(_.accept(file.getPath))
+  }
+
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
@@ -69,7 +75,7 @@ abstract class PartitioningAwareFileIndex(
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(isNonEmptyFile)
+              existingDir.filter(f => matchGlobPattern(f) && isNonEmptyFile(f))
 
             case None =>
               // Directory does not exist, or has no children files
@@ -89,7 +95,7 @@ abstract class PartitioningAwareFileIndex(
   override def sizeInBytes: Long = allFiles().map(_.getLen).sum
 
   def allFiles(): Seq[FileStatus] = {
-    if (partitionSpec().partitionColumns.isEmpty) {
+    val files = if (partitionSpec().partitionColumns.isEmpty) {
       // For each of the root input paths, get the list of files inside them
       rootPaths.flatMap { path =>
         // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
@@ -118,6 +124,7 @@ abstract class PartitioningAwareFileIndex(
     } else {
       leafFiles.values.toSeq
     }
+    files.filter(matchGlobPattern)
   }
 
   protected def inferPartitioning(): PartitionSpec = {
