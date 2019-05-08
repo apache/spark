@@ -286,13 +286,16 @@ function submitEventTimelineForm(e) {
         success: function(data)
         {
             var jsonStr = JSON.stringify(data);
-            console.log("Hereeeeeeeeee 1 " + jsonStr);
-            var domj = JSON.parse(jsonStr);
-            console.log("Hereeeeeeeeee 2 " + domj);
+            var timelineDom = JSON.parse(jsonStr);
 
             $(".expand-task-assignment-timeline").remove();
             $("#task-assignment-timeline").remove();
-            $("#pokemon").append(domj.abcd);
+            $("#showAdditionalMetrics").after(timelineDom.timelineData);
+            if (window.localStorage.getItem("expand-task-assignment-timeline") == "true") {
+              // Set it to false so that the click function can revert it
+              window.localStorage.setItem("expand-task-assignment-timeline", "false");
+              $("span.expand-task-assignment-timeline").trigger('click');
+            }
         }
     });
   });

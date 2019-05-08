@@ -23,19 +23,17 @@ import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
 import javax.ws.rs.core.{MediaType, Response}
 
-import org.apache.spark.SparkConf
-
+import scala.collection.mutable.HashSet
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.AppStatusUtils
 import org.apache.spark.status.api.v1.TaskData
 import org.apache.spark.ui.scope.RDDOperationGraph
-import org.apache.spark.internal.config.UI._
-
-import scala.collection.mutable.HashSet
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
@@ -260,7 +258,7 @@ private[spark] object UIUtils extends Logging {
             <ul class="nav">{header}</ul>
           </div>
         </div>
-        <div class="container-fluid" id="pokemon">
+        <div class="container-fluid">
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: bottom; display: inline-block;">

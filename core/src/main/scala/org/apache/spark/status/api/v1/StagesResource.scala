@@ -232,7 +232,6 @@ private[v1] class StagesResource extends BaseAppResource {
   HashMap[String, Object] = {
     withUI { ui =>
       val uriQueryParameters = uriInfo.getQueryParameters(true)
-      System.err.println("Hereeeeeeeeeee 1 " + uriQueryParameters.toString)
       val totalTasks = uriQueryParameters.getFirst("totalTasks").toInt
       val eventTimelineParameterTaskPage =
         uriQueryParameters.getFirst("task.eventTimelinePageNumber")
@@ -257,10 +256,9 @@ private[v1] class StagesResource extends BaseAppResource {
       val currentTime = System.currentTimeMillis()
 
       val ret = new HashMap[String, Object]()
-      val abc = UIUtils.makeTimeline(_tasksToShow, currentTime, eventTimelineTaskPage,
+      val timelineData = UIUtils.makeTimeline(_tasksToShow, currentTime, eventTimelineTaskPage,
         eventTimelineTaskPageSize, eventTimelineTotalPages, stageId, stageAttemptId, totalTasks, ui.conf)
-      System.err.println("Hereeeeeeeeeee 2 ")
-      ret.put("abcd", abc.toString())
+      ret.put("timelineData", timelineData.toString())
       ret
     }
   }
