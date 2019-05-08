@@ -189,6 +189,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * separate methods here in order to avoid dealing with the wrapper `TrimmedFilter` classes
    * in the recursive implementation here, and only wrap the final result in the outer function.
    *
+   * NOTE: If you change the set of supported `Filter` types here, you need to modify
+   * `createBuilder` accordingly!
+   *
    * @param dataTypeMap a map from the attribute name to its data type.
    * @param expression the input filter predicates.
    * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
@@ -207,6 +210,17 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
     expression match {
       case And(left, right) =>
+        // At here, it is not safe to just keep one side and remove the other side
+        // if we do not understand what the parent filters are.
+        //
+        // Here is an example used to explain the reason.
+        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+        // NOT(a = 2), which will generate wrong results.
+        //
+        // Pushing one side of AND down is only safe to do at the top level or in the child
+        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+        // can be safely removed.
         val lhs =
           trimNonConvertibleSubtreesImpl(dataTypeMap, left, canPartialPushDownConjuncts = true)
         val rhs =
@@ -245,6 +259,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           trimNonConvertibleSubtreesImpl(dataTypeMap, child, canPartialPushDownConjuncts = false)
         filteredSubtree.map(Not(_))
 
+      // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
+      // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
+      // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) => Some(expression)
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         Some(expression)
@@ -264,6 +281,19 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     }
   }
 
+  /**
+   * Build a SearchArgument for a Filter that has already been trimmed so as to only contain
+   * expressions that are convertible to a `SearchArgument`. This allows for a more efficient and
+   * more readable implementation since there's no need to check every node before converting it.
+   *
+   * NOTE: If you change the set of supported `Filter` types here, you need to modify
+   * `trimNonConvertibleSubtreesImpl` accordingly!
+   *
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the trimmed input filter predicates.
+   * @param builder the builder so far.
+   * @return
+   */
   private def createBuilder(
       dataTypeMap: Map[String, DataType],
       expression: TrimmedFilter,
@@ -334,6 +364,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         builder.startAnd().in(quotedName, getType(attribute),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end()
 
+      // This case should never happen since this function only expects fully convertible filters.
+      // However, we return true as a safety measure in case something goes wrong.
       case _ => builder.startAnd().literal(TruthValue.YES).end()
     }
 
