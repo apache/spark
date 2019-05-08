@@ -28,13 +28,32 @@ class EdgeSuite extends SparkFunSuite {
 
     val ser = new KryoSerializer(conf).newInstance()
 
-    val edge1 = Edge(0L, 1L, 1)
-    val edge2 = Edge(1L, 2L, 2)
+    val edge1 = Edge(0L, 1L, true)
+    assert(edge1 == ser.deserialize[Edge[Boolean]](ser.serialize(edge1)))
 
-    Seq(edge1, edge2).foreach { i =>
-      val i2 = ser.deserialize[Edge[Int]](ser.serialize(i))
-      assert(i === i2)
-    }
+    val edge2 = Edge(0L, 1L, 1.toChar)
+    assert(edge2 == ser.deserialize[Edge[Char]](ser.serialize(edge2)))
+
+    val edge3 = Edge(0L, 1L, 1.toByte)
+    assert(edge3 == ser.deserialize[Edge[Byte]](ser.serialize(edge3)))
+
+    val edge4 = Edge(0L, 1L, 1)
+    assert(edge4 == ser.deserialize[Edge[Int]](ser.serialize(edge4)))
+
+    val edge5 = Edge(0L, 1L, 1L)
+    assert(edge5 == ser.deserialize[Edge[Long]](ser.serialize(edge5)))
+
+    val edge6 = Edge(0L, 1L, 1F)
+    assert(edge6 == ser.deserialize[Edge[Float]](ser.serialize(edge6)))
+
+    val edge7 = Edge(0L, 1L, 1D)
+    assert(edge7 == ser.deserialize[Edge[Double]](ser.serialize(edge7)))
+
+    val edge8 = Edge(0L, 1L, "1")
+    assert(edge8 == ser.deserialize[Edge[String]](ser.serialize(edge8)))
+
+    val edge9 = Edge(0L, 1L, null)
+    assert(edge9 == ser.deserialize[Edge[Null]](ser.serialize(edge9)))
   }
 
   test ("compare") {
