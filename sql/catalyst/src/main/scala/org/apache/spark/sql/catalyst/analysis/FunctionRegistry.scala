@@ -292,6 +292,7 @@ object FunctionRegistry {
     expression[MaxBy]("max_by"),
     expression[Average]("mean"),
     expression[Min]("min"),
+    expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
