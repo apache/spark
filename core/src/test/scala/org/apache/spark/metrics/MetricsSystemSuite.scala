@@ -29,7 +29,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.Sink
 import org.apache.spark.metrics.source.{LongAccumulatorSource, Source, StaticSources}
 
-class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
+class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
   var filePath: String = _
   var conf: SparkConf = null
   var securityMgr: SecurityManager = null
@@ -74,14 +74,22 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     when(mockEnvironment.metricsSystem) thenReturn (metricsSystem)
     when(mockContext.env) thenReturn (mockEnvironment)
     val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
-    val la = mockContext.longAccumulator
-    val laSource = LongAccumulatorSource.register(mockContext, Map("la"->la))
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
+    val registry = PrivateMethod[MetricRegistry]('registry)
+    val laFirst = mockContext.longAccumulator
+    val laSecond = mockContext.longAccumulator
+    val laThird = mockContext.longAccumulator
+    val laSource =
+      LongAccumulatorSource.register(mockContext, Map("laF" -> laFirst, "laS" -> laSecond))
+    LongAccumulatorSource.register(mockContext, Map("laT" -> laThird))
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 2)
     val notRegisteredSource = new LongAccumulatorSource
     metricsSystem.removeSource(notRegisteredSource)
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 2)
     metricsSystem.removeSource(laSource)
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
+    assert(metricsSystem.invokePrivate(registry()).getNames.contains("AccumulatorSource.laT"))
+    assert(!metricsSystem.invokePrivate(registry()).getNames.contains("AccumulatorSource.laF"))
+    assert(!metricsSystem.invokePrivate(registry()).getNames.contains("AccumulatorSource.laS"))
   }
 
   test("MetricsSystem with Driver instance") {
