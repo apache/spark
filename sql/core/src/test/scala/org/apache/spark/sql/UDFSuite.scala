@@ -169,9 +169,18 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val foo2 = udf((x: String, i: Int) => x.length + i)
     spark.udf.register("mystrlen", foo2)
     assert(foo2.deterministic)
-    assert(sql("SELECT mystrlen('abc', 1)").head().getInt(0) === 4)
+    assert(sql("SELECT mystrlen('abc', 1)").head().getInt(0) == 4)
     val plan2 = sql("SELECT mystrlen('abc', 1)").queryExecution.optimizedPlan
     assert(udfNodesCount(plan2) == 0)
+
+    // udf is deterministic and args are not literal
+    withTempView("temp1") {
+      val df = sparkContext.parallelize(
+        (1 to 10).map(i => i.toString)).toDF("i1")
+      df.createOrReplaceTempView("temp1")
+      val plan = sql("SELECT mystrlen(i1, 1) FROM temp1").queryExecution.optimizedPlan
+      assert(udfNodesCount(plan) == 1)
+    }
   }
 
   test("UDF in a WHERE") {
