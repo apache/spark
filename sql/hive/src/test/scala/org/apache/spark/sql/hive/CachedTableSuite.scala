@@ -363,7 +363,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           withCache(s"$db.cachedTable") {
 
             // Create table 'cachedTable' in default db for testing purpose.
-            sql(s"CREATE TABLE $db.cachedTable STORED AS PARQUET AS SELECT 1")
+            sql(s"CREATE TABLE $db.cachedTable(key STRING) USING PARQUET LOCATION '${path.toURI}'")
 
             // Cache the table 'cachedTable' in temp db with qualified table name,
             // and then check whether the table is cached with expected name
@@ -396,15 +396,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
     }
 
-    // This section tests when a table is cached with its unqualified name but it is refreshed with
-    // its qualified name.
+    // This section tests when a table is cached with its unqualified name but it is refreshed
+    // with its qualified name.
     withTempPath { path =>
       withTempDatabase { db =>
         withTable("cachedTable") {
           withCache("cachedTable") {
 
             // Create table 'cachedTable' in default db for testing purpose.
-            sql(s"CREATE TABLE cachedTable(key, STRING) USING PARQUET LOCATION ${path.toURI}")
+            sql(s"CREATE TABLE cachedTable(key STRING) USING PARQUET LOCATION '${path.toURI}'")
 
             // Cache the table 'cachedTable' in default db without qualified table name , and then
             // check whether the table is cached with expected name.
