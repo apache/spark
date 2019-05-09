@@ -1073,7 +1073,7 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
 private[client] class Shim_v2_1 extends Shim_v2_0 {
 
   // true if there is any following stats task
-  protected lazy val hasFollowingStatsTask = Boolean.box(SQLConf.get.autoSizeUpdateEnabled)
+  protected lazy val hasFollowingStatsTask = JBoolean.FALSE
   // TODO: Now, always set environmentContext to null. In the future, we should avoid setting
   // hive-generated stats to -1 when altering tables by using environmentContext. See Hive-12730
   protected lazy val environmentContextInAlterTable = null
