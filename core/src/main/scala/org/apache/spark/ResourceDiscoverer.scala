@@ -21,11 +21,12 @@ import java.io.File
 
 import com.fasterxml.jackson.core.JsonParseException
 import org.json4s.{DefaultFormats, MappingException}
+import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils.executeAndGetOutput
-import org.json4s.JsonAST.{JObject, JValue}
 
 /**
  * Discovers resources (GPUs/FPGAs/etc). It currently only supports resources that have
