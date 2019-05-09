@@ -36,12 +36,6 @@ class PlanResolutionSuite extends AnalysisTest {
 
   private val orc2 = classOf[OrcDataSourceV2].getName
 
-  private val defaultCatalog: TableCatalog = {
-    val newCatalog = new TestTableCatalog
-    newCatalog.initialize("default", CaseInsensitiveStringMap.empty())
-    newCatalog
-  }
-
   private val testCat: TableCatalog = {
     val newCatalog = new TestTableCatalog
     newCatalog.initialize("testcat", CaseInsensitiveStringMap.empty())
@@ -49,8 +43,6 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   private val lookupCatalog: String => CatalogPlugin = {
-    case "default" =>
-      defaultCatalog
     case "testcat" =>
       testCat
     case name =>
@@ -58,7 +50,9 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   def parseAndResolve(query: String): LogicalPlan = {
-    DataSourceResolution(conf, lookupCatalog).apply(parsePlan(query))
+    val newConf = conf.copy()
+    newConf.setConfString("spark.sql.default.catalog", "testcat")
+    DataSourceResolution(newConf, lookupCatalog).apply(parsePlan(query))
   }
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
@@ -355,7 +349,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "default")
+        assert(ctas.catalog.name == "testcat")
         assert(ctas.tableName == Identifier.of(Array("mydb"), "page_view"))
         assert(ctas.properties == expectedProperties)
         assert(ctas.writeOptions.isEmpty)

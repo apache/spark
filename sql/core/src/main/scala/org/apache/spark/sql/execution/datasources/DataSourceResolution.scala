@@ -41,6 +41,8 @@ case class DataSourceResolution(
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
+  private def defaultCatalog: Option[CatalogPlugin] = conf.defaultV2Catalog.map(findCatalog)
+
   override def lookupCatalog: Option[String => CatalogPlugin] = Some(findCatalog)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -67,7 +69,9 @@ case class DataSourceResolution(
     case create: CreateTableAsSelectStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = create.tableName
-      val catalog = maybeCatalog.getOrElse(findCatalog.apply("default")).asTableCatalog
+      val catalog = maybeCatalog.orElse(defaultCatalog)
+          .getOrElse(throw new AnalysisException("Default catalog is not set"))
+          .asTableCatalog
       convertCTAS(catalog, identifier, create)
   }
 
