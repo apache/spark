@@ -22,25 +22,26 @@ import java.io.File
 import com.fasterxml.jackson.core.JsonParseException
 import org.json4s.{DefaultFormats, MappingException}
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils.executeAndGetOutput
+import org.json4s.JsonAST.{JObject, JValue}
 
 /**
- * Discovers resources (GPUs/FPGAs/etc).
+ * Discovers resources (GPUs/FPGAs/etc). It currently only supports resources that have
+ * addresses.
  * This class find resources by running and parses the output of the user specified script
  * from the config spark.{driver/executor}.resource.{resourceType}.discoveryScript.
  * The output of the script it runs is expected to be JSON in the format of the
- * ResourceInformation class, with addresses being optional.
+ * ResourceInformation class.
  *
- * For example:  {"name": "gpu","count":2, "units":"", "addresses": ["0","1"]}
+ * For example:  {"name": "gpu", "addresses": ["0","1"]}
  */
 private[spark] object ResourceDiscoverer extends Logging {
 
   private implicit val formats = DefaultFormats
 
-  def findResources(sparkconf: SparkConf, isDriver: Boolean): Map[String, ResourceInformation] = {
+  def findResources(sparkConf: SparkConf, isDriver: Boolean): Map[String, ResourceInformation] = {
     val prefix = if (isDriver) {
       SPARK_DRIVER_RESOURCE_PREFIX
     } else {
@@ -48,21 +49,21 @@ private[spark] object ResourceDiscoverer extends Logging {
     }
     // get unique resource types by grabbing first part config with multiple periods,
     // ie resourceType.count, grab resourceType part
-    val resourceTypes = sparkconf.getAllWithPrefix(prefix).map { case (k, _) =>
+    val resourceNames = sparkConf.getAllWithPrefix(prefix).map { case (k, _) =>
       k.split('.').head
     }.toSet
-    resourceTypes.map { rtype => {
-      val rInfo = getResourceInfoForType(sparkconf, prefix, rtype)
-      (rtype -> rInfo)
+    resourceNames.map { rName => {
+      val rInfo = getResourceInfoForType(sparkConf, prefix, rName)
+      (rName -> rInfo)
     }}.toMap
   }
 
   private def getResourceInfoForType(
-      sparkconf: SparkConf,
+      sparkConf: SparkConf,
       prefix: String,
       resourceType: String): ResourceInformation = {
     val discoveryConf = prefix + resourceType + SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX
-    val script = sparkconf.getOption(discoveryConf)
+    val script = sparkConf.getOption(discoveryConf)
     val result = if (script.nonEmpty) {
       val scriptFile = new File(script.get)
       // check that script exists and try to execute
@@ -70,7 +71,9 @@ private[spark] object ResourceDiscoverer extends Logging {
         try {
           val output = executeAndGetOutput(Seq(script.get), new File("."))
           val parsedJson = parse(output)
-          parsedJson.extract[ResourceInformation]
+          val name = (parsedJson \ "name").extract[String]
+          val addresses = (parsedJson \ "addresses").extract[Array[JValue]].map(_.extract[String])
+          new ResourceInformation(name, addresses)
         } catch {
           case e @ (_: SparkException | _: MappingException | _: JsonParseException) =>
             throw new SparkException(s"Error running the resource discovery script: $scriptFile" +

@@ -236,8 +236,8 @@ of the most common options to set are:
   <td>None</td>
   <td>
     The script the executor should run to discover a particular resource type. This should
-    return a JSON string in the format of the ResourceInformation class. This has a
-    name, count, units, and array of addresses.
+    write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
+    name and array of addresses.
   </td>
 </tr>
 <tr>

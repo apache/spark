@@ -45,7 +45,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript1")
       // this is a bit ugly but do it the hardway to test out some formatting
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"," +
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\"," +
         " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(file1.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
@@ -54,20 +54,19 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val resources = ResourceDiscoverer.findResources(sparkconf, false)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
-      assert(gpuValue.get.count == 2, "Should have 2")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
-      assert(gpuValue.get.units == "", "units should be empty")
       assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
       assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
     }
   }
 
-  test("Resource discoverer no addresses") {
+  // TODO
+  test("Resource discoverer no addresses errors") {
     val sparkconf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript1")
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"}",
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\"}",
         file1, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(file1.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
@@ -76,48 +75,8 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val resources = ResourceDiscoverer.findResources(sparkconf, false)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
-      assert(gpuValue.get.count == 2, "Should have 2")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
-      assert(gpuValue.get.units == "", "units should be empty")
       assert(gpuValue.get.addresses.size == 0, "Should have 0 indexes")
-    }
-  }
-
-  test("Resource discoverer no count") {
-    val sparkconf = new SparkConf
-    assume(!(Utils.isWindows))
-    withTempDir { dir =>
-      val file1 = new File(dir, "resourceDiscoverScript1")
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"units\\\":\\\"\\\"," +
-        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
-      JavaFiles.setPosixFilePermissions(file1.toPath(),
-        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
-      sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
-      val error = intercept[SparkException] {
-        ResourceDiscoverer.findResources(sparkconf, false)
-      }.getMessage()
-
-      assert(error.contains("Error running the resource discovery"))
-    }
-  }
-
-  test("Resource discoverer no count value") {
-    val sparkconf = new SparkConf
-    assume(!(Utils.isWindows))
-    withTempDir { dir =>
-      val file1 = new File(dir, "resourceDiscoverScript1")
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":, \\\"units\\\":\\\"\\\"," +
-        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
-      JavaFiles.setPosixFilePermissions(file1.toPath(),
-        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
-      sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
-      val error = intercept[SparkException] {
-        ResourceDiscoverer.findResources(sparkconf, false)
-      }.getMessage()
-
-      assert(error.contains("Error running the resource discovery"))
     }
   }
 
@@ -126,13 +85,13 @@ class ResourceDiscovererSuite extends SparkFunSuite
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val gpuDiscovery = new File(dir, "resourceDiscoverScriptgpu")
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"," +
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\", " +
         " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", gpuDiscovery, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(gpuDiscovery.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
 
       val fpgaDiscovery = new File(dir, "resourceDiscoverScriptfpga")
-      Files.write("echo {\\\"name\\\":\\\"fpga\\\", \\\"count\\\":3, \\\"units\\\":\\\"mb\\\"," +
+      Files.write("echo {\\\"name\\\":\\\"fpga\\\"," +
         " \\\"addresses\\\":[\\\"f1\\\",\\\"f2\\\",\\\"f3\\\"]}",
         fpgaDiscovery, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(fpgaDiscovery.toPath(),
@@ -146,17 +105,13 @@ class ResourceDiscovererSuite extends SparkFunSuite
       assert(resources.size === 2)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
-      assert(gpuValue.get.count == 2, "Should have 2")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
-      assert(gpuValue.get.units == "", "units should be empty")
       assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
       assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
 
       val fpgaValue = resources.get("fpga")
       assert(fpgaValue.nonEmpty, "Should have a gpu entry")
-      assert(fpgaValue.get.count == 3, "Should have 3")
       assert(fpgaValue.get.name == "fpga", "name should be fpga")
-      assert(fpgaValue.get.units == "mb", "units should be mb")
       assert(fpgaValue.get.addresses.size == 3, "Should have 3 indexes")
       assert(fpgaValue.get.addresses.deep == Array("f1", "f2", "f3").deep,
         "should have f1,f2,f3 entries")
@@ -168,7 +123,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val file1 = new File(dir, "resourceDiscoverScript2")
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\", \\\"count\\\":2, \\\"units\\\":\\\"\\\"," +
+      Files.write("echo {\\\"name\\\":\\\"gpu\\\", " +
         " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
       JavaFiles.setPosixFilePermissions(file1.toPath(),
         EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
@@ -180,12 +135,9 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val resources = ResourceDiscoverer.findResources(sparkconf, true)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
-      assert(gpuValue.get.count == 2, "Should have 2")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
-      assert(gpuValue.get.units == "", "units should be empty")
       assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
       assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
-
     }
   }
 
