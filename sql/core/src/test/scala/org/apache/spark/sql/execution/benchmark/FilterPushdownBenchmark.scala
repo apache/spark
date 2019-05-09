@@ -411,7 +411,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       }
     }
 
-    runBenchmark(s"Predicate conversion benchmark with unbalanced Expression") {
+    runBenchmark(s"Predicate conversion benchmark with unbalanced Column") {
       // This benchmark tests a very isolated part of the predicate pushdown process - specifically,
       // the individual action of converting a Spark `Expression` to an ORC `SearchArgument`.
       // This results in more granular numbers that can help highlight small performance
