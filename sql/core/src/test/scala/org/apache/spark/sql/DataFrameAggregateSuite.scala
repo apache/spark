@@ -813,6 +813,19 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(null) :: Nil
     )
 
+    // structs as ordering value.
+    checkAnswer(
+      sql("select max_by(x, y) FROM VALUES (('a', (10, 20))), (('b', (10, 50))), " +
+        "(('c', (10, 60))) AS tab(x, y)"),
+      Row("c") :: Nil
+    )
+
+    checkAnswer(
+      sql("select max_by(x, y) FROM VALUES (('a', (10, 20))), (('b', (10, 50))), " +
+        "(('c', null)) AS tab(x, y)"),
+      Row("b") :: Nil
+    )
+
     withTempView("tempView") {
       val dfWithMap = Seq((0, "a"), (1, "b"), (2, "c"))
         .toDF("x", "y")
@@ -854,6 +867,19 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT min_by(x, y) FROM VALUES (('a', null)), (('b', null)) AS tab(x, y)"),
       Row(null) :: Nil
+    )
+
+    // structs as ordering value.
+    checkAnswer(
+      sql("select min_by(x, y) FROM VALUES (('a', (10, 20))), (('b', (10, 50))), " +
+        "(('c', (10, 60))) AS tab(x, y)"),
+      Row("a") :: Nil
+    )
+
+    checkAnswer(
+      sql("select min_by(x, y) FROM VALUES (('a', null)), (('b', (10, 50))), " +
+        "(('c', (10, 60))) AS tab(x, y)"),
+      Row("b") :: Nil
     )
 
     withTempView("tempView") {
