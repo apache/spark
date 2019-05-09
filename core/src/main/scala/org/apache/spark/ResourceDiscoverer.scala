@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils.executeAndGetOutput
 /**
  * Discovers resources (GPUs/FPGAs/etc). It currently only supports resources that have
  * addresses.
- * This class find resources by running and parses the output of the user specified script
+ * This class finds resources by running and parsing the output of the user specified script
  * from the config spark.{driver/executor}.resource.{resourceType}.discoveryScript.
  * The output of the script it runs is expected to be JSON in the format of the
  * ResourceInformation class.
