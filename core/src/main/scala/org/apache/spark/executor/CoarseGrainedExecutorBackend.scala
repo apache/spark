@@ -82,22 +82,6 @@ private[spark] class CoarseGrainedExecutorBackend(
     }(ThreadUtils.sameThread)
   }
 
-  // we only support converting from units that are byte based, this will
-  // either convert it to bytes or just return the count if the units can't be
-  // parsed as bytes.
-  private def tryConvertUnitsToBytes(count: String, units: String): Long = {
-    try {
-        Utils.byteStringAsBytes(count + units)
-    } catch {
-      case e: NumberFormatException =>
-        // Ignore units not of byte types and just use count
-        logWarning("Illegal resource unit type, spark only " +
-          s"supports conversion of byte types, units: $units, " +
-          "ignoring the type and using the raw count.", e)
-        count.toLong
-    }
-  }
-
   // Check that the executor resources at startup will satisfy the user specified task
   // requirements (spark.task.resource.*) and that they match the executor configs
   // specified by the user (spark.executor.resource.*) to catch mismatches between what
