@@ -3024,6 +3024,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("reset")
     }
   }
+
+  test("string date comparison") {
+    spark.range(1).selectExpr("date '2000-01-01' as d").createOrReplaceTempView("t1")
+    val result = Date.valueOf("2000-01-01")
+    checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-1-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-1-01'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-01'"), Row(result))
+    checkAnswer(sql("select * from t1 where d > '2000-01-01'"), Nil)
+    checkAnswer(sql("select * from t1 where '2000' >= d"), Row(result))
+    checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
+  }
 }
 
 case class Foo(bar: Option[String])
