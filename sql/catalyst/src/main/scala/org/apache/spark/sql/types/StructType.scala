@@ -307,6 +307,29 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     nameToIndex.get(name)
   }
 
+  /**
+   * Returns a field in this struct and its child structs.
+   *
+   * This does not support finding fields nested in maps or arrays.
+   */
+  private[sql] def findNestedField(fieldNames: Seq[String]): Option[StructField] = {
+    fieldNames.headOption.flatMap(nameToField.get) match {
+      case Some(field) =>
+        if (fieldNames.tail.isEmpty) {
+          Some(field)
+        } else {
+          field.dataType match {
+            case struct: StructType =>
+              struct.findNestedField(fieldNames.tail)
+            case _ =>
+              None
+          }
+        }
+      case _ =>
+        None
+    }
+  }
+
   protected[sql] def toAttributes: Seq[AttributeReference] =
     map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
