@@ -145,7 +145,8 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-  def formatBytes(bytes: Long): String = {
+  // Format raw bytes to binary prefix byte units
+  def formatBytesBinary(bytes: Long): String = {
     if (bytes == 0) {
       return "0.0 B"
     }

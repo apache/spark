@@ -193,22 +193,23 @@ private[v1] class StagesResource extends BaseAppResource {
         || containsValue(UIUtils.formatDuration(task.taskMetrics.get.executorRunTime))
         || containsValue(UIUtils.formatDuration(task.taskMetrics.get.jvmGcTime))
         || containsValue(UIUtils.formatDuration(task.taskMetrics.get.resultSerializationTime))
-        || containsValue(UIUtils.formatBytes(task.taskMetrics.get.memoryBytesSpilled))
-        || containsValue(UIUtils.formatBytes(task.taskMetrics.get.diskBytesSpilled))
-        || containsValue(UIUtils.formatBytes(task.taskMetrics.get.peakExecutionMemory))
-        || containsValue(UIUtils.formatBytes(task.taskMetrics.get.inputMetrics.bytesRead))
+        || containsValue(UIUtils.formatBytesBinary(task.taskMetrics.get.memoryBytesSpilled))
+        || containsValue(UIUtils.formatBytesBinary(task.taskMetrics.get.diskBytesSpilled))
+        || containsValue(UIUtils.formatBytesBinary(task.taskMetrics.get.peakExecutionMemory))
+        || containsValue(UIUtils.formatBytesBinary(task.taskMetrics.get.inputMetrics.bytesRead))
         || containsValue(task.taskMetrics.get.inputMetrics.recordsRead)
-        || containsValue(UIUtils.formatBytes(task.taskMetrics.get.outputMetrics.bytesWritten))
+        || containsValue(UIUtils.formatBytesBinary(
+          task.taskMetrics.get.outputMetrics.bytesWritten))
         || containsValue(task.taskMetrics.get.outputMetrics.recordsWritten)
         || containsValue(UIUtils.formatDuration(
           task.taskMetrics.get.shuffleReadMetrics.fetchWaitTime))
-        || containsValue(UIUtils.formatBytes(
+        || containsValue(UIUtils.formatBytesBinary(
           task.taskMetrics.get.shuffleReadMetrics.remoteBytesRead))
-        || containsValue(UIUtils.formatBytes(
+        || containsValue(UIUtils.formatBytesBinary(
           task.taskMetrics.get.shuffleReadMetrics.localBytesRead +
           task.taskMetrics.get.shuffleReadMetrics.remoteBytesRead))
         || containsValue(task.taskMetrics.get.shuffleReadMetrics.recordsRead)
-        || containsValue(UIUtils.formatBytes(
+        || containsValue(UIUtils.formatBytesBinary(
           task.taskMetrics.get.shuffleWriteMetrics.bytesWritten))
         || containsValue(task.taskMetrics.get.shuffleWriteMetrics.recordsWritten)
         || containsValue(UIUtils.formatDuration(
