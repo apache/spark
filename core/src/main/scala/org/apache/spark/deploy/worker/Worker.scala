@@ -393,12 +393,20 @@ private[deploy] class Worker(
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
-      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress) =>
-        if (preferConfiguredMasterAddress) {
-          logInfo("Successfully registered with master " + masterAddress.toSparkURL)
-        } else {
-          logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate) =>
+        val preferredMasterAddress = {
+          if (preferConfiguredMasterAddress) {
+            masterAddress.toSparkURL
+          } else {
+            masterRef.address.toSparkURL
+          }
         }
+
+        if (duplicate) {
+          logWarning(s"Duplicate registration at master $preferredMasterAddress")
+        }
+
+        logInfo(s"Successfully registered with master $preferredMasterAddress")
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
         forwardMessageScheduler.scheduleAtFixedRate(
@@ -478,6 +486,7 @@ private[deploy] class Worker(
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
+      registered = true
       changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
       val execs = executors.values.
@@ -485,8 +494,13 @@ private[deploy] class Worker(
       masterRef.send(WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq))
 
     case ReconnectWorker(masterUrl) =>
-      logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
-      registerWithMaster()
+      if (masterUrl != activeMasterUrl) {
+        logWarning(s"New Master is at $activeMasterUrl, " +
+          s"ignore old Master ($masterUrl)'s request to reconnect")
+      } else {
+        logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
+        registerWithMaster()
+      }
 
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
