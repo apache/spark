@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{File, FileNotFoundException}
+import java.io.{File, FilenameFilter, FileNotFoundException}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT, NullData, NullUDT}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -549,6 +550,65 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         val df = spark.read.format(format).load(path.getCanonicalPath)
           .select("CoL1", "Col2", "CoL5", "CoL3")
         checkAnswer(df, Row("a", 2, "e", "c"))
+      }
+    }
+  }
+
+  test("sizeInBytes should be the total size of all files") {
+    Seq("orc", "").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          dir.delete()
+          spark.range(1000).write.orc(dir.toString)
+          // ignore hidden files
+          val allFiles = dir.listFiles(new FilenameFilter {
+            override def accept(dir: File, name: String): Boolean = {
+              !name.startsWith(".") && !name.startsWith("_")
+            }
+          })
+          val totalSize = allFiles.map(_.length()).sum
+          val df = spark.read.orc(dir.toString)
+          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(totalSize))
+        }
+      }
+    }
+  }
+
+  test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
+    Seq(1.0, 0.5).foreach { compressionFactor =>
+      withSQLConf("spark.sql.sources.fileCompressionFactor" -> compressionFactor.toString,
+        "spark.sql.autoBroadcastJoinThreshold" -> "250") {
+        withTempPath { workDir =>
+          // the file size is 486 bytes
+          val workDirPath = workDir.getAbsolutePath
+          val data1 = Seq(100, 200, 300, 400).toDF("count")
+          data1.write.orc(workDirPath + "/data1")
+          val df1FromFile = spark.read.orc(workDirPath + "/data1")
+          val data2 = Seq(100, 200, 300, 400).toDF("count")
+          data2.write.orc(workDirPath + "/data2")
+          val df2FromFile = spark.read.orc(workDirPath + "/data2")
+          val joinedDF = df1FromFile.join(df2FromFile, Seq("count"))
+          if (compressionFactor == 0.5) {
+            val bJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case bJoin: BroadcastHashJoinExec => bJoin
+            }
+            assert(bJoinExec.nonEmpty)
+            val smJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case smJoin: SortMergeJoinExec => smJoin
+            }
+            assert(smJoinExec.isEmpty)
+          } else {
+            // compressionFactor is 1.0
+            val bJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case bJoin: BroadcastHashJoinExec => bJoin
+            }
+            assert(bJoinExec.isEmpty)
+            val smJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case smJoin: SortMergeJoinExec => smJoin
+            }
+            assert(smJoinExec.nonEmpty)
+          }
+        }
       }
     }
   }
