@@ -423,8 +423,11 @@ object ScalaReflection extends ScalaReflection {
           createSerializerForGenericArray(input, dt, nullable = schemaFor(elementType).nullable)
       }
     }
-
-    tpe.dealias match {
+    val baseTpe = tpe.dealias match {
+      case annotatedType: AnnotatedType => annotatedType.underlying
+      case other => other
+    }
+    baseTpe match {
       case _ if !inputObject.dataType.isInstanceOf[ObjectType] => inputObject
 
       case t if isSubtype(t, localTypeOf[Option[_]]) =>
