@@ -110,11 +110,27 @@ object Encoders {
   def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.LocalDate` class
+   * to the internal representation of nullable Catalyst's DateType.
+   *
+   * @since 3.0.0
+   */
+  def LOCALDATE: Encoder[java.time.LocalDate] = ExpressionEncoder()
+
+  /**
    * An encoder for nullable timestamp type.
    *
    * @since 1.6.0
    */
   def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
+
+  /**
+   * Creates an encoder that serializes instances of the `java.time.Instant` class
+   * to the internal representation of nullable Catalyst's TimestampType.
+   *
+   * @since 3.0.0
+   */
+  def INSTANT: Encoder[java.time.Instant] = ExpressionEncoder()
 
   /**
    * An encoder for arrays of bytes.
@@ -133,7 +149,7 @@ object Encoders {
    *  - boxed types: Boolean, Integer, Double, etc.
    *  - String
    *  - java.math.BigDecimal, java.math.BigInteger
-   *  - time related: java.sql.Date, java.sql.Timestamp
+   *  - time related: java.sql.Date, java.sql.Timestamp, java.time.LocalDate, java.time.Instant
    *  - collection types: only array and java.util.List currently, map support is in progress
    *  - nested java bean.
    *

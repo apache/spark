@@ -60,6 +60,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
@@ -67,6 +68,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
+import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -97,6 +99,8 @@ private[spark] object Utils extends Logging {
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
+
+  private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+?)=(.+)".r
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -185,15 +189,24 @@ private[spark] object Utils extends Logging {
 
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
-    // scalastyle:off classforname
-    Try { Class.forName(clazz, false, getContextOrSparkClassLoader) }.isSuccess
-    // scalastyle:on classforname
+    Try { classForName(clazz, initialize = false) }.isSuccess
   }
 
   // scalastyle:off classforname
-  /** Preferred alternative to Class.forName(className) */
-  def classForName(className: String): Class[_] = {
-    Class.forName(className, true, getContextOrSparkClassLoader)
+  /**
+   * Preferred alternative to Class.forName(className), as well as
+   * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
+   */
+  def classForName[C](
+      className: String,
+      initialize: Boolean = true,
+      noSparkClassLoader: Boolean = false): Class[C] = {
+    if (!noSparkClassLoader) {
+      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
+    } else {
+      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
+        asInstanceOf[Class[C]]
+    }
     // scalastyle:on classforname
   }
 
@@ -335,6 +348,50 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Copy the first `maxSize` bytes of data from the InputStream to an in-memory
+   * buffer, primarily to check for corruption.
+   *
+   * This returns a new InputStream which contains the same data as the original input stream.
+   * It may be entirely on in-memory buffer, or it may be a combination of in-memory data, and then
+   * continue to read from the original stream. The only real use of this is if the original input
+   * stream will potentially detect corruption while the data is being read (eg. from compression).
+   * This allows for an eager check of corruption in the first maxSize bytes of data.
+   *
+   * @return An InputStream which includes all data from the original stream (combining buffered
+   *         data and remaining data in the original stream)
+   */
+  def copyStreamUpTo(in: InputStream, maxSize: Long): InputStream = {
+    var count = 0L
+    val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+    val fullyCopied = tryWithSafeFinally {
+      val bufSize = Math.min(8192L, maxSize)
+      val buf = new Array[Byte](bufSize.toInt)
+      var n = 0
+      while (n != -1 && count < maxSize) {
+        n = in.read(buf, 0, Math.min(maxSize - count, bufSize).toInt)
+        if (n != -1) {
+          out.write(buf, 0, n)
+          count += n
+        }
+      }
+      count < maxSize
+    } {
+      try {
+        if (count < maxSize) {
+          in.close()
+        }
+      } finally {
+        out.close()
+      }
+    }
+    if (fullyCopied) {
+      out.toChunkedByteBuffer.toInputStream(dispose = true)
+    } else {
+      new SequenceInputStream( out.toChunkedByteBuffer.toInputStream(dispose = true), in)
+    }
+  }
+
   def copyFileStreamNIO(
       input: FileChannel,
       output: FileChannel,
@@ -364,22 +421,6 @@ private[spark] object Utils extends Logging {
          |this is a kernel bug which will lead to unexpected behavior when using transferTo.
          |You can set spark.file.transferTo = false to disable this NIO feature.
            """.stripMargin)
-  }
-
-  /**
-   * Construct a URI container information used for authentication.
-   * This also sets the default authenticator to properly negotiation the
-   * user/password based on the URI.
-   *
-   * Note this relies on the Authenticator.setDefault being set properly to decode
-   * the user name and password. This is currently set in the SecurityManager.
-   */
-  def constructURIForAuthentication(uri: URI, securityMgr: SecurityManager): URI = {
-    val userCred = securityMgr.getSecretKey()
-    if (userCred == null) throw new Exception("Secret key is null with authentication on")
-    val userInfo = securityMgr.getHttpUser()  + ":" + userCred
-    new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), uri.getPath(),
-      uri.getQuery(), uri.getFragment())
   }
 
   /**
@@ -652,17 +693,7 @@ private[spark] object Utils extends Logging {
         val is = Channels.newInputStream(source)
         downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
-        var uc: URLConnection = null
-        if (securityMgr.isAuthenticationEnabled()) {
-          logDebug("fetchFile with security enabled")
-          val newuri = constructURIForAuthentication(uri, securityMgr)
-          uc = newuri.toURL().openConnection()
-          uc.setAllowUserInteraction(false)
-        } else {
-          logDebug("fetchFile not using security")
-          uc = new URL(url).openConnection()
-        }
-
+        val uc = new URL(url).openConnection()
         val timeoutMs =
           conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
         uc.setConnectTimeout(timeoutMs)
@@ -2469,6 +2500,12 @@ private[spark] object Utils extends Logging {
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
   }
 
+  def isStreamingDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+    val streamingDynamicAllocationEnabled = conf.get(STREAMING_DYN_ALLOCATION_ENABLED)
+    streamingDynamicAllocationEnabled &&
+      (!isLocalMaster(conf) || conf.get(STREAMING_DYN_ALLOCATION_TESTING))
+  }
+
   /**
    * Return the initial number of executors for dynamic allocation.
    */
@@ -2617,6 +2654,17 @@ private[spark] object Utils extends Logging {
     redact(redactionPattern, kvs.toArray)
   }
 
+  def redactCommandLineArgs(conf: SparkConf, commands: Seq[String]): Seq[String] = {
+    val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
+    commands.map {
+      case PATTERN_FOR_COMMAND_LINE_ARG(key, value) =>
+        val (_, newValue) = redact(redactionPattern, Seq((key, value))).head
+        s"-D$key=$newValue"
+
+      case cmd => cmd
+    }
+  }
+
   def stringToSeq(str: String): Seq[String] = {
     str.split(",").map(_.trim()).filter(_.nonEmpty)
   }
@@ -2633,10 +2681,11 @@ private[spark] object Utils extends Logging {
    * other state) and decide they do not need to be added. A log message is printed in that case.
    * Other exceptions are bubbled up.
    */
-  def loadExtensions[T](extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
+  def loadExtensions[T <: AnyRef](
+      extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
     classes.flatMap { name =>
       try {
-        val klass = classForName(name)
+        val klass = classForName[T](name)
         require(extClass.isAssignableFrom(klass),
           s"$name is not a subclass of ${extClass.getName()}.")
 

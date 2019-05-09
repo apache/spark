@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import java.lang.{Boolean => JBool}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.{existentials, implicitConversions}
+import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{BooleanType, DataType}
@@ -224,7 +224,7 @@ object Block {
       } else {
         args.foreach {
           case _: ExprValue | _: Inline | _: Block =>
-          case _: Int | _: Long | _: Float | _: Double | _: String =>
+          case _: Boolean | _: Int | _: Long | _: Float | _: Double | _: String =>
           case other => throw new IllegalArgumentException(
             s"Can not interpolate ${other.getClass.getName} into code block.")
         }

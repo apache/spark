@@ -163,8 +163,6 @@ class LogisticRegressionModel @Since("1.3.0") (
       numFeatures, numClasses, weights, intercept, threshold)
   }
 
-  override protected def formatVersion: String = "1.0"
-
   override def toString: String = {
     s"${super.toString}, numClasses = ${numClasses}, threshold = ${threshold.getOrElse("None")}"
   }

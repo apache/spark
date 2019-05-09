@@ -91,7 +91,7 @@ object ProcessingTime {
     if (cal.months > 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }
-    new ProcessingTime(cal.microseconds / 1000)
+    new ProcessingTime(TimeUnit.MICROSECONDS.toMillis(cal.microseconds))
   }
 
   /**

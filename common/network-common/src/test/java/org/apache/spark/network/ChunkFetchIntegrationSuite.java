@@ -56,6 +56,7 @@ public class ChunkFetchIntegrationSuite {
   static final int BUFFER_CHUNK_INDEX = 0;
   static final int FILE_CHUNK_INDEX = 1;
 
+  static TransportContext context;
   static TransportServer server;
   static TransportClientFactory clientFactory;
   static StreamManager streamManager;
@@ -117,7 +118,7 @@ public class ChunkFetchIntegrationSuite {
         return streamManager;
       }
     };
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
   }
@@ -127,6 +128,7 @@ public class ChunkFetchIntegrationSuite {
     bufferChunk.release();
     server.close();
     clientFactory.close();
+    context.close();
     testFile.delete();
   }
 

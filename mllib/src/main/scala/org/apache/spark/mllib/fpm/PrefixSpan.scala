@@ -628,8 +628,6 @@ class PrefixSpanModel[Item] @Since("1.5.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     PrefixSpanModel.SaveLoadV1_0.save(this, path)
   }
-
-  override protected val formatVersion: String = "1.0"
 }
 
 @Since("2.0.0")

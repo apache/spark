@@ -133,7 +133,13 @@ object ImageSchema {
    */
   private[spark] def decode(origin: String, bytes: Array[Byte]): Option[Row] = {
 
-    val img = ImageIO.read(new ByteArrayInputStream(bytes))
+    val img = try {
+      ImageIO.read(new ByteArrayInputStream(bytes))
+    } catch {
+      // Catch runtime exception because `ImageIO` may throw unexcepted `RuntimeException`.
+      // But do not catch the declared `IOException` (regarded as FileSystem failure)
+      case _: RuntimeException => null
+    }
 
     if (img == null) {
       None

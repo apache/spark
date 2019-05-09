@@ -48,8 +48,6 @@ class PowerIterationClusteringModel @Since("1.3.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     PowerIterationClusteringModel.SaveLoadV1_0.save(sc, this, path)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 @Since("1.4.0")

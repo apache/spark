@@ -197,17 +197,40 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
   }
 }
 
-checkTypeRequirementForArrow <- function(dataHead, schema) {
-  # Currenty Arrow optimization does not support raw for now.
-  # Also, it does not support explicit float type set by users. It leads to
-  # incorrect conversion. We will fall back to the path without Arrow optimization.
-  if (any(sapply(dataHead, is.raw))) {
-    stop("Arrow optimization with R DataFrame does not support raw type yet.")
-  }
-  if (inherits(schema, "structType")) {
-    if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
-      stop("Arrow optimization with R DataFrame does not support FloatType type yet.")
+getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
+  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
+    if (is.null(firstRow)) {
+      stopifnot(!is.null(rdd))
+      firstRow <- firstRDD(rdd)
     }
+    names <- if (is.null(schema)) {
+      names(firstRow)
+    } else {
+      as.list(schema)
+    }
+    if (is.null(names)) {
+      names <- lapply(1:length(firstRow), function(x) {
+        paste0("_", as.character(x))
+      })
+    }
+
+    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
+    # TODO(davies): remove this once SPARK-2775 is fixed
+    names <- lapply(names, function(n) {
+      nn <- gsub("[.]", "_", n)
+      if (nn != n) {
+        warning(paste("Use", nn, "instead of", n, "as column name"))
+      }
+      nn
+    })
+
+    types <- lapply(firstRow, infer_type)
+    fields <- lapply(1:length(firstRow), function(i) {
+      structField(names[[i]], types[[i]], TRUE)
+    })
+    schema <- do.call(structType, fields)
+  } else {
+    schema
   }
 }
 
@@ -260,8 +283,9 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     if (arrowEnabled) {
       useArrow <- tryCatch({
         stopifnot(length(data) > 0)
-        dataHead <- head(data, 1)
-        checkTypeRequirementForArrow(data, schema)
+        firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
+        schema <- getSchema(schema, firstRow = firstRow)
+        checkSchemaInArrow(schema)
         fileName <- tempfile(pattern = "sparwriteToFileInArrowk-arrow", fileext = ".tmp")
         tryCatch({
           writeToFileInArrow(fileName, data, numPartitions)
@@ -274,8 +298,6 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
           # File might not be created.
           suppressWarnings(file.remove(fileName))
         })
-
-        firstRow <- do.call(mapply, append(args, dataHead))[[1]]
         TRUE
       },
       error = function(e) {
@@ -318,37 +340,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     stop(paste("unexpected type:", class(data)))
   }
 
-  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    if (is.null(firstRow)) {
-      firstRow <- firstRDD(rdd)
-    }
-    names <- if (is.null(schema)) {
-      names(firstRow)
-    } else {
-      as.list(schema)
-    }
-    if (is.null(names)) {
-      names <- lapply(1:length(firstRow), function(x) {
-        paste("_", as.character(x), sep = "")
-      })
-    }
-
-    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
-    # TODO(davies): remove this once SPARK-2775 is fixed
-    names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
-      if (nn != n) {
-        warning(paste("Use", nn, "instead of", n, " as column name"))
-      }
-      nn
-    })
-
-    types <- lapply(firstRow, infer_type)
-    fields <- lapply(1:length(firstRow), function(i) {
-      structField(names[[i]], types[[i]], TRUE)
-    })
-    schema <- do.call(structType, fields)
-  }
+  schema <- getSchema(schema, firstRow, rdd)
 
   stopifnot(class(schema) == "structType")
 
@@ -469,7 +461,7 @@ read.parquet <- function(path, ...) {
 #'
 #' Loads text files and returns a SparkDataFrame whose schema starts with
 #' a string column named "value", and followed by partitioned columns if
-#' there are any.
+#' there are any. The text files must be encoded as UTF-8.
 #'
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'

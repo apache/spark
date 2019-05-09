@@ -27,7 +27,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -279,13 +278,10 @@ class ExecutorSuite extends SparkFunSuite
     val heartbeats = ArrayBuffer[Heartbeat]()
     val mockReceiver = mock[RpcEndpointRef]
     when(mockReceiver.askSync(any[Heartbeat], any[RpcTimeout])(any))
-      .thenAnswer(new Answer[HeartbeatResponse] {
-        override def answer(invocation: InvocationOnMock): HeartbeatResponse = {
-          val args = invocation.getArguments()
-          val mock = invocation.getMock
-          heartbeats += args(0).asInstanceOf[Heartbeat]
-          HeartbeatResponse(false)
-        }
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val args = invocation.getArguments()
+        heartbeats += args(0).asInstanceOf[Heartbeat]
+        HeartbeatResponse(false)
       })
     val receiverRef = executorClass.getDeclaredField("heartbeatReceiverRef")
     receiverRef.setAccessible(true)

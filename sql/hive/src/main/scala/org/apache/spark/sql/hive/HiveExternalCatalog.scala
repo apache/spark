@@ -128,7 +128,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def verifyTableProperties(table: CatalogTable): Unit = {
     val invalidKeys = table.properties.keys.filter(_.startsWith(SPARK_SQL_PREFIX))
     if (invalidKeys.nonEmpty) {
-      throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
+      throw new AnalysisException(s"Cannot persist ${table.qualifiedName} into Hive metastore " +
         s"as table property keys may not start with '$SPARK_SQL_PREFIX': " +
         invalidKeys.mkString("[", ", ", "]"))
     }

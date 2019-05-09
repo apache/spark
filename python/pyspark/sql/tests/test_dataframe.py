@@ -581,14 +581,15 @@ class DataFrameTests(ReusedSQLTestCase):
 
     # Regression test for SPARK-23360
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_create_dateframe_from_pandas_with_dst(self):
+    def test_create_dataframe_from_pandas_with_dst(self):
         import pandas as pd
+        from pandas.util.testing import assert_frame_equal
         from datetime import datetime
 
         pdf = pd.DataFrame({'time': [datetime(2015, 10, 31, 22, 30)]})
 
         df = self.spark.createDataFrame(pdf)
-        self.assertPandasEqual(pdf, df.toPandas())
+        assert_frame_equal(pdf, df.toPandas())
 
         orig_env_tz = os.environ.get('TZ', None)
         try:
@@ -597,7 +598,7 @@ class DataFrameTests(ReusedSQLTestCase):
             time.tzset()
             with self.sql_conf({'spark.sql.session.timeZone': tz}):
                 df = self.spark.createDataFrame(pdf)
-                self.assertPandasEqual(pdf, df.toPandas())
+                assert_frame_equal(pdf, df.toPandas())
         finally:
             del os.environ['TZ']
             if orig_env_tz is not None:
@@ -675,6 +676,34 @@ class DataFrameTests(ReusedSQLTestCase):
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
                     self.assertEquals(None, df._repr_html_())
                     self.assertEquals(expected, df.__repr__())
+
+    def test_to_local_iterator(self):
+        df = self.spark.range(8, numPartitions=4)
+        expected = df.collect()
+        it = df.toLocalIterator()
+        self.assertEqual(expected, list(it))
+
+        # Test DataFrame with empty partition
+        df = self.spark.range(3, numPartitions=4)
+        it = df.toLocalIterator()
+        expected = df.collect()
+        self.assertEqual(expected, list(it))
+
+    def test_to_local_iterator_not_fully_consumed(self):
+        # SPARK-23961: toLocalIterator throws exception when not fully consumed
+        # Create a DataFrame large enough so that write to socket will eventually block
+        df = self.spark.range(1 << 20, numPartitions=2)
+        it = df.toLocalIterator()
+        self.assertEqual(df.take(1)[0], next(it))
+        with QuietTest(self.sc):
+            it = None  # remove iterator from scope, socket is closed when cleaned up
+            # Make sure normal df operations still work
+            result = []
+            for i, row in enumerate(df.toLocalIterator()):
+                result.append(row)
+                if i == 7:
+                    break
+            self.assertEqual(df.take(8), result)
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

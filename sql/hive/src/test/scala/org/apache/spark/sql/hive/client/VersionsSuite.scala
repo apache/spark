@@ -183,7 +183,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: databaseExists") {
-      assert(client.databaseExists("default") == true)
+      assert(client.databaseExists("default"))
       assert(client.databaseExists("nonexist") == false)
     }
 
@@ -198,7 +198,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: dropDatabase") {
-      assert(client.databaseExists("temporary") == true)
+      assert(client.databaseExists("temporary"))
       client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
       assert(client.databaseExists("temporary") == false)
     }
@@ -492,7 +492,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         // Hive 0.12 doesn't allow customized permanent functions
         assert(client.functionExists("default", "func1") == false)
       } else {
-        assert(client.functionExists("default", "func1") == true)
+        assert(client.functionExists("default", "func1"))
       }
     }
 
@@ -504,7 +504,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         }
       } else {
         client.renameFunction("default", "func1", "func2")
-        assert(client.functionExists("default", "func2") == true)
+        assert(client.functionExists("default", "func2"))
       }
     }
 
@@ -579,6 +579,17 @@ class VersionsSuite extends SparkFunSuite with Logging {
         client.runSqlHive("CREATE TABLE indexed_table (key INT)")
         client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
           "as 'COMPACT' WITH DEFERRED REBUILD")
+      }
+    }
+
+    test(s"$version: sql read hive materialized view") {
+      // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
+      // But skip Hive 3.1 because of SPARK-27074.
+      if (version == "2.3") {
+        client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
+        client.runSqlHive("CREATE MATERIALIZED VIEW mv1 AS SELECT * FROM materialized_view_tbl")
+        val e = intercept[AnalysisException](versionSpark.table("mv1").collect()).getMessage
+        assert(e.contains("Hive materialized view is not supported"))
       }
     }
 

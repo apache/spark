@@ -41,6 +41,9 @@ public class CalendarIntervalSuite {
   public void toStringTest() {
     CalendarInterval i;
 
+    i = new CalendarInterval(0, 0);
+    assertEquals("interval 0 microseconds", i.toString());
+
     i = new CalendarInterval(34, 0);
     assertEquals("interval 2 years 10 months", i.toString());
 

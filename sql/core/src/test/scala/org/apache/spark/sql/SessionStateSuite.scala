@@ -37,7 +37,10 @@ class SessionStateSuite extends SparkFunSuite {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    activeSession = SparkSession.builder().master("local").getOrCreate()
+    activeSession = SparkSession.builder()
+      .master("local")
+      .config("default-config", "default")
+      .getOrCreate()
   }
 
   override def afterAll(): Unit = {
@@ -218,5 +221,22 @@ class SessionStateSuite extends SparkFunSuite {
   test("fork new session and inherit reference to SharedState") {
     val forkedSession = activeSession.cloneSession()
     assert(activeSession.sharedState eq forkedSession.sharedState)
+  }
+
+  test("SPARK-27253: forked new session should not discard SQLConf overrides") {
+    val key = "default-config"
+    try {
+      // override default config
+      activeSession.conf.set(key, "active")
+
+      val forkedSession = activeSession.cloneSession()
+      assert(forkedSession ne activeSession)
+      assert(forkedSession.conf ne activeSession.conf)
+
+      // forked new session should not discard SQLConf overrides
+      assert(forkedSession.conf.get(key) == "active")
+    } finally {
+      activeSession.conf.unset(key)
+    }
   }
 }

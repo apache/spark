@@ -181,12 +181,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("200ms")
 
-  private[spark] val SCHEDULER_SERVICES = ConfigBuilder("spark.yarn.services")
-    .doc("A comma-separated list of class names of services to add to the scheduler.")
-    .stringConf
-    .toSequence
-    .createWithDefault(Nil)
-
   private[spark] val AM_FINAL_MSG_LIMIT = ConfigBuilder("spark.yarn.am.finalMessageLimit")
     .doc("The limit size of final diagnostic message for our ApplicationMaster to unregister from" +
       " the ResourceManager.")
@@ -315,6 +309,12 @@ package object config {
     ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  /* Initially blacklisted YARN nodes. */
+  private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."

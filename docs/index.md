@@ -3,6 +3,21 @@ layout: global
 displayTitle: Spark Overview
 title: Overview
 description: Apache Spark SPARK_VERSION_SHORT documentation homepage
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.
@@ -20,7 +35,7 @@ Please see [Spark Security](security.html) before downloading and running Spark.
 Get Spark from the [downloads page](https://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
 Users can also download a "Hadoop free" binary and run Spark with any Hadoop version
 [by augmenting Spark's classpath](hadoop-provided.html).
-Scala and Java users can include Spark in their projects using its Maven coordinates and in the future Python users can also install Spark from PyPI.
+Scala and Java users can include Spark in their projects using its Maven coordinates and Python users can install Spark from PyPI.
 
 
 If you'd like to build Spark from 
@@ -31,7 +46,8 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
 or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 8+, Python 2.7+/3.4+ and R 3.1+. R prior to version 3.4 support is deprecated as of Spark 3.0.0.
+Spark runs on Java 8+, Scala 2.12, Python 2.7+/3.4+ and R 3.1+.
+R prior to version 3.4 support is deprecated as of Spark 3.0.0.
 For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).

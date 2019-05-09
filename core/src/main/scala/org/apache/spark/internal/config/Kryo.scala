@@ -34,11 +34,11 @@ private[spark] object Kryo {
     .toSequence
     .createWithDefault(Nil)
 
-  val KRYO_USE_UNSAFE = ConfigBuilder("spark.kyro.unsafe")
+  val KRYO_USE_UNSAFE = ConfigBuilder("spark.kryo.unsafe")
     .booleanConf
     .createWithDefault(false)
 
-  val KRYO_USE_POOL = ConfigBuilder("spark.kyro.pool")
+  val KRYO_USE_POOL = ConfigBuilder("spark.kryo.pool")
     .booleanConf
     .createWithDefault(true)
 

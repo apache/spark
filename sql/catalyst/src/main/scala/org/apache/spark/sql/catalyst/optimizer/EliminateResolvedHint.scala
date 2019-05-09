@@ -30,30 +30,58 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val pulledUp = plan transformUp {
       case j: Join =>
-        val leftHint = mergeHints(collectHints(j.left))
-        val rightHint = mergeHints(collectHints(j.right))
-        j.copy(hint = JoinHint(leftHint, rightHint))
+        val (newLeft, leftHints) = extractHintsFromPlan(j.left)
+        val (newRight, rightHints) = extractHintsFromPlan(j.right)
+        val newJoinHint = JoinHint(mergeHints(leftHints), mergeHints(rightHints))
+        j.copy(left = newLeft, right = newRight, hint = newJoinHint)
     }
     pulledUp.transformUp {
-      case h: ResolvedHint => h.child
+      case h: ResolvedHint =>
+        handleInvalidHintInfo(h.hints)
+        h.child
     }
   }
 
+  /**
+   * Combine a list of [[HintInfo]]s into one [[HintInfo]].
+   */
   private def mergeHints(hints: Seq[HintInfo]): Option[HintInfo] = {
-    hints.reduceOption((h1, h2) => HintInfo(
-      broadcast = h1.broadcast || h2.broadcast))
+    hints.reduceOption((h1, h2) => h1.merge(h2, handleOverriddenHintInfo))
   }
 
-  private def collectHints(plan: LogicalPlan): Seq[HintInfo] = {
+  /**
+   * Extract all hints from the plan, returning a list of extracted hints and the transformed plan
+   * with [[ResolvedHint]] nodes removed. The returned hint list comes in top-down order.
+   * Note that hints can only be extracted from under certain nodes. Those that cannot be extracted
+   * in this method will be cleaned up later by this rule, and may emit warnings depending on the
+   * configurations.
+   */
+  private def extractHintsFromPlan(plan: LogicalPlan): (LogicalPlan, Seq[HintInfo]) = {
     plan match {
-      case h: ResolvedHint => collectHints(h.child) :+ h.hints
-      case u: UnaryNode => collectHints(u.child)
+      case h: ResolvedHint =>
+        val (plan, hints) = extractHintsFromPlan(h.child)
+        (plan, h.hints +: hints)
+      case u: UnaryNode =>
+        val (plan, hints) = extractHintsFromPlan(u.child)
+        (u.withNewChildren(Seq(plan)), hints)
       // TODO revisit this logic:
       // except and intersect are semi/anti-joins which won't return more data then
       // their left argument, so the broadcast hint should be propagated here
-      case i: Intersect => collectHints(i.left)
-      case e: Except => collectHints(e.left)
-      case _ => Seq.empty
+      case i: Intersect =>
+        val (plan, hints) = extractHintsFromPlan(i.left)
+        (i.copy(left = plan), hints)
+      case e: Except =>
+        val (plan, hints) = extractHintsFromPlan(e.left)
+        (e.copy(left = plan), hints)
+      case p: LogicalPlan => (p, Seq.empty)
     }
+  }
+
+  private def handleInvalidHintInfo(hint: HintInfo): Unit = {
+    logWarning(s"A join hint $hint is specified but it is not part of a join relation.")
+  }
+
+  private def handleOverriddenHintInfo(hint: HintInfo): Unit = {
+    logWarning(s"Join hint $hint is overridden by another hint and will not take effect.")
   }
 }

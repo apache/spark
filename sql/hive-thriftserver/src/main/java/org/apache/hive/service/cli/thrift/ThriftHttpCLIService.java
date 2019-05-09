@@ -144,7 +144,7 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       // Finally, start the server
       httpServer.start();
       String msg = "Started " + ThriftHttpCLIService.class.getSimpleName() + " in " + schemeName
-          + " mode on port " + portNum + " path=" + httpPath + " with " + minWorkerThreads + "..."
+          + " mode on port " + connector.getLocalPort()+ " path=" + httpPath + " with " + minWorkerThreads + "..."
           + maxWorkerThreads + " worker threads";
       LOG.info(msg);
       httpServer.join();

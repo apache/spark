@@ -137,29 +137,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(configuredPythonPod.container.getImage === "spark-driver-py:latest")
   }
 
-  test("Additional system properties resolve jars and set cluster-mode confs.") {
-    val allJars = Seq("local:///opt/spark/jar1.jar", "hdfs:///opt/spark/jar2.jar")
-    val allFiles = Seq("https://localhost:9000/file1.txt", "local:///opt/spark/file2.txt")
-    val sparkConf = new SparkConf()
-      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
-      .setJars(allJars)
-      .set(FILES, allFiles)
-      .set(CONTAINER_IMAGE, "spark-driver:latest")
-    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
-
-    val step = new BasicDriverFeatureStep(kubernetesConf)
-    val additionalProperties = step.getAdditionalPodSystemProperties()
-    val expectedSparkConf = Map(
-      KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
-      "spark.app.id" -> KubernetesTestConf.APP_ID,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> kubernetesConf.resourceNamePrefix,
-      "spark.kubernetes.submitInDriver" -> "true",
-      JARS.key -> "/opt/spark/jar1.jar,hdfs:///opt/spark/jar2.jar",
-      FILES.key -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt",
-      MEMORY_OVERHEAD_FACTOR.key -> MEMORY_OVERHEAD_FACTOR.defaultValue.get.toString)
-    assert(additionalProperties === expectedSparkConf)
-  }
-
   // Memory overhead tests. Tuples are:
   //   test name, main resource, overhead factor, expected factor
   Seq(

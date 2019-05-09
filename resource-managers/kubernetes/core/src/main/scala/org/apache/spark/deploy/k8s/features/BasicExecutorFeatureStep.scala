@@ -83,6 +83,11 @@ private[spark] class BasicExecutorFeatureStep(
     // name as the hostname.  This preserves uniqueness since the end of name contains
     // executorId
     val hostname = name.substring(Math.max(0, name.length - 63))
+      // Remove non-word characters from the start of the hostname
+      .replaceAll("^[^\\w]+", "")
+      // Replace dangerous characters in the remaining string with a safe alternative.
+      .replaceAll("[^\\w-]+", "_")
+
     val executorMemoryQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryTotal}Mi")
       .build()

@@ -35,19 +35,29 @@ case class AnalyzeTableCommand(
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
-    }
+      // Analyzes a catalog view if the view is cached
+      val table = sparkSession.table(tableIdent.quotedString)
+      val cacheManager = sparkSession.sharedState.cacheManager
+      if (cacheManager.lookupCachedData(table.logicalPlan).isDefined) {
+        if (!noscan) {
+          // To collect table stats, materializes an underlying columnar RDD
+          table.count()
+        }
+      } else {
+        throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      }
+    } else {
+      // Compute stats for the whole table
+      val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val newRowCount =
+        if (noscan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
-    // Compute stats for the whole table
-    val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
-    val newRowCount =
-      if (noscan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
-
-    // Update the metastore if the above statistics of the table are different from those
-    // recorded in the metastore.
-    val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
-    if (newStats.isDefined) {
-      sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
+      // Update the metastore if the above statistics of the table are different from those
+      // recorded in the metastore.
+      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      if (newStats.isDefined) {
+        sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
+      }
     }
 
     Seq.empty[Row]

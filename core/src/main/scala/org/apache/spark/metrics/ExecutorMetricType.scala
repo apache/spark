@@ -19,9 +19,12 @@ package org.apache.spark.metrics
 import java.lang.management.{BufferPoolMXBean, ManagementFactory}
 import javax.management.ObjectName
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ProcfsMetricsGetter
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.memory.MemoryManager
 
 /**
@@ -99,6 +102,63 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
   }
 }
 
+case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
+  private var nonBuiltInCollectors: Seq[String] = Nil
+
+  override val names = Seq(
+    "MinorGCCount",
+    "MinorGCTime",
+    "MajorGCCount",
+    "MajorGCTime"
+  )
+
+  /* We builtin some common GC collectors which categorized as young generation and old */
+  private[spark] val YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS = Seq(
+    "Copy",
+    "PS Scavenge",
+    "ParNew",
+    "G1 Young Generation"
+  )
+
+  private[spark] val OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS = Seq(
+    "MarkSweepCompact",
+    "PS MarkSweep",
+    "ConcurrentMarkSweep",
+    "G1 Old Generation"
+  )
+
+  private lazy val youngGenerationGarbageCollector: Seq[String] = {
+    SparkEnv.get.conf.get(config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS)
+  }
+
+  private lazy val oldGenerationGarbageCollector: Seq[String] = {
+    SparkEnv.get.conf.get(config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS)
+  }
+
+  override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
+    val gcMetrics = new Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
+    ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
+      if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
+        gcMetrics(0) = mxBean.getCollectionCount
+        gcMetrics(1) = mxBean.getCollectionTime
+      } else if (oldGenerationGarbageCollector.contains(mxBean.getName)) {
+        gcMetrics(2) = mxBean.getCollectionCount
+        gcMetrics(3) = mxBean.getCollectionTime
+      } else if (!nonBuiltInCollectors.contains(mxBean.getName)) {
+        nonBuiltInCollectors = mxBean.getName +: nonBuiltInCollectors
+        // log it when first seen
+        logWarning(s"To enable non-built-in garbage collector(s) " +
+          s"$nonBuiltInCollectors, users should configure it(them) to " +
+          s"${config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS.key} or " +
+          s"${config.EVENT_LOG_GC_METRICS_OLD_GENERATION_GARBAGE_COLLECTORS.key}")
+      } else {
+        // do nothing
+      }
+    }
+    gcMetrics
+  }
+}
+
 case object OnHeapExecutionMemory extends MemoryManagerExecutorMetricType(
   _.onHeapExecutionMemoryUsed)
 
@@ -137,7 +197,8 @@ private[spark] object ExecutorMetricType {
     OffHeapUnifiedMemory,
     DirectPoolMemory,
     MappedPoolMemory,
-    ProcessTreeMetrics
+    ProcessTreeMetrics,
+    GarbageCollectionMetrics
   )
 
 

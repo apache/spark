@@ -345,10 +345,10 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
-    // ... -> BroadcastHashJoin(nodeId = 0)
+    // ... -> BroadcastHashJoin(nodeId = 1)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> (("BroadcastHashJoin", Map(
+      1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L))))
     )
   }
@@ -573,5 +573,27 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
           "number of files read" -> 2L))))
       )
     }
+  }
+
+  test("InMemoryTableScan shows the table name on UI if possible") {
+    // Show table name on UI
+    withView("inMemoryTable", "```a``b```") {
+      sql("CREATE TEMPORARY VIEW inMemoryTable AS SELECT 1 AS c1")
+      sql("CACHE TABLE inMemoryTable")
+      testSparkPlanMetrics(spark.table("inMemoryTable"), 1,
+        Map(0L -> (("Scan In-memory table `inMemoryTable`", Map.empty)))
+      )
+
+      sql("CREATE TEMPORARY VIEW ```a``b``` AS SELECT 2 AS c1")
+      sql("CACHE TABLE ```a``b```")
+      testSparkPlanMetrics(spark.table("```a``b```"), 1,
+        Map(0L -> (("Scan In-memory table ```a``b```", Map.empty)))
+      )
+    }
+
+    // Show InMemoryTableScan on UI
+    testSparkPlanMetrics(spark.range(1).cache().select("id"), 1,
+      Map(0L -> (("InMemoryTableScan", Map.empty)))
+    )
   }
 }

@@ -21,8 +21,7 @@ import java.util.regex.Pattern
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceV2, SessionConfigSupport}
+import org.apache.spark.sql.sources.v2.{SessionConfigSupport, TableProvider}
 
 private[sql] object DataSourceV2Utils extends Logging {
 
@@ -34,34 +33,28 @@ private[sql] object DataSourceV2Utils extends Logging {
    * `spark.datasource.$keyPrefix`. A session config `spark.datasource.$keyPrefix.xxx -> yyy` will
    * be transformed into `xxx -> yyy`.
    *
-   * @param ds a [[DataSourceV2]] object
+   * @param source a [[TableProvider]] object
    * @param conf the session conf
    * @return an immutable map that contains all the extracted and transformed k/v pairs.
    */
-  def extractSessionConfigs(ds: DataSourceV2, conf: SQLConf): Map[String, String] = ds match {
-    case cs: SessionConfigSupport =>
-      val keyPrefix = cs.keyPrefix()
-      require(keyPrefix != null, "The data source config key prefix can't be null.")
+  def extractSessionConfigs(source: TableProvider, conf: SQLConf): Map[String, String] = {
+    source match {
+      case cs: SessionConfigSupport =>
+        val keyPrefix = cs.keyPrefix()
+        require(keyPrefix != null, "The data source config key prefix can't be null.")
 
-      val pattern = Pattern.compile(s"^spark\\.datasource\\.$keyPrefix\\.(.+)")
+        val pattern = Pattern.compile(s"^spark\\.datasource\\.$keyPrefix\\.(.+)")
 
-      conf.getAllConfs.flatMap { case (key, value) =>
-        val m = pattern.matcher(key)
-        if (m.matches() && m.groupCount() > 0) {
-          Seq((m.group(1), value))
-        } else {
-          Seq.empty
+        conf.getAllConfs.flatMap { case (key, value) =>
+          val m = pattern.matcher(key)
+          if (m.matches() && m.groupCount() > 0) {
+            Seq((m.group(1), value))
+          } else {
+            Seq.empty
+          }
         }
-      }
 
-    case _ => Map.empty
-  }
-
-  def failForUserSpecifiedSchema[T](ds: DataSourceV2): T = {
-    val name = ds match {
-      case register: DataSourceRegister => register.shortName()
-      case _ => ds.getClass.getName
+      case _ => Map.empty
     }
-    throw new UnsupportedOperationException(name + " source does not support user-specified schema")
   }
 }

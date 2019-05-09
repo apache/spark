@@ -15,16 +15,20 @@
 # limitations under the License.
 #
 
-# Image for building Spark releases. Based on Ubuntu 16.04.
+# Image for building Spark releases. Based on Ubuntu 18.04.
 #
 # Includes:
 # * Java 8
 # * Ivy
-# * Python/PyPandoc (2.7.12/3.5.2)
-# * R-base/R-base-dev (3.3.2+)
+# * Python/PyPandoc (2.7.15/3.6.7)
+# * R-base/R-base-dev (3.5.0+)
 # * Ruby 2.3 build utilities
 
-FROM ubuntu:16.04
+FROM ubuntu:18.04
+
+# For apt to be noninteractive
+ENV DEBIAN_FRONTEND noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN true
 
 # These arguments are just for reuse and not really meant to be customized.
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
@@ -38,7 +42,8 @@ ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
 #
 # This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
 # the most current package versions (instead of potentially using old versions cached by docker).
-RUN echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu xenial/' >> /etc/apt/sources.list && \
+RUN apt-get clean && apt-get update && $APT_INSTALL gnupg && \
+  echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu bionic-cran35/' >> /etc/apt/sources.list && \
   gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
@@ -54,8 +59,7 @@ RUN echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu xenial/' >> /etc/apt
   # Install build / source control tools
   $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
     pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \
-  ln -s -T /usr/share/java/ivy.jar /usr/share/ant/lib/ivy.jar && \
-  curl -sL https://deb.nodesource.com/setup_4.x | bash && \
+  curl -sL https://deb.nodesource.com/setup_11.x | bash && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
   $APT_INSTALL libpython2.7-dev libpython3-dev python-pip python3-pip && \

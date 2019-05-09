@@ -53,7 +53,7 @@ private[sql] object ContinuousTrigger {
     if (cal.months > 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }
-    new ContinuousTrigger(cal.microseconds / 1000)
+    new ContinuousTrigger(TimeUnit.MICROSECONDS.toMillis(cal.microseconds))
   }
 
   def apply(interval: Duration): ContinuousTrigger = {

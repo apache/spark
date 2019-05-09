@@ -322,9 +322,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val data = sc.parallelize(Seq(true, false, false, false), 4)
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count
-    assert(sc.persistentRdds.isEmpty === false)
+    assert(sc.persistentRdds.nonEmpty)
     data.unpersist(blocking = true)
-    assert(sc.persistentRdds.isEmpty === true)
+    assert(sc.persistentRdds.isEmpty)
 
     failAfter(Span(3000, Millis)) {
       try {

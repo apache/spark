@@ -21,7 +21,7 @@ import java.io.File
 import java.util.{Locale, TimeZone}
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{Assertions, BeforeAndAfterAll}
+import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.BlockRDD
@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StreamingAggregationStateManager}
+import org.apache.spark.sql.execution.streaming.sources.MemorySink
+import org.apache.spark.sql.execution.streaming.state.StreamingAggregationStateManager
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -207,15 +208,15 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1),
       CheckLastBatch((1, 1), (2, 1)),
       AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 2 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 2 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 2 },
       AddData(inputData, 2, 3),
       CheckLastBatch((2, 2), (3, 2), (4, 1)),
       AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 3 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 3 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 4 }
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 4 }
     )
 
     // Test with Complete mode
@@ -224,15 +225,15 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1),
       CheckLastBatch((1, 1), (2, 1)),
       AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 2 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 2 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 2 },
       AddData(inputData, 2, 3),
       CheckLastBatch((1, 1), (2, 2), (3, 2), (4, 1)),
       AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 4 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 3 },
-      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 4 }
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 4 },
+      AssertOnQuery { _.stateNodes.head.metrics("numUpdatedStateRows").value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics("numTotalStateRows").value === 4 }
     )
   }
 
@@ -344,16 +345,15 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("prune results by current_date, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
-    val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
-        .select(to_utc_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY), tz))
-        .toDF("value")
+        .select(($"value" * DateTimeUtils.SECONDS_PER_DAY).cast("timestamp").as("value"))
         .groupBy($"value")
         .agg(count("*"))
-        .where($"value".cast("date") >= date_sub(current_date(), 10))
-        .select(($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
+        .where($"value".cast("date") >= date_sub(current_timestamp().cast("date"), 10))
+        .select(
+          ($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
       StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
       // advance clock to 10 days, should retain all keys
