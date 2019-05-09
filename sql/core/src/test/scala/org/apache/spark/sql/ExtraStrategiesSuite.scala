@@ -39,7 +39,7 @@ case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
 }
 
 object TestStrategy extends Strategy {
-  override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case Project(Seq(attr), _) if attr.name == "a" =>
       FastOperator(attr.toAttribute :: Nil) :: Nil
     case _ => Nil

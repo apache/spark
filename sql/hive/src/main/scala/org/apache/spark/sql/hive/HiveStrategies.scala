@@ -223,7 +223,7 @@ private[hive] trait HiveStrategies {
   val sparkSession: SparkSession
 
   object Scripts extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ScriptTransformation(input, script, output, child, ioschema) =>
         val hiveIoSchema = HiveScriptIOSchema(ioschema)
         ScriptTransformationExec(input, script, output, planLater(child), hiveIoSchema) :: Nil
@@ -236,7 +236,7 @@ private[hive] trait HiveStrategies {
    * applied.
    */
   object HiveTableScans extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates, relation: HiveTableRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.

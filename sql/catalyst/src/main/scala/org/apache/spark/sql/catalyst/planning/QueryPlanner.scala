@@ -60,7 +60,9 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
     // Obviously a lot to do here still...
 
     // Collect physical plan candidates.
-    val candidates = strategies.iterator.flatMap(_(plan))
+    val candidates = strategies.iterator.flatMap({
+      _(plan).map(propagate(_, plan))
+    })
 
     // The candidates may contain placeholders marked as [[planLater]],
     // so try to replace them by their child plans.
@@ -102,4 +104,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
 
   /** Prunes bad plans to prevent combinatorial explosion. */
   protected def prunePlans(plans: Iterator[PhysicalPlan]): Iterator[PhysicalPlan]
+
+  /** Propagate logicalPlan properties to PhysicalPlan */
+  protected def propagate(plan: PhysicalPlan, logicalPlan: LogicalPlan): PhysicalPlan
 }

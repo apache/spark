@@ -102,7 +102,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
   import DataSourceV2Implicits._
 
-  override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.newScanBuilder()
 

@@ -218,7 +218,7 @@ case class MyCheckRule(spark: SparkSession) extends (LogicalPlan => Unit) {
 }
 
 case class MySparkStrategy(spark: SparkSession) extends SparkStrategy {
-  override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = Seq.empty
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = Seq.empty
 }
 
 case class MyParser(spark: SparkSession, delegate: ParserInterface) extends ParserInterface {
@@ -272,7 +272,7 @@ case class MyCheckRule2(spark: SparkSession) extends (LogicalPlan => Unit) {
 }
 
 case class MySparkStrategy2(spark: SparkSession) extends SparkStrategy {
-  override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = Seq.empty
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = Seq.empty
 }
 
 object MyExtensions2 {

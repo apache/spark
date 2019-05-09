@@ -65,6 +65,10 @@ class SparkPlanner(
     plans
   }
 
+  override protected def propagate(plan: SparkPlan, logicalPlan: LogicalPlan): SparkPlan = {
+    plan.withStats(logicalPlan.stats)
+  }
+
   /**
    * Used to build table scan operators where complex projection and filtering are done using
    * separate physical operators.  This function returns the given scan operator with Project and

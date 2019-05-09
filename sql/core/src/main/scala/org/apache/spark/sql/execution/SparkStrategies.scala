@@ -49,12 +49,6 @@ import org.apache.spark.sql.types.StructType
 abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
 
   override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
-
-  override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
-    doApply(plan).map(sparkPlan => sparkPlan.withStats(plan.stats))
-  }
-
-  protected def doApply(plan: LogicalPlan): Seq[SparkPlan]
 }
 
 case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
@@ -73,7 +67,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Plans special cases of limit operators.
    */
   object SpecialLimits extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
         case Limit(IntegerLiteral(limit), Sort(order, true, child))
             if limit < conf.topKSortFallbackThreshold =>
@@ -215,7 +209,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
     }
 
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast hash join if the join type is supported. If both sides
@@ -389,7 +383,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * on-demand, only when planning in a [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
       case EventTimeWatermark(columnName, delay, child) =>
@@ -429,7 +423,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Used to plan the streaming deduplicate operator.
    */
   object StreamingDeduplicationStrategy extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case Deduplicate(keys, child) if child.isStreaming =>
         StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
@@ -446,7 +440,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Limit is unsupported for streams in Update mode.
    */
   case class StreamingGlobalLimitStrategy(outputMode: OutputMode) extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
         case Limit(IntegerLiteral(limit), child)
             if plan.isStreaming && outputMode == InternalOutputModes.Append =>
@@ -461,7 +455,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   object StreamingJoinStrategy extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
         case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, _)
           if left.isStreaming && right.isStreaming =>
@@ -482,7 +476,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
    */
   object Aggregation extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
         if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
         val aggregateExpressions = aggExpressions.map(expr =>
@@ -544,7 +538,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   object Window extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalWindow(
         WindowFunctionType.SQL, windowExprs, partitionSpec, orderSpec, child) =>
         execution.window.WindowExec(
@@ -562,7 +556,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   protected lazy val singleRowRdd = sparkContext.parallelize(Seq(InternalRow()), 1)
 
   object InMemoryScans extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
         pruneFilterProject(
           projectList,
@@ -580,7 +574,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * be replaced with the real relation using the `Source` in `StreamExecution`.
    */
   object StreamingRelationStrategy extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case s: StreamingRelation =>
         StreamingRelationExec(s.sourceName, s.output) :: Nil
       case s: StreamingExecutionRelation =>
@@ -596,7 +590,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
    */
   object FlatMapGroupsWithStateStrategy extends Strategy {
-    override def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMapGroupsWithState(
         func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
         timeout, child) =>
@@ -614,7 +608,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Strategy to convert EvalPython logical operator to physical operator.
    */
   object PythonEvals extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ArrowEvalPython(udfs, output, child) =>
         ArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case BatchEvalPython(udfs, output, child) =>
@@ -625,7 +619,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   object BasicOperators extends Strategy {
-    override protected def doApply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
