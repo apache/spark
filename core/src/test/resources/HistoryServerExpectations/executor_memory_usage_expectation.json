@@ -25,7 +25,9 @@
     "usedOffHeapStorageMemory" : 0,
     "totalOnHeapStorageMemory" : 384093388,
     "totalOffHeapStorageMemory" : 524288000
-  }
+  },
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "3",
   "hostPort" : "172.22.0.167:51485",
@@ -56,7 +58,9 @@
     "usedOffHeapStorageMemory" : 0,
     "totalOnHeapStorageMemory" : 384093388,
     "totalOffHeapStorageMemory" : 524288000
-  }
+  },
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 } ,{
   "id" : "2",
   "hostPort" : "172.22.0.167:51487",
@@ -87,7 +91,9 @@
     "usedOffHeapStorageMemory" : 0,
     "totalOnHeapStorageMemory" : 384093388,
     "totalOffHeapStorageMemory" : 524288000
-  }
+  },
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "1",
   "hostPort" : "172.22.0.167:51490",
@@ -118,7 +124,9 @@
     "usedOffHeapStorageMemory": 0,
     "totalOnHeapStorageMemory": 384093388,
     "totalOffHeapStorageMemory": 524288000
-  }
+  },
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "0",
   "hostPort" : "172.22.0.167:51491",
@@ -149,5 +157,7 @@
     "usedOffHeapStorageMemory" : 0,
     "totalOnHeapStorageMemory" : 384093388,
     "totalOffHeapStorageMemory" : 524288000
-  }
+  },
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 } ]

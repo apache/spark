@@ -233,4 +233,15 @@ private[json] trait TestJsonData {
     spark.createDataset(spark.sparkContext.parallelize("""{"a":123}""" :: Nil))(Encoders.STRING)
 
   def empty: Dataset[String] = spark.emptyDataset(Encoders.STRING)
+
+  def sampledTestData: Dataset[String] = {
+    spark.range(0, 100, 1).map { index =>
+      val predefinedSample = Set[Long](3, 18, 20, 24, 50, 60, 87, 99)
+      if (predefinedSample.contains(index)) {
+        s"""{"f1":${index.toString}}"""
+      } else {
+        s"""{"f1":${(index.toDouble + 0.1).toString}}"""
+      }
+    }(Encoders.STRING)
+  }
 }

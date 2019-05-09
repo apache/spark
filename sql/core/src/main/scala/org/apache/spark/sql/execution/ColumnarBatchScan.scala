@@ -17,20 +17,22 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 
 /**
- * Helper trait for abstracting scan functionality using
- * [[ColumnarBatch]]es.
+ * Helper trait for abstracting scan functionality using [[ColumnarBatch]]es.
  */
 private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
   def vectorTypes: Option[Seq[String]] = None
+
+  protected def supportsBatch: Boolean = true
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -46,20 +48,24 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       ordinal: String,
       dataType: DataType,
       nullable: Boolean): ExprCode = {
-    val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(columnVar, dataType, ordinal)
-    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
+    val javaType = CodeGenerator.javaType(dataType)
+    val value = CodeGenerator.getValueFromVector(columnVar, dataType, ordinal)
+    val isNullVar = if (nullable) {
+      JavaCode.isNullVariable(ctx.freshName("isNull"))
+    } else {
+      FalseLiteral
+    }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
-      s"""
+    val code = code"${ctx.registerComment(str)}" + (if (nullable) {
+      code"""
         boolean $isNullVar = $columnVar.isNullAt($ordinal);
-        $javaType $valueVar = $isNullVar ? ${ctx.defaultValue(dataType)} : ($value);
+        $javaType $valueVar = $isNullVar ? ${CodeGenerator.defaultValue(dataType)} : ($value);
       """
     } else {
-      s"$javaType $valueVar = $value;"
-    }).trim
-    ExprCode(code, isNullVar, valueVar)
+      code"$javaType $valueVar = $value;"
+    })
+    ExprCode(code, isNullVar, JavaCode.variable(valueVar, dataType))
   }
 
   /**
@@ -71,16 +77,24 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     // PhysicalRDD always just has one input
     val input = ctx.addMutableState("scala.collection.Iterator", "input",
       v => s"$v = inputs[0];")
+    if (supportsBatch) {
+      produceBatches(ctx, input)
+    } else {
+      produceRows(ctx, input)
+    }
+  }
 
+  private def produceBatches(ctx: CodegenContext, input: String): String = {
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
-    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime") // init as scanTime = 0
+    val scanTimeTotalNs =
+      ctx.addMutableState(CodeGenerator.JAVA_LONG, "scanTime") // init as scanTime = 0
 
     val columnarBatchClz = classOf[ColumnarBatch].getName
     val batch = ctx.addMutableState(columnarBatchClz, "batch")
 
-    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx") // init as batchIdx = 0
+    val idx = ctx.addMutableState(CodeGenerator.JAVA_INT, "batchIdx") // init as batchIdx = 0
     val columnVectorClzs = vectorTypes.getOrElse(
       Seq.fill(output.indices.size)(classOf[ColumnVector].getName))
     val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {
@@ -120,7 +134,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
        |if ($batch == null) {
        |  $nextBatchFuncName();
        |}
-       |while ($batch != null) {
+       |while ($limitNotReachedCond $batch != null) {
        |  int $numRows = $batch.numRows();
        |  int $localEnd = $numRows - $idx;
        |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
@@ -137,4 +151,19 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
      """.stripMargin
   }
 
+  private def produceRows(ctx: CodegenContext, input: String): String = {
+    val numOutputRows = metricTerm(ctx, "numOutputRows")
+    val row = ctx.freshName("row")
+
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    s"""
+       |while ($limitNotReachedCond $input.hasNext()) {
+       |  InternalRow $row = (InternalRow) $input.next();
+       |  $numOutputRows.add(1);
+       |  ${consume(ctx, null, row).trim}
+       |  if (shouldStop()) return;
+       |}
+     """.stripMargin
+  }
 }

@@ -25,6 +25,7 @@ import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.serializer.KryoSerializer
@@ -38,7 +39,7 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
   test("kryo class register") {
     val conf = new SparkConf(false)
-    conf.set("spark.kryo.registrationRequired", "true")
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
@@ -494,5 +495,19 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
     assert(mlDenseVectorToArray(dv) === mlDenseVectorToArray(newDV))
     assert(mlSparseVectorToArray(sv) === mlSparseVectorToArray(newSV))
+  }
+
+  test("sparse vector only support non-negative length") {
+    val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
+    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    assert(v1.size === 0)
+    assert(v2.size === 0)
+
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array(1), Array(2.0))
+    }
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array((1, 2.0)))
+    }
   }
 }

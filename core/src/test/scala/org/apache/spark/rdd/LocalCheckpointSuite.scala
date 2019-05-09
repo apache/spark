@@ -18,7 +18,6 @@
 package org.apache.spark.rdd
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
@@ -174,7 +173,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     val blockId = RDDBlockId(rdd.id, numPartitions - 1)
     bmm.removeBlock(blockId)
     // Wait until the block has been removed successfully.
-    eventually(timeout(1 seconds), interval(100 milliseconds)) {
+    eventually(timeout(1.second), interval(100.milliseconds)) {
       assert(bmm.getBlockStatus(blockId).isEmpty)
     }
     try {

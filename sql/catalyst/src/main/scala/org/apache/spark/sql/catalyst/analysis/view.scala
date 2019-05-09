@@ -48,8 +48,8 @@ import org.apache.spark.sql.internal.SQLConf
  * completely resolved during the batch of Resolution.
  */
 case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case v @ View(desc, output, child) if child.resolved && output != child.output =>
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+    case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
       val queryOutput = if (queryColumnNames.nonEmpty) {
@@ -70,13 +70,14 @@ case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupp
       }
       // Map the attributes in the query output to the attributes in the view output by index.
       val newOutput = output.zip(queryOutput).map {
-        case (attr, originAttr) if attr != originAttr =>
+        case (attr, originAttr) if !attr.semanticEquals(originAttr) =>
           // The dataType of the output attributes may be not the same with that of the view
           // output, so we should cast the attribute to the dataType of the view output attribute.
           // Will throw an AnalysisException if the cast can't perform or might truncate.
           if (Cast.mayTruncate(originAttr.dataType, attr.dataType)) {
             throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
-              s"${originAttr.dataType.simpleString} to ${attr.simpleString} as it may truncate\n")
+              s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} as it " +
+              s"may truncate\n")
           } else {
             Alias(cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
               qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
@@ -111,8 +112,8 @@ object EliminateView extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // The child should have the same output attributes with the View operator, so we simply
     // remove the View operator.
-    case View(_, output, child) =>
-      assert(output == child.output,
+    case v @ View(_, output, child) =>
+      assert(v.sameOutput(child),
         s"The output of the child ${child.output.mkString("[", ",", "]")} is different from the " +
           s"view output ${output.mkString("[", ",", "]")}")
       child

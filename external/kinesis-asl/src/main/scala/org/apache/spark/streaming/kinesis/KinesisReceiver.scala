@@ -160,7 +160,6 @@ private[kinesis] class KinesisReceiver[T](
         cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider),
         workerId)
         .withKinesisEndpoint(endpointUrl)
-        .withInitialPositionInStream(initialPosition.getPosition)
         .withTaskBackoffTimeMillis(500)
         .withRegionName(regionName)
 
@@ -169,7 +168,8 @@ private[kinesis] class KinesisReceiver[T](
       initialPosition match {
         case ts: AtTimestamp =>
           baseClientLibConfiguration.withTimestampAtInitialPositionInStream(ts.getTimestamp)
-        case _ => baseClientLibConfiguration
+        case _ =>
+          baseClientLibConfiguration.withInitialPositionInStream(initialPosition.getPosition)
       }
     }
 

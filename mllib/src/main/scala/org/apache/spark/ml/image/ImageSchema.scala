@@ -133,7 +133,13 @@ object ImageSchema {
    */
   private[spark] def decode(origin: String, bytes: Array[Byte]): Option[Row] = {
 
-    val img = ImageIO.read(new ByteArrayInputStream(bytes))
+    val img = try {
+      ImageIO.read(new ByteArrayInputStream(bytes))
+    } catch {
+      // Catch runtime exception because `ImageIO` may throw unexcepted `RuntimeException`.
+      // But do not catch the declared `IOException` (regarded as FileSystem failure)
+      case _: RuntimeException => null
+    }
 
     if (img == null) {
       None
@@ -169,12 +175,11 @@ object ImageSchema {
         var offset = 0
         for (h <- 0 until height) {
           for (w <- 0 until width) {
-            val color = new Color(img.getRGB(w, h))
-
+            val color = new Color(img.getRGB(w, h), hasAlpha)
             decoded(offset) = color.getBlue.toByte
             decoded(offset + 1) = color.getGreen.toByte
             decoded(offset + 2) = color.getRed.toByte
-            if (nChannels == 4) {
+            if (hasAlpha) {
               decoded(offset + 3) = color.getAlpha.toByte
             }
             offset += nChannels
@@ -199,6 +204,8 @@ object ImageSchema {
    * @return DataFrame with a single column "image" of images;
    *         see ImageSchema for the details
    */
+  @deprecated("use `spark.read.format(\"image\").load(path)` and this `readImages` will be " +
+    "removed in 3.0.0.", "2.4.0")
   def readImages(path: String): DataFrame = readImages(path, null, false, -1, false, 1.0, 0)
 
   /**
@@ -219,6 +226,8 @@ object ImageSchema {
    * @return DataFrame with a single column "image" of images;
    *         see ImageSchema for the details
    */
+  @deprecated("use `spark.read.format(\"image\").load(path)` and this `readImages` will be " +
+    "removed in 3.0.0.", "2.4.0")
   def readImages(
       path: String,
       sparkSession: SparkSession,

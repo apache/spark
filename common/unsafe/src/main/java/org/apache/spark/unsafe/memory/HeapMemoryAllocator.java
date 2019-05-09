@@ -46,9 +46,12 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
   @Override
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    if (shouldPool(size)) {
+    int numWords = (int) ((size + 7) / 8);
+    long alignedSize = numWords * 8L;
+    assert (alignedSize >= size);
+    if (shouldPool(alignedSize)) {
       synchronized (this) {
-        final LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(size);
+        final LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
         if (pool != null) {
           while (!pool.isEmpty()) {
             final WeakReference<long[]> arrayReference = pool.pop();
@@ -62,11 +65,11 @@ public class HeapMemoryAllocator implements MemoryAllocator {
               return memory;
             }
           }
-          bufferPoolsBySize.remove(size);
+          bufferPoolsBySize.remove(alignedSize);
         }
       }
     }
-    long[] array = new long[(int) ((size + 7) / 8)];
+    long[] array = new long[numWords];
     MemoryBlock memory = new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
       memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
@@ -98,12 +101,13 @@ public class HeapMemoryAllocator implements MemoryAllocator {
     long[] array = (long[]) memory.obj;
     memory.setObjAndOffset(null, 0);
 
-    if (shouldPool(size)) {
+    long alignedSize = ((size + 7) / 8) * 8;
+    if (shouldPool(alignedSize)) {
       synchronized (this) {
-        LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(size);
+        LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
         if (pool == null) {
           pool = new LinkedList<>();
-          bufferPoolsBySize.put(size, pool);
+          bufferPoolsBySize.put(alignedSize, pool);
         }
         pool.add(new WeakReference<>(array));
       }

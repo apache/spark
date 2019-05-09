@@ -18,6 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.InputStream;
+import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -29,7 +30,7 @@ class ChildProcAppHandle extends AbstractAppHandle {
   private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
 
   private volatile Process childProc;
-  private OutputRedirector redirector;
+  private volatile OutputRedirector redirector;
 
   ChildProcAppHandle(LauncherServer server) {
     super(server);
@@ -46,16 +47,35 @@ class ChildProcAppHandle extends AbstractAppHandle {
     }
   }
 
+  /**
+   * Parses the logs of {@code spark-submit} and returns the last exception thrown.
+   * <p>
+   * Since {@link SparkLauncher} runs {@code spark-submit} in a sub-process, it's difficult to
+   * accurately retrieve the full {@link Throwable} from the {@code spark-submit} process.
+   * This method parses the logs of the sub-process and provides a best-effort attempt at
+   * returning the last exception thrown by the {@code spark-submit} process. Only the exception
+   * message is parsed, the associated stacktrace is meaningless.
+   *
+   * @return an {@link Optional} containing a {@link RuntimeException} with the parsed
+   * exception, otherwise returns a {@link Optional#EMPTY}
+   */
+  @Override
+  public Optional<Throwable> getError() {
+    return redirector != null ? Optional.ofNullable(redirector.getError()) : Optional.empty();
+  }
+
   @Override
   public synchronized void kill() {
-    disconnect();
-    if (childProc != null) {
-      if (childProc.isAlive()) {
-        childProc.destroyForcibly();
+    if (!isDisposed()) {
+      setState(State.KILLED);
+      disconnect();
+      if (childProc != null) {
+        if (childProc.isAlive()) {
+          childProc.destroyForcibly();
+        }
+        childProc = null;
       }
-      childProc = null;
     }
-    setState(State.KILLED);
   }
 
   void setChildProc(Process childProc, String loggerName, InputStream logStream) {
@@ -94,8 +114,6 @@ class ChildProcAppHandle extends AbstractAppHandle {
         return;
       }
 
-      disconnect();
-
       int ec;
       try {
         ec = proc.exitValue();
@@ -104,20 +122,15 @@ class ChildProcAppHandle extends AbstractAppHandle {
         ec = 1;
       }
 
-      State currState = getState();
-      State newState = null;
       if (ec != 0) {
+        State currState = getState();
         // Override state with failure if the current state is not final, or is success.
         if (!currState.isFinal() || currState == State.FINISHED) {
-          newState = State.FAILED;
+          setState(State.FAILED, true);
         }
-      } else if (!currState.isFinal()) {
-        newState = State.LOST;
       }
 
-      if (newState != null) {
-        setState(newState, true);
-      }
+      dispose();
     }
   }
 

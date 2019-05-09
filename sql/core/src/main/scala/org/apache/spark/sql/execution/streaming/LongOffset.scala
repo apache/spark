@@ -35,14 +35,4 @@ object LongOffset {
    * @return new LongOffset
    */
   def apply(offset: SerializedOffset) : LongOffset = new LongOffset(offset.json.toLong)
-
-  /**
-   * Convert generic Offset to LongOffset if possible.
-   * @return converted LongOffset
-   */
-  def convert(offset: Offset): Option[LongOffset] = offset match {
-    case lo: LongOffset => Some(lo)
-    case so: SerializedOffset => Some(LongOffset(so))
-    case _ => None
-  }
 }

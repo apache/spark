@@ -49,7 +49,9 @@ ALTER TABLE global_temp.global_temp_view CHANGE a a INT COMMENT 'this is column 
 -- Change column in partition spec (not supported yet)
 CREATE TABLE partition_table(a INT, b STRING, c INT, d STRING) USING parquet PARTITIONED BY (c, d);
 ALTER TABLE partition_table PARTITION (c = 1) CHANGE COLUMN a new_a INT;
+ALTER TABLE partition_table CHANGE COLUMN c c INT COMMENT 'this is column C';
 
 -- DROP TEST TABLE
 DROP TABLE test_change;
 DROP TABLE partition_table;
+DROP VIEW global_temp.global_temp_view;

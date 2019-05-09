@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+"""
+An example for Chi-square hypothesis testing.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/chi_square_test_example.py
+"""
 from __future__ import print_function
 
 from pyspark.sql import SparkSession
@@ -23,11 +28,6 @@ from pyspark.ml.linalg import Vectors
 from pyspark.ml.stat import ChiSquareTest
 # $example off$
 
-"""
-An example for Chi-square hypothesis testing.
-Run with:
-  bin/spark-submit examples/src/main/python/ml/chi_square_test_example.py
-"""
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \

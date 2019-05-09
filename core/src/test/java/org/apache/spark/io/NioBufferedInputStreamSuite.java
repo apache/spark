@@ -18,6 +18,7 @@ package org.apache.spark.io;
 
 import org.junit.Before;
 
+import java.io.InputStream;
 import java.io.IOException;
 
 /**
@@ -28,6 +29,9 @@ public class NioBufferedInputStreamSuite extends GenericFileInputStreamSuite {
   @Before
   public void setUp() throws IOException {
     super.setUp();
-    inputStream = new NioBufferedFileInputStream(inputFile);
+    inputStreams = new InputStream[] {
+      new NioBufferedFileInputStream(inputFile), // default
+      new NioBufferedFileInputStream(inputFile, 123) // small, unaligned buffer
+    };
   }
 }

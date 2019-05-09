@@ -159,7 +159,9 @@ private[streaming] class ReceiverSupervisorImpl(
     logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
     val numRecords = blockStoreResult.numRecords
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, metadataOption, blockStoreResult)
-    trackerEndpoint.askSync[Boolean](AddBlock(blockInfo))
+    if (!trackerEndpoint.askSync[Boolean](AddBlock(blockInfo))) {
+      throw new SparkException("Failed to add block to receiver tracker.")
+    }
     logDebug(s"Reported block $blockId")
   }
 

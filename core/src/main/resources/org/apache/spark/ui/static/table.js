@@ -89,7 +89,7 @@ function onSearchStringChange() {
             if($(this).attr('id') && $(this).attr('id').match(/thread_[0-9]+_tr/) ) {
                 var children = $(this).children()
                 var found = false
-                for (i = 0; i < children.length; i++) {
+                for (var i = 0; i < children.length; i++) {
                     if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
                         found = true
                     }

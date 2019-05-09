@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -89,7 +90,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInitializationMode("k-means||")
       .setInitializationSteps(10)
       .setSeed(seed)
-    val initialCenters = km.initKMeansParallel(normedData).map(_.vector)
+
+    val distanceMeasureInstance = new EuclideanDistanceMeasure
+    val initialCenters = km.initKMeansParallel(normedData, distanceMeasureInstance).map(_.vector)
     assert(initialCenters.length === initialCenters.distinct.length)
     assert(initialCenters.length <= numDistinctPoints)
 
@@ -104,7 +107,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInitializationMode("k-means||")
       .setInitializationSteps(10)
       .setSeed(seed)
-    val initialCenters2 = km2.initKMeansParallel(normedData).map(_.vector)
+    val initialCenters2 = km2.initKMeansParallel(normedData, distanceMeasureInstance).map(_.vector)
     assert(initialCenters2.length === initialCenters2.distinct.length)
     assert(initialCenters2.length === k)
 
@@ -314,7 +317,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Kryo class register") {
     val conf = new SparkConf(false)
-    conf.set("spark.kryo.registrationRequired", "true")
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
 
@@ -347,7 +350,7 @@ object KMeansSuite extends SparkFunSuite {
       case (ca: DenseVector, cb: DenseVector) =>
         assert(ca === cb)
       case _ =>
-        throw new AssertionError("checkEqual failed since the two clusters were not identical.\n")
+        fail("checkEqual failed since the two clusters were not identical.\n")
     }
   }
 }

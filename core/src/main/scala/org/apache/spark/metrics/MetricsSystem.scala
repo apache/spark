@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -94,11 +94,13 @@ private[spark] class MetricsSystem private (
 
   metricsConfig.initialize()
 
-  def start() {
+  def start(registerStaticSources: Boolean = true) {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
-    StaticSources.allSources.foreach(registerSource)
-    registerSources()
+    if (registerStaticSources) {
+      StaticSources.allSources.foreach(registerSource)
+      registerSources()
+    }
     registerSinks()
     sinks.foreach(_.start)
   }
@@ -128,7 +130,7 @@ private[spark] class MetricsSystem private (
   private[spark] def buildRegistryName(source: Source): String = {
     val metricsNamespace = conf.get(METRICS_NAMESPACE).orElse(conf.getOption("spark.app.id"))
 
-    val executorId = conf.getOption("spark.executor.id")
+    val executorId = conf.get(EXECUTOR_ID)
     val defaultName = MetricRegistry.name(source.sourceName)
 
     if (instance == "driver" || instance == "executor") {
@@ -166,9 +168,7 @@ private[spark] class MetricsSystem private (
   def removeSource(source: Source) {
     sources -= source
     val regName = buildRegistryName(source)
-    registry.removeMatching(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name.startsWith(regName)
-    })
+    registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
   }
 
   private def registerSources() {
@@ -179,8 +179,8 @@ private[spark] class MetricsSystem private (
     sourceConfigs.foreach { kv =>
       val classPath = kv._2.getProperty("class")
       try {
-        val source = Utils.classForName(classPath).newInstance()
-        registerSource(source.asInstanceOf[Source])
+        val source = Utils.classForName[Source](classPath).getConstructor().newInstance()
+        registerSource(source)
       } catch {
         case e: Exception => logError("Source class " + classPath + " cannot be instantiated", e)
       }
@@ -195,13 +195,18 @@ private[spark] class MetricsSystem private (
       val classPath = kv._2.getProperty("class")
       if (null != classPath) {
         try {
-          val sink = Utils.classForName(classPath)
-            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-            .newInstance(kv._2, registry, securityMgr)
           if (kv._1 == "servlet") {
-            metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
+            val servlet = Utils.classForName[MetricsServlet](classPath)
+              .getConstructor(
+                classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+              .newInstance(kv._2, registry, securityMgr)
+            metricsServlet = Some(servlet)
           } else {
-            sinks += sink.asInstanceOf[Sink]
+            val sink = Utils.classForName[Sink](classPath)
+              .getConstructor(
+                classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+              .newInstance(kv._2, registry, securityMgr)
+            sinks += sink
           }
         } catch {
           case e: Exception =>
@@ -232,4 +237,30 @@ private[spark] object MetricsSystem {
       instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
     new MetricsSystem(instance, conf, securityMgr)
   }
+}
+
+private[spark] object MetricsSystemInstances {
+  // The Spark standalone master process
+  val MASTER = "master"
+
+  // A component within the master which reports on various applications
+  val APPLICATIONS = "applications"
+
+  // A Spark standalone worker process
+  val WORKER = "worker"
+
+  // A Spark executor
+  val EXECUTOR = "executor"
+
+  // The Spark driver process (the process in which your SparkContext is created)
+  val DRIVER = "driver"
+
+  // The Spark shuffle service
+  val SHUFFLE_SERVICE = "shuffleService"
+
+  // The Spark ApplicationMaster when running on YARN
+  val APPLICATION_MASTER = "applicationMaster"
+
+  // The Spark cluster scheduler when running on Mesos
+  val MESOS_CLUSTER = "mesos_cluster"
 }

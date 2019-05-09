@@ -29,6 +29,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -57,12 +58,43 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
 
-  private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    4, 4, 4, 4, 4, 4, 4, 4,
-    5, 5, 5, 5,
-    6, 6};
+  /**
+   * A char in UTF-8 encoding can take 1-4 bytes depending on the first byte which
+   * indicates the size of the char. See Unicode standard in page 126, Table 3-6:
+   * http://www.unicode.org/versions/Unicode10.0.0/UnicodeStandard-10.0.pdf
+   *
+   * Binary    Hex          Comments
+   * 0xxxxxxx  0x00..0x7F   Only byte of a 1-byte character encoding
+   * 10xxxxxx  0x80..0xBF   Continuation bytes (1-3 continuation bytes)
+   * 110xxxxx  0xC0..0xDF   First byte of a 2-byte character encoding
+   * 1110xxxx  0xE0..0xEF   First byte of a 3-byte character encoding
+   * 11110xxx  0xF0..0xF7   First byte of a 4-byte character encoding
+   *
+   * As a consequence of the well-formedness conditions specified in
+   * Table 3-7 (page 126), the following byte values are disallowed in UTF-8:
+   *   C0–C1, F5–FF.
+   */
+  private static byte[] bytesOfCodePointInUTF8 = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x00..0x0F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x10..0x1F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x20..0x2F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x30..0x3F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x40..0x4F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x50..0x5F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x60..0x6F
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x70..0x7F
+    // Continuation bytes cannot appear as the first byte
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x80..0x8F
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x90..0x9F
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0xA0..0xAF
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0xB0..0xBF
+    0, 0, // 0xC0..0xC1 - disallowed in UTF-8
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 0xC2..0xCF
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 0xD0..0xDF
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // 0xE0..0xEF
+    4, 4, 4, 4, 4, // 0xF0..0xF4
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 0xF5..0xFF - disallowed in UTF-8
+  };
 
   private static final boolean IS_LITTLE_ENDIAN =
       ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
@@ -187,8 +219,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @param b The first byte of a code point
    */
   private static int numBytesForFirstByte(final byte b) {
-    final int offset = (b & 0xFF) - 192;
-    return (offset >= 0) ? bytesOfCodePointInUTF8[offset] : 1;
+    final int offset = b & 0xFF;
+    byte numBytes = bytesOfCodePointInUTF8[offset];
+    return (numBytes == 0) ? 1: numBytes; // Skip the first byte disallowed in UTF-8
   }
 
   /**
@@ -850,17 +883,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public static UTF8String concat(UTF8String... inputs) {
     // Compute the total length of the result.
-    int totalLength = 0;
+    long totalLength = 0;
     for (int i = 0; i < inputs.length; i++) {
       if (inputs[i] != null) {
-        totalLength += inputs[i].numBytes;
+        totalLength += (long)inputs[i].numBytes;
       } else {
         return null;
       }
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it.
-    final byte[] result = new byte[totalLength];
+    final byte[] result = new byte[Ints.checkedCast(totalLength)];
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
       int len = inputs[i].numBytes;
@@ -925,6 +958,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
+    // Java String's split method supports "ignore empty string" behavior when the limit is 0
+    // whereas other languages do not. To avoid this java specific behavior, we fall back to
+    // -1 when the limit is 0.
+    if (limit == 0) {
+      limit = -1;
+    }
     String[] splits = toString().split(pattern.toString(), limit);
     UTF8String[] res = new UTF8String[splits.length];
     for (int i = 0; i < res.length; i++) {

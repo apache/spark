@@ -17,36 +17,110 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
-import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.reader.{Statistics => V2Statistics, _}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+/**
+ * A logical plan representing a data source v2 table.
+ *
+ * @param table   The table that this relation represents.
+ * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
+ *                and [[WriteBuilder]].
+ */
 case class DataSourceV2Relation(
-    fullOutput: Seq[AttributeReference],
-    reader: DataSourceV2Reader) extends LeafNode with DataSourceReaderHolder {
+    table: Table,
+    output: Seq[AttributeReference],
+    options: CaseInsensitiveStringMap)
+  extends LeafNode with MultiInstanceRelation with NamedRelation {
 
-  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
+  import DataSourceV2Implicits._
 
-  override def computeStats(): Statistics = reader match {
+  override def name: String = table.name()
+
+  override def simpleString(maxFields: Int): String = {
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+  }
+
+  def newScanBuilder(): ScanBuilder = {
+    table.asReadable.newScanBuilder(options)
+  }
+
+  override def computeStats(): Statistics = {
+    val scan = newScanBuilder().build()
+    scan match {
+      case r: SupportsReportStatistics =>
+        val statistics = r.estimateStatistics()
+        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+      case _ =>
+        Statistics(sizeInBytes = conf.defaultSizeInBytes)
+    }
+  }
+
+  override def newInstance(): DataSourceV2Relation = {
+    copy(output = output.map(_.newInstance()))
+  }
+
+  override def refresh(): Unit = table match {
+    case table: FileTable => table.fileIndex.refresh()
+    case _ => // Do nothing.
+  }
+}
+
+/**
+ * A specialization of [[DataSourceV2Relation]] with the streaming bit set to true.
+ *
+ * Note that, this plan has a mutable reader, so Spark won't apply operator push-down for this plan,
+ * to avoid making the plan mutable. We should consolidate this plan and [[DataSourceV2Relation]]
+ * after we figure out how to apply operator push-down for streaming data sources.
+ */
+case class StreamingDataSourceV2Relation(
+    output: Seq[Attribute],
+    scan: Scan,
+    stream: SparkDataStream,
+    startOffset: Option[Offset] = None,
+    endOffset: Option[Offset] = None)
+  extends LeafNode with MultiInstanceRelation {
+
+  override def isStreaming: Boolean = true
+
+  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
-      Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      val statistics = r.estimateStatistics()
+      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 }
 
-/**
- * A specialization of DataSourceV2Relation with the streaming bit set to true. Otherwise identical
- * to the non-streaming relation.
- */
-class StreamingDataSourceV2Relation(
-    fullOutput: Seq[AttributeReference],
-    reader: DataSourceV2Reader) extends DataSourceV2Relation(fullOutput, reader) {
-  override def isStreaming: Boolean = true
-}
-
 object DataSourceV2Relation {
-  def apply(reader: DataSourceV2Reader): DataSourceV2Relation = {
-    new DataSourceV2Relation(reader.readSchema().toAttributes, reader)
+  def create(table: Table, options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+    val output = table.schema().toAttributes
+    DataSourceV2Relation(table, output, options)
+  }
+
+  /**
+   * This is used to transform data source v2 statistics to logical.Statistics.
+   */
+  def transformV2Stats(
+      v2Statistics: V2Statistics,
+      defaultRowCount: Option[BigInt],
+      defaultSizeInBytes: Long): Statistics = {
+    val numRows: Option[BigInt] = if (v2Statistics.numRows().isPresent) {
+      Some(v2Statistics.numRows().getAsLong)
+    } else {
+      defaultRowCount
+    }
+    Statistics(
+      sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
+      rowCount = numRows)
   }
 }

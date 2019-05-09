@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
@@ -98,7 +97,7 @@ private[python] class PythonMLLibAPI extends Serializable {
         List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
       }
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -336,7 +335,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = isotonicRegressionAlg.run(input)
       List[AnyRef](model.boundaryVector, model.predictionVector).asJava
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -366,7 +365,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -411,7 +410,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK)))
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -572,10 +571,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[java.lang.Iterable[Any]],
       minSupport: Double,
       numPartitions: Int): FPGrowthModel[Any] = {
-    val fpg = new FPGrowth()
-      .setMinSupport(minSupport)
-      .setNumPartitions(numPartitions)
-
+    val fpg = new FPGrowth(minSupport, numPartitions)
     val model = fpg.run(data.rdd.map(_.asScala.toArray))
     new FPGrowthModelWrapper(model)
   }
@@ -707,7 +703,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
     } finally {
-      dataJRDD.rdd.unpersist(blocking = false)
+      dataJRDD.rdd.unpersist()
     }
   }
 
@@ -745,7 +741,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       DecisionTree.train(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), strategy)
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -786,7 +782,7 @@ private[python] class PythonMLLibAPI extends Serializable {
         RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       }
     } finally {
-      cached.unpersist(blocking = false)
+      cached.unpersist()
     }
   }
 
@@ -817,7 +813,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       GradientBoostedTrees.train(cached, boostingStrategy)
     } finally {
-      cached.unpersist(blocking = false)
+      cached.unpersist()
     }
   }
 
@@ -1351,6 +1347,10 @@ private[spark] abstract class SerDeBase {
       val unpickle = new Unpickler
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
+        // `Opcodes.MEMOIZE` of Protocol 4 (Python 3.4+) will store objects in internal map
+        // of `Unpickler`. This map is cleared when calling `Unpickler.close()`. Pyrolite
+        // doesn't clear it up, so we manually clear it.
+        unpickle.close()
         if (batched) {
           obj match {
             case list: JArrayList[_] => list.asScala

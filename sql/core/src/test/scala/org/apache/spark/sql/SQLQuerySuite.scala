@@ -18,16 +18,15 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.math.MathContext
 import java.net.{MalformedURLException, URL}
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -261,7 +260,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.sparkPlan
-      .collect { case _: aggregate.HashAggregateExec => true }
+      .collect { case _: HashAggregateExec => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
@@ -413,32 +412,32 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00")))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.001'"),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE '1969-12-31 16:00:00.001'=time"),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
       """SELECT time FROM timestamps WHERE time<'1969-12-31 16:00:00.003'
           AND time>'1969-12-31 16:00:00.001'"""),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
     checkAnswer(sql(
       """
         |SELECT time FROM timestamps
         |WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')
       """.stripMargin),
-      Seq(Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")),
-        Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002"))))
+      Seq(Row(Timestamp.valueOf("1969-12-31 16:00:00.001")),
+        Row(Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='123'"),
@@ -548,7 +547,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("date row") {
     checkAnswer(sql(
       """select cast("2015-01-28" as date) from testData limit 1"""),
-      Row(java.sql.Date.valueOf("2015-01-28"))
+      Row(Date.valueOf("2015-01-28"))
     )
   }
 
@@ -1484,11 +1483,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("select interval")
     }
     assert(e1.message.contains("at least one time unit should be given for interval literal"))
+
     // Currently we don't yet support nanosecond
     val e2 = intercept[AnalysisException] {
       sql("select interval 23 nanosecond")
     }
-    assert(e2.message.contains("No interval can be constructed"))
+    assert(e2.message.contains("no viable alternative at input 'interval 23 nanosecond'"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
@@ -1515,24 +1515,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         "SELECT key, count(value) FROM testData GROUP BY key",
         (1 to 100).map(i => Row(i, 1)))
     }
-  }
-
-  test("decimal precision with multiply/division") {
-    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
-    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
-    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
-    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
-      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
-    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
-      Row(null))
-
-    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
-    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
-    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
-    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
-    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
   }
 
   test("SPARK-10215 Div of Decimal returns null") {
@@ -1583,36 +1565,38 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("specifying database name for a temporary view is not allowed") {
     withTempPath { dir =>
-      val path = dir.toURI.toString
-      val df =
-        sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df
-        .write
-        .format("parquet")
-        .save(path)
+      withTempView("db.t") {
+        val path = dir.toURI.toString
+        val df =
+          sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+        df
+          .write
+          .format("parquet")
+          .save(path)
 
-      // We don't support creating a temporary table while specifying a database
-      intercept[AnalysisException] {
+        // We don't support creating a temporary table while specifying a database
+        intercept[AnalysisException] {
+          spark.sql(
+            s"""
+              |CREATE TEMPORARY VIEW db.t
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+             """.stripMargin)
+        }.getMessage
+
+        // If you use backticks to quote the name then it's OK.
         spark.sql(
           s"""
-            |CREATE TEMPORARY VIEW db.t
+            |CREATE TEMPORARY VIEW `db.t`
             |USING parquet
             |OPTIONS (
             |  path '$path'
             |)
            """.stripMargin)
-      }.getMessage
-
-      // If you use backticks to quote the name then it's OK.
-      spark.sql(
-        s"""
-          |CREATE TEMPORARY VIEW `db.t`
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-         """.stripMargin)
-      checkAnswer(spark.table("`db.t`"), df)
+        checkAnswer(spark.table("`db.t`"), df)
+      }
     }
   }
 
@@ -1631,6 +1615,46 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Seq(Row(1), Row(1)))
       checkAnswer(sql("SELECT MAX(value) FROM src GROUP BY key + 1 ORDER BY (key + 1) * 2"),
         Seq(Row(1), Row(1)))
+    }
+  }
+
+  test("SPARK-23281: verify the correctness of sort direction on composite order by clause") {
+    withTempView("src") {
+      Seq[(Integer, Integer)](
+        (1, 1),
+        (1, 3),
+        (2, 3),
+        (3, 3),
+        (4, null),
+        (5, null)
+      ).toDF("key", "value").createOrReplaceTempView("src")
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value desc, key
+        """.stripMargin),
+        Seq(Row(3, 1), Row(3, 2), Row(3, 3), Row(null, 4), Row(null, 5)))
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value desc, key desc
+        """.stripMargin),
+        Seq(Row(3, 3), Row(3, 2), Row(3, 1), Row(null, 5), Row(null, 4)))
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value asc, key desc
+        """.stripMargin),
+        Seq(Row(null, 5), Row(null, 4), Row(3, 3), Row(3, 2), Row(3, 1)))
     }
   }
 
@@ -1665,22 +1689,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
     }
     assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
-
-    e = intercept[AnalysisException] {
-      sql(s"select id from `com.databricks.spark.avro`.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
-
-    // data source type is case insensitive
-    e = intercept[AnalysisException] {
-      sql(s"select id from Avro.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: avro."))
-
-    e = intercept[AnalysisException] {
-      sql(s"select id from avro.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
@@ -1914,12 +1922,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       var e = intercept[AnalysisException] {
         sql("SELECT a.* FROM temp_table_no_cols a")
       }.getMessage
-      assert(e.contains("cannot resolve 'a.*' give input columns ''"))
+      assert(e.contains("cannot resolve 'a.*' given input columns ''"))
 
       e = intercept[AnalysisException] {
         dfNoCols.select($"b.*")
       }.getMessage
-      assert(e.contains("cannot resolve 'b.*' give input columns ''"))
+      assert(e.contains("cannot resolve 'b.*' given input columns ''"))
     }
   }
 
@@ -2038,6 +2046,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("xxhash64 function") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    withTempView("tbl") {
+      df.createOrReplaceTempView("tbl")
+      checkAnswer(
+        df.select(xxhash64($"i", $"j")),
+        sql("SELECT xxhash64(i, j) from tbl")
+      )
+    }
+  }
+
   test("join with using clause") {
     val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
       ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
@@ -2127,7 +2146,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
-      sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
+      val provider = spark.sessionState.conf.defaultDataSourceName
+      sql(s"CREATE TABLE tbl(i INT, j STRING) USING $provider")
       checkAnswer(sql("SELECT i, j FROM tbl"), Nil)
 
       Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
@@ -2451,9 +2471,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-16975: Column-partition path starting '_' should be handled correctly") {
     withTempDir { dir =>
-      val parquetDir = new File(dir, "parquet").getCanonicalPath
-      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(parquetDir)
-      spark.read.parquet(parquetDir)
+      val dataDir = new File(dir, "data").getCanonicalPath
+      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(dataDir)
+      spark.read.load(dataDir)
     }
   }
 
@@ -2680,7 +2700,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         val m = intercept[AnalysisException] {
           sql("SELECT * FROM t, S WHERE c = C")
         }.message
-        assert(m.contains("cannot resolve '(t.`c` = S.`C`)' due to data type mismatch"))
+        assert(
+          m.contains("cannot resolve '(default.t.`c` = default.S.`C`)' due to data type mismatch"))
       }
     }
   }
@@ -2714,6 +2735,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |WHERE t1.col1 = 1 AND 1 = t1.col2 AND t1.col1 = t2.col AND t1.col2 = t2.col
         """.stripMargin)
       checkAnswer(df, Row(1, 1, 1))
+    }
+  }
+
+  test("SPARK-23079: constraints should be inferred correctly with aliases") {
+    withTable("t") {
+      spark.range(5).write.saveAsTable("t")
+      val t = spark.read.table("t")
+      val left = t.withColumn("xid", $"id" + lit(1)).as("x")
+      val right = t.withColumnRenamed("id", "xid").as("y")
+      val df = left.join(right, "xid").filter("id = 3").toDF()
+      checkAnswer(df, Row(4, 3))
     }
   }
 
@@ -2758,19 +2790,240 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  // Only New OrcFileFormat supports this
-  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
-      "parquet").foreach { format =>
-    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
-      withTempPath { file =>
-        val path = file.getCanonicalPath
-        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
-        emptyDf.write.format(format).save(path)
+  test("SPARK-24696 ColumnPruning rule fails to remove extra Project") {
+    withTable("fact_stats", "dim_stats") {
+      val factData = Seq((1, 1, 99, 1), (2, 2, 99, 2), (3, 1, 99, 3), (4, 2, 99, 4))
+      val storeData = Seq((1, "BW", "DE"), (2, "AZ", "US"))
+      spark.udf.register("filterND", udf((value: Int) => value > 2).asNondeterministic)
+      factData.toDF("date_id", "store_id", "product_id", "units_sold")
+        .write.mode("overwrite").partitionBy("store_id").format("parquet").saveAsTable("fact_stats")
+      storeData.toDF("store_id", "state_province", "country")
+        .write.mode("overwrite").format("parquet").saveAsTable("dim_stats")
+      val df = sql(
+        """
+          |SELECT f.date_id, f.product_id, f.store_id FROM
+          |(SELECT date_id, product_id, store_id
+          |   FROM fact_stats WHERE filterND(date_id)) AS f
+          |JOIN dim_stats s
+          |ON f.store_id = s.store_id WHERE s.country = 'DE'
+        """.stripMargin)
+      checkAnswer(df, Seq(Row(3, 99, 1)))
+    }
+  }
 
-        val df = spark.read.format(format).load(path)
-        assert(df.schema.sameType(emptyDf.schema))
-        checkAnswer(df, emptyDf)
+
+  test("SPARK-24940: coalesce and repartition hint") {
+    withTempView("nums1") {
+      val numPartitionsSrc = 10
+      spark.range(0, 100, 1, numPartitionsSrc).createOrReplaceTempView("nums1")
+      assert(spark.table("nums1").rdd.getNumPartitions == numPartitionsSrc)
+
+      withTable("nums") {
+        sql("CREATE TABLE nums (id INT) USING parquet")
+
+        Seq(5, 20, 2).foreach { numPartitions =>
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE nums
+               |SELECT /*+ REPARTITION($numPartitions) */ *
+               |FROM nums1
+             """.stripMargin)
+          assert(spark.table("nums").inputFiles.length == numPartitions)
+
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE nums
+               |SELECT /*+ COALESCE($numPartitions) */ *
+               |FROM nums1
+             """.stripMargin)
+          // Coalesce can not increase the number of partitions
+          assert(spark.table("nums").inputFiles.length == Seq(numPartitions, numPartitionsSrc).min)
+        }
       }
     }
   }
+
+  test("SPARK-25084: 'distribute by' on multiple columns may lead to codegen issue") {
+    withView("spark_25084") {
+      val count = 1000
+      val df = spark.range(count)
+      val columns = (0 until 400).map{ i => s"id as id$i" }
+      val distributeExprs = (0 until 100).map(c => s"id$c").mkString(",")
+      df.selectExpr(columns : _*).createTempView("spark_25084")
+      assert(
+        spark.sql(s"select * from spark_25084 distribute by ($distributeExprs)").count === count)
+    }
+  }
+
+  test("SPARK-25144 'distinct' causes memory leak") {
+    val ds = List(Foo(Some("bar"))).toDS
+    val result = ds.flatMap(_.bar).distinct
+    result.rdd.isEmpty
+  }
+
+  test("SPARK-25454: decimal division with negative scale") {
+    // TODO: completely fix this issue even when LITERAL_PRECISE_PRECISION is true.
+    withSQLConf(SQLConf.LITERAL_PICK_MINIMUM_PRECISION.key -> "false") {
+      checkAnswer(sql("select 26393499451 / (1e6 * 1000)"), Row(BigDecimal("26.3934994510000")))
+    }
+  }
+
+  test("SPARK-25988: self join with aliases on partitioned tables #1") {
+    withTempView("tmpView1", "tmpView2") {
+      withTable("tab1", "tab2") {
+        sql(
+          """
+            |CREATE TABLE `tab1` (`col1` INT, `TDATE` DATE)
+            |USING CSV
+            |PARTITIONED BY (TDATE)
+          """.stripMargin)
+        spark.table("tab1").where("TDATE >= '2017-08-15'").createOrReplaceTempView("tmpView1")
+        sql("CREATE TABLE `tab2` (`TDATE` DATE) USING parquet")
+        sql(
+          """
+            |CREATE OR REPLACE TEMPORARY VIEW tmpView2 AS
+            |SELECT N.tdate, col1 AS aliasCol1
+            |FROM tmpView1 N
+            |JOIN tab2 Z
+            |ON N.tdate = Z.tdate
+          """.stripMargin)
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+          sql("SELECT * FROM tmpView2 x JOIN tmpView2 y ON x.tdate = y.tdate").collect()
+        }
+      }
+    }
+  }
+
+  test("SPARK-25988: self join with aliases on partitioned tables #2") {
+    withTempView("tmp") {
+      withTable("tab1", "tab2") {
+        sql(
+          """
+            |CREATE TABLE `tab1` (`EX` STRING, `TDATE` DATE)
+            |USING parquet
+            |PARTITIONED BY (tdate)
+          """.stripMargin)
+        sql("CREATE TABLE `tab2` (`TDATE` DATE) USING parquet")
+        sql(
+          """
+            |CREATE OR REPLACE TEMPORARY VIEW TMP as
+            |SELECT  N.tdate, EX AS new_ex
+            |FROM tab1 N
+            |JOIN tab2 Z
+            |ON N.tdate = Z.tdate
+          """.stripMargin)
+        sql(
+          """
+            |SELECT * FROM TMP x JOIN TMP y
+            |ON x.tdate = y.tdate
+          """.stripMargin).queryExecution.executedPlan
+      }
+    }
+  }
+
+  test("SPARK-26366: verify ReplaceExceptWithFilter") {
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.REPLACE_EXCEPT_WITH_FILTER.key -> enabled.toString) {
+        val df = spark.createDataFrame(
+          sparkContext.parallelize(Seq(Row(0, 3, 5),
+            Row(0, 3, null),
+            Row(null, 3, 5),
+            Row(0, null, 5),
+            Row(0, null, null),
+            Row(null, null, 5),
+            Row(null, 3, null),
+            Row(null, null, null))),
+          StructType(Seq(StructField("c1", IntegerType),
+            StructField("c2", IntegerType),
+            StructField("c3", IntegerType))))
+        val where = "c2 >= 3 OR c1 >= 0"
+        val whereNullSafe =
+          """
+            |(c2 IS NOT NULL AND c2 >= 3)
+            |OR (c1 IS NOT NULL AND c1 >= 0)
+          """.stripMargin
+
+        val df_a = df.filter(where)
+        val df_b = df.filter(whereNullSafe)
+        checkAnswer(df.except(df_a), df.except(df_b))
+
+        val whereWithIn = "c2 >= 3 OR c1 in (2)"
+        val whereWithInNullSafe =
+          """
+            |(c2 IS NOT NULL AND c2 >= 3)
+          """.stripMargin
+        val dfIn_a = df.filter(whereWithIn)
+        val dfIn_b = df.filter(whereWithInNullSafe)
+        checkAnswer(df.except(dfIn_a), df.except(dfIn_b))
+      }
+    }
+  }
+
+  test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val msg = intercept[AnalysisException] {
+        withTable("t") {
+          sql("create table t (s struct<i: Int>) using json")
+          checkAnswer(sql("select s.I from t group by s.i"), Nil)
+        }
+      }.message
+      assert(msg.contains("No such struct field I in i"))
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTable("t") {
+        sql("create table t (s struct<i: Int>) using json")
+        checkAnswer(sql("select s.I from t group by s.i"), Nil)
+      }
+    }
+  }
+
+  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
+    Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+          sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
+          if (enableOptimizeMetadataOnlyQuery) {
+            // The result is wrong if we enable the configuration.
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(5))
+          } else {
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+          }
+          checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
+        }
+
+        withTempPath { path =>
+          val tabLocation = path.getCanonicalPath
+          val partLocation1 = tabLocation + "/p=3"
+          val partLocation2 = tabLocation + "/p=1"
+          // SPARK-23271 empty RDD when saved should write a metadata only file
+          val df = spark.emptyDataFrame.select(lit(1).as("col"))
+          df.write.parquet(partLocation1)
+          val df2 = spark.range(10).toDF("col")
+          df2.write.parquet(partLocation2)
+          val readDF = spark.read.parquet(tabLocation)
+          if (enableOptimizeMetadataOnlyQuery) {
+            // The result is wrong if we enable the configuration.
+            checkAnswer(readDF.selectExpr("max(p)"), Row(3))
+          } else {
+            checkAnswer(readDF.selectExpr("max(p)"), Row(1))
+          }
+          checkAnswer(readDF.selectExpr("max(col)"), Row(9))
+        }
+      }
+    }
+  }
+
+  test("reset command should not fail with cache") {
+    withTable("tbl") {
+      val provider = spark.sessionState.conf.defaultDataSourceName
+      sql(s"CREATE TABLE tbl(i INT, j STRING) USING $provider")
+      sql("reset")
+      sql("cache table tbl")
+      sql("reset")
+    }
+  }
 }
+
+case class Foo(bar: Option[String])

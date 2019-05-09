@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.TimeUnit._
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -39,7 +42,7 @@ case class SortExec(
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with BlockingOperatorWithCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -84,7 +87,7 @@ case class SortExec(
     }
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-    val sorter = new UnsafeExternalRowSorter(
+    val sorter = UnsafeExternalRowSorter.create(
       schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
 
     if (testSpillFrequency > 0) {
@@ -106,7 +109,7 @@ case class SortExec(
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
-      sortTime += sorter.getSortTimeNanos / 1000000
+      sortTime += NANOSECONDS.toMillis(sorter.getSortTimeNanos)
       peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
@@ -124,16 +127,9 @@ case class SortExec(
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
-  // The result rows come from the sort buffer, so this operator doesn't need to copy its result
-  // even if its child does.
-  override def needCopyResult: Boolean = false
-
-  // Sort operator always consumes all the input rows before outputting any result, so we don't need
-  // a stop check before sorting.
-  override def needStopCheck: Boolean = false
-
   override protected def doProduce(ctx: CodegenContext): String = {
-    val needToSort = ctx.addMutableState(ctx.JAVA_BOOLEAN, "needToSort", v => s"$v = true;")
+    val needToSort =
+      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "needToSort", v => s"$v = true;")
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
@@ -164,14 +160,14 @@ case class SortExec(
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $addToSorterFuncName();
        |   $sortedIterator = $sorterVariable.sort();
-       |   $sortTime.add($sorterVariable.getSortTimeNanos() / 1000000);
+       |   $sortTime.add($sorterVariable.getSortTimeNanos() / $NANOS_PER_MILLIS);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
        |   $needToSort = false;
        | }
        |
-       | while ($sortedIterator.hasNext()) {
+       | while ($limitNotReachedCond $sortedIterator.hasNext()) {
        |   UnsafeRow $outputRow = (UnsafeRow)$sortedIterator.next();
        |   ${consume(ctx, null, outputRow)}
        |   if (shouldStop()) return;

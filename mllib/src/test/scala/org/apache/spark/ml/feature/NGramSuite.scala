@@ -17,19 +17,16 @@
 
 package org.apache.spark.ml.feature
 
-import scala.beans.BeanInfo
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.sql.{DataFrame, Row}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Dataset, Row}
+case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String]) {
+  def getInputTokens: Array[String] = inputTokens
+  def getWantedNGrams: Array[String] = wantedNGrams
+}
 
-@BeanInfo
-case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String])
+class NGramSuite extends MLTest with DefaultReadWriteTest {
 
-class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
-
-  import org.apache.spark.ml.feature.NGramSuite._
   import testImplicits._
 
   test("default behavior yields bigram features") {
@@ -83,16 +80,11 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRe
       .setN(3)
     testDefaultReadWrite(t)
   }
-}
 
-object NGramSuite extends SparkFunSuite {
-
-  def testNGram(t: NGram, dataset: Dataset[_]): Unit = {
-    t.transform(dataset)
-      .select("nGrams", "wantedNGrams")
-      .collect()
-      .foreach { case Row(actualNGrams, wantedNGrams) =>
+  def testNGram(t: NGram, dataFrame: DataFrame): Unit = {
+    testTransformer[(Seq[String], Seq[String])](dataFrame, t, "nGrams", "wantedNGrams") {
+      case Row(actualNGrams : Seq[_], wantedNGrams: Seq[_]) =>
         assert(actualNGrams === wantedNGrams)
-      }
+    }
   }
 }

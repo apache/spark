@@ -18,6 +18,8 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
 import org.scalatest.BeforeAndAfter
 
@@ -125,5 +127,34 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
     df2.createOrReplaceTempView("jsonTable2")
 
     checkLoad(df2, "jsonTable2")
+  }
+
+  test("SPARK-23459: Improve error message when specified unknown column in partition columns") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val unknown = "unknownColumn"
+      val df = Seq(1L -> "a").toDF("i", "j")
+      val schemaCatalog = df.schema.catalogString
+      val e = intercept[AnalysisException] {
+        df.write
+          .format("parquet")
+          .partitionBy(unknown)
+          .save(path)
+      }.getMessage
+      assert(e.contains(s"Partition column `$unknown` not found in schema $schemaCatalog"))
+    }
+  }
+
+  test("skip empty files in non bucketed read") {
+    Seq("csv", "text").foreach { format =>
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        Files.write(Paths.get(path, "empty"), Array.empty[Byte])
+        Files.write(Paths.get(path, "notEmpty"), "a".getBytes(StandardCharsets.UTF_8))
+        val readBack = spark.read.option("wholetext", true).format(format).load(path)
+
+        assert(readBack.rdd.getNumPartitions === 1)
+      }
+    }
   }
 }

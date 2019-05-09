@@ -36,6 +36,10 @@ class JavaWrapper(object):
         super(JavaWrapper, self).__init__()
         self._java_obj = java_obj
 
+    def __del__(self):
+        if SparkContext._active_spark_context and self._java_obj is not None:
+            SparkContext._active_spark_context._gateway.detach(self._java_obj)
+
     @classmethod
     def _create_from_java_class(cls, java_class, *args):
         """
@@ -67,6 +71,10 @@ class JavaWrapper(object):
         """
         Create a Java array of given java_class type. Useful for
         calling a method with a Scala Array from Python with Py4J.
+        If the param pylist is a 2D array, then a 2D java array will be returned.
+        The returned 2D java array is a square, non-jagged 2D array that is big
+        enough for all elements. The empty slots in the inner Java arrays will
+        be filled with null to make the non-jagged 2D array.
 
         :param pylist:
           Python list to convert to a Java Array.
@@ -83,9 +91,21 @@ class JavaWrapper(object):
           - bool -> sc._gateway.jvm.java.lang.Boolean
         """
         sc = SparkContext._active_spark_context
-        java_array = sc._gateway.new_array(java_class, len(pylist))
-        for i in xrange(len(pylist)):
-            java_array[i] = pylist[i]
+        java_array = None
+        if len(pylist) > 0 and isinstance(pylist[0], list):
+            # If pylist is a 2D array, then a 2D java array will be created.
+            # The 2D array is a square, non-jagged 2D array that is big enough for all elements.
+            inner_array_length = 0
+            for i in xrange(len(pylist)):
+                inner_array_length = max(inner_array_length, len(pylist[i]))
+            java_array = sc._gateway.new_array(java_class, len(pylist), inner_array_length)
+            for i in xrange(len(pylist)):
+                for j in xrange(len(pylist[i])):
+                    java_array[i][j] = pylist[i][j]
+        else:
+            java_array = sc._gateway.new_array(java_class, len(pylist))
+            for i in xrange(len(pylist)):
+                java_array[i] = pylist[i]
         return java_array
 
 
@@ -99,10 +119,6 @@ class JavaParams(JavaWrapper, Params):
     #: synced with the Python wrapper in fit/transform/evaluate/copy.
 
     __metaclass__ = ABCMeta
-
-    def __del__(self):
-        if SparkContext._active_spark_context:
-            SparkContext._active_spark_context._gateway.detach(self._java_obj)
 
     def _make_java_param_pair(self, param, value):
         """
@@ -118,11 +134,18 @@ class JavaParams(JavaWrapper, Params):
         """
         Transforms the embedded params to the companion Java object.
         """
-        paramMap = self.extractParamMap()
+        pair_defaults = []
         for param in self.params:
-            if param in paramMap:
-                pair = self._make_java_param_pair(param, paramMap[param])
+            if self.isSet(param):
+                pair = self._make_java_param_pair(param, self._paramMap[param])
                 self._java_obj.set(pair)
+            if self.hasDefault(param):
+                pair = self._make_java_param_pair(param, self._defaultParamMap[param])
+                pair_defaults.append(pair)
+        if len(pair_defaults) > 0:
+            sc = SparkContext._active_spark_context
+            pair_defaults_seq = sc._jvm.PythonUtils.toSeq(pair_defaults)
+            self._java_obj.setDefault(pair_defaults_seq)
 
     def _transfer_param_map_to_java(self, pyParamMap):
         """

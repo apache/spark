@@ -17,17 +17,15 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
-class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class IDFSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -46,7 +44,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   test("params") {
     ParamsSuite.checkParams(new IDF)
-    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0)))
+    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0), Array(1L), 1))
     ParamsSuite.checkParams(model)
   }
 
@@ -57,7 +55,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       Vectors.dense(0.0, 1.0, 2.0, 3.0),
       Vectors.sparse(numOfFeatures, Array(1), Array(1.0))
     )
-    val numOfData = data.size
+    val numOfData = data.length
     val idf = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       math.log((numOfData + 1.0) / (x + 1.0))
     })
@@ -72,7 +70,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
     MLTestingUtils.checkCopyAndUids(idfEst, idfModel)
 
-    idfModel.transform(df).select("idfValue", "expected").collect().foreach {
+    testTransformer[(Vector, Vector)](df, idfModel, "idfValue", "expected") {
       case Row(x: Vector, y: Vector) =>
         assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }
@@ -85,7 +83,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       Vectors.dense(0.0, 1.0, 2.0, 3.0),
       Vectors.sparse(numOfFeatures, Array(1), Array(1.0))
     )
-    val numOfData = data.size
+    val numOfData = data.length
     val idf = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       if (x > 0) math.log((numOfData + 1.0) / (x + 1.0)) else 0
     })
@@ -99,7 +97,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       .setMinDocFreq(1)
       .fit(df)
 
-    idfModel.transform(df).select("idfValue", "expected").collect().foreach {
+    testTransformer[(Vector, Vector)](df, idfModel, "idfValue", "expected") {
       case Row(x: Vector, y: Vector) =>
         assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }
@@ -114,10 +112,13 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("IDFModel read/write") {
-    val instance = new IDFModel("myIDFModel", new OldIDFModel(Vectors.dense(1.0, 2.0)))
+    val instance = new IDFModel("myIDFModel",
+      new OldIDFModel(Vectors.dense(1.0, 2.0), Array(1, 2), 2))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.idf === instance.idf)
+    assert(newInstance.docFreq === instance.docFreq)
+    assert(newInstance.numDocs === instance.numDocs)
   }
 }

@@ -17,16 +17,23 @@
 
 package org.apache.spark.status
 
-import org.apache.spark.status.api.v1.{TaskData, TaskMetrics}
+import org.apache.spark.status.api.v1.TaskData
 
 private[spark] object AppStatusUtils {
 
+  private val TASK_FINISHED_STATES = Set("FAILED", "KILLED", "SUCCESS")
+
+  private def isTaskFinished(task: TaskData): Boolean = {
+    TASK_FINISHED_STATES.contains(task.status)
+  }
+
   def schedulerDelay(task: TaskData): Long = {
-    if (task.taskMetrics.isDefined && task.duration.isDefined) {
+    if (isTaskFinished(task) && task.taskMetrics.isDefined && task.duration.isDefined) {
       val m = task.taskMetrics.get
       schedulerDelay(task.launchTime.getTime(), fetchStart(task), task.duration.get,
         m.executorDeserializeTime, m.resultSerializationTime, m.executorRunTime)
     } else {
+      // The task is still running and the metrics like executorRunTime are not available.
       0L
     }
   }

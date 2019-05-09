@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Fractional, Numeric, Ordering}
+import scala.math.{Fractional, Numeric}
 import scala.math.Numeric.DoubleAsIfIntegral
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.util.Utils
 
 /**
@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class DoubleType private() extends FractionalType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
@@ -38,9 +38,8 @@ class DoubleType private() extends FractionalType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
-  private[sql] val ordering = new Ordering[Double] {
-    override def compare(x: Double, y: Double): Int = Utils.nanSafeCompareDoubles(x, y)
-  }
+  private[sql] val ordering =
+    (x: Double, y: Double) => Utils.nanSafeCompareDoubles(x, y)
   private[sql] val asIntegral = DoubleAsIfIntegral
 
   /**
@@ -54,5 +53,5 @@ class DoubleType private() extends FractionalType {
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case object DoubleType extends DoubleType

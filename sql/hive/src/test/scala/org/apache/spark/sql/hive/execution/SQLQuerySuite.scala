@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
@@ -25,13 +26,14 @@ import java.util.{Locale, Set}
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -516,23 +518,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("CTAS with default fileformat") {
     val table = "ctas1"
     val ctas = s"CREATE TABLE IF NOT EXISTS $table SELECT key k, value FROM src"
-    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
-      withSQLConf("hive.default.fileformat" -> "textfile") {
+    Seq("orc", "parquet").foreach { dataSourceFormat =>
+      withSQLConf(
+        SQLConf.CONVERT_CTAS.key -> "true",
+        SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> dataSourceFormat,
+        "hive.default.fileformat" -> "textfile") {
         withTable(table) {
           sql(ctas)
-          // We should use parquet here as that is the default datasource fileformat. The default
-          // datasource file format is controlled by `spark.sql.sources.default` configuration.
+          // The default datasource file format is controlled by `spark.sql.sources.default`.
           // This testcase verifies that setting `hive.default.fileformat` has no impact on
           // the target table's fileformat in case of CTAS.
-          assert(sessionState.conf.defaultDataSourceName === "parquet")
-          checkRelation(tableName = table, isDataSourceTable = true, format = "parquet")
+          checkRelation(tableName = table, isDataSourceTable = true, format = dataSourceFormat)
         }
-      }
-      withSQLConf("spark.sql.sources.default" -> "orc") {
-        withTable(table) {
-          sql(ctas)
-          checkRelation(tableName = table, isDataSourceTable = true, format = "orc")
-         }
       }
     }
   }
@@ -695,8 +692,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               |AS SELECT key, value FROM mytable1
             """.stripMargin)
         }.getMessage
-        assert(e.contains("A Create Table As Select (CTAS) statement is not allowed to " +
-          "create a partitioned table using Hive's file formats"))
+        assert(e.contains("Create Partitioned Table As Select cannot specify data type for " +
+          "the partition columns of the target table"))
       }
     }
   }
@@ -1108,7 +1105,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
         sql(
-          s"ADD JAR ${hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+          s"ADD JAR ${hiveContext.getHiveContribJar().getCanonicalPath}")
         try {
           sql(
             """
@@ -1203,35 +1200,37 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("specifying database name for a temporary view is not allowed") {
     withTempPath { dir =>
-      val path = dir.toURI.toString
-      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df
-        .write
-        .format("parquet")
-        .save(path)
+      withTempView("db.t") {
+        val path = dir.toURI.toString
+        val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+        df
+          .write
+          .format("parquet")
+          .save(path)
 
-      // We don't support creating a temporary table while specifying a database
-      intercept[AnalysisException] {
+        // We don't support creating a temporary table while specifying a database
+        intercept[AnalysisException] {
+          spark.sql(
+            s"""
+              |CREATE TEMPORARY VIEW db.t
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+             """.stripMargin)
+        }
+
+        // If you use backticks to quote the name then it's OK.
         spark.sql(
           s"""
-            |CREATE TEMPORARY VIEW db.t
+            |CREATE TEMPORARY VIEW `db.t`
             |USING parquet
             |OPTIONS (
             |  path '$path'
             |)
            """.stripMargin)
+        checkAnswer(spark.table("`db.t`"), df)
       }
-
-      // If you use backticks to quote the name then it's OK.
-      spark.sql(
-        s"""
-          |CREATE TEMPORARY VIEW `db.t`
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-         """.stripMargin)
-      checkAnswer(spark.table("`db.t`"), df)
     }
   }
 
@@ -1915,13 +1914,83 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           sql("LOAD DATA LOCAL INPATH '/non-exist-folder/*part*' INTO TABLE load_t")
         }.getMessage
         assert(m.contains("LOAD DATA input path does not exist"))
-
-        val m2 = intercept[AnalysisException] {
-          sql(s"LOAD DATA LOCAL INPATH '$path*/*part*' INTO TABLE load_t")
-        }.getMessage
-        assert(m2.contains("LOAD DATA input path allows only filename wildcard"))
       }
     }
+  }
+
+  test("SPARK-23425 Test LOAD DATA LOCAL INPATH with space in file name") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t") {
+        sql("CREATE TABLE load_t (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000 1' INTO TABLE load_t")
+        checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1")))
+      }
+    }
+  }
+
+  test("Support wildcard character in folderlevel for LOAD DATA LOCAL INPATH") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t_folder_wildcard") {
+        sql("CREATE TABLE load_t (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '${
+          path.substring(0, path.length - 1)
+            .concat("*")
+        }/' INTO TABLE load_t")
+        checkAnswer(sql("SELECT * FROM load_t"), Seq(Row("1"), Row("2"), Row("3")))
+        val m = intercept[AnalysisException] {
+          sql(s"LOAD DATA LOCAL INPATH '${
+            path.substring(0, path.length - 1).concat("_invalid_dir") concat ("*")
+          }/' INTO TABLE load_t")
+        }.getMessage
+        assert(m.contains("LOAD DATA input path does not exist"))
+      }
+    }
+  }
+
+  test("SPARK-17796 Support wildcard '?'char in middle as part of local file path") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t1") {
+        sql("CREATE TABLE load_t1 (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/part-r-0000?' INTO TABLE load_t1")
+        checkAnswer(sql("SELECT * FROM load_t1"), Seq(Row("1"), Row("2"), Row("3")))
+      }
+    }
+  }
+
+  test("SPARK-17796 Support wildcard '?'char in start as part of local file path") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      for (i <- 1 to 3) {
+        Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
+      }
+      withTable("load_t2") {
+        sql("CREATE TABLE load_t2 (a STRING)")
+        sql(s"LOAD DATA LOCAL INPATH '$path/?art-r-00001' INTO TABLE load_t2")
+        checkAnswer(sql("SELECT * FROM load_t2"), Seq(Row("1")))
+      }
+    }
+  }
+
+  test("SPARK-25738: defaultFs can have a port") {
+    val defaultURI = new URI("hdfs://fizz.buzz.com:8020")
+    val r = LoadDataCommand.makeQualified(defaultURI, new Path("/foo/bar"), new Path("/flim/flam"))
+    assert(r === new Path("hdfs://fizz.buzz.com:8020/flim/flam"))
   }
 
   test("Insert overwrite with partition") {
@@ -1966,6 +2035,22 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
         checkAnswer(sql("SELECT i, j FROM tbl WHERE J=10"), Row(1, 10))
         checkAnswer(spark.table("tbl").filter($"J" === 10), Row(1, 10))
+      }
+    }
+  }
+
+  test("column resolution scenarios with hive table") {
+    val currentDb = spark.catalog.currentDatabase
+    withTempDatabase { db1 =>
+      try {
+        spark.catalog.setCurrentDatabase(db1)
+        spark.sql("CREATE TABLE t1(i1 int) STORED AS parquet")
+        spark.sql("INSERT INTO t1 VALUES(1)")
+        checkAnswer(spark.sql(s"SELECT $db1.t1.i1 FROM t1"), Row(1))
+        checkAnswer(spark.sql(s"SELECT $db1.t1.i1 FROM $db1.t1"), Row(1))
+        checkAnswer(spark.sql(s"SELECT $db1.t1.* FROM $db1.t1"), Row(1))
+      } finally {
+        spark.catalog.setCurrentDatabase(currentDb)
       }
     }
   }
@@ -2056,7 +2141,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val deleteOnExitField = classOf[FileSystem].getDeclaredField("deleteOnExit")
       deleteOnExitField.setAccessible(true)
 
-      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(spark.sessionState.newHadoopConf())
       val setOfPath = deleteOnExitField.get(fs).asInstanceOf[Set[Path]]
 
       val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
@@ -2077,6 +2162,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
           }.getMessage
           assert(m.contains(s"contains invalid character(s)"))
+
+          val m1 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
+          }.getMessage
+          assert(m1.contains(s"contains invalid character(s)"))
 
           val m2 = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
@@ -2102,7 +2192,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   Seq("orc", "parquet").foreach { format =>
     test(s"SPARK-18355 Read data from a hive table with a new column - $format") {
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
 
       Seq("true", "false").foreach { value =>
         withSQLConf(
@@ -2160,10 +2251,136 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
-    test(s"Writing empty datasets should not fail - $format") {
-      withTempDir { dir =>
-        Seq("str").toDS.limit(0).write.format(format).save(dir.getCanonicalPath + "/tmp")
+  test("SPARK-24085 scalar subquery in partitioning expression") {
+    Seq("orc", "parquet").foreach { format =>
+      Seq(true, false).foreach { isConverted =>
+        withSQLConf(
+          HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted",
+          "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTable(format) {
+            withTempPath { tempDir =>
+              sql(
+                s"""
+                  |CREATE TABLE ${format} (id_value string)
+                  |PARTITIONED BY (id_type string)
+                  |LOCATION '${tempDir.toURI}'
+                  |STORED AS ${format}
+                """.stripMargin)
+              sql(s"insert into $format values ('1','a')")
+              sql(s"insert into $format values ('2','a')")
+              sql(s"insert into $format values ('3','b')")
+              sql(s"insert into $format values ('4','b')")
+              checkAnswer(
+                sql(s"SELECT * FROM $format WHERE id_type = (SELECT 'b')"),
+                Row("3", "b") :: Row("4", "b") :: Nil)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-25271: Hive ctas commands should use data source if it is convertible") {
+    withTempView("p") {
+      Seq(1, 2, 3).toDF("id").createOrReplaceTempView("p")
+
+      Seq("orc", "parquet").foreach { format =>
+        Seq(true, false).foreach { isConverted =>
+          withSQLConf(
+            HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+            HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
+            Seq(true, false).foreach { isConvertedCtas =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> s"$isConvertedCtas") {
+
+                val targetTable = "targetTable"
+                withTable(targetTable) {
+                  val df = sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
+                  checkAnswer(sql(s"SELECT id FROM $targetTable"),
+                    Row(1) :: Row(2) :: Row(3) :: Nil)
+
+                  val ctasDSCommand = df.queryExecution.analyzed.collect {
+                    case _: OptimizedCreateHiveTableAsSelectCommand => true
+                  }.headOption
+                  val ctasCommand = df.queryExecution.analyzed.collect {
+                    case _: CreateHiveTableAsSelectCommand => true
+                  }.headOption
+
+                  if (isConverted && isConvertedCtas) {
+                    assert(ctasDSCommand.nonEmpty)
+                    assert(ctasCommand.isEmpty)
+                  } else {
+                    assert(ctasDSCommand.isEmpty)
+                    assert(ctasCommand.nonEmpty)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-26181 hasMinMaxStats method of ColumnStatsMap is not correct") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("all_null") {
+        sql("create table all_null (attr1 int, attr2 int)")
+        sql("insert into all_null values (null, null)")
+        sql("analyze table all_null compute statistics for columns attr1, attr2")
+        // check if the stats can be calculated without Cast exception.
+        sql("select * from all_null where attr1 < 1").queryExecution.stringWithStats
+        sql("select * from all_null where attr1 < attr2").queryExecution.stringWithStats
+      }
+    }
+  }
+
+  test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
+    Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+          sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
+          if (enableOptimizeMetadataOnlyQuery) {
+            // The result is wrong if we enable the configuration.
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(5))
+          } else {
+            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+          }
+          checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-25158: " +
+    "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
+    withTempView("test") {
+      val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
+      try {
+        val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
+        Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
+
+        // Use a bad udf to generate failed inputs.
+        val badUDF = org.apache.spark.sql.functions.udf((x: Int) => {
+          if (x < 1) x
+          else throw new RuntimeException("Failed to produce data.")
+        })
+        spark
+          .range(5)
+          .select(badUDF('id).as("a"))
+          .createOrReplaceTempView("test")
+        val scriptFilePath = getTestResourcePath("data")
+        val e = intercept[SparkException] {
+          sql(
+            s"""FROM test SELECT TRANSFORM(a)
+               |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+             """.stripMargin).collect()
+        }
+        assert(e.getMessage.contains("Failed to produce data."))
+        assert(uncaughtExceptionHandler.exception.isEmpty)
+      } finally {
+        Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
       }
     }
   }

@@ -19,6 +19,7 @@ import cProfile
 import pstats
 import os
 import atexit
+import sys
 
 from pyspark.accumulators import AccumulatorParam
 
@@ -103,11 +104,11 @@ class Profiler(object):
 
     def profile(self, func):
         """ Do profiling on the function `func`"""
-        raise NotImplemented
+        raise NotImplementedError
 
     def stats(self):
         """ Return the collected profiling stats (pstats.Stats)"""
-        raise NotImplemented
+        raise NotImplementedError
 
     def show(self, id):
         """ Print the profile stats to stdout, id is the RDD id """
@@ -173,4 +174,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

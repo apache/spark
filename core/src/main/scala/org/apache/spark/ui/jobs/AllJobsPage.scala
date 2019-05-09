@@ -28,6 +28,7 @@ import scala.xml._
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -36,6 +37,9 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("") {
+
+  import ApiHelper._
+
   private val JOBS_LEGEND =
     <div class="legend-area"><svg width="150px" height="85px">
       <rect class="succeeded-job-legend"
@@ -65,10 +69,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }.map { job =>
       val jobId = job.jobId
       val status = job.status
-      val jobDescription = store.lastStageAttempt(job.stageIds.max).description
-      val displayJobDescription = jobDescription
-        .map(UIUtils.makeDescription(_, "", plainText = true).text)
-        .getOrElse("")
+      val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
+      val jobDescription = UIUtils.makeDescription(lastStageDescription, "", plainText = true).text
+
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
       val classNameByStatus = status match {
@@ -80,7 +83,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
       // extra layers of escaping in order to embed this in a Javascript string literal.
-      val escapedDesc = Utility.escape(displayJobDescription)
+      val escapedDesc = Utility.escape(jobDescription)
       val jsEscapedDesc = StringEscapeUtils.escapeEcmaScript(escapedDesc)
       val jobEventJsonAsStr =
         s"""
@@ -203,20 +206,17 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       jobTag: String,
       jobs: Seq[v1.JobData],
       killEnabled: Boolean): Seq[Node] = {
-    // stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
-    val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
+    val parameterOtherTable = request.getParameterMap().asScala
+      .filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
 
     val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
     val jobIdTitle = if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"
 
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterJobPage = UIUtils.stripXSS(request.getParameter(jobTag + ".page"))
-    val parameterJobSortColumn = UIUtils.stripXSS(request.getParameter(jobTag + ".sort"))
-    val parameterJobSortDesc = UIUtils.stripXSS(request.getParameter(jobTag + ".desc"))
-    val parameterJobPageSize = UIUtils.stripXSS(request.getParameter(jobTag + ".pageSize"))
-    val parameterJobPrevPageSize = UIUtils.stripXSS(request.getParameter(jobTag + ".prevPageSize"))
+    val parameterJobPage = request.getParameter(jobTag + ".page")
+    val parameterJobSortColumn = request.getParameter(jobTag + ".sort")
+    val parameterJobSortDesc = request.getParameter(jobTag + ".desc")
+    val parameterJobPageSize = request.getParameter(jobTag + ".pageSize")
 
     val jobPage = Option(parameterJobPage).map(_.toInt).getOrElse(1)
     val jobSortColumn = Option(parameterJobSortColumn).map { sortColumn =>
@@ -227,17 +227,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       jobSortColumn == jobIdTitle
     )
     val jobPageSize = Option(parameterJobPageSize).map(_.toInt).getOrElse(100)
-    val jobPrevPageSize = Option(parameterJobPrevPageSize).map(_.toInt).getOrElse(jobPageSize)
 
-    val page: Int = {
-      // If the user has changed to a larger page size, then go to page 1 in order to avoid
-      // IndexOutOfBoundsException.
-      if (jobPageSize <= jobPrevPageSize) {
-        jobPage
-      } else {
-        1
-      }
-    }
     val currentTime = System.currentTimeMillis()
 
     try {
@@ -246,7 +236,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         jobs,
         tableHeaderId,
         jobTag,
-        UIUtils.prependBaseUri(parent.basePath),
+        UIUtils.prependBaseUri(request, parent.basePath),
         "jobs", // subPath
         parameterOtherTable,
         killEnabled,
@@ -255,7 +245,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         pageSize = jobPageSize,
         sortColumn = jobSortColumn,
         desc = jobSortDesc
-      ).table(page)
+      ).table(jobPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         <div class="alert alert-error">
@@ -306,7 +296,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
 
     val schedulingMode = store.environmentInfo().sparkProperties.toMap
-      .get("spark.scheduler.mode")
+      .get(SCHEDULER_MODE.key)
       .map { mode => SchedulingMode.withName(mode).toString }
       .getOrElse("Unknown")
 
@@ -363,22 +353,49 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       store.executorList(false), startTime)
 
     if (shouldShowActiveJobs) {
-      content ++= <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++
-        activeJobsTable
+      content ++=
+        <span id="active" class="collapse-aggregated-activeJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-activeJobs','aggregated-activeJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Active Jobs ({activeJobs.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-activeJobs collapsible-table">
+          {activeJobsTable}
+        </div>
     }
     if (shouldShowCompletedJobs) {
-      content ++= <h4 id="completed">Completed Jobs ({completedJobNumStr})</h4> ++
-        completedJobsTable
+      content ++=
+        <span id="completed" class="collapse-aggregated-completedJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-completedJobs','aggregated-completedJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Completed Jobs ({completedJobNumStr})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-completedJobs collapsible-table">
+          {completedJobsTable}
+        </div>
     }
     if (shouldShowFailedJobs) {
-      content ++= <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++
-        failedJobsTable
+      content ++=
+        <span id ="failed" class="collapse-aggregated-failedJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-failedJobs','aggregated-failedJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Failed Jobs ({failedJobs.size})</a>
+          </h4>
+        </span> ++
+      <div class="aggregated-failedJobs collapsible-table">
+        {failedJobsTable}
+      </div>
     }
 
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +
       " Click on a job to see information about the stages of tasks inside it."
 
-    UIUtils.headerSparkPage("Spark Jobs", content, parent, helpText = Some(helpText))
+    UIUtils.headerSparkPage(request, "Spark Jobs", content, parent, helpText = Some(helpText))
   }
 
 }
@@ -402,6 +419,8 @@ private[ui] class JobDataSource(
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[JobTableRowData](pageSize) {
+
+  import ApiHelper._
 
   // Convert JobUIData to JobTableRowData which contains the final contents to show in the table
   // so that we can avoid creating duplicate contents during sorting the data
@@ -427,23 +446,21 @@ private[ui] class JobDataSource(
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
     val submissionTime = jobData.submissionTime
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-    val lastStageAttempt = store.lastStageAttempt(jobData.stageIds.max)
-    val lastStageDescription = lastStageAttempt.description.getOrElse("")
+    val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
-    val formattedJobDescription =
-      UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
+    val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
 
-    val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
+    val detailUrl = "%s/jobs/job/?id=%s".format(basePath, jobData.jobId)
 
     new JobTableRowData(
       jobData,
-      lastStageAttempt.name,
+      lastStageName,
       lastStageDescription,
       duration.getOrElse(-1),
       formattedDuration,
       submissionTime.map(_.getTime()).getOrElse(-1L),
       formattedSubmissionTime,
-      formattedJobDescription,
+      jobDescription,
       detailUrl
     )
   }
@@ -494,8 +511,6 @@ private[ui] class JobPagedTable(
       "table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = jobTag + ".pageSize"
-
-  override def prevPageSizeFormField: String = jobTag + ".prevPageSize"
 
   override def pageNumberFormField: String = jobTag + ".page"
 

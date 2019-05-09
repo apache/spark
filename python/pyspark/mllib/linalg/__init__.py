@@ -281,6 +281,8 @@ class DenseVector(Vector):
     DenseVector([3.0, 2.0])
     >>> u % 2
     DenseVector([1.0, 0.0])
+    >>> -v
+    DenseVector([-1.0, -2.0])
     """
     def __init__(self, ar):
         if isinstance(ar, bytes):
@@ -480,6 +482,9 @@ class DenseVector(Vector):
     def __getattr__(self, item):
         return getattr(self.array, item)
 
+    def __neg__(self):
+        return DenseVector(-self.array)
+
     def _delegate(op):
         def func(self, other):
             if isinstance(other, DenseVector):
@@ -487,7 +492,6 @@ class DenseVector(Vector):
             return DenseVector(getattr(self.array, op)(other))
         return func
 
-    __neg__ = _delegate("__neg__")
     __add__ = _delegate("__add__")
     __sub__ = _delegate("__sub__")
     __mul__ = _delegate("__mul__")
@@ -1131,14 +1135,14 @@ class DenseMatrix(Matrix):
             return self.values[i + j * self.numRows]
 
     def __eq__(self, other):
-        if (not isinstance(other, DenseMatrix) or
-                self.numRows != other.numRows or
-                self.numCols != other.numCols):
+        if (self.numRows != other.numRows or self.numCols != other.numCols):
             return False
+        if isinstance(other, SparseMatrix):
+            return np.all(self.toArray() == other.toArray())
 
         self_values = np.ravel(self.toArray(), order='F')
         other_values = np.ravel(other.toArray(), order='F')
-        return all(self_values == other_values)
+        return np.all(self_values == other_values)
 
 
 class SparseMatrix(Matrix):
@@ -1368,9 +1372,15 @@ class QRDecomposition(object):
 
 def _test():
     import doctest
+    import numpy
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

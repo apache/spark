@@ -212,9 +212,15 @@ case object TaskResultLost extends TaskFailedReason {
  * Task was killed intentionally and needs to be rescheduled.
  */
 @DeveloperApi
-case class TaskKilled(reason: String) extends TaskFailedReason {
+case class TaskKilled(
+    reason: String,
+    accumUpdates: Seq[AccumulableInfo] = Seq.empty,
+    private[spark] val accums: Seq[AccumulatorV2[_, _]] = Nil)
+  extends TaskFailedReason {
+
   override def toErrorString: String = s"TaskKilled ($reason)"
   override def countTowardsTaskFailures: Boolean = false
+
 }
 
 /**

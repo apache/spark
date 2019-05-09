@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
- * An [[LogicalPlanVisitor]] that computes a the statistics used in a cost-based optimizer.
+ * A [[LogicalPlanVisitor]] that computes the statistics for the cost-based optimizer.
  */
 object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
@@ -46,8 +46,6 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitGenerate(p: Generate): Statistics = fallback(p)
 
   override def visitGlobalLimit(p: GlobalLimit): Statistics = fallback(p)
-
-  override def visitHint(p: ResolvedHint): Statistics = fallback(p)
 
   override def visitIntersect(p: Intersect): Statistics = fallback(p)
 

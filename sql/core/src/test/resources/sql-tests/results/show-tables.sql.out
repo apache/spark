@@ -178,6 +178,8 @@ struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
 showdb	show_t1	false	Partition Values: [c=Us, d=1]
 Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
+Created Time [not included in comparison]
+Last Access [not included in comparison]
 
 
 -- !query 15

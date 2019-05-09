@@ -23,16 +23,17 @@ import org.junit.Test;
 import org.apache.spark.SparkConf;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.internal.config.package$;
 
 public class TaskMemoryManagerSuite {
 
   @Test
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new StaticMemoryManager(
-        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+      new UnifiedMemoryManager(
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false),
         Long.MAX_VALUE,
-        Long.MAX_VALUE,
+        Long.MAX_VALUE / 2,
         1),
       0);
     final MemoryConsumer c = new TestMemoryConsumer(manager);
@@ -44,8 +45,8 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOffHeap() {
     final SparkConf conf = new SparkConf()
-      .set("spark.memory.offHeap.enabled", "true")
-      .set("spark.memory.offHeap.size", "1000");
+      .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), true)
+      .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 1000L);
     final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
@@ -61,7 +62,8 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOnHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+      new TestMemoryManager(
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
@@ -72,7 +74,8 @@ public class TaskMemoryManagerSuite {
   @Test
   public void freeingPageSetsPageNumberToSpecialConstant() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+      new TestMemoryManager(
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     c.freePage(dataPage);
@@ -82,7 +85,8 @@ public class TaskMemoryManagerSuite {
   @Test(expected = AssertionError.class)
   public void freeingPageDirectlyInAllocatorTriggersAssertionError() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+      new TestMemoryManager(
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     MemoryAllocator.HEAP.free(dataPage);
@@ -91,7 +95,8 @@ public class TaskMemoryManagerSuite {
   @Test(expected = AssertionError.class)
   public void callingFreePageOnDirectlyAllocatedPageTriggersAssertionError() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+      new TestMemoryManager(
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = MemoryAllocator.HEAP.allocate(256);
     manager.freePage(dataPage, c);
@@ -199,7 +204,7 @@ public class TaskMemoryManagerSuite {
     // was deprecated in Spark 1.6 and replaced by `spark.memory.offHeap.enabled` (see SPARK-12251).
     final SparkConf conf = new SparkConf()
       .set("spark.unsafe.offHeap", "true")
-      .set("spark.memory.offHeap.size", "1000");
+      .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 1000L);
     final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);
   }

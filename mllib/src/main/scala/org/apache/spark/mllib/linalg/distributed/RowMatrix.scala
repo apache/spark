@@ -27,6 +27,7 @@ import breeze.numerics.{sqrt => brzSqrt}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
@@ -117,15 +118,116 @@ class RowMatrix @Since("1.0.0") (
     // Computes n*(n+1)/2, avoiding overflow in the multiplication.
     // This succeeds when n <= 65535, which is checked above
     val nt = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
+    val gramianSizeInBytes = nt * 8L
 
     // Compute the upper triangular part of the gram matrix.
-    val GU = rows.treeAggregate(new BDV[Double](nt))(
-      seqOp = (U, v) => {
+    val GU = rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
+      seqOp = (maybeU, v) => {
+        val U =
+          if (maybeU == null) {
+            new BDV[Double](nt)
+          } else {
+            maybeU
+          }
         BLAS.spr(1.0, v, U.data)
         U
-      }, combOp = (U1, U2) => U1 += U2)
+      }, combOp = (U1, U2) =>
+        if (U1 == null) {
+          U2
+        } else if (U2 == null) {
+          U1
+        } else {
+          U1 += U2
+        },
+      depth = getTreeAggregateIdealDepth(gramianSizeInBytes)
+    )
 
     RowMatrix.triuToFull(n, GU.data)
+  }
+
+  private def computeDenseVectorCovariance(mean: Vector, n: Int, m: Long): Matrix = {
+
+    val bc = rows.context.broadcast(mean)
+
+    // Computes n*(n+1)/2, avoiding overflow in the multiplication.
+    // This succeeds when n <= 65535, which is checked above
+    val nt = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
+
+    val MU = rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
+      seqOp = (maybeU, v) => {
+        val U =
+          if (maybeU == null) {
+            new BDV[Double](nt)
+          } else {
+            maybeU
+          }
+
+        val n = v.size
+        val na = Array.ofDim[Double](n)
+        val means = bc.value
+
+        val ta = v.toArray
+        for (index <- 0 until n) {
+          na(index) = ta(index) - means(index)
+        }
+
+        BLAS.spr(1.0, new DenseVector(na), U.data)
+        U
+      }, combOp = (U1, U2) =>
+        if (U1 == null) {
+          U2
+        } else if (U2 == null) {
+          U1
+        } else {
+          U1 += U2
+        }
+    )
+
+    bc.destroy()
+
+    val M = RowMatrix.triuToFull(n, MU.data).asBreeze
+
+    var i = 0
+    var j = 0
+    val m1 = m - 1.0
+    while (i < n) {
+      j = i
+      while (j < n) {
+        val Mij = M(i, j) / m1
+        M(i, j) = Mij
+        M(j, i) = Mij
+        j += 1
+      }
+      i += 1
+    }
+
+    Matrices.fromBreeze(M)
+  }
+
+  private def computeSparseVectorCovariance(mean: Vector, n: Int, m: Long): Matrix = {
+
+    // We use the formula Cov(X, Y) = E[X * Y] - E[X] E[Y], which is not accurate if E[X * Y] is
+    // large but Cov(X, Y) is small, but it is good for sparse computation.
+    // TODO: find a fast and stable way for sparse data.
+    val G = computeGramianMatrix().asBreeze
+
+    var i = 0
+    var j = 0
+    val m1 = m - 1.0
+    var alpha = 0.0
+    while (i < n) {
+      alpha = m / m1 * mean(i)
+      j = i
+      while (j < n) {
+        val Gij = G(i, j) / m1 - alpha * mean(j)
+        G(i, j) = Gij
+        G(j, i) = Gij
+        j += 1
+      }
+      i += 1
+    }
+
+    Matrices.fromBreeze(G)
   }
 
   private def checkNumColumns(cols: Int): Unit = {
@@ -337,29 +439,11 @@ class RowMatrix @Since("1.0.0") (
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
     val mean = summary.mean
 
-    // We use the formula Cov(X, Y) = E[X * Y] - E[X] E[Y], which is not accurate if E[X * Y] is
-    // large but Cov(X, Y) is small, but it is good for sparse computation.
-    // TODO: find a fast and stable way for sparse data.
-
-    val G = computeGramianMatrix().asBreeze
-
-    var i = 0
-    var j = 0
-    val m1 = m - 1.0
-    var alpha = 0.0
-    while (i < n) {
-      alpha = m / m1 * mean(i)
-      j = i
-      while (j < n) {
-        val Gij = G(i, j) / m1 - alpha * mean(j)
-        G(i, j) = Gij
-        G(j, i) = Gij
-        j += 1
-      }
-      i += 1
+    if (rows.first().isInstanceOf[DenseVector]) {
+      computeDenseVectorCovariance(mean, n, m)
+    } else {
+      computeSparseVectorCovariance(mean, n, m)
     }
-
-    Matrices.fromBreeze(G)
   }
 
   /**
@@ -370,32 +454,41 @@ class RowMatrix @Since("1.0.0") (
    * Each column corresponds for one principal component,
    * and the columns are in descending order of component variance.
    * The row data do not need to be "centered" first; it is not necessary for
-   * the mean of each column to be 0.
+   * the mean of each column to be 0. But, if the number of columns are more than
+   * 65535, then the data need to be "centered".
    *
    * @param k number of top principal components.
    * @return a matrix of size n-by-k, whose columns are principal components, and
    * a vector of values which indicate how much variance each principal component
    * explains
-   *
-   * @note This cannot be computed on matrices with more than 65535 columns.
    */
   @Since("1.6.0")
   def computePrincipalComponentsAndExplainedVariance(k: Int): (Matrix, Vector) = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
 
-    val Cov = computeCovariance().asBreeze.asInstanceOf[BDM[Double]]
+    if (n > 65535) {
+      val svd = computeSVD(k)
+      val s = svd.s.toArray.map(eigValue => eigValue * eigValue / (n - 1))
+      val eigenSum = s.sum
+      val explainedVariance = s.map(_ / eigenSum)
 
-    val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
-
-    val eigenSum = s.data.sum
-    val explainedVariance = s.data.map(_ / eigenSum)
-
-    if (k == n) {
-      (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
+      (svd.V, Vectors.dense(explainedVariance))
     } else {
-      (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
-        Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
+
+      val Cov = computeCovariance().asBreeze.asInstanceOf[BDM[Double]]
+
+      val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
+
+      val eigenSum = s.data.sum
+      val explainedVariance = s.data.map(_ / eigenSum)
+
+      if (k == n) {
+        (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
+      } else {
+        (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
+          Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
+      }
     }
   }
 
@@ -531,7 +624,7 @@ class RowMatrix @Since("1.0.0") (
    * decomposition (factorization) for the [[RowMatrix]] of a tall and skinny shape.
    * Reference:
    *  Paul G. Constantine, David F. Gleich. "Tall and skinny QR factorizations in MapReduce
-   *  architectures" (see <a href="http://dx.doi.org/10.1145/1996092.1996103">here</a>)
+   *  architectures" (see <a href="https://doi.org/10.1145/1996092.1996103">here</a>)
    *
    * @param computeQ whether to computeQ
    * @return QRDecomposition(Q, R), Q = null if computeQ = false.
@@ -684,6 +777,35 @@ class RowMatrix @Since("1.0.0") (
       require(nRows == m,
         s"The number of rows $m is different from what specified or previously computed: ${nRows}.")
     }
+  }
+
+  /**
+   * Computing desired tree aggregate depth necessary to avoid exceeding
+   * driver.MaxResultSize during aggregation.
+   * Based on the formulae: (numPartitions)^(1/depth) * objectSize <= DriverMaxResultSize
+   * @param aggregatedObjectSizeInBytes the size, in megabytes, of the object being tree aggregated
+   */
+  private[spark] def getTreeAggregateIdealDepth(aggregatedObjectSizeInBytes: Long) = {
+    require(aggregatedObjectSizeInBytes > 0,
+      "Cannot compute aggregate depth heuristic based on a zero-size object to aggregate")
+
+    val maxDriverResultSizeInBytes = rows.conf.get[Long](MAX_RESULT_SIZE)
+
+    require(maxDriverResultSizeInBytes > aggregatedObjectSizeInBytes,
+      s"Cannot aggregate object of size $aggregatedObjectSizeInBytes Bytes, "
+        + s"as it's bigger than maxResultSize ($maxDriverResultSizeInBytes Bytes)")
+
+    val numerator = math.log(rows.getNumPartitions)
+    val denominator = math.log(maxDriverResultSizeInBytes) - math.log(aggregatedObjectSizeInBytes)
+    val desiredTreeDepth = math.ceil(numerator / denominator)
+
+    if (desiredTreeDepth > 4) {
+      logWarning(
+        s"Desired tree depth for treeAggregation is big ($desiredTreeDepth)."
+          + "Consider increasing driver max result size or reducing number of partitions")
+    }
+
+    math.min(math.max(1, desiredTreeDepth), 10).toInt
   }
 }
 

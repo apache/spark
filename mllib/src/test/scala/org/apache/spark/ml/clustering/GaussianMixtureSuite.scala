@@ -21,25 +21,23 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 
-class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultReadWriteTest {
+class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
-  import testImplicits._
   import GaussianMixtureSuite._
+  import testImplicits._
 
   final val k = 5
   private val seed = 538009335
-  @transient var dataset: Dataset[_] = _
-  @transient var denseDataset: Dataset[_] = _
-  @transient var sparseDataset: Dataset[_] = _
-  @transient var decompositionDataset: Dataset[_] = _
-  @transient var rDataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
+  @transient var denseDataset: DataFrame = _
+  @transient var sparseDataset: DataFrame = _
+  @transient var decompositionDataset: DataFrame = _
+  @transient var rDataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -118,15 +116,10 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(model.weights.length === k)
     assert(model.gaussians.length === k)
 
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName, probabilityColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
-
     // Check prediction matches the highest probability, and probabilities sum to one.
-    transformed.select(predictionColName, probabilityColName).collect().foreach {
-      case Row(pred: Int, prob: Vector) =>
+    testTransformer[Tuple1[Vector]](dataset.toDF(), model,
+      "features", predictionColName, probabilityColName) {
+      case Row(_, pred: Int, prob: Vector) =>
         val probArray = prob.toArray
         val predFromProb = probArray.zipWithIndex.maxBy(_._1)._2
         assert(pred === predFromProb)
@@ -150,6 +143,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+    assert(summary.numIter == 2)
 
     model.setSummary(None)
     assert(!model.hasSummary)
@@ -255,6 +249,32 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val symmetricMatrix = new DenseMatrix(4, 4, symmetricValues)
     val expectedMatrix = GaussianMixture.unpackUpperTriangularMatrix(4, triangularValues)
     assert(symmetricMatrix === expectedMatrix)
+  }
+
+  test("GaussianMixture with Array input") {
+    def trainAndComputlogLikelihood(dataset: Dataset[_]): Double = {
+      val model = new GaussianMixture().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
+      model.summary.logLikelihood
+    }
+
+    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
+    val trueLikelihood = trainAndComputlogLikelihood(newDataset)
+    val doubleLikelihood = trainAndComputlogLikelihood(newDatasetD)
+    val floatLikelihood = trainAndComputlogLikelihood(newDatasetF)
+
+    // checking the cost is fine enough as a sanity check
+    assert(trueLikelihood ~== doubleLikelihood absTol 1e-6)
+    assert(trueLikelihood ~== floatLikelihood absTol 1e-6)
+  }
+
+  test("prediction on single instance") {
+    val gmm = new GaussianMixture().setSeed(123L)
+    val model = gmm.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
+
+    testClusteringModelSingleProbabilisticPrediction(model, model.predictProbability, dataset,
+      model.getFeaturesCol, model.getProbabilityCol)
   }
 }
 

@@ -37,7 +37,7 @@ if not (ENV['SKIP_API'] == '1')
 
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
-    source = "../target/scala-2.11/unidoc"
+    source = "../target/scala-2.12/unidoc"
     dest = "api/scala"
 
     puts "Making directory " + dest

@@ -124,7 +124,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkNaNWithoutCodegen(
     expression: Expression,
     inputRow: InternalRow = EmptyRow): Unit = {
-    val actual = try evaluate(expression, inputRow) catch {
+    val actual = try evaluateWithoutCodegen(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
     if (!actual.asInstanceOf[Double].isNaN) {
@@ -246,7 +246,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("toDegrees") {
     testUnary(ToDegrees, math.toDegrees)
-    checkConsistencyBetweenInterpretedAndCodegen(Acos, DoubleType)
+    checkConsistencyBetweenInterpretedAndCodegen(ToDegrees, DoubleType)
   }
 
   test("toRadians") {

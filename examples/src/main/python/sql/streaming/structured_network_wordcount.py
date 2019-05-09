@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Counts words in UTF8 encoded, '\n' delimited text received from the network.
  Usage: structured_network_wordcount.py <hostname> <port>
    <hostname> and <port> describe the TCP server that Structured Streaming
@@ -38,7 +38,7 @@ from pyspark.sql.functions import split
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: structured_network_wordcount.py <hostname> <port>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     host = sys.argv[1]
     port = int(sys.argv[2])

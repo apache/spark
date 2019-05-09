@@ -32,6 +32,8 @@ public abstract class RecordComparator {
   public abstract int compare(
     Object leftBaseObject,
     long leftBaseOffset,
+    int leftBaseLength,
     Object rightBaseObject,
-    long rightBaseOffset);
+    long rightBaseOffset,
+    int rightBaseLength);
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.streaming.Trigger
 
 /**
@@ -25,5 +25,5 @@ import org.apache.spark.sql.streaming.Trigger
  * the query.
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 case object OneTimeTrigger extends Trigger

@@ -69,7 +69,7 @@ case class InsertIntoHiveTable(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
+    outputColumnNames: Seq[String]) extends SaveAsHiveFile {
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
@@ -172,7 +172,7 @@ case class InsertIntoHiveTable(
         val enforceBucketingConfig = "hive.enforce.bucketing"
         val enforceSortingConfig = "hive.enforce.sorting"
 
-        val message = s"Output Hive table ${table.identifier} is bucketed but Spark" +
+        val message = s"Output Hive table ${table.identifier} is bucketed but Spark " +
           "currently does NOT populate bucketed output which is compatible with Hive."
 
         if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||
@@ -198,7 +198,6 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
-      allColumns = outputColumns,
       partitionAttributes = partitionAttributes)
 
     if (partition.nonEmpty) {

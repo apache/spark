@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
@@ -62,7 +62,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
       spark.sql("create view vw1 as select 1 as id")
       val plan = spark.sql("select id from vw1").queryExecution.analyzed
       val aliases = plan.collect {
-        case x @ SubqueryAlias("vw1", _) => x
+        case x @ SubqueryAlias(AliasIdentifier("vw1", Some("default")), _) => x
       }
       assert(aliases.size == 1)
     }
@@ -159,7 +159,25 @@ class DataSourceWithHiveMetastoreCatalogSuite
       "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
     )),
 
+    "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat" -> ((
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+    )),
+
     "orc" -> ((
+      "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+    )),
+
+    "org.apache.spark.sql.hive.orc" -> ((
+      "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+    )),
+
+    "org.apache.spark.sql.execution.datasources.orc.OrcFileFormat" -> ((
       "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcSerde"

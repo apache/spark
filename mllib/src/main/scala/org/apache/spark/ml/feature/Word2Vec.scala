@@ -410,7 +410,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       }
 
       val model = new Word2VecModel(metadata.uid, oldModel)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

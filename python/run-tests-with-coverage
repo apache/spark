@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+set -o pipefail
+set -e
+
+# This variable indicates which coverage executable to run to combine coverages
+# and generate HTMLs, for example, 'coverage3' in Python 3.
+COV_EXEC="${COV_EXEC:-coverage}"
+FWDIR="$(cd "`dirname $0`"; pwd)"
+pushd "$FWDIR" > /dev/null
+
+# Ensure that coverage executable is installed.
+if ! hash $COV_EXEC 2>/dev/null; then
+  echo "Missing coverage executable in your path, skipping PySpark coverage"
+  exit 1
+fi
+
+# Set up the directories for coverage results.
+export COVERAGE_DIR="$FWDIR/test_coverage"
+rm -fr "$COVERAGE_DIR/coverage_data"
+rm -fr "$COVERAGE_DIR/htmlcov"
+mkdir -p "$COVERAGE_DIR/coverage_data"
+
+# Current directory are added in the python path so that it doesn't refer our built
+# pyspark zip library first.
+export PYTHONPATH="$FWDIR:$PYTHONPATH"
+# Also, our sitecustomize.py and coverage_daemon.py are included in the path.
+export PYTHONPATH="$COVERAGE_DIR:$PYTHONPATH"
+
+# We use 'spark.python.daemon.module' configuration to insert the coverage supported workers.
+export SPARK_CONF_DIR="$COVERAGE_DIR/conf"
+
+# This environment variable enables the coverage.
+export COVERAGE_PROCESS_START="$FWDIR/.coveragerc"
+
+./run-tests "$@"
+
+# Don't run coverage for the coverage command itself
+unset COVERAGE_PROCESS_START
+
+# Coverage could generate empty coverage data files. Remove it to get rid of warnings when combining.
+find $COVERAGE_DIR/coverage_data -size 0 -print0 | xargs -0 rm
+echo "Combining collected coverage data under $COVERAGE_DIR/coverage_data"
+$COV_EXEC combine
+echo "Reporting the coverage data at $COVERAGE_DIR/coverage_data/coverage"
+$COV_EXEC report --include "pyspark/*"
+echo "Generating HTML files for PySpark coverage under $COVERAGE_DIR/htmlcov"
+$COV_EXEC html --ignore-errors --include "pyspark/*" --directory "$COVERAGE_DIR/htmlcov"
+
+popd

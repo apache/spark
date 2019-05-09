@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
+    <relativePath>../../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>spark-kubernetes-integration-tests_2.12</artifactId>
+  <properties>
+    <download-maven-plugin.version>1.3.0</download-maven-plugin.version>
+    <exec-maven-plugin.version>1.4.0</exec-maven-plugin.version>
+    <extraScalaTestArgs></extraScalaTestArgs>
+    <kubernetes-client.version>4.1.2</kubernetes-client.version>
+    <scala-maven-plugin.version>3.2.2</scala-maven-plugin.version>
+    <scalatest-maven-plugin.version>1.0</scalatest-maven-plugin.version>
+    <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
+
+    <!-- Integration Test Configuration Properties -->
+    <!-- Please see README.md in this directory for explanation of these -->
+    <spark.kubernetes.test.sparkTgz></spark.kubernetes.test.sparkTgz>
+    <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
+    <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
+    <spark.kubernetes.test.imageTagFile>${project.build.directory}/imageTag.txt</spark.kubernetes.test.imageTagFile>
+    <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
+    <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
+    <spark.kubernetes.test.kubeConfigContext></spark.kubernetes.test.kubeConfigContext>
+    <spark.kubernetes.test.master></spark.kubernetes.test.master>
+    <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
+    <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
+
+    <test.exclude.tags></test.exclude.tags>
+    <test.include.tags></test.include.tags>
+  </properties>
+  <packaging>jar</packaging>
+  <name>Spark Project Kubernetes Integration Tests</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.fabric8</groupId>
+      <artifactId>kubernetes-client</artifactId>
+      <version>${kubernetes-client.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>${exec-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>setup-integration-test-env</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>scripts/setup-integration-test-env.sh</executable>
+              <arguments>
+                <argument>--unpacked-spark-tgz</argument>
+                <argument>${spark.kubernetes.test.unpackSparkDir}</argument>
+
+                <argument>--image-repo</argument>
+                <argument>${spark.kubernetes.test.imageRepo}</argument>
+
+                <argument>--image-tag</argument>
+                <argument>${spark.kubernetes.test.imageTag}</argument>
+
+                <argument>--image-tag-output-file</argument>
+                <argument>${spark.kubernetes.test.imageTagFile}</argument>
+
+                <argument>--deploy-mode</argument>
+                <argument>${spark.kubernetes.test.deployMode}</argument>
+
+                <argument>--spark-tgz</argument>
+                <argument>${spark.kubernetes.test.sparkTgz}</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <skipTests>true</skipTests>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <!-- Triggers scalatest plugin in the integration-test phase instead of
+             the test phase. -->
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+        <version>${scalatest-maven-plugin.version}</version>
+        <configuration>
+          <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+          <junitxml>.</junitxml>
+          <filereports>SparkTestSuite.txt</filereports>
+          <argLine>-ea -Xmx4g -XX:ReservedCodeCacheSize=512m ${extraScalaTestArgs}</argLine>
+          <stderr/>
+          <systemProperties>
+            <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
+            <java.awt.headless>true</java.awt.headless>
+            <spark.kubernetes.test.imageTagFile>${spark.kubernetes.test.imageTagFile}</spark.kubernetes.test.imageTagFile>
+            <spark.kubernetes.test.unpackSparkDir>${spark.kubernetes.test.unpackSparkDir}</spark.kubernetes.test.unpackSparkDir>
+            <spark.kubernetes.test.imageRepo>${spark.kubernetes.test.imageRepo}</spark.kubernetes.test.imageRepo>
+            <spark.kubernetes.test.deployMode>${spark.kubernetes.test.deployMode}</spark.kubernetes.test.deployMode>
+            <spark.kubernetes.test.kubeConfigContext>${spark.kubernetes.test.kubeConfigContext}</spark.kubernetes.test.kubeConfigContext>
+            <spark.kubernetes.test.master>${spark.kubernetes.test.master}</spark.kubernetes.test.master>
+            <spark.kubernetes.test.namespace>${spark.kubernetes.test.namespace}</spark.kubernetes.test.namespace>
+            <spark.kubernetes.test.serviceAccountName>${spark.kubernetes.test.serviceAccountName}</spark.kubernetes.test.serviceAccountName>
+            <spark.kubernetes.test.jvmImage>${spark.kubernetes.test.jvmImage}</spark.kubernetes.test.jvmImage>
+            <spark.kubernetes.test.pythonImage>${spark.kubernetes.test.pythonImage}</spark.kubernetes.test.pythonImage>
+            <spark.kubernetes.test.rImage>${spark.kubernetes.test.rImage}</spark.kubernetes.test.rImage>
+          </systemProperties>
+          <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+          <tagsToInclude>${test.include.tags}</tagsToInclude>
+        </configuration>
+        <executions>
+          <execution>
+            <id>test</id>
+            <phase>none</phase>
+            <goals>
+              <goal>test</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>integration-test</id>
+            <phase>integration-test</phase>
+            <goals>
+              <goal>test</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+
+  </build>
+
+</project>

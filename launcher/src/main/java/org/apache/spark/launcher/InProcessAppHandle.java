@@ -17,7 +17,9 @@
 
 package org.apache.spark.launcher;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -25,11 +27,13 @@ import java.util.logging.Logger;
 class InProcessAppHandle extends AbstractAppHandle {
 
   private static final String THREAD_NAME_FMT = "spark-app-%d: '%s'";
-  private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
+  private static final Logger LOG = Logger.getLogger(InProcessAppHandle.class.getName());
   private static final AtomicLong THREAD_IDS = new AtomicLong();
 
   // Avoid really long thread names.
   private static final int MAX_APP_NAME_LEN = 16;
+
+  private volatile Throwable error;
 
   private Thread app;
 
@@ -39,15 +43,21 @@ class InProcessAppHandle extends AbstractAppHandle {
 
   @Override
   public synchronized void kill() {
-    LOG.warning("kill() may leave the underlying app running in in-process mode.");
-    disconnect();
+    if (!isDisposed()) {
+      LOG.warning("kill() may leave the underlying app running in in-process mode.");
+      setState(State.KILLED);
+      disconnect();
 
-    // Interrupt the thread. This is not guaranteed to kill the app, though.
-    if (app != null) {
-      app.interrupt();
+      // Interrupt the thread. This is not guaranteed to kill the app, though.
+      if (app != null) {
+        app.interrupt();
+      }
     }
+  }
 
-    setState(State.KILLED);
+  @Override
+  public Optional<Throwable> getError() {
+    return Optional.ofNullable(error);
   }
 
   synchronized void start(String appName, Method main, String[] args) {
@@ -61,18 +71,15 @@ class InProcessAppHandle extends AbstractAppHandle {
       try {
         main.invoke(null, (Object) args);
       } catch (Throwable t) {
+        if (t instanceof InvocationTargetException) {
+          t = t.getCause();
+        }
         LOG.log(Level.WARNING, "Application failed with exception.", t);
+        error = t;
         setState(State.FAILED);
       }
 
-      synchronized (InProcessAppHandle.this) {
-        if (!isDisposed()) {
-          disconnect();
-          if (!getState().isFinal()) {
-            setState(State.LOST, true);
-          }
-        }
-      }
+      dispose();
     });
 
     app.setName(String.format(THREAD_NAME_FMT, THREAD_IDS.incrementAndGet(), appName));

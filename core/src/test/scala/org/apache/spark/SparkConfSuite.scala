@@ -21,16 +21,17 @@ import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
 
-import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
+import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -78,7 +79,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.get("spark.master") === "local[3]")
     assert(conf.get("spark.app.name") === "My app")
     assert(conf.get("spark.home") === "/path")
-    assert(conf.get("spark.jars") === "a.jar,b.jar")
+    assert(conf.get(JARS) === Seq("a.jar", "b.jar"))
     assert(conf.get("spark.executorEnv.VAR1") === "value1")
     assert(conf.get("spark.executorEnv.VAR2") === "value2")
     assert(conf.get("spark.executorEnv.VAR3") === "value3")
@@ -86,7 +87,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     // Test the Java-friendly versions of these too
     conf.setJars(Array("c.jar", "d.jar"))
     conf.setExecutorEnv(Array(("VAR4", "value4"), ("VAR5", "value5")))
-    assert(conf.get("spark.jars") === "c.jar,d.jar")
+    assert(conf.get(JARS) === Seq("c.jar", "d.jar"))
     assert(conf.get("spark.executorEnv.VAR4") === "value4")
     assert(conf.get("spark.executorEnv.VAR5") === "value5")
   }
@@ -155,16 +156,15 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("Thread safeness - SPARK-5425") {
     val executor = Executors.newSingleThreadScheduledExecutor()
-    val sf = executor.scheduleAtFixedRate(new Runnable {
-      override def run(): Unit =
-        System.setProperty("spark.5425." + Random.nextInt(), Random.nextInt().toString)
-    }, 0, 1, TimeUnit.MILLISECONDS)
+    executor.scheduleAtFixedRate(
+      () => System.setProperty("spark.5425." + Random.nextInt(), Random.nextInt().toString),
+      0, 1, TimeUnit.MILLISECONDS)
 
     try {
-      val t0 = System.currentTimeMillis()
-      while ((System.currentTimeMillis() - t0) < 1000) {
+      val t0 = System.nanoTime()
+      while ((System.nanoTime() - t0) < TimeUnit.SECONDS.toNanos(1)) {
         val conf = Try(new SparkConf(loadDefaults = true))
-        assert(conf.isSuccess === true)
+        assert(conf.isSuccess)
       }
     } finally {
       executor.shutdownNow()
@@ -175,19 +175,19 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("register kryo classes through registerKryoClasses") {
-    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
+    val conf = new SparkConf().set(KRYO_REGISTRATION_REQUIRED, true)
 
     conf.registerKryoClasses(Array(classOf[Class1], classOf[Class2]))
-    assert(conf.get("spark.kryo.classesToRegister") ===
-      classOf[Class1].getName + "," + classOf[Class2].getName)
+    assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet ===
+      Seq(classOf[Class1].getName, classOf[Class2].getName).toSet)
 
     conf.registerKryoClasses(Array(classOf[Class3]))
-    assert(conf.get("spark.kryo.classesToRegister") ===
-      classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
+    assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet ===
+      Seq(classOf[Class1].getName, classOf[Class2].getName, classOf[Class3].getName).toSet)
 
     conf.registerKryoClasses(Array(classOf[Class2]))
-    assert(conf.get("spark.kryo.classesToRegister") ===
-      classOf[Class1].getName + "," + classOf[Class2].getName + "," + classOf[Class3].getName)
+    assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet ===
+      Seq(classOf[Class1].getName, classOf[Class2].getName, classOf[Class3].getName).toSet)
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
@@ -198,12 +198,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("register kryo classes through registerKryoClasses and custom registrator") {
-    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
+    val conf = new SparkConf().set(KRYO_REGISTRATION_REQUIRED, true)
 
     conf.registerKryoClasses(Array(classOf[Class1]))
-    assert(conf.get("spark.kryo.classesToRegister") === classOf[Class1].getName)
+    assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet === Seq(classOf[Class1].getName).toSet)
 
-    conf.set("spark.kryo.registrator", classOf[CustomRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, classOf[CustomRegistrator].getName)
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
@@ -213,9 +213,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("register kryo classes through conf") {
-    val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
-    conf.set("spark.kryo.classesToRegister", "java.lang.StringBuffer")
-    conf.set("spark.serializer", classOf[KryoSerializer].getName)
+    val conf = new SparkConf().set(KRYO_REGISTRATION_REQUIRED, true)
+    conf.set(KRYO_CLASSES_TO_REGISTER, Seq("java.lang.StringBuffer"))
+    conf.set(SERIALIZER, classOf[KryoSerializer].getName)
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
@@ -225,7 +225,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("deprecated configs") {
     val conf = new SparkConf()
-    val newName = "spark.history.fs.update.interval"
+    val newName = UPDATE_INTERVAL_S.key
 
     assert(!conf.contains(newName))
 
@@ -255,15 +255,21 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set("spark.scheduler.listenerbus.eventqueue.size", "84")
     assert(conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY) === 84)
+
+    conf.set("spark.yarn.access.namenodes", "testNode")
+    assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
+
+    conf.set("spark.yarn.access.hadoopFileSystems", "testNode")
+    assert(conf.get(KERBEROS_FILESYSTEMS_TO_ACCESS) === Array("testNode"))
   }
 
   test("akka deprecated configs") {
     val conf = new SparkConf()
 
-    assert(!conf.contains("spark.rpc.numRetries"))
-    assert(!conf.contains("spark.rpc.retry.wait"))
-    assert(!conf.contains("spark.rpc.askTimeout"))
-    assert(!conf.contains("spark.rpc.lookupTimeout"))
+    assert(!conf.contains(RPC_NUM_RETRIES))
+    assert(!conf.contains(RPC_RETRY_WAIT))
+    assert(!conf.contains(RPC_ASK_TIMEOUT))
+    assert(!conf.contains(RPC_LOOKUP_TIMEOUT))
 
     conf.set("spark.akka.num.retries", "1")
     assert(RpcUtils.numRetries(conf) === 1)
@@ -272,10 +278,10 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(RpcUtils.retryWaitMs(conf) === 2L)
 
     conf.set("spark.akka.askTimeout", "3")
-    assert(RpcUtils.askRpcTimeout(conf).duration === (3 seconds))
+    assert(RpcUtils.askRpcTimeout(conf).duration === 3.seconds)
 
     conf.set("spark.akka.lookupTimeout", "4")
-    assert(RpcUtils.lookupRpcTimeout(conf).duration === (4 seconds))
+    assert(RpcUtils.lookupRpcTimeout(conf).duration === 4.seconds)
   }
 
   test("SPARK-13727") {
@@ -283,12 +289,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     // set the conf in the deprecated way
     conf.set("spark.io.compression.lz4.block.size", "12345")
     // get the conf in the recommended way
-    assert(conf.get("spark.io.compression.lz4.blockSize") === "12345")
+    assert(conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE.key) === "12345")
     // we can still get the conf in the deprecated way
     assert(conf.get("spark.io.compression.lz4.block.size") === "12345")
     // the contains() also works as expected
     assert(conf.contains("spark.io.compression.lz4.block.size"))
-    assert(conf.contains("spark.io.compression.lz4.blockSize"))
+    assert(conf.contains(IO_COMPRESSION_LZ4_BLOCKSIZE.key))
     assert(conf.contains("spark.io.unknown") === false)
   }
 
@@ -314,12 +320,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.validateSettings()
 
-    conf.set(NETWORK_ENCRYPTION_ENABLED, true)
+    conf.set(NETWORK_CRYPTO_ENABLED, true)
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }
 
-    conf.set(NETWORK_ENCRYPTION_ENABLED, false)
+    conf.set(NETWORK_CRYPTO_ENABLED, false)
     conf.set(SASL_ENCRYPTION_ENABLED, true)
     intercept[IllegalArgumentException] {
       conf.validateSettings()
@@ -333,12 +339,70 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.validateSettings()
 
-    conf.set("spark.network.timeout", "5s")
+    conf.set(NETWORK_TIMEOUT.key, "5s")
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }
   }
 
+  test("SPARK-26998: SSL configuration not needed on executors") {
+    val conf = new SparkConf(false)
+    conf.set("spark.ssl.enabled", "true")
+    conf.set("spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.keyStorePassword", "password")
+    conf.set("spark.ssl.trustStorePassword", "password")
+
+    val filtered = conf.getAll.filter { case (k, _) => SparkConf.isExecutorStartupConf(k) }
+    assert(filtered.isEmpty)
+  }
+
+  test("SPARK-27244 toDebugString redacts sensitive information") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set("dummy.password", "dummy-password")
+      .set("spark.hadoop.hive.server2.keystore.password", "1234")
+      .set("spark.hadoop.javax.jdo.option.ConnectionPassword", "1234")
+      .set("spark.regular.property", "regular_value")
+    assert(conf.toDebugString ==
+      s"""
+        |dummy.password=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.hadoop.hive.server2.keystore.password=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.hadoop.javax.jdo.option.ConnectionPassword=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.regular.property=regular_value
+      """.stripMargin.trim)
+  }
+
+  val defaultIllegalValue = "SomeIllegalValue"
+  val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
+    "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
+    "getTimeAsSeconds with default" -> (_.getTimeAsSeconds(_, defaultIllegalValue)),
+    "getTimeAsMs" -> (_.getTimeAsMs(_)),
+    "getTimeAsMs with default" -> (_.getTimeAsMs(_, defaultIllegalValue)),
+    "getSizeAsBytes" -> (_.getSizeAsBytes(_)),
+    "getSizeAsBytes with default string" -> (_.getSizeAsBytes(_, defaultIllegalValue)),
+    "getSizeAsBytes with default long" -> (_.getSizeAsBytes(_, 0L)),
+    "getSizeAsKb" -> (_.getSizeAsKb(_)),
+    "getSizeAsKb with default" -> (_.getSizeAsKb(_, defaultIllegalValue)),
+    "getSizeAsMb" -> (_.getSizeAsMb(_)),
+    "getSizeAsMb with default" -> (_.getSizeAsMb(_, defaultIllegalValue)),
+    "getSizeAsGb" -> (_.getSizeAsGb(_)),
+    "getSizeAsGb with default" -> (_.getSizeAsGb(_, defaultIllegalValue)),
+    "getInt" -> (_.getInt(_, 0)),
+    "getLong" -> (_.getLong(_, 0L)),
+    "getDouble" -> (_.getDouble(_, 0.0)),
+    "getBoolean" -> (_.getBoolean(_, false))
+  )
+
+  illegalValueTests.foreach { case (name, getValue) =>
+    test(s"SPARK-24337: $name throws an useful error message with key name") {
+      val key = "SomeKey"
+      val conf = new SparkConf()
+      conf.set(key, "SomeInvalidValue")
+      val thrown = intercept[IllegalArgumentException] {
+        getValue(conf, key)
+      }
+      assert(thrown.getMessage.contains(key))
+    }
+  }
 }
 
 class Class1 {}

@@ -19,9 +19,9 @@ package org.apache.spark.sql.streaming;
 
 import java.util.concurrent.TimeUnit;
 
+import org.apache.spark.annotation.Evolving;
 import scala.concurrent.duration.Duration;
 
-import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 
@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 public class Trigger {
 
   /**
@@ -50,7 +50,7 @@ public class Trigger {
    *
    * {{{
    *    import java.util.concurrent.TimeUnit
-   *    df.writeStream.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   *    df.writeStream().trigger(Trigger.ProcessingTime(10, TimeUnit.SECONDS))
    * }}}
    *
    * @since 2.2.0
@@ -66,7 +66,7 @@ public class Trigger {
    *
    * {{{
    *    import scala.concurrent.duration._
-   *    df.writeStream.trigger(ProcessingTime(10.seconds))
+   *    df.writeStream.trigger(Trigger.ProcessingTime(10.seconds))
    * }}}
    * @since 2.2.0
    */

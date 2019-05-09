@@ -40,6 +40,10 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  *    CREATE [OR REPLACE] FUNCTION [IF NOT EXISTS] [databaseName.]functionName
  *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
  * }}}
+ *
+ * @param ignoreIfExists: When true, ignore if the function with the specified name exists
+ *                        in the specified database.
+ * @param replace: When true, alter the function with the specified name
  */
 case class CreateFunctionCommand(
     databaseName: Option[String],
@@ -47,17 +51,17 @@ case class CreateFunctionCommand(
     className: String,
     resources: Seq[FunctionResource],
     isTemp: Boolean,
-    ifNotExists: Boolean,
+    ignoreIfExists: Boolean,
     replace: Boolean)
   extends RunnableCommand {
 
-  if (ifNotExists && replace) {
+  if (ignoreIfExists && replace) {
     throw new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE" +
       " is not allowed.")
   }
 
   // Disallow to define a temporary function with `IF NOT EXISTS`
-  if (ifNotExists && isTemp) {
+  if (ignoreIfExists && isTemp) {
     throw new AnalysisException(
       "It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
   }
@@ -79,12 +83,12 @@ case class CreateFunctionCommand(
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
       if (replace && catalog.functionExists(func.identifier)) {
         // alter the function in the metastore
-        catalog.alterFunction(CatalogFunction(func.identifier, className, resources))
+        catalog.alterFunction(func)
       } else {
         // For a permanent, we will store the metadata into underlying external catalog.
         // This function will be loaded into the FunctionRegistry when a query uses it.
         // We do not load it into FunctionRegistry right now.
-        catalog.createFunction(CatalogFunction(func.identifier, className, resources), ifNotExists)
+        catalog.createFunction(func, ignoreIfExists)
       }
     }
     Seq.empty[Row]

@@ -21,6 +21,7 @@ import java.io.File
 import java.security.NoSuchAlgorithmException
 import javax.net.ssl.SSLContext
 
+import org.apache.hadoop.conf.Configuration
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
 import org.apache.spark.internal.Logging
@@ -128,7 +129,7 @@ private[spark] case class SSLOptions(
   }
 
   /** Returns a string representation of this SSLOptions with all the passwords masked. */
-  override def toString: String = s"SSLOptions{enabled=$enabled, " +
+  override def toString: String = s"SSLOptions{enabled=$enabled, port=$port, " +
       s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
       s"trustStore=$trustStore, trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
       s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
@@ -142,6 +143,7 @@ private[spark] object SSLOptions extends Logging {
    *
    * The following settings are allowed:
    * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
+   * $ - `[ns].port` - the port where to bind the SSL server
    * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
    * $ - `[ns].keyStorePassword` - a password to the key-store file
    * $ - `[ns].keyPassword` - a password to the private key
@@ -162,11 +164,16 @@ private[spark] object SSLOptions extends Logging {
    * missing in SparkConf, the corresponding setting is used from the default configuration.
    *
    * @param conf Spark configuration object where the settings are collected from
+   * @param hadoopConf Hadoop configuration to get settings
    * @param ns the namespace name
    * @param defaults the default configuration
    * @return [[org.apache.spark.SSLOptions]] object
    */
-  def parse(conf: SparkConf, ns: String, defaults: Option[SSLOptions] = None): SSLOptions = {
+  def parse(
+      conf: SparkConf,
+      hadoopConf: Configuration,
+      ns: String,
+      defaults: Option[SSLOptions] = None): SSLOptions = {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
 
     val port = conf.getWithSubstitution(s"$ns.port").map(_.toInt)
@@ -178,9 +185,11 @@ private[spark] object SSLOptions extends Logging {
         .orElse(defaults.flatMap(_.keyStore))
 
     val keyStorePassword = conf.getWithSubstitution(s"$ns.keyStorePassword")
+        .orElse(Option(hadoopConf.getPassword(s"$ns.keyStorePassword")).map(new String(_)))
         .orElse(defaults.flatMap(_.keyStorePassword))
 
     val keyPassword = conf.getWithSubstitution(s"$ns.keyPassword")
+        .orElse(Option(hadoopConf.getPassword(s"$ns.keyPassword")).map(new String(_)))
         .orElse(defaults.flatMap(_.keyPassword))
 
     val keyStoreType = conf.getWithSubstitution(s"$ns.keyStoreType")
@@ -193,6 +202,7 @@ private[spark] object SSLOptions extends Logging {
         .orElse(defaults.flatMap(_.trustStore))
 
     val trustStorePassword = conf.getWithSubstitution(s"$ns.trustStorePassword")
+        .orElse(Option(hadoopConf.getPassword(s"$ns.trustStorePassword")).map(new String(_)))
         .orElse(defaults.flatMap(_.trustStorePassword))
 
     val trustStoreType = conf.getWithSubstitution(s"$ns.trustStoreType")

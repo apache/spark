@@ -15,7 +15,11 @@
 # limitations under the License.
 #
 
-
+"""
+An example demonstrating BucketedRandomProjectionLSH.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/bucketed_random_projection_lsh_example.py
+"""
 from __future__ import print_function
 
 # $example on$
@@ -24,12 +28,6 @@ from pyspark.ml.linalg import Vectors
 from pyspark.sql.functions import col
 # $example off$
 from pyspark.sql import SparkSession
-
-"""
-An example demonstrating BucketedRandomProjectionLSH.
-Run with:
-  bin/spark-submit examples/src/main/python/ml/bucketed_random_projection_lsh_example.py
-"""
 
 if __name__ == "__main__":
     spark = SparkSession \

@@ -173,6 +173,16 @@ WHERE  t1a = (SELECT   max(t2a)
               HAVING   count(*) >= 0)
 OR     t1i > '2014-12-31';
 
+-- TC 02.03.01
+SELECT t1a
+FROM   t1
+WHERE  t1a = (SELECT   max(t2a)
+              FROM     t2
+              WHERE    t2c = t1c
+              GROUP BY t2c
+              HAVING   count(*) >= 1)
+OR     t1i > '2014-12-31';
+
 -- TC 02.04
 -- t1 on the right of an outer join
 -- can be reduced to inner join

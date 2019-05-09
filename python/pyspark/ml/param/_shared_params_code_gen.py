@@ -157,7 +157,17 @@ if __name__ == "__main__":
          "TypeConverters.toInt"),
         ("parallelism", "the number of threads to use when running parallel algorithms (>= 1).",
          "1", "TypeConverters.toInt"),
-        ("loss", "the loss function to be optimized.", None, "TypeConverters.toString")]
+        ("collectSubModels", "Param for whether to collect a list of sub-models trained during " +
+         "tuning. If set to false, then only the single best sub-model will be available after " +
+         "fitting. If set to true, then all sub-models will be available. Warning: For large " +
+         "models, collecting all sub-models can cause OOMs on the Spark driver.",
+         "False", "TypeConverters.toBoolean"),
+        ("loss", "the loss function to be optimized.", None, "TypeConverters.toString"),
+        ("distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.",
+         "'euclidean'", "TypeConverters.toString"),
+        ("validationIndicatorCol", "name of the column that indicates whether each row is for " +
+         "training or for validation. False indicates training; true indicates validation.",
+         None, "TypeConverters.toString")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

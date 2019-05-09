@@ -17,7 +17,8 @@
 
 package org.apache.spark.api.r
 
-import java.io.File
+import java.io.{File, OutputStream}
+import java.net.Socket
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -25,10 +26,10 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
-import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer}
 
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
@@ -42,7 +43,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
   override def getPartitions: Array[Partition] = parent.partitions
 
   override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
-    val runner = new RRunner[U](
+    val runner = new RRunner[T, U](
       func, deserializer, serializer, packageNames, broadcastVars, numPartitions)
 
     // The parent may be also an RRDD, so we should launch it first.
@@ -101,7 +102,7 @@ private class StringRRDD[T: ClassTag](
   lazy val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
 }
 
-private[r] object RRDD {
+private[spark] object RRDD {
   def createSparkContext(
       master: String,
       appName: String,
@@ -160,6 +161,25 @@ private[r] object RRDD {
    */
   def createRDDFromFile(jsc: JavaSparkContext, fileName: String, parallelism: Int):
   JavaRDD[Array[Byte]] = {
-    PythonRDD.readRDDFromFile(jsc, fileName, parallelism)
+    JavaRDD.readRDDFromFile(jsc, fileName, parallelism)
+  }
+
+  private[spark] def serveToStream(
+      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
+    SocketAuthHelper.serveToStream(threadName, new RAuthHelper(SparkEnv.get.conf))(writeFunc)
+  }
+}
+
+/**
+ * Helper for making RDD[Array[Byte]] from some R data, by reading the data from R
+ * over a socket. This is used in preference to writing data to a file when encryption is enabled.
+ */
+private[spark] class RParallelizeServer(sc: JavaSparkContext, parallelism: Int)
+    extends SocketAuthServer[JavaRDD[Array[Byte]]](
+      new RAuthHelper(SparkEnv.get.conf), "sparkr-parallelize-server") {
+
+  override def handleConnection(sock: Socket): JavaRDD[Array[Byte]] = {
+    val in = sock.getInputStream()
+    JavaRDD.readRDDFromInputStream(sc.sc, in, parallelism)
   }
 }

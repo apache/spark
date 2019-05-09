@@ -42,7 +42,12 @@ public abstract class SharedSparkSession implements Serializable {
 
   @After
   public void tearDown() {
-    spark.stop();
-    spark = null;
+    try {
+      spark.stop();
+      spark = null;
+    } finally {
+      SparkSession.clearDefaultSession();
+      SparkSession.clearActiveSession();
+    }
   }
 }

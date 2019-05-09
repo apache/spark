@@ -43,7 +43,7 @@ analyze table loc_orc compute statistics for columns state,locid,zip,year;
 -- dept_orc - 4
 -- loc_orc  - 8
 
--- count distincts for relevant columns (since count distinct values are approximate in some cases count distint values will be greater than number of rows)
+-- count distincts for relevant columns (since count distinct values are approximate in some cases count distinct values will be greater than number of rows)
 -- emp_orc.deptid - 3
 -- emp_orc.lastname - 7
 -- dept_orc.deptid - 6

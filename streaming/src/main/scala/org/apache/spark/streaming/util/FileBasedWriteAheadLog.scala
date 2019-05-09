@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ExecutionContextTaskSupport
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.language.postfixOps
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -142,7 +141,7 @@ private[streaming] class FileBasedWriteAheadLog(
       CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, () => reader.close())
     }
     if (!closeFileAfterWrite) {
-      logFilesToRead.iterator.map(readFile).flatten.asJava
+      logFilesToRead.iterator.flatMap(readFile).asJava
     } else {
       // For performance gains, it makes sense to parallelize the recovery if
       // closeFileAfterWrite = true
@@ -190,7 +189,7 @@ private[streaming] class FileBasedWriteAheadLog(
           if (waitForCompletion) {
             import scala.concurrent.duration._
             // scalastyle:off awaitready
-            Await.ready(f, 1 second)
+            Await.ready(f, 1.second)
             // scalastyle:on awaitready
           }
         } catch {
@@ -222,7 +221,7 @@ private[streaming] class FileBasedWriteAheadLog(
         pastLogs += LogInfo(currentLogWriterStartTime, currentLogWriterStopTime, _)
       }
       currentLogWriterStartTime = currentTime
-      currentLogWriterStopTime = currentTime + (rollingIntervalSecs * 1000)
+      currentLogWriterStopTime = currentTime + (rollingIntervalSecs * 1000L)
       val newLogPath = new Path(logDirectory,
         timeToLogFile(currentLogWriterStartTime, currentLogWriterStopTime))
       currentLogPath = Some(newLogPath.toString)
@@ -312,6 +311,7 @@ private[streaming] object FileBasedWriteAheadLog {
       handler: I => Iterator[O]): Iterator[O] = {
     val taskSupport = new ExecutionContextTaskSupport(executionContext)
     val groupSize = taskSupport.parallelismLevel.max(8)
+
     source.grouped(groupSize).flatMap { group =>
       val parallelCollection = group.par
       parallelCollection.tasksupport = taskSupport

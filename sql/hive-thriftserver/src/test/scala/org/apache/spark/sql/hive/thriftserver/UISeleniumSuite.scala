@@ -46,10 +46,13 @@ class UISeleniumSuite
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
-    super.afterAll()
   }
 
   override protected def serverStartCommand(port: Int) = {
@@ -83,12 +86,12 @@ class UISeleniumSuite
 
       queries.foreach(statement.execute)
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to baseURL
         find(cssSelector("""ul li a[href*="sql"]""")) should not be None
       }
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (baseURL + "/sql")
         find(id("sessionstat")) should not be None
         find(id("sqlstat")) should not be None

@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
 
 /**
  * An [[Offset]] for the [[KafkaSource]]. This one tracks all partitions of subscribed topics and
@@ -30,6 +31,10 @@ case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) exte
 
   override val json = JsonUtils.partitionOffsets(partitionToOffsets)
 }
+
+private[kafka010]
+case class KafkaSourcePartitionOffset(topicPartition: TopicPartition, partitionOffset: Long)
+  extends PartitionOffset
 
 /** Companion object of the [[KafkaSourceOffset]] */
 private[kafka010] object KafkaSourceOffset {

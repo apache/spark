@@ -217,21 +217,21 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
 
-    val struct0 = reader.getStruct(0, 2)
+    val struct0 = reader.getStruct(0)
     assert(struct0.getInt(0) === 1)
     assert(struct0.getUTF8String(1) === UTF8String.fromString("str1"))
 
-    val struct1 = reader.getStruct(1, 2)
+    val struct1 = reader.getStruct(1)
     assert(struct1.isNullAt(0))
     assert(struct1.isNullAt(1))
 
     assert(reader.isNullAt(2))
 
-    val struct3 = reader.getStruct(3, 2)
+    val struct3 = reader.getStruct(3)
     assert(struct3.getInt(0) === 4)
     assert(struct3.isNullAt(1))
 
-    val struct4 = reader.getStruct(4, 2)
+    val struct4 = reader.getStruct(4)
     assert(struct4.isNullAt(0))
     assert(struct4.getUTF8String(1) === UTF8String.fromString("str5"))
 
@@ -252,15 +252,15 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
 
-    val struct00 = reader.getStruct(0, 1).getStruct(0, 2)
+    val struct00 = reader.getStruct(0).getStruct(0, 2)
     assert(struct00.getInt(0) === 1)
     assert(struct00.getUTF8String(1) === UTF8String.fromString("str1"))
 
-    val struct10 = reader.getStruct(1, 1).getStruct(0, 2)
+    val struct10 = reader.getStruct(1).getStruct(0, 2)
     assert(struct10.isNullAt(0))
     assert(struct10.isNullAt(1))
 
-    val struct2 = reader.getStruct(2, 1)
+    val struct2 = reader.getStruct(2)
     assert(struct2.isNullAt(0))
 
     assert(reader.isNullAt(3))
