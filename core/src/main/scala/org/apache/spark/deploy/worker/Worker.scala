@@ -486,7 +486,6 @@ private[deploy] class Worker(
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
-      registered = true
       changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
       val execs = executors.values.
@@ -496,7 +495,7 @@ private[deploy] class Worker(
     case ReconnectWorker(masterUrl) =>
       if (masterUrl != activeMasterUrl) {
         logWarning(s"New Master is at $activeMasterUrl, " +
-          s"ignore old Master ($masterUrl)'s request to reconnect")
+          s"ignore old Master ($masterUrl)'s request to reconnect.")
       } else {
         logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
         registerWithMaster()
