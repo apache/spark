@@ -524,12 +524,21 @@ class BlockManagerMasterEndpoint(
     }
 
     if (locations.nonEmpty && status.isDefined) {
-      val localDirs = if (status.get.storageLevel.useDisk) {
-        locations.find(_.host == requesterHost).map(blockManagerInfo(_).localDirs)
+      val bmIdToLocalDirs = if (status.get.storageLevel.useDisk) {
+        locations
+          .find(_.host == requesterHost)
+          .map { sameHostBlockId =>
+            val bmInfo = blockManagerInfo(sameHostBlockId)
+            bmInfo.blockManagerId -> bmInfo.localDirs
+          }
       } else {
         None
       }
-      Some(BlockLocationsAndStatus(locations, status.get, localDirs))
+      bmIdToLocalDirs.map { case (bmId, localDirs) =>
+        Some(BlockLocationsAndStatus(locations.filter(_ != bmId), status.get, Some(localDirs)))
+      }.getOrElse(
+        Some(BlockLocationsAndStatus(locations, status.get, None))
+      )
     } else {
       None
     }
