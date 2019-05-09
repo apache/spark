@@ -895,11 +895,7 @@ class Dataset[T] private[sql](
   }
 
   private def prepareJoinPlan(left: Dataset[_], right: Dataset[_]): (LogicalPlan, LogicalPlan) = {
-    if (left.logicalPlan.outputSet.intersect(right.logicalPlan.outputSet).isEmpty) {
-      // If there is no conflicting attributes, then it's not a self-join and we don't need to
-      // attach the dataset id.
-      (left.logicalPlan, right.logicalPlan)
-    } else if (!sparkSession.sessionState.conf.getConf(SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE)) {
+    if (!sparkSession.sessionState.conf.getConf(SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE)) {
       // If the config is disabled, do nothing.
       (left.logicalPlan, right.logicalPlan)
     } else {

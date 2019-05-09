@@ -149,6 +149,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     withSQLConf(
       SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+
       checkAnswer(df1.join(df2, df1("id") > df2("id")), Row(2, 1))
 
       checkAnswer(df1.join(df2).select(df2("id")), Seq(1, 2, 1, 2, 1, 2).map(Row(_)))
@@ -163,10 +164,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         Row(2, 0, 1) :: Row(2, 1, 1) :: Row(2, 2, 1) :: Nil)
 
       // `df1("id")` is ambiguous here.
-      // Current behavior is: it points to the column of the first `df1`.
-      checkAnswer(
-        df1.join(df2).join(df1, df1("id") > df2("id")),
-        Row(2, 1, 0) :: Row(2, 1, 1) :: Row(2, 1, 2) :: Nil)
+      intercept[AnalysisException](df1.join(df2).join(df1, df1("id") > df2("id")))
 
       // `df2("id")` is not ambiguous.
       checkAnswer(
@@ -215,9 +213,14 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       df.join(df.filter($"value" === "2"), df("key") === df("key")),
       Row(2, "2", 2, "2") :: Nil)
 
-    checkAnswer(
-      df.join(df, df("key") === df("key") && df("value") === 1),
-      Row(1, "1", 1, "1") :: Nil)
+    withSQLConf(SQLConf.RESOLVE_DATASET_COLUMN_REFERENCE.key -> "false") {
+      // `df("value")` is ambiguous. But under this case, it's OK because the "value" columns from
+      // the two DataFrames always equal.
+      // TODO: support it in `ResolveDatasetColumnReference`.
+      checkAnswer(
+        df.join(df, df("key") === df("key") && df("value") === 1),
+        Row(1, "1", 1, "1") :: Nil)
+    }
 
     val left = df.groupBy("key").agg(count("*"))
     val right = df.groupBy("key").agg(sum("key"))
