@@ -227,13 +227,6 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.graphx.PartitionStrategy",
       "org.apache.spark.graphx.impl.EdgePartition",
       "org.apache.spark.graphx.impl.VertexAttributeBlock",
-      "org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap",
-      "org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$mcID$sp",
-      "org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$mcII$sp",
-      "org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$mcIJ$sp",
-      "org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$mcJD$sp",
-      "org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$mcJI$sp",
-      "org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap$mcJJ$sp",
 
       "org.apache.spark.sql.catalyst.expressions.UnsafeRow",
       "org.apache.spark.sql.catalyst.expressions.UnsafeArrayData",
