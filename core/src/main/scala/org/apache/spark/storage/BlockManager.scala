@@ -960,6 +960,9 @@ private[spark] class BlockManager(
     None
   }
 
+  /**
+   * Reads the block from the local directories of another executor which runs on the same host.
+   */
   private def readDiskBlockFromSameHostExecutor(
       blockId: BlockId,
       localDirs: Array[String],
