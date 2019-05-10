@@ -120,6 +120,19 @@ class LikeSimplificationSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
   }
 
+  test("optimize limit queries that end with single underscore.") {
+      val singleUnderscoreEndsWithQuery =
+        testRelation
+          .where('a like "abc_")
+      val optimized = Optimize.execute(singleUnderscoreEndsWithQuery.analyze)
+      val correctAnswer = testRelation
+        .where(
+            And(EqualTo(Length('a), Literal(4)),
+              StartsWith('a, Literal("abc"))))
+        .analyze
+      comparePlans(optimized, correctAnswer)
+  }
+
   test("expressions that start and end with single underscore, " +
     "underscore optimization should be ignored.") {
       val singleUnderscoreEndsWithQuery =
@@ -146,7 +159,7 @@ class LikeSimplificationSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
   }
 
-  test("Ignore multiple underscore characters") {
+  test("Ignore optimization in the case of multiple underscore characters") {
       val singleUnderscoreInQuery =
         testRelation
           .where('a like "abc__def")
@@ -157,7 +170,7 @@ class LikeSimplificationSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
   }
 
-  test("multiple underscore characters, underscore optimization should be ignored.") {
+  test("Ignore optimization in the case of multiple single underscore characters") {
       val singleUnderscoreInQuery =
         testRelation
           .where('a like "abc_def_ghi")
