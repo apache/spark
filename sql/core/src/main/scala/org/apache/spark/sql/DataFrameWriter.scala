@@ -23,21 +23,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan, OverwriteByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.execution.command.{DataFrameWriteCommand, DDLUtils}
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -246,89 +236,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    val session = df.sparkSession
-    val useV1Sources =
-      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
-    val lookupCls = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val cls = lookupCls.newInstance() match {
-      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
-        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
-        f.fallbackFileFormat
-      case _ => lookupCls
-    }
-    // In Data Source V2 project, partitioning is still under development.
-    // Here we fallback to V1 if partitioning columns are specified.
-    // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
-    if (classOf[TableProvider].isAssignableFrom(cls) && partitioningColumns.isEmpty) {
-      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
-      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        provider, session.sessionState.conf)
-      val options = sessionOptions ++ extraOptions
-      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
-
-      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      provider.getTable(dsOptions) match {
-        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
-          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
-          mode match {
-            case SaveMode.Append =>
-              runCommand(df.sparkSession, "save") {
-                AppendData.byName(relation, df.logicalPlan)
-              }
-
-            case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
-              // truncate the table
-              runCommand(df.sparkSession, "save") {
-                OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
-              }
-
-            case _ =>
-              table.newWriteBuilder(dsOptions) match {
-                case writeBuilder: SupportsSaveMode =>
-                  val write = writeBuilder.mode(mode)
-                      .withQueryId(UUID.randomUUID().toString)
-                      .withInputDataSchema(df.logicalPlan.schema)
-                      .buildForBatch()
-                  // It can only return null with `SupportsSaveMode`. We can clean it up after
-                  // removing `SupportsSaveMode`.
-                  if (write != null) {
-                    runCommand(df.sparkSession, "save") {
-                      WriteToDataSourceV2(write, df.logicalPlan)
-                    }
-                  }
-
-                case _ =>
-                  throw new AnalysisException(
-                    s"data source ${table.name} does not support SaveMode $mode")
-              }
-          }
-
-        // Streaming also uses the data source V2 API. So it may be that the data source implements
-        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
-        // as though it's a V1 source.
-        case _ => saveToV1Source()
-      }
-    } else {
-      saveToV1Source()
-    }
-  }
-
-  private def saveToV1Source(): Unit = {
-    if (SparkSession.active.sessionState.conf.getConf(
-      SQLConf.LEGACY_PASS_PARTITION_BY_AS_OPTIONS)) {
-      partitioningColumns.foreach { columns =>
-        extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
-          DataSourceUtils.encodePartitioningColumns(columns))
-      }
-    }
-
-    // Code path for data source v1.
-    runCommand(df.sparkSession, "save") {
-      DataSource(
-        sparkSession = df.sparkSession,
-        className = source,
-        partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+    runCommand(df.sparkSession, "saveDataFrame") {
+      DataFrameWriteCommand(
+        df.logicalPlan,
+        source,
+        mode,
+        extraOptions.toMap,
+        partitioningColumns,
+        bucketColumnNames,
+        numBuckets,
+        sortColumnNames,
+        tableIdent = None)
     }
   }
 
@@ -451,68 +369,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    val catalog = df.sparkSession.sessionState.catalog
-    val tableExists = catalog.tableExists(tableIdent)
-    val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-    val tableIdentWithDB = tableIdent.copy(database = Some(db))
-    val tableName = tableIdentWithDB.unquotedString
-
-    (tableExists, mode) match {
-      case (true, SaveMode.Ignore) =>
-        // Do nothing
-
-      case (true, SaveMode.ErrorIfExists) =>
-        throw new AnalysisException(s"Table $tableIdent already exists.")
-
-      case (true, SaveMode.Overwrite) =>
-        // Get all input data source or hive relations of the query.
-        val srcRelations = df.logicalPlan.collect {
-          case LogicalRelation(src: BaseRelation, _, _, _) => src
-          case relation: HiveTableRelation => relation.tableMeta.identifier
-        }
-
-        val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
-        EliminateSubqueryAliases(tableRelation) match {
-          // check if the table is a data source table (the relation is a BaseRelation).
-          case LogicalRelation(dest: BaseRelation, _, _, _) if srcRelations.contains(dest) =>
-            throw new AnalysisException(
-              s"Cannot overwrite table $tableName that is also being read from")
-          // check hive table relation when overwrite mode
-          case relation: HiveTableRelation
-              if srcRelations.contains(relation.tableMeta.identifier) =>
-            throw new AnalysisException(
-              s"Cannot overwrite table $tableName that is also being read from")
-          case _ => // OK
-        }
-
-        // Drop the existing table
-        catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
-        createTable(tableIdentWithDB)
-        // Refresh the cache of the table in the catalog.
-        catalog.refreshTable(tableIdentWithDB)
-
-      case _ => createTable(tableIdent)
+    runCommand(df.sparkSession, "saveDataFrameAsTable") {
+      DataFrameWriteCommand(
+        df.logicalPlan,
+        source,
+        mode,
+        extraOptions.toMap,
+        partitioningColumns,
+        bucketColumnNames,
+        numBuckets,
+        sortColumnNames,
+        tableIdent = Some(tableIdent))
     }
-  }
-
-  private def createTable(tableIdent: TableIdentifier): Unit = {
-    val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
-    val tableType = if (storage.locationUri.isDefined) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
-
-    val tableDesc = CatalogTable(
-      identifier = tableIdent,
-      tableType = tableType,
-      storage = storage,
-      schema = new StructType,
-      provider = Some(source),
-      partitionColumnNames = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec)
-
-    runCommand(df.sparkSession, "saveAsTable")(CreateTable(tableDesc, mode, Some(df.logicalPlan)))
   }
 
   /**
