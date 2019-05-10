@@ -20,13 +20,13 @@ import itertools
 import re
 import os
 
-all_modules = []
-
 if os.environ.get("AMPLAB_JENKINS"):
     hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
 else:
     hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
+print "[info] Choosing supported modules with Hadoop profile", hadoop_version
 
+all_modules = []
 
 @total_ordering
 class Module(object):
@@ -79,7 +79,7 @@ class Module(object):
         for dep in dependencies:
             dep.dependent_modules.add(self)
         if name == "hive-thriftserver" and hadoop_version == "hadoop3.2":
-            print("[info] Skip unsupported module: ", name)
+            print "[info] Skip unsupported module:", name
         else:
             all_modules.append(self)
 
