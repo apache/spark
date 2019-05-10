@@ -31,9 +31,16 @@ import org.apache.spark.util.Utils
 class ResourceDiscovererSuite extends SparkFunSuite
     with LocalSparkContext {
 
+  def mockDiscoveryScript(file: File, result: String): String = {
+    Files.write(s"echo $result", file, StandardCharsets.UTF_8)
+    JavaFiles.setPosixFilePermissions(file.toPath(),
+      EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+    file.getPath()
+  }
+
   test("Resource discoverer no resources") {
     val sparkconf = new SparkConf
-    val resources = ResourceDiscoverer.findResources(sparkconf, false)
+    val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = false)
     assert(resources.size === 0)
     assert(resources.get("gpu").isEmpty,
       "Should have a gpus entry that is empty")
@@ -43,15 +50,12 @@ class ResourceDiscovererSuite extends SparkFunSuite
     val sparkconf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val file1 = new File(dir, "resourceDiscoverScript1")
-      // this is a bit ugly but do it the hardway to test out some formatting
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\"," +
-        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
-      JavaFiles.setPosixFilePermissions(file1.toPath(),
-        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val scriptPath = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu","addresses":["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
-      val resources = ResourceDiscoverer.findResources(sparkconf, false)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, scriptPath)
+      val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = false)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
@@ -60,19 +64,16 @@ class ResourceDiscovererSuite extends SparkFunSuite
     }
   }
 
-  // TODO
   test("Resource discoverer no addresses errors") {
     val sparkconf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val file1 = new File(dir, "resourceDiscoverScript1")
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\"}",
-        file1, StandardCharsets.UTF_8)
-      JavaFiles.setPosixFilePermissions(file1.toPath(),
-        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val scriptPath = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu"}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
-      val resources = ResourceDiscoverer.findResources(sparkconf, false)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, scriptPath)
+      val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = false)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
@@ -84,24 +85,19 @@ class ResourceDiscovererSuite extends SparkFunSuite
     val sparkconf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val gpuDiscovery = new File(dir, "resourceDiscoverScriptgpu")
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\", " +
-        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", gpuDiscovery, StandardCharsets.UTF_8)
-      JavaFiles.setPosixFilePermissions(gpuDiscovery.toPath(),
-        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
-
-      val fpgaDiscovery = new File(dir, "resourceDiscoverScriptfpga")
-      Files.write("echo {\\\"name\\\":\\\"fpga\\\"," +
-        " \\\"addresses\\\":[\\\"f1\\\",\\\"f2\\\",\\\"f3\\\"]}",
-        fpgaDiscovery, StandardCharsets.UTF_8)
-      JavaFiles.setPosixFilePermissions(fpgaDiscovery.toPath(),
-        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
-
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val gpuDiscovery = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu", "addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery.getPath())
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+
+      val fpgaFile = new File(dir, "fpgaDiscoverScript")
+      val fpgaDiscovery = mockDiscoveryScript(fpgaFile,
+        """'{"name": "fpga", "addresses": ["f1", "f2", "f3"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, fpgaDiscovery.getPath())
-      val resources = ResourceDiscoverer.findResources(sparkconf, false)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, fpgaDiscovery)
+
+      val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = false)
       assert(resources.size === 2)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
@@ -122,17 +118,15 @@ class ResourceDiscovererSuite extends SparkFunSuite
     val sparkconf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val file1 = new File(dir, "resourceDiscoverScript2")
-      Files.write("echo {\\\"name\\\":\\\"gpu\\\", " +
-        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
-      JavaFiles.setPosixFilePermissions(file1.toPath(),
-        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val gpuDiscovery = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu", "addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
-      sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+      sparkconf set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
         SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, "boguspath")
       // make sure it reads from correct config, here it should use driver
-      val resources = ResourceDiscoverer.findResources(sparkconf, true)
+      val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = true)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
@@ -145,16 +139,13 @@ class ResourceDiscovererSuite extends SparkFunSuite
     val sparkconf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val file1 = new File(dir, "resourceDiscoverScript3")
-      Files.write("echo {\\\"units\\\":\\\"\\\"," +
-        " \\\"addresses\\\":[\\\"0\\\",\\\"1\\\"]}", file1, StandardCharsets.UTF_8)
-      JavaFiles.setPosixFilePermissions(file1.toPath(),
-        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val gpuDiscovery = mockDiscoveryScript(gpuFile,
+        """'{"addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
-
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
       val error = intercept[SparkException] {
-        ResourceDiscoverer.findResources(sparkconf, false)
+        ResourceDiscoverer.findResources(sparkconf, isDriver = false)
       }.getMessage()
 
       assert(error.contains("Error running the resource discovery"))
@@ -163,36 +154,33 @@ class ResourceDiscovererSuite extends SparkFunSuite
 
   test("Resource discoverer script doesn't exist") {
     val sparkconf = new SparkConf
-    val file1 = new File("/tmp/bogus")
-    try {
-      sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
+    withTempDir { dir =>
+      val file1 = new File(dir, "bogusfilepath")
+      try {
+        sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
 
-      val error = intercept[SparkException] {
-        ResourceDiscoverer.findResources(sparkconf, false)
-      }.getMessage()
+        val error = intercept[SparkException] {
+          ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+        }.getMessage()
 
-      assert(error.contains("doesn't exist"))
-    } finally {
-      JavaFiles.deleteIfExists(file1.toPath())
+        assert(error.contains("doesn't exist"))
+      } finally {
+        JavaFiles.deleteIfExists(file1.toPath())
+      }
     }
   }
 
   test("gpu's specified but not discovery script") {
     val sparkconf = new SparkConf
-    val file1 = new File("/tmp/bogus")
-    try {
-      sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_COUNT_POSTFIX, "2")
+    sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
+      SPARK_RESOURCE_COUNT_POSTFIX, "2")
 
-      val error = intercept[SparkException] {
-        ResourceDiscoverer.findResources(sparkconf, false)
-      }.getMessage()
+    val error = intercept[SparkException] {
+      ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+    }.getMessage()
 
-      assert(error.contains("User is expecting to use"))
-    } finally {
-      JavaFiles.deleteIfExists(file1.toPath())
-    }
+    assert(error.contains("User is expecting to use"))
   }
 
 }

@@ -30,11 +30,8 @@ import org.apache.spark.annotation.Evolving
  */
 @Evolving
 class ResourceInformation(
-    private val _name: String,
-    private val _addresses: Array[String]) extends Serializable {
+    val name: String,
+    val addresses: Array[String]) extends Serializable {
 
-  def name: String = _name
-  def addresses: Array[String] = _addresses
-
-  override def toString: String = s"[name: ${name}, addresses: ${_addresses.mkString(",")}]"
+  override def toString: String = s"[name: ${name}, addresses: ${addresses.mkString(",")}]"
 }

@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import org.json4s.DefaultFormats
-import org.json4s.JsonAST.{JArray, JValue}
+import org.json4s.JsonAST.JArray
 import org.json4s.MappingException
 import org.json4s.jackson.JsonMethods._
 
@@ -68,11 +68,12 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onStart() {
     logInfo("Connecting to driver: " + driverUrl)
+    val resources = parseOrFindResources(resourcesFile)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, parseOrFindResources(resourcesFile)))
+        extractAttributes, resources))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
@@ -82,42 +83,38 @@ private[spark] class CoarseGrainedExecutorBackend(
     }(ThreadUtils.sameThread)
   }
 
-  // Check that the executor resources at startup will satisfy the user specified task
-  // requirements (spark.task.resource.*) and that they match the executor configs
-  // specified by the user (spark.executor.resource.*) to catch mismatches between what
-  // the user requested and what resource manager gave or what the discovery script found.
-  private def checkExecResourcesMeetTaskRequirements(
-      taskResourceConfigs: Array[(String, String)],
-      actualExecResources: Map[String, ResourceInformation]): Unit = {
+  // Check that the actual resources discovered will satisfy the user specified
+  // requirements and that they match the configs specified by the user to catch
+  // mismatches between what the user requested and what resource manager gave or
+  // what the discovery script found.
+  private def checkResourcesMeetRequirements(
+      resourceConfigPrefix: String,
+      reqResourcesAndCounts: Array[(String, String)],
+      actualResources: Map[String, ResourceInformation]): Unit = {
 
-    // get just the map of resource name to count
-    val taskResourcesAndCounts = taskResourceConfigs.
-      withFilter { case (k, v) => k.endsWith(SPARK_RESOURCE_COUNT_POSTFIX)}.
-      map { case (k, v) => (k.dropRight(SPARK_RESOURCE_COUNT_POSTFIX.size), v)}
+    reqResourcesAndCounts.foreach { case (rName, reqCount) =>
+      if (actualResources.contains(rName)) {
+        val resourceInfo = actualResources(rName)
 
-    taskResourcesAndCounts.foreach { case (rName, taskReqCount) =>
-      if (actualExecResources.contains(rName)) {
-        val execResourceInfo = actualExecResources(rName)
-
-        if (execResourceInfo.addresses.size < taskReqCount.toLong) {
-          throw new SparkException(s"Executor resource: $rName with addresses: " +
-            s"${execResourceInfo.addresses.mkString(",")} doesn't meet the task " +
-            s"requirements of needing $taskReqCount of them")
+        if (resourceInfo.addresses.size < reqCount.toLong) {
+          throw new SparkException(s"Resource: $rName with addresses: " +
+            s"${resourceInfo.addresses.mkString(",")} doesn't meet the " +
+            s"requirements of needing $reqCount of them")
         }
-        // also make sure the executor resource count on start matches the
-        // spark.executor.resource configs specified by user
-        val userExecCountConfigName =
-          SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_POSTFIX
-        val userExecConfigCount = env.conf.getOption(userExecCountConfigName).
-          getOrElse(throw new SparkException(s"Executor resource: $rName not specified " +
-            s"via config: $userExecCountConfigName, but required " +
-            s"by the task, please fix your configuration"))
+        // also make sure the resource count on start matches the
+        // resource configs specified by user
+        val userCountConfigName =
+        resourceConfigPrefix + rName + SPARK_RESOURCE_COUNT_POSTFIX
+        val userConfigCount = env.conf.getOption(userCountConfigName).
+          getOrElse(throw new SparkException(s"Resource: $rName not specified " +
+            s"via config: $userCountConfigName, but required, " +
+            s"please fix your configuration"))
 
-        if (userExecConfigCount.toLong != execResourceInfo.addresses.size) {
-          throw new SparkException(s"Executor resource: $rName, with addresses: " +
-            s"${execResourceInfo.addresses.mkString(",")} " +
-            s"doesn't match what the user requested for executor count: $userExecConfigCount, " +
-            s"via $userExecCountConfigName")
+        if (userConfigCount.toLong > resourceInfo.addresses.size) {
+          throw new SparkException(s"Resource: $rName, with addresses: " +
+            s"${resourceInfo.addresses.mkString(",")} " +
+            s"is less than what the user requested for count: $userConfigCount, " +
+            s"via $userCountConfigName")
         }
       } else {
         throw new SparkException(s"Executor resource config missing required task resource: $rName")
@@ -136,7 +133,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           val parsedJson = parse(source).asInstanceOf[JArray].arr
           parsedJson.map { json =>
             val name = (json \ "name").extract[String]
-            val addresses = (json \ "addresses").extract[Array[JValue]].map(_.extract[String])
+            val addresses = (json \ "addresses").extract[Array[String]]
             new ResourceInformation(name, addresses)
           }.map(x => (x.name -> x)).toMap
         } catch {
@@ -147,23 +144,25 @@ private[spark] class CoarseGrainedExecutorBackend(
           source.close()
         }
         resourceMap
-      }}.getOrElse(ResourceDiscoverer.findResources(env.conf, false))
+      }}.getOrElse(ResourceDiscoverer.findResources(env.conf, isDriver = false))
 
       if (execResources.isEmpty) {
         throw new SparkException(s"User specified resources per task via: " +
           s"$SPARK_TASK_RESOURCE_PREFIX, but can't find any resources available on the executor.")
       }
+      // get just the map of resource name to count
+      val resourcesAndCounts = taskResourceConfigs.
+        withFilter { case (k, v) => k.endsWith(SPARK_RESOURCE_COUNT_POSTFIX)}.
+        map { case (k, v) => (k.dropRight(SPARK_RESOURCE_COUNT_POSTFIX.size), v)}
 
-      // check that the executor has all the resources required by the application/task
-      checkExecResourcesMeetTaskRequirements(taskResourceConfigs, execResources)
+      checkResourcesMeetRequirements(SPARK_EXECUTOR_RESOURCE_PREFIX, resourcesAndCounts,
+        execResources)
 
-      logInfo(s"Executor ${executorId} using resources: ${execResources.keys}")
-      if (log.isDebugEnabled) {
-        logDebug("===============================================================================")
-        logDebug("Executor Resources:")
-        execResources.foreach { case (k, v) => logDebug(s"$k -> $v") }
-        logDebug("===============================================================================")
-      }
+      logInfo("===============================================================================")
+      logInfo("Executor ${executorId} Resources:")
+      execResources.foreach { case (k, v) => logInfo(s"$k -> $v") }
+      logInfo("===============================================================================")
+
       execResources
     } else {
       if (resourcesFile.nonEmpty) {

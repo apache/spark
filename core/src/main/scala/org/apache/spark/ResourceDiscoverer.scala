@@ -73,7 +73,7 @@ private[spark] object ResourceDiscoverer extends Logging {
           val output = executeAndGetOutput(Seq(script.get), new File("."))
           val parsedJson = parse(output)
           val name = (parsedJson \ "name").extract[String]
-          val addresses = (parsedJson \ "addresses").extract[Array[JValue]].map(_.extract[String])
+          val addresses = (parsedJson \ "addresses").extract[Array[String]].toArray
           new ResourceInformation(name, addresses)
         } catch {
           case e @ (_: SparkException | _: MappingException | _: JsonParseException) =>
