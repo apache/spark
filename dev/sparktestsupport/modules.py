@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
 from functools import total_ordering
 import itertools
 import re
@@ -24,9 +25,10 @@ if os.environ.get("AMPLAB_JENKINS"):
     hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
 else:
     hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
-print "[info] Choosing supported modules with Hadoop profile", hadoop_version
+print("[info] Choosing supported modules with Hadoop profile", hadoop_version)
 
 all_modules = []
+
 
 @total_ordering
 class Module(object):
@@ -78,8 +80,9 @@ class Module(object):
         self.dependent_modules = set()
         for dep in dependencies:
             dep.dependent_modules.add(self)
+        # TODO: Skip hive-thriftserver module for hadoop-3.2. remove this once hadoop-3.2 support it
         if name == "hive-thriftserver" and hadoop_version == "hadoop3.2":
-            print "[info] Skip unsupported module:", name
+            print("[info] Skip unsupported module:", name)
         else:
             all_modules.append(self)
 
