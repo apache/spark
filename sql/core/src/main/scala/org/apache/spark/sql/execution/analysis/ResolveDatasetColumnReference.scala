@@ -72,7 +72,12 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
       val colRefToActualAttr = new mutable.HashMap[ColumnReference, AttributeReference]()
       // Keeps the column references that points to more than one actual attributes.
       val ambiguousColRefs = new mutable.HashMap[ColumnReference, Seq[AttributeReference]]()
+      // We only care about `SubqueryAlias` referring to Datasets which produces the column
+      // references that we want to resolve here.
       val dsIdSet = colRefs.map(_.datasetId).toSet
+      // If a column reference points to an attribute that is not present in the plan's inputSet, we
+      // should ignore it as it's invalid.
+      val inputSet = plan.inputSet
 
       plan.foreach {
         // We only add the special `SubqueryAlias` to attach the dataset id for self-join. After
@@ -86,15 +91,18 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
                   s"$ref. Please open a JIRA ticket to report it.")
               } else {
                 val actualAttr = child.output(ref.colPos).asInstanceOf[AttributeReference]
-                // Record the ambiguous column references. We will deal with them later.
-                if (ambiguousColRefs.contains(ref)) {
-                  assert(!colRefToActualAttr.contains(ref))
-                  ambiguousColRefs(ref) = ambiguousColRefs(ref) :+ actualAttr
-                } else if (colRefToActualAttr.contains(ref)) {
-                  ambiguousColRefs(ref) = Seq(colRefToActualAttr.remove(ref).get, actualAttr)
-                } else {
-                  colRefToActualAttr(ref) = actualAttr
+                if (inputSet.contains(actualAttr)) {
+                  // Record the ambiguous column references. We will deal with them later.
+                  if (ambiguousColRefs.contains(ref)) {
+                    assert(!colRefToActualAttr.contains(ref))
+                    ambiguousColRefs(ref) = ambiguousColRefs(ref) :+ actualAttr
+                  } else if (colRefToActualAttr.contains(ref)) {
+                    ambiguousColRefs(ref) = Seq(colRefToActualAttr.remove(ref).get, actualAttr)
+                  } else {
+                    colRefToActualAttr(ref) = actualAttr
+                  }
                 }
+
               }
             }
           }
@@ -102,7 +110,6 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
         case _ =>
       }
 
-      val inputSet = plan.inputSet
       val deAmbiguousColsRefs = new mutable.HashSet[ColumnReference]()
       val newPlan = plan.transformExpressions {
         case e @ Equality(a: AttributeReference, b: AttributeReference)
@@ -110,10 +117,7 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
           val colRefA = toColumnReference(a)
           val colRefB = toColumnReference(a)
           val maybeActualAttrs = ambiguousColRefs.get(colRefA)
-          val areValidAttrs = maybeActualAttrs.exists { attrs =>
-            attrs.length == 2 && attrs.forall(inputSet.contains)
-          }
-          if (colRefA == colRefB && areValidAttrs) {
+          if (colRefA == colRefB && maybeActualAttrs.exists(_.length == 2)) {
             deAmbiguousColsRefs += colRefA
             if (e.isInstanceOf[EqualTo]) {
               EqualTo(maybeActualAttrs.get.head, maybeActualAttrs.get.last)
@@ -125,11 +129,7 @@ class ResolveDatasetColumnReference(conf: SQLConf) extends Rule[LogicalPlan] {
           }
 
         case a: AttributeReference if isColumnReference(a) =>
-          val actualAttr = colRefToActualAttr.get(toColumnReference(a)).filter { attr =>
-            // Make sure the attribute is valid.
-            inputSet.contains(attr)
-          }.getOrElse(a)
-
+          val actualAttr = colRefToActualAttr.getOrElse(toColumnReference(a), a)
           // Remove the special metadata from this `AttributeReference`, as the column reference
           // resolving is done.
           Column.stripColumnReferenceMetadata(actualAttr)
