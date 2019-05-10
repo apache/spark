@@ -423,6 +423,86 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(state.finishedDrivers.size == 1)
   }
 
+  test("SPARK-27347: do not restart outdated supervised drivers") {
+    // Covers scenario where:
+    // - agent goes down
+    // - supervised job is relaunched on another agent
+    // - first agent re-registers and sends status update: TASK_FAILED
+    // - job should NOT be relaunched again
+    val conf = new SparkConf()
+    conf.setMaster("mesos://localhost:5050")
+    conf.setAppName("SparkMesosDriverRetries")
+    setScheduler(conf.getAll.toMap)
+
+    val mem = 1000
+    val cpu = 1
+    val offers = List(
+      Utils.createOffer("o1", "s1", mem, cpu, None),
+      Utils.createOffer("o2", "s2", mem, cpu, None),
+      Utils.createOffer("o3", "s1", mem, cpu, None))
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 100, 1, true, command,
+        Map(("spark.mesos.executor.home", "test"), ("spark.app.name", "test")), "sub1", new Date()))
+    assert(response.success)
+
+    // Offer a resource to launch the submitted driver
+    scheduler.resourceOffers(driver, Collections.singletonList(offers.head))
+    var state = scheduler.getSchedulerState()
+    assert(state.launchedDrivers.size == 1)
+
+    // Signal agent lost with status with TASK_LOST
+    val agent1 = SlaveID.newBuilder().setValue("s1").build()
+    var taskStatus = TaskStatus.newBuilder()
+      .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
+      .setSlaveId(agent1)
+      .setReason(TaskStatus.Reason.REASON_SLAVE_REMOVED)
+      .setState(MesosTaskState.TASK_LOST)
+      .build()
+
+    scheduler.statusUpdate(driver, taskStatus)
+    state = scheduler.getSchedulerState()
+    assert(state.pendingRetryDrivers.size == 1)
+    assert(state.pendingRetryDrivers.head.submissionId == taskStatus.getTaskId.getValue)
+    assert(state.launchedDrivers.isEmpty)
+
+    // Offer new resource to retry driver on a new agent
+    Thread.sleep(1500) // sleep to cover nextRetry's default wait time of 1s
+    scheduler.resourceOffers(driver, Collections.singletonList(offers(1)))
+
+    val agent2 = SlaveID.newBuilder().setValue("s2").build()
+    taskStatus = TaskStatus.newBuilder()
+      .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
+      .setSlaveId(agent2)
+      .setState(MesosTaskState.TASK_RUNNING)
+      .build()
+
+    scheduler.statusUpdate(driver, taskStatus)
+    state = scheduler.getSchedulerState()
+    assert(state.pendingRetryDrivers.isEmpty)
+    assert(state.launchedDrivers.size == 1)
+    assert(state.launchedDrivers.head.taskId.getValue.endsWith("-retry-1"))
+    assert(state.launchedDrivers.head.taskId.getValue != taskStatus.getTaskId.getValue)
+
+    // Agent1 comes back online and sends status update: TASK_FAILED
+    taskStatus = TaskStatus.newBuilder()
+      .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
+      .setSlaveId(agent1)
+      .setState(MesosTaskState.TASK_FAILED)
+      .setMessage("Abnormal executor termination")
+      .setReason(TaskStatus.Reason.REASON_EXECUTOR_TERMINATED)
+      .build()
+
+    scheduler.statusUpdate(driver, taskStatus)
+    scheduler.resourceOffers(driver, Collections.singletonList(offers.last))
+
+    // Assert driver does not restart 2nd time
+    state = scheduler.getSchedulerState()
+    assert(state.pendingRetryDrivers.isEmpty)
+    assert(state.launchedDrivers.size == 1)
+    assert(state.launchedDrivers.head.taskId.getValue.endsWith("-retry-1"))
+  }
+
   test("Declines offer with refuse seconds = 120.") {
     setScheduler()
 
