@@ -95,39 +95,49 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
   protected def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case Filter(condition: Expression, child: LogicalPlan) =>
-        val newCondition =
-          splitConjunctivePredicates(condition)
-            .map(rewriteEqual)
-            .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
-            .reduce(And)
-        Filter(newCondition, child)
+        Filter(normalize(condition), child)
       case sample: Sample =>
         sample.copy(seed = 0L)
       case Join(left, right, joinType, condition, hint) if condition.isDefined =>
-        val newCondition =
-          splitConjunctivePredicates(condition.get)
-            .map(rewriteEqual)
-            .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
-            .reduce(And)
-        Join(left, right, joinType, Some(newCondition), hint)
+        Join(left, right, joinType, condition.map(normalize), hint)
     }
   }
 
   /**
-   * Rewrite [[EqualTo]] and [[EqualNullSafe]] operator to keep order. The following cases will be
-   * equivalent:
-   * 1. (a = b), (b = a);
-   * 2. (a <=> b), (b <=> a).
+   * Rewrite [[EqualTo]], [[EqualNullSafe]], [[GreaterThan]], [[GreaterThanOrEqual]], [[And]] and
+   * [[Or]] operators to keep order.
+   * The following pairs will be equivalent:
+   * 1. (a = b) and (b = a),
+   * 2. (a <=> b) and (b <=> a),
+   * 3. (a > b) and (b < a),
+   * 4. (a >= b) and (b <= a),
+   * 5. (a <= b AND b <= a) and (b <= a AND a <= b),
+   * 6. (a <= b OR b <= a) and (b <= a OR a <= b)
    */
-  private def rewriteEqual(condition: Expression): Expression = condition transform {
-    case eq @ EqualTo(l: Expression, r: Expression) =>
+  private def normalize(expression: Expression): Expression = expression match {
+    case EqualTo(l: Expression, r: Expression) =>
       Seq(l, r)
+        .map(normalize)
         .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
         .reduce(EqualTo)
-    case eq @ EqualNullSafe(l: Expression, r: Expression) =>
+    case EqualNullSafe(l: Expression, r: Expression) =>
       Seq(l, r)
+        .map(normalize)
         .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
         .reduce(EqualNullSafe)
+    case GreaterThan(l, r) => LessThan(normalize(r), normalize(l))
+    case GreaterThanOrEqual(l, r) => LessThanOrEqual(normalize(r), normalize(l))
+    case and: And =>
+      splitConjunctivePredicates(and)
+        .map(normalize)
+        .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
+        .reduce(And)
+    case or: Or =>
+      splitDisjunctivePredicates(or)
+        .map(normalize)
+        .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
+        .reduce(Or)
+    case _ => expression
   }
 
   /** Fails the test if the two plans do not match */

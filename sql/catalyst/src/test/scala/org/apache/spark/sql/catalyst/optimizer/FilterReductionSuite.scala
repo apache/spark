@@ -31,8 +31,8 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
  */
 class FilterReductionSuite extends PlanTest {
 
-  object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches =
+  trait OptimizeBase extends RuleExecutor[LogicalPlan] {
+    protected def batches =
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
         Batch("FilterReduction", FixedPoint(10),
@@ -44,17 +44,26 @@ class FilterReductionSuite extends PlanTest {
           PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'x.boolean)
+  object Optimize extends OptimizeBase
+
+  object OptimizeWithoutFilterReduction extends OptimizeBase {
+    override protected def batches =
+      super.batches.map(b => Batch(b.name, b.strategy, b.rules.filterNot(_ == FilterReduction): _*))
+  }
+
+  val testRelation = LocalRelation('a.int, 'b.int, 'c.int.notNull, 'd.int.notNull, 'x.boolean)
 
   val data = {
-    val intElements = Seq(null, 1, 2, 3)
-    val booleanElements = Seq(null, true, false)
+    val intElementsWithNull = Seq(null, 1, 2, 3, 4)
+    val intElementsWithoutNull = Seq(null, 1, 2, 3, 4)
+    val booleanElementsWithNull = Seq(null, true, false)
     for {
-      a <- intElements
-      b <- intElements
-      c <- intElements
-      x <- booleanElements
-    } yield (a, b, c, x)
+      a <- intElementsWithNull
+      b <- intElementsWithNull
+      c <- intElementsWithoutNull
+      d <- intElementsWithoutNull
+      x <- booleanElementsWithNull
+    } yield (a, b, c, d, x)
   }
 
   val testRelationWithData = LocalRelation.fromExternalRows(testRelation.output, data.map(Row(_)))
@@ -67,13 +76,22 @@ class FilterReductionSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     val correctAnswer = if (expectEmptyRelation) {
       testRelation
+    } else if (expectedConstraints.isEmpty) {
+      testRelationWithData
     } else {
       testRelationWithData.where(expectedConstraints.reduce(And)).analyze
     }
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Filter reduction") {
+  private def testSameAsWithoutFilterReduction(input: Expression) = {
+    val originalQuery = testRelationWithData.where(input).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer = OptimizeWithoutFilterReduction.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Filter reduction with nullable attributes") {
     testFilterReduction('a < 2 && Literal(2) < 'a, true)
     testFilterReduction('a < 2 && Literal(2) <= 'a, true)
     testFilterReduction('a < 2 && Literal(2) === 'a, true)
@@ -352,5 +370,91 @@ class FilterReductionSuite extends PlanTest {
     testFilterReduction(('x || 'a > abs('b)) && abs('b) <=> 'a, false, Seq('x, abs('b) <=> 'a))
     testFilterReduction(('x || 'a > abs('b)) && abs('b) >= 'a, false, Seq('x, 'a <= abs('b)))
     testFilterReduction(('x || 'a > abs('b)) && abs('b) > 'a, false, Seq('x, 'a < abs('b)))
+  }
+
+  // These cases test scenarios when there is NullIntolerant node (ex. Not) between Filter and the
+  // subtree of And nodes and the expression to be reduced is nullable.
+  // For example in these cases the following reduction does not hold when X and Y is null and so
+  // FilterReduction should do nothing:
+  // Not(X < Y && Y < X)            =>  Not(X < Y && false)
+  // Not(X < Y && Not(X < Y))       =>  Not(X < Y && Not(true))
+  // Not(X <=> Y && Y < X)          =>  Not(X <=> Y && false)
+  // Not(X < Y && Y <=> X)          =>  Not(X < Y && false)
+  test("Filter reduction with nullable attributes and NullIntolerant nodes") {
+    testSameAsWithoutFilterReduction(Not(('x || 'a < abs('b)) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a < abs('b)) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a < abs('b)) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a < abs('b)) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a < abs('b)) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a < abs('b)) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <= abs('b)) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <= abs('b)) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <= abs('b)) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <= abs('b)) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <= abs('b)) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <= abs('b)) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a === abs('b)) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a === abs('b)) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a === abs('b)) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a === abs('b)) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a === abs('b)) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a === abs('b)) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <=> abs('b)) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <=> abs('b)) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <=> abs('b)) && abs('b) === 'a))
+    // the only exception:
+    // testSameAsWithoutFilterReduction(Not(('x || 'a <=> abs('b)) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <=> abs('b)) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a <=> abs('b)) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a >= abs('b)) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a >= abs('b)) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a >= abs('b)) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a >= abs('b)) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a >= abs('b)) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a >= abs('b)) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a > abs('b)) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a > abs('b)) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a > abs('b)) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a > abs('b)) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a > abs('b)) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || 'a > abs('b)) && abs('b) > 'a))
+
+    testSameAsWithoutFilterReduction(Not(('x || Not('a < abs('b))) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a < abs('b))) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a < abs('b))) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a < abs('b))) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a < abs('b))) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a < abs('b))) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <= abs('b))) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <= abs('b))) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <= abs('b))) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <= abs('b))) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <= abs('b))) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <= abs('b))) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a === abs('b))) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a === abs('b))) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a === abs('b))) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a === abs('b))) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a === abs('b))) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a === abs('b))) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <=> abs('b))) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <=> abs('b))) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <=> abs('b))) && abs('b) === 'a))
+    // the only exception:
+    // testSameAsWithoutFilterReduction(Not(('x || Not('a <=> abs('b))) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <=> abs('b))) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a <=> abs('b))) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a >= abs('b))) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a >= abs('b))) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a >= abs('b))) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a >= abs('b))) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a >= abs('b))) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a >= abs('b))) && abs('b) > 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a > abs('b))) && abs('b) < 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a > abs('b))) && abs('b) <= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a > abs('b))) && abs('b) === 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a > abs('b))) && abs('b) <=> 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a > abs('b))) && abs('b) >= 'a))
+    testSameAsWithoutFilterReduction(Not(('x || Not('a > abs('b))) && abs('b) > 'a))
   }
 }
