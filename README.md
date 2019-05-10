@@ -41,9 +41,9 @@ The easiest way to start using Spark is through the Scala shell:
 
     ./bin/spark-shell
 
-Try the following command, which should return 1000:
+Try the following command, which should return 1,000,000,000:
 
-    scala> sc.parallelize(1 to 1000).count()
+    scala> spark.range(1000 * 1000 * 1000).count()
 
 ## Interactive Python Shell
 
@@ -51,9 +51,9 @@ Alternatively, if you prefer Python, you can use the Python shell:
 
     ./bin/pyspark
 
-And run the following command, which should also return 1000:
+And run the following command, which should also return 1,000,000,000:
 
-    >>> sc.parallelize(range(1000)).count()
+    >>> spark.range(1000 * 1000 * 1000).count()
 
 ## Example Programs
 
