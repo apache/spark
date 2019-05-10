@@ -408,5 +408,6 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(serializerFor[FooWithAnnotation].dataType == StructType(Seq(
       StructField("f1", StringType),
       StructField("f2", StringType))))
+    assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
   }
 }
