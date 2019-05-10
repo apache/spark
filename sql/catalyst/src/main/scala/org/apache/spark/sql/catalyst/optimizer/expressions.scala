@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
-
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -479,12 +478,15 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
   private val contains = "%([^_%]+)%".r
   private val equalTo = "([^_%]*)".r
+  private val endsWithUnderscore = "([^_%]+)_".r
+  private val startsWithUnderscore = "_([^_%]+)".r
+  private val containsSingleUnderscore = "([^_%]+)_([^_%]+)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(input, Literal(pattern, StringType)) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
-        Literal(null, BooleanType)
+        Literal(false, BooleanType)
       } else {
         pattern.toString match {
           case startsWith(prefix) if !prefix.endsWith("\\") =>
@@ -500,6 +502,18 @@ object LikeSimplification extends Rule[LogicalPlan] {
             Contains(input, Literal(infix))
           case equalTo(str) =>
             EqualTo(input, Literal(str))
+          // case: abc_
+          case endsWithUnderscore(prefix) =>
+            And(EqualTo(Length(input), Literal(prefix.length + 1)),
+              StartsWith(input, Literal(prefix)))
+          // case: _abc
+          case startsWithUnderscore(suffix) =>
+            And(EqualTo(Length(input), Literal(suffix.length + 1)),
+              EndsWith(input, Literal(suffix)))
+          // case: abc_xyz
+          case containsSingleUnderscore(prefix, suffix) =>
+            And(EqualTo(Length(input), Literal(prefix.length + suffix.length + 1)),
+              And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(suffix))))
           case _ =>
             Like(input, Literal.create(pattern, StringType))
         }
