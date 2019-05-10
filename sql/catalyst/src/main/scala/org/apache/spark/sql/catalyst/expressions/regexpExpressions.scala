@@ -101,7 +101,8 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   note = """
     Use RLIKE to match with standard regular expressions.
-  """)
+  """,
+  since = "1.0.0")
 case class Like(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
@@ -179,7 +180,8 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   """,
   note = """
     Use LIKE to match with simple string pattern.
-  """)
+  """,
+  since = "1.0.0")
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
@@ -237,7 +239,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
     Examples:
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
        ["one","two","three",""]
-  """)
+  """,
+  since = "1.5.0")
 case class StringSplit(str: Expression, pattern: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -274,7 +277,8 @@ case class StringSplit(str: Expression, pattern: Expression)
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)', 'num');
        num-num
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -373,7 +377,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
-  """)
+  """,
+  since = "1.5.0")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
