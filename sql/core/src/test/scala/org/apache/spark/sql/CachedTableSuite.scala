@@ -939,22 +939,39 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("Cache should respect the broadcast hint") {
-    val df = broadcast(spark.range(1000)).cache()
-    val df2 = spark.range(1000).cache()
-    df.count()
-    df2.count()
+    def testHint(df: Dataset[_]): Unit = {
+      val df2 = spark.range(2000).cache()
+      df2.count()
 
-    // Test the broadcast hint.
-    val joinPlan = df.join(df2, "id").queryExecution.optimizedPlan
-    val hint = joinPlan.collect {
-      case Join(_, _, _, _, hint) => hint
+      def checkHintExists(): Unit = {
+        // Test the broadcast hint.
+        val joinPlan = df.join(df2, "id").queryExecution.optimizedPlan
+        val hint = joinPlan.collect {
+          case Join(_, _, _, _, hint) => hint
+        }
+        assert(hint.size == 1)
+        assert(hint(0).leftHint.get.strategy.contains(BROADCAST))
+        assert(hint(0).rightHint.isEmpty)
+      }
+
+      // Make sure the hint does exist when `df` is not cached.
+      checkHintExists()
+
+      df.cache()
+      df.count()
+      // Make sure the hint still exists when `df` is cached.
+      checkHintExists()
+
+      // Clean-up
+      df.unpersist()
     }
-    assert(hint.size == 1)
-    assert(hint(0).leftHint.get.strategy.contains(BROADCAST))
-    assert(hint(0).rightHint.isEmpty)
 
-    // Clean-up
-    df.unpersist()
+    // The hint is the root node
+    testHint(broadcast(spark.range(1000)))
+    // The hint is under subquery alias
+    testHint(broadcast(spark.range(1000)).as("df"))
+    // The hint is under filter
+    testHint(broadcast(spark.range(1000)).filter($"id" > 100))
   }
 
   test("analyzes column statistics in cached query") {
