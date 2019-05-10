@@ -585,6 +585,17 @@ object SQLConf {
       .longConf
       .createWithDefault(250 * 1024 * 1024)
 
+  val HIVE_FILESOURCE_FILE_CACHE_CONCURRENCY_LEVEL =
+    buildConf("spark.sql.hive.filesourceFileCacheConcurrencyLevel")
+      .doc("Provide concurrency level for underlying guava cache. The default is 1." +
+        " Higher value may give better performance, when the number of " +
+        "entries in the cache is very large. This imposes a limit on the size of single entry" +
+        "in the cache, i.e. sizeLimit < totalCacheCapacity/concurrencyLevel. See SPARK-27664.")
+      .intConf
+      .checkValue(value => value >= 1 && value <= 64, "The concurrency level should be " +
+        "between 1 and 64.")
+      .createWithDefault(1)
+
   object HiveCaseSensitiveInferenceMode extends Enumeration {
     val INFER_AND_SAVE, INFER_ONLY, NEVER_INFER = Value
   }
@@ -1897,6 +1908,9 @@ class SQLConf extends Serializable with Logging {
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
+
+  def filesourceFileCacheConcurrencyLevel: Int =
+    getConf(HIVE_FILESOURCE_FILE_CACHE_CONCURRENCY_LEVEL)
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
