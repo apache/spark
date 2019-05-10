@@ -118,7 +118,8 @@ object HiveThriftServer2 extends Logging {
           logWarning("HiveThriftServer2 HA is compatible with Hive metastore version is " +
               "0.14.0 or higher.")
         case _ =>
-          if (executionHive.conf.getBoolVar(ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY)) {
+          if (executionHive.conf.getBoolVar(
+            ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY)) {
             val method = server.getClass.getSuperclass.getDeclaredMethod(
                 "addServerInstanceToZooKeeper",
                 classOf[org.apache.hadoop.hive.conf.HiveConf])
