@@ -797,7 +797,8 @@ private[spark] class MesosClusterScheduler(
    * after a supervised driver has already been relaunched
    */
   private def isTaskOutdated(taskId: String, state: MesosClusterSubmissionState): Boolean =
-    taskId != state.taskId.getValue && !pendingRetryDrivers.contains(state.driverDescription)
+    taskId != state.taskId.getValue &&
+      !pendingRetryDrivers.exists(_.submissionId == state.driverDescription.submissionId)
 
   private def retireDriver(
       submissionId: String,

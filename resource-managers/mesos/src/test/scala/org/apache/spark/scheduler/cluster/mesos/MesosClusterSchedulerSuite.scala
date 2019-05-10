@@ -490,6 +490,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     scheduler.statusUpdate(driver, taskStatus)
     state = scheduler.getSchedulerState()
     assert(state.pendingRetryDrivers.size == 1)
+    assert(state.pendingRetryDrivers.head.submissionId == taskStatus.getTaskId.getValue)
     assert(state.launchedDrivers.isEmpty)
 
     // Offer new resource to retry driver on a new agent
@@ -508,6 +509,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(state.pendingRetryDrivers.isEmpty)
     assert(state.launchedDrivers.size == 1)
     assert(state.launchedDrivers.head.taskId.getValue.endsWith("-retry-1"))
+    assert(state.launchedDrivers.head.taskId.getValue != taskStatus.getTaskId.getValue)
 
     // Agent1 comes back online and sends status update: TASK_FAILED
     taskStatus = TaskStatus.newBuilder()
