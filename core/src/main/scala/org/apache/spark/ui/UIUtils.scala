@@ -145,17 +145,6 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-  // Format raw bytes to binary prefix byte units
-  def formatBytesBinary(bytes: Long): String = {
-    if (bytes == 0) {
-      return "0.0 B"
-    }
-    val factor = 1024
-    val sizes = Array("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
-    val num = (Math.floor(Math.log(bytes.toDouble) / Math.log(factor.toDouble))).toInt
-    "%.1f".format((bytes / Math.pow(factor, num)).toFloat) + " " + sizes(num)
-  }
-
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
   def uiRoot(request: HttpServletRequest): String = {
     // Knox uses X-Forwarded-Context to notify the application the base path
