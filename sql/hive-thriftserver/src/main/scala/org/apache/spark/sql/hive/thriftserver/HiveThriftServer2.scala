@@ -107,6 +107,12 @@ object HiveThriftServer2 extends Logging {
       } else {
         None
       }
+      if (executionHive.conf.getBoolVar(ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY)) {
+        val method = server.getClass.getSuperclass.getDeclaredMethod("addServerInstanceToZooKeeper",
+            classOf[org.apache.hadoop.hive.conf.HiveConf])
+        method.setAccessible(true)
+        method.invoke(server, executionHive.conf)
+      }
       // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
       // process can not exit, so check whether if SparkContext was stopped.
       if (SparkSQLEnv.sparkContext.stopped.get()) {
