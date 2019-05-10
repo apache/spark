@@ -44,7 +44,8 @@ object FileStatusCache {
       session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
       if (sharedCache == null) {
         sharedCache = new SharedInMemoryCache(
-          session.sqlContext.conf.filesourcePartitionFileCacheSize)
+          session.sqlContext.conf.filesourcePartitionFileCacheSize,
+          session.sqlContext.conf.filesourceFileCacheConcurrencyLevel)
       }
       sharedCache.createForNewClient()
     } else {
@@ -88,8 +89,9 @@ abstract class FileStatusCache {
  * An implementation that caches partition file statuses in memory.
  *
  * @param maxSizeInBytes max allowable cache size before entries start getting evicted
+ * @param concurrencyLevel concurrency level for underlying guava cache.
  */
-private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
+private class SharedInMemoryCache(maxSizeInBytes: Long, concurrencyLevel: Int) extends Logging {
 
   // Opaque object that uniquely identifies a shared cache user
   private type ClientId = Object
@@ -131,6 +133,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
     }
     CacheBuilder.newBuilder()
       .weigher(weigher)
+      .concurrencyLevel(concurrencyLevel)
       .removalListener(removalListener)
       .maximumWeight(maxSizeInBytes / weightScale)
       .build[(ClientId, Path), Array[FileStatus]]()
