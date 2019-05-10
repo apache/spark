@@ -168,10 +168,14 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
 
+    val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
+
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       return paths.map { path =>
-        (path, listLeafFiles(path, hadoopConf, filter, Some(sparkSession)))
+        val leafFiles = listLeafFiles(
+          path, hadoopConf, filter, Some(sparkSession), ignoreMissingFiles = ignoreMissingFiles)
+        (path, leafFiles)
       }
     }
 
@@ -204,7 +208,9 @@ object InMemoryFileIndex extends Logging {
         .mapPartitions { pathStrings =>
           val hadoopConf = serializableConfiguration.value
           pathStrings.map(new Path(_)).toSeq.map { path =>
-            (path, listLeafFiles(path, hadoopConf, filter, None))
+            val leafFiles = listLeafFiles(
+              path, hadoopConf, filter, None, ignoreMissingFiles = ignoreMissingFiles)
+            (path, leafFiles)
           }.iterator
         }.map { case (path, statuses) =>
         val serializableStatuses = statuses.map { status =>
@@ -267,15 +273,15 @@ object InMemoryFileIndex extends Logging {
       path: Path,
       hadoopConf: Configuration,
       filter: PathFilter,
-      sessionOpt: Option[SparkSession]): Seq[FileStatus] = {
+      sessionOpt: Option[SparkSession],
+      ignoreMissingFiles: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
-    // [SPARK-17599] Prevent InMemoryFileIndex from failing if path doesn't exist
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
     val statuses = try fs.listStatus(path) catch {
-      case _: FileNotFoundException =>
+      case _: FileNotFoundException if ignoreMissingFiles =>
         logWarning(s"The directory $path was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
@@ -288,7 +294,14 @@ object InMemoryFileIndex extends Logging {
         case Some(session) =>
           bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session).flatMap(_._2)
         case _ =>
-          dirs.flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
+          dirs.flatMap { dir =>
+            listLeafFiles(
+              dir.getPath,
+              hadoopConf,
+              filter,
+              sessionOpt,
+              ignoreMissingFiles = ignoreMissingFiles)
+          }
       }
       val allFiles = topLevelFiles ++ nestedFiles
       if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
@@ -330,7 +343,7 @@ object InMemoryFileIndex extends Logging {
           }
           Some(lfs)
         } catch {
-          case _: FileNotFoundException =>
+          case _: FileNotFoundException if ignoreMissingFiles =>
             missingFiles += f.getPath.toString
             None
         }
