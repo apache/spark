@@ -27,6 +27,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -85,7 +86,7 @@ private[kafka010] class KafkaSource(
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
     "kafkaConsumer.pollTimeoutMs",
-    (sc.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000L).toString
+    (sc.conf.get(NETWORK_TIMEOUT) * 1000L).toString
   ).toLong
 
   private val maxOffsetsPerTrigger =

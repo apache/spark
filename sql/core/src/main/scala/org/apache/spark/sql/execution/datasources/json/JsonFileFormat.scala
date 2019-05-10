@@ -157,38 +157,3 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     case _ => false
   }
 }
-
-private[json] class JsonOutputWriter(
-    path: String,
-    options: JSONOptions,
-    dataSchema: StructType,
-    context: TaskAttemptContext)
-  extends OutputWriter with Logging {
-
-  private val encoding = options.encoding match {
-    case Some(charsetName) => Charset.forName(charsetName)
-    case None => StandardCharsets.UTF_8
-  }
-
-  if (JSONOptionsInRead.blacklist.contains(encoding)) {
-    logWarning(s"The JSON file ($path) was written in the encoding ${encoding.displayName()}" +
-         " which can be read back by Spark only if multiLine is enabled.")
-  }
-
-  private var jacksonGenerator: Option[JacksonGenerator] = None
-
-  override def write(row: InternalRow): Unit = {
-    val gen = jacksonGenerator.getOrElse {
-      val os = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)
-      // create the Generator without separator inserted between 2 records
-      val newGen = new JacksonGenerator(dataSchema, os, options)
-      jacksonGenerator = Some(newGen)
-      newGen
-    }
-
-    gen.write(row)
-    gen.writeLineEnding()
-  }
-
-  override def close(): Unit = jacksonGenerator.foreach(_.close())
-}
