@@ -981,8 +981,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
     // This section tests when a table is cached with its qualified name but it is refreshed with
     // its unqualified name.
-    withTempPath { path =>
-      withTempDatabase { db =>
+    withTempDatabase { db =>
+      withTempPath { path =>
         withTable(s"$db.cachedTable") {
           // Create table 'cachedTable' in temp db for testing purpose.
           spark.catalog.createTable(
@@ -1025,12 +1025,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
           }
         }
       }
-    }
 
-    // This section tests when a table is cached with its unqualified name but it is refreshed with
-    // its qualified name.
-    withTempPath { path =>
-      withTempDatabase { db =>
+      // This section tests when a table is cached with its unqualified name but it is refreshed
+      // with its qualified name.
+      withTempPath { path =>
         withTable("cachedTable") {
           // Create table 'cachedTable' in default db for testing purpose.
           spark.catalog.createTable(
