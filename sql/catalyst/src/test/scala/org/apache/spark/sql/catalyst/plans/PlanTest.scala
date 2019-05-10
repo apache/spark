@@ -137,7 +137,7 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
         .map(normalize)
         .sortBy(p => scala.util.hashing.MurmurHash3.seqHash(Seq(p.getClass, p)))
         .reduce(Or)
-    case _ => expression
+    case _ => expression.mapChildren(normalize)
   }
 
   /** Fails the test if the two plans do not match */
