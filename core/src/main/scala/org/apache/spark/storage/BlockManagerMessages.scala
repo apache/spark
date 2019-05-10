@@ -97,7 +97,13 @@ private[spark] object BlockManagerMessages {
   case class GetLocationsAndStatus(blockId: BlockId, requesterHost: String)
     extends ToBlockManagerMaster
 
-  // The response message of `GetLocationsAndStatus` request.
+  /**
+   * The response message of `GetLocationsAndStatus` request.
+   *
+   * @param localDirs if it is persisted-to-disk on the same host as the requester executor is
+   *                  running on then localDirs will be Some and the cached data will be in a file
+   *                  in one of those dirs, otherwise it is None.
+   */
   case class BlockLocationsAndStatus(
       locations: Seq[BlockManagerId],
       status: BlockStatus,

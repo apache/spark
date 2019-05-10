@@ -881,6 +881,8 @@ private[spark] class BlockManager(
 
     val blockSize = locationsAndStatus.status.diskSize.max(locationsAndStatus.status.memSize)
     if (locationsAndStatus.localDirs.isDefined) {
+      // as the block content can be found on the same host using the network can be avoided by
+      // accessing the file directly and using the local directories of the other executor
       val blockDataOption =
         readDiskBlockFromSameHostExecutor(blockId, locationsAndStatus.localDirs.get, blockSize)
       if (blockDataOption.isDefined) {

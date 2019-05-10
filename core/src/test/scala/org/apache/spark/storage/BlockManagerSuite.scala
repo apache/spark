@@ -576,11 +576,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       conf.set("spark.shuffle.io.maxRetries", "0")
        val noFetcher = new MockBlockTransferService(0) {
         override def fetchBlockSync(
-          host: String,
-          port: Int,
-          execId: String,
-          blockId: String,
-          tempFileManager: DownloadFileManager): ManagedBuffer = {
+            host: String,
+            port: Int,
+            execId: String,
+            blockId: String,
+            tempFileManager: DownloadFileManager): ManagedBuffer = {
           fail("Fetching over network is not expected when the block is requested from same host")
         }
       }

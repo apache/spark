@@ -535,8 +535,8 @@ class BlockManagerMasterEndpoint(
         None
       }
       bmIdToLocalDirs.map { case (bmId, localDirs) =>
-        Some(BlockLocationsAndStatus(locations.filter(_ != bmId), status.get, Some(localDirs)))
-      }.getOrElse(
+        BlockLocationsAndStatus(locations.filter(_ != bmId), status.get, Some(localDirs))
+      }.orElse(
         Some(BlockLocationsAndStatus(locations, status.get, None))
       )
     } else {
