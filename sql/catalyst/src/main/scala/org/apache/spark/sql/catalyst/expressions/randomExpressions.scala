@@ -68,7 +68,8 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
        0.8446490682263027
       > SELECT _FUNC_(null);
        0.8446490682263027
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Rand(child: Expression) extends RDG {
 
@@ -102,7 +103,8 @@ object Rand {
        1.1164209726833079
       > SELECT _FUNC_(null);
        1.1164209726833079
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Randn(child: Expression) extends RDG {
 
