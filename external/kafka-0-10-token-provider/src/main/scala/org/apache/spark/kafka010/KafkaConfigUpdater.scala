@@ -21,11 +21,11 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Kafka
 
 /**
  * Class to conveniently update Kafka config params, while logging the changes
@@ -57,14 +57,17 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
     //   configuration.
     if (KafkaTokenUtil.isGlobalJaasConfigurationProvided) {
       logDebug("JVM global security configuration detected, using it for login.")
-    } else if (KafkaTokenUtil.isTokenAvailable()) {
-      logDebug("Delegation token detected, using it for login.")
-      val jaasParams = KafkaTokenUtil.getTokenJaasParams(SparkEnv.get.conf)
-      set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
-      val mechanism = SparkEnv.get.conf.get(Kafka.TOKEN_SASL_MECHANISM)
-      require(mechanism.startsWith("SCRAM"),
-        "Delegation token works only with SCRAM mechanism.")
-      set(SaslConfigs.SASL_MECHANISM, mechanism)
+    } else {
+      val clusterConfig = KafkaTokenUtil.findMatchingToken(SparkEnv.get.conf,
+        map.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
+      clusterConfig.foreach { clusterConf =>
+        logDebug("Delegation token detected, using it for login.")
+        val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
+        set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
+        require(clusterConf.tokenMechanism.startsWith("SCRAM"),
+          "Delegation token works only with SCRAM mechanism.")
+        set(SaslConfigs.SASL_MECHANISM, clusterConf.tokenMechanism)
+      }
     }
     this
   }
