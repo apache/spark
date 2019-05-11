@@ -481,7 +481,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
   private val endsWithUnderscore = "([^_%]+)_".r
   private val startsWithUnderscore = "_([^_%]+)".r
-  private val containsSingleUnderscore = "([^_%]+)_([^_%]+)".r
+  private val startsAndEndsWithUnderscore = "([^_%]+)_([^_%]+)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(input, Literal(pattern, StringType)) =>
@@ -512,7 +512,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
             And(EqualTo(Length(input), Literal(suffix.length + 1)),
               EndsWith(input, Literal(suffix)))
           // case: abc_xyz
-          case containsSingleUnderscore(prefix, suffix) =>
+          case startsAndEndsWithUnderscore(prefix, suffix) =>
             And(EqualTo(Length(input), Literal(prefix.length + suffix.length + 1)),
               And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(suffix))))
           case _ =>
