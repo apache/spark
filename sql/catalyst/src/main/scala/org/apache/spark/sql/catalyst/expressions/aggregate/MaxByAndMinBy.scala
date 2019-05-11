@@ -64,9 +64,9 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   override lazy val updateExpressions: Seq[Expression] = Seq(
     /* value = */
     CaseWhen(
-      (And(IsNull(ordering), IsNull(orderingExpr)), nullValue) ::
-        (IsNull(ordering), valueExpr) ::
-        (IsNull(orderingExpr), value) :: Nil,
+      (ordering.isNull && orderingExpr.isNull, nullValue) ::
+        (ordering.isNull, valueExpr) ::
+        (orderingExpr.isNull, value) :: Nil,
       If(predicate(ordering, orderingExpr), value, valueExpr)
     ),
     /* ordering = */ orderingUpdater(ordering, orderingExpr)
@@ -75,9 +75,9 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   override lazy val mergeExpressions: Seq[Expression] = Seq(
     /* value = */
     CaseWhen(
-      (And(IsNull(ordering.left), IsNull(ordering.right)), nullValue) ::
-        (IsNull(ordering.left), value.right) ::
-        (IsNull(ordering.right), value.left) :: Nil,
+      (ordering.left.isNull && ordering.right.isNull, nullValue) ::
+        (ordering.left.isNull, value.right) ::
+        (ordering.right.isNull, value.left) :: Nil,
       If(predicate(ordering.left, ordering.right), value.left, value.right)
     ),
     /* ordering = */ orderingUpdater(ordering.left, ordering.right)

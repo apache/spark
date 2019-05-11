@@ -840,9 +840,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("min_by") {
-    val yearOfMaxEarnings =
+    val yearOfMinEarnings =
       sql("SELECT course, min_by(year, earnings) FROM courseSales GROUP BY course")
-    checkAnswer(yearOfMaxEarnings, Row("dotNET", 2012) :: Row("Java", 2012) :: Nil)
+    checkAnswer(yearOfMinEarnings, Row("dotNET", 2012) :: Row("Java", 2012) :: Nil)
 
     checkAnswer(
       sql("SELECT min_by(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y)"),
