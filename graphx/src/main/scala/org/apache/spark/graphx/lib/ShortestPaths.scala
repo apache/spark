@@ -36,7 +36,7 @@ object ShortestPaths extends Serializable {
   private def addMaps(spmap1: SPMap, spmap2: SPMap): SPMap = {
     (spmap1.keySet ++ spmap2.keySet).map {
       k => k -> math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue))
-    }(collection.breakOut) // more efficient alternative to [[collection.Traversable.toMap]]
+    }(collection.breakOut)
   }
 
   /**
