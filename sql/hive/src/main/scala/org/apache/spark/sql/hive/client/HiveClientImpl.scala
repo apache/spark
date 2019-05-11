@@ -30,7 +30,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars.{METASTORECONNECTURLKEY, METASTOREURIS}
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
@@ -197,13 +196,17 @@ private[hive] class HiveClientImpl(
     // Hive changed the default of datanucleus.schema.autoCreateAll from true to false
     // and hive.metastore.schema.verification from false to true since Hive 2.0.
     // For details, see the JIRA HIVE-6113, HIVE-12463 and HIVE-1841.
-    // For the production environment. Either isDefaultMSUri or isDerbyMS should not be true.
+    // isEmbeddedMetaStore should not be true in the production environment.
     // We hard-code hive.metastore.schema.verification and datanucleus.schema.autoCreateAll to allow
     // bin/spark-shell, bin/spark-sql and sbin/start-thriftserver.sh to automatically create the
     // Derby Metastore when running Spark in the non-production environment.
-    val isDefaultMSUri = hiveConf.getVar(METASTOREURIS).equals(METASTOREURIS.defaultStrVal)
-    val isDerbyMS = hiveConf.getVar(METASTORECONNECTURLKEY).startsWith("jdbc:derby")
-    if (isDefaultMSUri && isDerbyMS) {
+    val isEmbeddedMetaStore = {
+      val msUri = hiveConf.getVar(ConfVars.METASTOREURIS)
+      val msConnUrl = hiveConf.getVar(ConfVars.METASTORECONNECTURLKEY)
+      (msUri == null || msUri.trim().isEmpty) &&
+        (msConnUrl != null && msConnUrl.startsWith("jdbc:derby"))
+    }
+    if (isEmbeddedMetaStore) {
       hiveConf.setBoolean("hive.metastore.schema.verification", false)
       hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
     }
