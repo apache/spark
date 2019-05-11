@@ -996,28 +996,13 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     atomicTypes.foreach { atomicType =>
       val struct = Literal.create(
-        InternalRow(
-          UTF8String.fromString("123"),
-          UTF8String.fromString("true"),
-          UTF8String.fromString("f"),
-          null),
-        StructType(Seq(
-          StructField("a", StringType, nullable = true),
-          StructField("b", StringType, nullable = true),
-          StructField("c", StringType, nullable = true),
-          StructField("d", NullType, nullable = true))))
+        InternalRow(null),
+        StructType(Seq(StructField("a", NullType, nullable = true))))
 
       val ret = cast(struct, StructType(Seq(
-        StructField("a", StringType, nullable = true),
-        StructField("b", StringType, nullable = true),
-        StructField("c", StringType, nullable = true),
-        StructField("d", atomicType, nullable = true))))
+        StructField("a", atomicType, nullable = true))))
       assert(ret.resolved)
-      checkEvaluation(ret, InternalRow(
-        UTF8String.fromString("123"),
-        UTF8String.fromString("true"),
-        UTF8String.fromString("f"),
-        null))
+      checkEvaluation(ret, InternalRow(null))
     }
   }
 }
