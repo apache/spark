@@ -646,12 +646,10 @@ private[spark] class ExecutorAllocationManager(
   private[spark] class ExecutorAllocationListener extends SparkListener {
 
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
-    // Number of running tasks per stage including speculative tasks.
-    // Should be 0 when no stages are active.
-    // Ignore running-but-zombie stage attempts.
-    private val stageIdToNumRunningTask = new mutable.HashMap[Int, Int]
-    private val activeStageIdToStageAttemptId = new mutable.HashMap[Int, Int]
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
+    // The number of tasks currently running across all stages.
+    // Include running-but-zombie stage attempts and sepective task
+    private val taskIdToNumLiveTasks = new mutable.HashMap[Long, Int]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
     // Number of speculative tasks to be scheduled in each stage
     private val stageIdToNumSpeculativeTasks = new mutable.HashMap[Int, Int]
@@ -671,8 +669,6 @@ private[spark] class ExecutorAllocationManager(
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {
         stageIdToNumTasks(stageId) = numTasks
-        stageIdToNumRunningTask(stageId) = 0
-        activeStageIdToStageAttemptId(stageId) = attemptId
         allocationManager.onSchedulerBacklogged()
 
         // Compute the number of tasks requested by the stage on each host
@@ -699,8 +695,6 @@ private[spark] class ExecutorAllocationManager(
       val stageId = stageCompleted.stageInfo.stageId
       allocationManager.synchronized {
         stageIdToNumTasks -= stageId
-        stageIdToNumRunningTask -= stageId
-        activeStageIdToStageAttemptId -= stageId
         stageIdToNumSpeculativeTasks -= stageId
         stageIdToTaskIndices -= stageId
         stageIdToSpeculativeTaskIndices -= stageId
@@ -724,9 +718,7 @@ private[spark] class ExecutorAllocationManager(
       val executorId = taskStart.taskInfo.executorId
 
       allocationManager.synchronized {
-        if (stageIdToNumRunningTask.contains(stageId)) {
-          stageIdToNumRunningTask(stageId) += 1
-        }
+        taskIdToNumLiveTasks(taskId) = taskIdToNumLiveTasks.getOrElse(taskId, 0) + 1
         // This guards against the following race condition:
         // 1. The `SparkListenerTaskStart` event is posted before the
         // `SparkListenerExecutorAdded` event
@@ -761,12 +753,12 @@ private[spark] class ExecutorAllocationManager(
       val taskId = taskEnd.taskInfo.taskId
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
-      val stageAttemptId = taskEnd.stageAttemptId
       allocationManager.synchronized {
-        if (stageIdToNumRunningTask.contains(stageId) &&
-            activeStageIdToStageAttemptId.contains(stageId) &&
-            activeStageIdToStageAttemptId(stageId) == stageAttemptId) {
-          stageIdToNumRunningTask(stageId) -= 1
+        if (taskIdToNumLiveTasks.contains(taskId)) {
+          taskIdToNumLiveTasks(taskId) -= 1
+          if (taskIdToNumLiveTasks(taskId) <= 0) {
+            taskIdToNumLiveTasks.remove(taskId)
+          }
         }
         // If the executor is no longer running any scheduled tasks, mark it as idle
         if (executorIdToTaskIds.contains(executorId)) {
@@ -843,11 +835,11 @@ private[spark] class ExecutorAllocationManager(
     }
 
     /**
-     * The number of tasks currently running across all active stages.
-     * Ignore running-but-zombie stage attempts
+     * The number of tasks currently running across all stages.
+     * Include running-but-zombie stage attempts
      */
     def totalRunningTasks(): Int = {
-      stageIdToNumRunningTask.values.sum
+      taskIdToNumLiveTasks.values.sum
     }
 
     /**

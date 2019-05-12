@@ -289,22 +289,21 @@ class ExecutorAllocationManagerSuite
     post(sc.listenerBus, SparkListenerStageCompleted(stage))
 
     // There are still two tasks that belong to the zombie stage running.
-    // totalRunningTasks only computes the running task of the active stage
-    assert(totalRunningTasks(manager) === 0)
+    assert(totalRunningTasks(manager) === 2)
 
     // submit another attempt for the stage.  We may get some task completions from the
     // first attempt, but they are ignored.
     val stageAttempt1 = createStageInfo(stage.stageId, 5, attemptId = 1)
     post(sc.listenerBus, SparkListenerStageSubmitted(stageAttempt1))
     post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, Success, taskInfo1, null))
-    assert(totalRunningTasks(manager) === 0)
+    assert(totalRunningTasks(manager) === 1)
     val attemptTaskInfo1 = createTaskInfo(3, 0, "executor-1")
     val attemptTaskInfo2 = createTaskInfo(4, 1, "executor-1")
     post(sc.listenerBus, SparkListenerTaskStart(0, 1, attemptTaskInfo1))
     post(sc.listenerBus, SparkListenerTaskStart(0, 1, attemptTaskInfo2))
-    assert(totalRunningTasks(manager) === 2)
+    assert(totalRunningTasks(manager) === 3)
     post(sc.listenerBus, SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo1, null))
-    assert(totalRunningTasks(manager) === 1)
+    assert(totalRunningTasks(manager) === 2)
     post(sc.listenerBus, SparkListenerTaskEnd(0, 0, null, Success, taskInfo2, null))
     assert(totalRunningTasks(manager) === 1)
     post(sc.listenerBus, SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo2, null))
