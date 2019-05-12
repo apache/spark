@@ -142,7 +142,7 @@ object StaticSQLConf {
         "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
         "cause memory problem.")
       .intConf
-      .checkValue(thres => thres > 0 && thres <= 128, "The threshold should be positive.")
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in [0,128].")
       .createWithDefault(128)
 
   val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
