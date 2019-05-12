@@ -712,20 +712,20 @@ private[hive] class HiveClientImpl(
    * in the sequence is one row.
    * Since upgrading the built-in Hive to 2.3, hive-llap-client is needed when
    * running MapReduce jobs with `runHive`.
+   * Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
-    logDebug(s"Running hiveql '$cmd'")
-    if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
-
-    def runProcessor(proc: CommandProcessor, tokens: Array[String], cmd_1: String): Seq[String] = {
-      if (state.out != null) {
-        // scalastyle:off println
-        state.out.println(tokens(0) + " " + cmd_1)
-        // scalastyle:on println
+    def closeDriver(driver: Driver): Unit = {
+      // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
+      // and the CommandProcessorFactory.clean function removed.
+      driver.getClass.getMethod("close").invoke(driver)
+      if (version != hive.v3_1) {
+        CommandProcessorFactory.clean(conf)
       }
-      Seq(proc.run(cmd_1).getResponseCode.toString)
     }
 
+    logDebug(s"Running hiveql '$cmd'")
+    if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
@@ -733,34 +733,26 @@ private[hive] class HiveClientImpl(
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc = shim.getCommandProcessor(tokens(0), conf)
       proc match {
-        // HIVE-18238(Hive 3.0.0) changed the close() function return type.
-        // This change is not compatible with the built-in Hive.
-        case driver: Driver if version != hive.v3_1 =>
+        case driver: Driver =>
           val response: CommandProcessorResponse = driver.run(cmd)
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
-            driver.close()
-            CommandProcessorFactory.clean(conf)
+            closeDriver(driver)
             throw new QueryExecutionException(response.getErrorMessage)
           }
           driver.setMaxRows(maxRows)
 
           val results = shim.getDriverResults(driver)
-          driver.close()
-          CommandProcessorFactory.clean(conf)
+          closeDriver(driver)
           results
 
-        case _: SetProcessor | _: ResetProcessor =>
-          runProcessor(proc, tokens, cmd_1)
-        case _: AddResourceProcessor | _: DeleteResourceProcessor | _: ListResourceProcessor =>
-          runProcessor(proc, tokens, cmd_1)
-        case _: CompileProcessor | _: CryptoProcessor | _: DfsProcessor | _: ReloadProcessor =>
-          runProcessor(proc, tokens, cmd_1)
-
-        case unsupportedProcessor =>
-          val className = unsupportedProcessor.getClass.getCanonicalName
-          throw new AnalysisException(
-            s"Dose not support Hive ${version.fullVersion} processor: $className")
+        case _ =>
+          if (state.out != null) {
+            // scalastyle:off println
+            state.out.println(tokens(0) + " " + cmd_1)
+            // scalastyle:on println
+          }
+          Seq(proc.run(cmd_1).getResponseCode.toString)
       }
     } catch {
       case e: Exception =>
@@ -872,20 +864,31 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    client.getAllTables("default").asScala.foreach { t =>
-      logDebug(s"Deleting table $t")
-      val table = client.getTable("default", t)
+    val allTables = client.getAllTables("default")
+    val (mvs, others) = allTables.asScala.map(t => client.getTable("default", t))
+      .partition(_.getTableType.toString.equals("MATERIALIZED_VIEW"))
+
+    // Remove materialized view first, otherwise caused a violation of foreign key constraint.
+    mvs.foreach { table =>
+      val tableName = table.getTableName
+      logDebug(s"Deleting materialized view $tableName")
+      client.dropTable("default", table.getTableName)
+    }
+
+    others.foreach { table =>
+      val tableName = table.getTableName
+      logDebug(s"Deleting table $tableName")
       try {
-        client.getIndexes("default", t, 255).asScala.foreach { index =>
-          shim.dropIndex(client, "default", t, index.getIndexName)
+        client.getIndexes("default", tableName, 255).asScala.foreach { index =>
+          shim.dropIndex(client, "default", tableName, index.getIndexName)
         }
         if (!table.isIndexTable) {
-          client.dropTable("default", t)
+          client.dropTable("default", tableName)
         }
       } catch {
         case _: NoSuchMethodError =>
           // HIVE-18448 Hive 3.0 remove index APIs
-          client.dropTable("default", t)
+          client.dropTable("default", tableName)
       }
     }
     client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
