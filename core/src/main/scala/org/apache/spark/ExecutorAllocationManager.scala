@@ -665,7 +665,6 @@ private[spark] class ExecutorAllocationManager(
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
-      val attemptId = stageSubmitted.stageInfo.attemptNumber()
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {
         stageIdToNumTasks(stageId) = numTasks
