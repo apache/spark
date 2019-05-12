@@ -127,16 +127,16 @@ public class JavaUDFSuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void udf7Test() {
-    String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_EANBLED().key());
+    String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_ENABLED().key());
     try {
-      spark.conf().set(SQLConf.DATETIME_JAVA8API_EANBLED().key(), "true");
+      spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), "true");
       spark.udf().register(
           "plusDay",
           (java.time.LocalDate ld) -> ld.plusDays(1), DataTypes.DateType);
       Row result = spark.sql("SELECT plusDay(DATE '2019-02-26')").head();
       Assert.assertEquals(LocalDate.parse("2019-02-27"), result.get(0));
     } finally {
-      spark.conf().set(SQLConf.DATETIME_JAVA8API_EANBLED().key(), originConf);
+      spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
     }
   }
 }

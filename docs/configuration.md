@@ -2,6 +2,21 @@
 layout: global
 displayTitle: Spark Configuration
 title: Configuration
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -457,7 +472,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.redaction.regex</code></td>
-  <td>(?i)secret|password</td>
+  <td>(?i)secret|password|token</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
     executor environments contain sensitive information. When this regex matches a property key or
@@ -860,6 +875,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.liveUpdate.minFlushPeriod</code></td>
+  <td>1s</td>
+  <td>
+    Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
+    task events are not fired frequently.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.port</code></td>
   <td>4040</td>
   <td>
@@ -986,7 +1009,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
     This setting applies for the Spark History Server too.
-  <td>
+  </td>
 </tr>
 </table>
 
@@ -2296,7 +2319,7 @@ In some cases, you may want to avoid hard-coding certain configurations in a `Sp
 instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
 
 {% highlight scala %}
-val conf = new SparkConf().set("spark.hadoop.abc.def","xyz")
+val conf = new SparkConf().set("spark.hadoop.abc.def", "xyz")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 

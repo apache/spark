@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.catalyst.util.StringUtils.{PlanStringConcat, StringConcat}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -480,7 +480,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       verbose: Boolean,
       addSuffix: Boolean = false,
       maxFields: Int = SQLConf.get.maxToStringFields): String = {
-    val concat = new StringConcat()
+    val concat = new PlanStringConcat()
 
     treeString(concat.append, verbose, addSuffix, maxFields)
     concat.toString
@@ -630,7 +630,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val fieldNames = getConstructorParameterNames(getClass)
     val fieldValues = productIterator.toSeq ++ otherCopyArgs
     assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
-      fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
+      fieldNames.mkString(", ") + s", values: " + fieldValues.mkString(", "))
 
     fieldNames.zip(fieldValues).map {
       // If the field value is a child, then use an int to encode it, represents the index of
@@ -683,7 +683,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       try {
         val fieldNames = getConstructorParameterNames(p.getClass)
         val fieldValues = p.productIterator.toSeq
-        assert(fieldNames.length == fieldValues.length)
+        assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
+          fieldNames.mkString(", ") + s", values: " + fieldValues.mkString(", "))
         ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
           case (name, value) => name -> parseToJson(value)
         }.toList

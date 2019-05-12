@@ -18,8 +18,9 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, PrintStream}
+  FileOutputStream, InputStream, PrintStream, SequenceInputStream}
 import java.lang.{Double => JDouble, Float => JFloat}
+import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
@@ -43,6 +44,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -209,6 +211,56 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     Utils.copyStream(new ByteArrayInputStream(bytes), os)
 
     assert(os.toByteArray.toList.equals(bytes.toList))
+  }
+
+  test("copyStreamUpTo") {
+    // input array initialization
+    val bytes = Array.ofDim[Byte](1200)
+    Random.nextBytes(bytes)
+
+    val limit = 1000
+    // testing for inputLength less than, equal to and greater than limit
+    (limit - 2 to limit + 2).foreach { inputLength =>
+      val in = new ByteArrayInputStream(bytes.take(inputLength))
+      val mergedStream = Utils.copyStreamUpTo(in, limit)
+      try {
+        // Get a handle on the buffered data, to make sure memory gets freed once we read past the
+        // end of it. Need to use reflection to get handle on inner structures for this check
+        val byteBufferInputStream = if (mergedStream.isInstanceOf[ChunkedByteBufferInputStream]) {
+          assert(inputLength < limit)
+          mergedStream.asInstanceOf[ChunkedByteBufferInputStream]
+        } else {
+          assert(inputLength >= limit)
+          val sequenceStream = mergedStream.asInstanceOf[SequenceInputStream]
+          val fieldValue = getFieldValue(sequenceStream, "in")
+          assert(fieldValue.isInstanceOf[ChunkedByteBufferInputStream])
+          fieldValue.asInstanceOf[ChunkedByteBufferInputStream]
+        }
+        (0 until inputLength).foreach { idx =>
+          assert(bytes(idx) === mergedStream.read().asInstanceOf[Byte])
+          if (idx == limit) {
+            assert(byteBufferInputStream.chunkedByteBuffer === null)
+          }
+        }
+        assert(mergedStream.read() === -1)
+        assert(byteBufferInputStream.chunkedByteBuffer === null)
+      } finally {
+        IOUtils.closeQuietly(mergedStream)
+        IOUtils.closeQuietly(in)
+      }
+    }
+  }
+
+  private def getFieldValue(obj: AnyRef, fieldName: String): Any = {
+    val field: Field = obj.getClass().getDeclaredField(fieldName)
+    if (field.isAccessible()) {
+      field.get(obj)
+    } else {
+      field.setAccessible(true)
+      val result = field.get(obj)
+      field.setAccessible(false)
+      result
+    }
   }
 
   test("memoryStringToMb") {

@@ -36,6 +36,37 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-27410][MLLIB] Remove deprecated / no-op mllib.KMeans getRuns, setRuns
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.getRuns"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.setRuns"),
+
+    // [SPARK-27090][CORE] Removing old LEGACY_DRIVER_IDENTIFIER ("<driver>")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkContext.LEGACY_DRIVER_IDENTIFIER"),
+    // [SPARK-25838] Remove formatVersion from Saveable
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.LocalLDAModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.BisectingKMeansModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeansModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.PowerIterationClusteringModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.GaussianMixtureModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.recommendation.MatrixFactorizationModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.feature.ChiSqSelectorModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.feature.Word2VecModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.classification.SVMModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.classification.LogisticRegressionModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.classification.NaiveBayesModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.util.Saveable.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.fpm.FPGrowthModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.fpm.PrefixSpanModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.regression.IsotonicRegressionModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.regression.RidgeRegressionModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.regression.LassoModel.formatVersion"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.regression.LinearRegressionModel.formatVersion"),
+
+    // [SPARK-26132] Remove support for Scala 2.11 in Spark 3.0.0
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("scala.concurrent.Future.transformWith"),
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("scala.concurrent.Future.transform"),
+
     // [SPARK-26254][CORE] Extract Hive + Kafka dependencies from Core.
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.deploy.security.HiveDelegationTokenProvider"),
 
@@ -410,7 +441,9 @@ object MimaExcludes {
     // [SPARK-15526][ML][FOLLOWUP] Make JPMML provided scope to avoid including unshaded JARs
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>
-        !cls.fullName.startsWith("org.spark_project.jpmml") &&
+        !cls.fullName.startsWith("org.sparkproject.jpmml") &&
+          !cls.fullName.startsWith("org.sparkproject.dmg.pmml") &&
+          !cls.fullName.startsWith("org.spark_project.jpmml") &&
           !cls.fullName.startsWith("org.spark_project.dmg.pmml")
       case _ => true
     }
@@ -685,6 +718,7 @@ object MimaExcludes {
       ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
       ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
       ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
+      ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),

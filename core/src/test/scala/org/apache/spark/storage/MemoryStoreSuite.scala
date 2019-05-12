@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import java.nio.ByteBuffer
 
 import scala.language.implicitConversions
-import scala.language.reflectiveCalls
 import scala.reflect.ClassTag
 
 import org.scalatest._
@@ -62,8 +61,8 @@ class MemoryStoreSuite
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
     val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
     val blockInfoManager = new BlockInfoManager
+    var memoryStore: MemoryStore = null
     val blockEvictionHandler = new BlockEvictionHandler {
-      var memoryStore: MemoryStore = _
       override private[storage] def dropFromMemory[T: ClassTag](
           blockId: BlockId,
           data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
@@ -71,10 +70,9 @@ class MemoryStoreSuite
         StorageLevel.NONE
       }
     }
-    val memoryStore =
+    memoryStore =
       new MemoryStore(conf, blockInfoManager, serializerManager, memManager, blockEvictionHandler)
     memManager.setMemoryStore(memoryStore)
-    blockEvictionHandler.memoryStore = memoryStore
     (memoryStore, blockInfoManager)
   }
 
@@ -421,8 +419,8 @@ class MemoryStoreSuite
       val blockInfoManager = new BlockInfoManager
       blockInfoManager.registerTask(tc.taskAttemptId)
       var droppedSoFar = 0
+      var memoryStore: MemoryStore = null
       val blockEvictionHandler = new BlockEvictionHandler {
-        var memoryStore: MemoryStore = _
 
         override private[storage] def dropFromMemory[T: ClassTag](
             blockId: BlockId,
@@ -442,7 +440,7 @@ class MemoryStoreSuite
           }
         }
       }
-      val memoryStore = new MemoryStore(conf, blockInfoManager, serializerManager, memManager,
+      memoryStore = new MemoryStore(conf, blockInfoManager, serializerManager, memManager,
           blockEvictionHandler) {
         override def afterDropAction(blockId: BlockId): Unit = {
           if (readLockAfterDrop) {
@@ -454,11 +452,10 @@ class MemoryStoreSuite
         }
       }
 
-      blockEvictionHandler.memoryStore = memoryStore
       memManager.setMemoryStore(memoryStore)
 
       // Put in some small blocks to fill up the memory store
-      val initialBlocks = (1 to numInitialBlocks).map { id =>
+      (1 to numInitialBlocks).foreach { id =>
         val blockId = BlockId(s"rdd_1_$id")
         val blockInfo = new BlockInfo(StorageLevel.MEMORY_ONLY, ct, tellMaster = false)
         val initialWriteLock = blockInfoManager.lockNewBlockForWriting(blockId, blockInfo)

@@ -120,6 +120,9 @@ class DataFrameReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
         """
         self._jreader = self._jreader.option(key, to_str(value))
         return self
@@ -132,6 +135,9 @@ class DataFrameReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
@@ -508,8 +514,6 @@ class DataFrameReader(OptionUtils):
     @since(1.5)
     def orc(self, path):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
-
-        .. note:: Currently ORC support is only available together with Hive support.
 
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
@@ -949,8 +953,6 @@ class DataFrameWriter(OptionUtils):
     @since(1.5)
     def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
-
-        .. note:: Currently ORC support is only available together with Hive support.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.

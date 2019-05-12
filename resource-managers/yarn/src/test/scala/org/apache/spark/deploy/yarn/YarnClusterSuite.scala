@@ -18,18 +18,14 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.io.Source
-import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.HadoopIllegalArgumentException
-import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.Matchers
@@ -98,10 +94,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("run Spark in yarn-client mode with different configurations, ensuring redaction") {
     testBasicYarnApp(true,
       Map(
-        "spark.driver.memory" -> "512m",
-        "spark.executor.cores" -> "1",
-        "spark.executor.memory" -> "512m",
-        "spark.executor.instances" -> "2",
+        DRIVER_MEMORY.key -> "512m",
+        EXECUTOR_CORES.key -> "1",
+        EXECUTOR_MEMORY.key -> "512m",
+        EXECUTOR_INSTANCES.key -> "2",
         // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
@@ -111,11 +107,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("run Spark in yarn-cluster mode with different configurations, ensuring redaction") {
     testBasicYarnApp(false,
       Map(
-        "spark.driver.memory" -> "512m",
-        "spark.driver.cores" -> "1",
-        "spark.executor.cores" -> "1",
-        "spark.executor.memory" -> "512m",
-        "spark.executor.instances" -> "2",
+        DRIVER_MEMORY.key -> "512m",
+        DRIVER_CORES.key -> "1",
+        EXECUTOR_CORES.key -> "1",
+        EXECUTOR_MEMORY.key -> "512m",
+        EXECUTOR_INSTANCES.key -> "2",
         // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
@@ -209,7 +205,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .startApplication()
 
     try {
-      eventually(timeout(30 seconds), interval(100 millis)) {
+      eventually(timeout(3.minutes), interval(100.milliseconds)) {
         handle.getState() should be (SparkAppHandle.State.RUNNING)
       }
 
@@ -217,7 +213,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       handle.getAppId() should startWith ("application_")
       handle.stop()
 
-      eventually(timeout(30 seconds), interval(100 millis)) {
+      eventually(timeout(3.minutes), interval(100.milliseconds)) {
         handle.getState() should be (SparkAppHandle.State.KILLED)
       }
     } finally {

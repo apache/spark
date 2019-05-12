@@ -511,8 +511,6 @@ class Word2VecModel private[spark] (
     this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
   }
 
-  override protected def formatVersion = "1.0"
-
   @Since("1.4.0")
   def save(sc: SparkContext, path: String): Unit = {
     Word2VecModel.SaveLoadV1_0.save(sc, path, getVectors)

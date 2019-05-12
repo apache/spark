@@ -23,6 +23,12 @@ pyspark.sql.functions module
     :members:
     :undoc-members:
 
+pyspark.sql.avro.functions module
+---------------------------------
+.. automodule:: pyspark.sql.avro.functions
+    :members:
+    :undoc-members:
+
 pyspark.sql.streaming module
 ----------------------------
 .. automodule:: pyspark.sql.streaming

@@ -143,12 +143,10 @@ private[spark] class ExternalSorter[K, V, C](
   // user. (A partial ordering means that equal keys have comparator.compare(k, k) = 0, but some
   // non-equal keys also have this, so we need to do a later pass to find truly equal keys).
   // Note that we ignore this if no aggregator and no ordering are given.
-  private val keyComparator: Comparator[K] = ordering.getOrElse(new Comparator[K] {
-    override def compare(a: K, b: K): Int = {
-      val h1 = if (a == null) 0 else a.hashCode()
-      val h2 = if (b == null) 0 else b.hashCode()
-      if (h1 < h2) -1 else if (h1 == h2) 0 else 1
-    }
+  private val keyComparator: Comparator[K] = ordering.getOrElse((a: K, b: K) => {
+    val h1 = if (a == null) 0 else a.hashCode()
+    val h2 = if (b == null) 0 else b.hashCode()
+    if (h1 < h2) -1 else if (h1 == h2) 0 else 1
   })
 
   private def comparator: Option[Comparator[K]] = {
@@ -363,17 +361,15 @@ private[spark] class ExternalSorter[K, V, C](
    * Merge-sort a sequence of (K, C) iterators using a given a comparator for the keys.
    */
   private def mergeSort(iterators: Seq[Iterator[Product2[K, C]]], comparator: Comparator[K])
-      : Iterator[Product2[K, C]] =
-  {
+      : Iterator[Product2[K, C]] = {
     val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
     type Iter = BufferedIterator[Product2[K, C]]
-    val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
-      // Use the reverse order because PriorityQueue dequeues the max
-      override def compare(x: Iter, y: Iter): Int = comparator.compare(y.head._1, x.head._1)
-    })
+    // Use the reverse order (compare(y,x)) because PriorityQueue dequeues the max
+    val heap = new mutable.PriorityQueue[Iter]()(
+      (x: Iter, y: Iter) => comparator.compare(y.head._1, x.head._1))
     heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {
-      override def hasNext: Boolean = !heap.isEmpty
+      override def hasNext: Boolean = heap.nonEmpty
 
       override def next(): Product2[K, C] = {
         if (!hasNext) {
@@ -400,13 +396,12 @@ private[spark] class ExternalSorter[K, V, C](
       mergeCombiners: (C, C) => C,
       comparator: Comparator[K],
       totalOrder: Boolean)
-      : Iterator[Product2[K, C]] =
-  {
+      : Iterator[Product2[K, C]] = {
     if (!totalOrder) {
       // We only have a partial ordering, e.g. comparing the keys by hash code, which means that
       // multiple distinct keys might be treated as equal by the ordering. To deal with this, we
       // need to read all keys considered equal by the ordering at once and compare them.
-      new Iterator[Iterator[Product2[K, C]]] {
+      val it = new Iterator[Iterator[Product2[K, C]]] {
         val sorted = mergeSort(iterators, comparator).buffered
 
         // Buffers reused across elements to decrease memory allocation
@@ -446,7 +441,8 @@ private[spark] class ExternalSorter[K, V, C](
           // equal by the partial order; we flatten this below to get a flat iterator of (K, C).
           keys.iterator.zip(combiners.iterator)
         }
-      }.flatMap(i => i)
+      }
+      it.flatten
     } else {
       // We have a total ordering, so the objects with the same key are sequential.
       new Iterator[Product2[K, C]] {
@@ -650,7 +646,7 @@ private[spark] class ExternalSorter[K, V, C](
     if (spills.isEmpty) {
       // Special case: if we have only in-memory data, we don't need to merge streams, and perhaps
       // we don't even need to sort by anything other than partition ID
-      if (!ordering.isDefined) {
+      if (ordering.isEmpty) {
         // The user hasn't requested sorted keys, so only sort by partition ID, not key
         groupByPartition(destructiveIterator(collection.partitionedDestructiveSortedIterator(None)))
       } else {

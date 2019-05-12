@@ -83,32 +83,17 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
   private def checkSecrets(pod: Pod): Unit = {
     Eventually.eventually(TIMEOUT, INTERVAL) {
       implicit val podName: String = pod.getMetadata.getName
-      val env = executeCommand("env")
+      implicit val components: KubernetesTestComponents = kubernetesTestComponents
+      val env = Utils.executeCommand("env")
       assert(env.toString.contains(ENV_SECRET_VALUE_1))
       assert(env.toString.contains(ENV_SECRET_VALUE_2))
-      val fileUsernameContents = executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_1")
-      val filePasswordContents = executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_2")
+      val fileUsernameContents = Utils
+        .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_1")
+      val filePasswordContents = Utils
+        .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_2")
       assert(fileUsernameContents.toString.trim.equals(ENV_SECRET_VALUE_1))
       assert(filePasswordContents.toString.trim.equals(ENV_SECRET_VALUE_2))
     }
-  }
-
-  private def executeCommand(cmd: String*)(implicit podName: String): String = {
-    val out = new ByteArrayOutputStream()
-    val watch = kubernetesTestComponents
-      .kubernetesClient
-      .pods()
-      .withName(podName)
-      .readingInput(System.in)
-      .writingOutput(out)
-      .writingError(System.err)
-      .withTTY()
-      .exec(cmd.toArray: _*)
-    // wait to get some result back
-    Thread.sleep(1000)
-    watch.close()
-    out.flush()
-    out.toString()
   }
 }
 

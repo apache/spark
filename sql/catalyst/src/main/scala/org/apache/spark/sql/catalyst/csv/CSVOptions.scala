@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.nio.charset.StandardCharsets
-import java.util.{Locale, TimeZone}
+import java.time.ZoneId
+import java.util.Locale
 
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
@@ -139,7 +140,7 @@ class CSVOptions(
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val timeZone: TimeZone = DateTimeUtils.getTimeZone(
+  val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // A language tag in IETF BCP 47 format

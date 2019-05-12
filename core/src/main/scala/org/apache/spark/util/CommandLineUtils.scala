@@ -25,8 +25,12 @@ import org.apache.spark.SparkException
  * Contains basic command line parsing functionality and methods to parse some common Spark CLI
  * options.
  */
-private[spark] trait CommandLineUtils {
+private[spark] trait CommandLineUtils extends CommandLineLoggingUtils {
 
+  def main(args: Array[String]): Unit
+}
+
+private[spark] trait CommandLineLoggingUtils {
   // Exposed for testing
   private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
 
@@ -41,6 +45,4 @@ private[spark] trait CommandLineUtils {
     printMessage("Run with --help for usage help or --verbose for debug output")
     exitFn(1)
   }
-
-  def main(args: Array[String]): Unit
 }

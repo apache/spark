@@ -365,7 +365,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def dropTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
       sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false, blocking = true)
+        sparkSession, viewDef, cascade = false)
       sessionCatalog.dropTempView(viewName)
     }
   }
@@ -381,7 +381,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
       sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false, blocking = true)
+        sparkSession, viewDef, cascade = false)
       sessionCatalog.dropGlobalTempView(viewName)
     }
   }
@@ -494,7 +494,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // cached version and make the new version cached lazily.
     if (isCached(table)) {
       // Uncache the logicalPlan.
-      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true, blocking = true)
+      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
       // Cache it again.
       sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableIdent.table))
     }

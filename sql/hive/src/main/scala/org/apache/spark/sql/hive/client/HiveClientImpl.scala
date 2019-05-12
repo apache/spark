@@ -178,6 +178,8 @@ private[hive] class HiveClientImpl(
          """.stripMargin)
       hiveConf.set(k, v)
     }
+    // Disable CBO because we removed the Calcite dependency.
+    hiveConf.setBoolean("hive.cbo.enable", false)
     val state = new SessionState(hiveConf)
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
@@ -435,8 +437,9 @@ private[hive] class HiveClientImpl(
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
-          case HiveTableType.INDEX_TABLE =>
-            throw new AnalysisException("Hive index table is not supported.")
+          case unsupportedType =>
+            val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
+            throw new AnalysisException(s"Hive $tableTypeStr is not supported.")
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
@@ -707,6 +710,8 @@ private[hive] class HiveClientImpl(
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
+   * Since upgrading the built-in Hive to 2.3, hive-llap-client is needed when
+   * running MapReduce jobs with `runHive`.
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
     logDebug(s"Running hiveql '$cmd'")
@@ -933,11 +938,10 @@ private[hive] object HiveClientImpl {
   }
 
   private def toInputFormat(name: String) =
-    Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
+    Utils.classForName[org.apache.hadoop.mapred.InputFormat[_, _]](name)
 
   private def toOutputFormat(name: String) =
-    Utils.classForName(name)
-      .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
+    Utils.classForName[org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]](name)
 
   /**
    * Converts the native table metadata representation format CatalogTable to Hive's Table.

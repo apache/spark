@@ -17,7 +17,7 @@
 
 package org.apache.spark.security
 
-import java.io.{DataInputStream, DataOutputStream, InputStream}
+import java.io.{BufferedOutputStream, DataInputStream, DataOutputStream, OutputStream}
 import java.net.Socket
 import java.nio.charset.StandardCharsets.UTF_8
 
@@ -114,4 +114,20 @@ private[spark] class SocketAuthHelper(conf: SparkConf) {
     dout.flush()
   }
 
+}
+
+private[spark] object SocketAuthHelper {
+  def serveToStream(
+      threadName: String,
+      authHelper: SocketAuthHelper)(writeFunc: OutputStream => Unit): Array[Any] = {
+    val (port, secret) = SocketAuthServer.setupOneConnectionServer(authHelper, threadName) { s =>
+      val out = new BufferedOutputStream(s.getOutputStream())
+      Utils.tryWithSafeFinally {
+        writeFunc(out)
+      } {
+        out.close()
+      }
+    }
+    Array(port, secret)
+  }
 }

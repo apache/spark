@@ -95,8 +95,7 @@ class RegressionMetrics(JavaModelWrapper):
     """
     Evaluator for regression.
 
-    :param predictionAndObservations: an RDD of (prediction,
-                                      observation) pairs.
+    :param predictionAndObservations: an RDD of prediction, observation and optional weight.
 
     >>> predictionAndObservations = sc.parallelize([
     ...     (2.5, 3.0), (0.0, -0.5), (2.0, 2.0), (8.0, 7.0)])
@@ -111,6 +110,11 @@ class RegressionMetrics(JavaModelWrapper):
     0.61...
     >>> metrics.r2
     0.94...
+    >>> predictionAndObservationsWithOptWeight = sc.parallelize([
+    ...     (2.5, 3.0, 0.5), (0.0, -0.5, 1.0), (2.0, 2.0, 0.3), (8.0, 7.0, 0.9)])
+    >>> metrics = RegressionMetrics(predictionAndObservationsWithOptWeight)
+    >>> metrics.rootMeanSquaredError
+    0.68...
 
     .. versionadded:: 1.4.0
     """
@@ -118,9 +122,13 @@ class RegressionMetrics(JavaModelWrapper):
     def __init__(self, predictionAndObservations):
         sc = predictionAndObservations.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
-        df = sql_ctx.createDataFrame(predictionAndObservations, schema=StructType([
+        numCol = len(predictionAndObservations.first())
+        schema = StructType([
             StructField("prediction", DoubleType(), nullable=False),
-            StructField("observation", DoubleType(), nullable=False)]))
+            StructField("observation", DoubleType(), nullable=False)])
+        if numCol == 3:
+            schema.add("weight", DoubleType(), False)
+        df = sql_ctx.createDataFrame(predictionAndObservations, schema=schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.RegressionMetrics
         java_model = java_class(df._jdf)
         super(RegressionMetrics, self).__init__(java_model)
@@ -369,6 +377,10 @@ class RankingMetrics(JavaModelWrapper):
     0.17...
     >>> metrics.meanAveragePrecision
     0.35...
+    >>> metrics.meanAveragePrecisionAt(1)
+    0.3333333333333333...
+    >>> metrics.meanAveragePrecisionAt(2)
+    0.25...
     >>> metrics.ndcgAt(3)
     0.33...
     >>> metrics.ndcgAt(10)
@@ -414,6 +426,15 @@ class RankingMetrics(JavaModelWrapper):
         a log warining is generated.
         """
         return self.call("meanAveragePrecision")
+
+    @since('3.0.0')
+    def meanAveragePrecisionAt(self, k):
+        """
+        Returns the mean average precision (MAP) at first k ranking of all the queries.
+        If a query has an empty ground truth set, the average precision will be zero and
+        a log warining is generated.
+        """
+        return self.call("meanAveragePrecisionAt", int(k))
 
     @since('1.4.0')
     def ndcgAt(self, k):

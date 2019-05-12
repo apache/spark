@@ -329,27 +329,27 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
+      // TODO: test file source V2 after write path is fixed.
       Seq(true).foreach { useV1 =>
         val useV1List = if (useV1) {
-          "orc"
+          "csv,json,orc"
         } else {
           ""
         }
-        def errorMessage(format: String, isWrite: Boolean): String = {
-          if (isWrite && (useV1 || format != "orc")) {
-            "cannot save interval data type into external storage."
-          } else {
-            s"$format data source does not support calendarinterval data type."
-          }
+        def validateErrorMessage(msg: String): Unit = {
+          val msg1 = "cannot save interval data type into external storage."
+          val msg2 = "data source does not support calendarinterval data type."
+          assert(msg.toLowerCase(Locale.ROOT).contains(msg1) ||
+            msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
 
         withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> useV1List) {
           // write path
           Seq("csv", "json", "parquet", "orc").foreach { format =>
-            var msg = intercept[AnalysisException] {
+            val msg = intercept[AnalysisException] {
               sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, true)))
+            validateErrorMessage(msg)
           }
 
           // read path
@@ -359,14 +359,14 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
               spark.range(1).write.format(format).mode("overwrite").save(tempDir)
               spark.read.schema(schema).format(format).load(tempDir).collect()
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, false)))
+            validateErrorMessage(msg)
 
             msg = intercept[AnalysisException] {
               val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
               spark.range(1).write.format(format).mode("overwrite").save(tempDir)
               spark.read.schema(schema).format(format).load(tempDir).collect()
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, false)))
+            validateErrorMessage(msg)
           }
         }
       }
@@ -374,9 +374,10 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
+    // TODO: test file source V2 after write path is fixed.
     Seq(true).foreach { useV1 =>
       val useV1List = if (useV1) {
-        "orc"
+        "csv,orc"
       } else {
         ""
       }
@@ -470,22 +471,116 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   test("SPARK-25237 compute correct input metrics in FileScanRDD") {
-    withTempPath { p =>
-      val path = p.getAbsolutePath
-      spark.range(1000).repartition(1).write.csv(path)
-      val bytesReads = new mutable.ArrayBuffer[Long]()
-      val bytesReadListener = new SparkListener() {
-        override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-          bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+    // TODO: Test CSV V2 as well after it implements [[SupportsReportStatistics]].
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "csv") {
+      withTempPath { p =>
+        val path = p.getAbsolutePath
+        spark.range(1000).repartition(1).write.csv(path)
+        val bytesReads = new mutable.ArrayBuffer[Long]()
+        val bytesReadListener = new SparkListener() {
+          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+            bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+          }
+        }
+        sparkContext.addSparkListener(bytesReadListener)
+        try {
+          spark.read.csv(path).limit(1).collect()
+          sparkContext.listenerBus.waitUntilEmpty(1000L)
+          assert(bytesReads.sum === 7860)
+        } finally {
+          sparkContext.removeSparkListener(bytesReadListener)
         }
       }
-      sparkContext.addSparkListener(bytesReadListener)
-      try {
-        spark.read.csv(path).limit(1).collect()
-        sparkContext.listenerBus.waitUntilEmpty(1000L)
-        assert(bytesReads.sum === 7860)
-      } finally {
-        sparkContext.removeSparkListener(bytesReadListener)
+    }
+  }
+
+  test("Do not use cache on overwrite") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          val path = dir.toString
+          spark.range(1000).write.mode("overwrite").orc(path)
+          val df = spark.read.orc(path).cache()
+          assert(df.count() == 1000)
+          spark.range(10).write.mode("overwrite").orc(path)
+          assert(df.count() == 10)
+          assert(spark.read.orc(path).count() == 10)
+        }
+      }
+    }
+  }
+
+  test("Do not use cache on append") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          val path = dir.toString
+          spark.range(1000).write.mode("append").orc(path)
+          val df = spark.read.orc(path).cache()
+          assert(df.count() == 1000)
+          spark.range(10).write.mode("append").orc(path)
+          assert(df.count() == 1010)
+          assert(spark.read.orc(path).count() == 1010)
+        }
+      }
+    }
+  }
+
+  test("UDF input_file_name()") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(10).write.orc(path)
+          val row = spark.read.orc(path).select(input_file_name).first()
+          assert(row.getString(0).contains(path))
+        }
+      }
+    }
+  }
+
+  test("Option pathGlobFilter: filter files correctly") {
+    withTempPath { path =>
+      val dataDir = path.getCanonicalPath
+      Seq("foo").toDS().write.text(dataDir)
+      Seq("bar").toDS().write.mode("append").orc(dataDir)
+      val df = spark.read.option("pathGlobFilter", "*.txt").text(dataDir)
+      checkAnswer(df, Row("foo"))
+
+      // Both glob pattern in option and path should be effective to filter files.
+      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*.orc")
+      checkAnswer(df2, Seq.empty)
+
+      val df3 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*xt")
+      checkAnswer(df3, Row("foo"))
+    }
+  }
+
+  test("Option pathGlobFilter: simple extension filtering should contains partition info") {
+    withTempPath { path =>
+      val input = Seq(("foo", 1), ("oof", 2)).toDF("a", "b")
+      input.write.partitionBy("b").text(path.getCanonicalPath)
+      Seq("bar").toDS().write.mode("append").orc(path.getCanonicalPath + "/b=1")
+
+      // If we use glob pattern in the path, the partition column won't be shown in the result.
+      val df = spark.read.text(path.getCanonicalPath + "/*/*.txt")
+      checkAnswer(df, input.select("a"))
+
+      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(path.getCanonicalPath)
+      checkAnswer(df2, input)
+    }
+  }
+
+  test("Return correct results when data columns overlap with partition columns") {
+    Seq("parquet", "orc", "json").foreach { format =>
+      withTempPath { path =>
+        val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
+        Seq((1, 2, 3, 4, 5)).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+          .write.format(format).save(tablePath.getCanonicalPath)
+
+        val df = spark.read.format(format).load(path.getCanonicalPath)
+          .select("CoL1", "Col2", "CoL5", "CoL3")
+        checkAnswer(df, Row("a", 2, "e", "c"))
       }
     }
   }

@@ -102,7 +102,9 @@ object JavaTypeInference {
 
       case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType.SYSTEM_DEFAULT, true)
       case c: Class[_] if c == classOf[java.math.BigInteger] => (DecimalType.BigIntDecimal, true)
+      case c: Class[_] if c == classOf[java.time.LocalDate] => (DateType, true)
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
+      case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
 
       case _ if typeToken.isArray =>
@@ -362,7 +364,12 @@ object JavaTypeInference {
     def toCatalystArray(input: Expression, elementType: TypeToken[_]): Expression = {
       val (dataType, nullable) = inferDataType(elementType)
       if (ScalaReflection.isNativeType(dataType)) {
-        createSerializerForGenericArray(input, dataType, nullable = nullable)
+        val cls = input.dataType.asInstanceOf[ObjectType].cls
+        if (cls.isArray && cls.getComponentType.isPrimitive) {
+          createSerializerForPrimitiveArray(input, dataType)
+        } else {
+          createSerializerForGenericArray(input, dataType, nullable = nullable)
+        }
       } else {
         createSerializerForMapObjects(input, ObjectType(elementType.getRawType),
           serializerFor(_, elementType))

@@ -27,6 +27,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.AvailableOffsetRange
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.util.UninterruptibleThread
@@ -346,7 +347,7 @@ private[kafka010] case class InternalKafkaConsumer(
    * consumer's `isolation.level` is `read_committed`), it will return a `FetchedRecord` with the
    * next offset to fetch.
    *
-   * This method also will try the best to detect data loss. If `failOnDataLoss` is true`, it will
+   * This method also will try the best to detect data loss. If `failOnDataLoss` is `true`, it will
    * throw an exception when we detect an unavailable offset. If `failOnDataLoss` is `false`, this
    * method will return `null` if the next available record is within [offset, untilOffset).
    *

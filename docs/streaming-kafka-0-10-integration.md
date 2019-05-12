@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Spark Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or higher)
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 The Spark Streaming integration for Kafka 0.10 provides simple parallelism, 1:1 correspondence between Kafka 
@@ -315,3 +330,10 @@ As with any Spark applications, `spark-submit` is used to launch your applicatio
 
 For Scala and Java applications, if you are using SBT or Maven for project management, then package `spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}` and its dependencies into the application JAR. Make sure `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` are marked as `provided` dependencies as those are already present in a Spark installation. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
 
+### Security
+
+See [Structured Streaming Security](structured-streaming-kafka-integration.html#security).
+
+##### Additional Caveats
+
+- Kafka native sink is not available so delegation token used only on consumer side.

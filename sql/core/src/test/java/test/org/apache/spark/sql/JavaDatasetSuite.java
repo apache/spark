@@ -21,6 +21,8 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 
 import org.apache.spark.sql.streaming.GroupStateTimeout;
@@ -396,6 +398,16 @@ public class JavaDatasetSuite implements Serializable {
           Date.valueOf("1970-01-01"), new Timestamp(System.currentTimeMillis()), Float.MAX_VALUE));
     Dataset<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> ds =
       spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testLocalDateAndInstantEncoders() {
+    Encoder<Tuple2<LocalDate, Instant>> encoder =
+      Encoders.tuple(Encoders.LOCALDATE(), Encoders.INSTANT());
+    List<Tuple2<LocalDate, Instant>> data =
+      Arrays.asList(new Tuple2<>(LocalDate.ofEpochDay(0), Instant.ofEpochSecond(0)));
+    Dataset<Tuple2<LocalDate, Instant>> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.{Executors, ThreadFactory}
+import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -52,16 +52,14 @@ private[kafka010] class KafkaOffsetReader(
   /**
    * Used to ensure execute fetch operations execute in an UninterruptibleThread
    */
-  val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
-    override def newThread(r: Runnable): Thread = {
-      val t = new UninterruptibleThread("Kafka Offset Reader") {
-        override def run(): Unit = {
-          r.run()
-        }
+  val kafkaReaderThread = Executors.newSingleThreadExecutor((r: Runnable) => {
+    val t = new UninterruptibleThread("Kafka Offset Reader") {
+      override def run(): Unit = {
+        r.run()
       }
-      t.setDaemon(true)
-      t
     }
+    t.setDaemon(true)
+    t
   })
   val execContext = ExecutionContext.fromExecutorService(kafkaReaderThread)
 

@@ -48,9 +48,14 @@ import org.apache.spark.sql.types.StructType
  *   build/sbt "~sql/test-only *SQLQueryTestSuite -- -z inline-table.sql"
  * }}}
  *
- * To re-generate golden files, run:
+ * To re-generate golden files for entire suite, run:
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
+ *
+ * To re-generate golden file for a single test, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * The format for input files is simple:
@@ -100,11 +105,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
   private val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
 
+  private val validFileExtensions = ".sql"
+
   /** List of test cases to ignore, in lower cases. */
   private val blackList = Set(
-    "blacklist.sql",  // Do NOT remove this one. It is here to test the blacklist functionality.
-    ".DS_Store"       // A meta-file that may be created on Mac by Finder App.
-                      // We should ignore this file from processing.
+    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
   )
 
   // Create all the test cases.
@@ -286,10 +291,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val df = session.sql(sql)
       val schema = df.schema
       val notIncludedMsg = "[not included in comparison]"
+      val clsName = this.getClass.getCanonicalName
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
       val answer = hiveResultString(df.queryExecution.executedPlan)
         .map(_.replaceAll("#\\d+", "#x")
-        .replaceAll("Location.*/sql/core/", s"Location ${notIncludedMsg}sql/core/")
+        .replaceAll(
+          s"Location.*/sql/core/spark-warehouse/$clsName/",
+          s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
         .replaceAll("Created By.*", s"Created By $notIncludedMsg")
         .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
         .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
@@ -324,7 +332,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   /** Returns all the files (not directories) in a directory, recursively. */
   private def listFilesRecursively(path: File): Seq[File] = {
     val (dirs, files) = path.listFiles().partition(_.isDirectory)
-    files ++ dirs.flatMap(listFilesRecursively)
+    // Filter out test files with invalid extensions such as temp files created
+    // by vi (.swp), Mac (.DS_Store) etc.
+    val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
+    filteredFiles ++ dirs.flatMap(listFilesRecursively)
   }
 
   /** Load built-in test tables into the SparkSession. */

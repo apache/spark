@@ -28,15 +28,18 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2
+import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -86,6 +89,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     visitFunctionIdentifier(ctx.functionIdentifier)
   }
 
+  override def visitSingleMultipartIdentifier(
+      ctx: SingleMultipartIdentifierContext): Seq[String] = withOrigin(ctx) {
+    visitMultipartIdentifier(ctx.multipartIdentifier)
+  }
+
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
     visitSparkDataType(ctx.dataType)
   }
@@ -106,18 +114,45 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val query = plan(ctx.queryNoWith)
 
     // Apply CTEs
-    query.optional(ctx.ctes) {
-      val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
-        val namedQuery = visitNamedQuery(nCtx)
-        (namedQuery.alias, namedQuery)
-      }
-      // Check for duplicate names.
-      checkDuplicateKeys(ctes, ctx)
-      With(query, ctes)
+    query.optionalMap(ctx.ctes)(withCTE)
+  }
+
+  override def visitDmlStatement(ctx: DmlStatementContext): AnyRef = withOrigin(ctx) {
+    val dmlStmt = plan(ctx.dmlStatementNoWith)
+    // Apply CTEs
+    dmlStmt.optionalMap(ctx.ctes)(withCTE)
+  }
+
+  private def withCTE(ctx: CtesContext, plan: LogicalPlan): LogicalPlan = {
+    val ctes = ctx.namedQuery.asScala.map { nCtx =>
+      val namedQuery = visitNamedQuery(nCtx)
+      (namedQuery.alias, namedQuery)
+    }
+    // Check for duplicate names.
+    checkDuplicateKeys(ctes, ctx)
+    With(plan, ctes)
+  }
+
+  override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
+    val from = visitFromClause(ctx.fromClause)
+    val selects = ctx.selectStatement.asScala.map { select =>
+      validate(select.querySpecification.fromClause == null,
+        "This select statement can not have FROM cause as its already specified upfront",
+        select)
+
+      withQuerySpecification(select.querySpecification, from).
+        // Add organization statements.
+        optionalMap(select.queryOrganization)(withQueryResultClauses)
+    }
+    // If there are multiple SELECT just UNION them together into one query.
+    if (selects.length == 1) {
+      selects.head
+    } else {
+      Union(selects)
     }
   }
 
-  override def visitQueryToDesc(ctx: QueryToDescContext): LogicalPlan = withOrigin(ctx) {
+  override def visitNoWithQuery(ctx: NoWithQueryContext): LogicalPlan = withOrigin(ctx) {
     plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
   }
 
@@ -150,23 +185,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val from = visitFromClause(ctx.fromClause)
 
     // Build the insert clauses.
-    val inserts = ctx.multiInsertQueryBody.asScala.map {
+    val inserts = ctx.multiInsertQueryBody().asScala.map {
       body =>
-        validate(body.querySpecification.fromClause == null,
+        validate(body.selectStatement.querySpecification.fromClause == null,
           "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
           body)
 
-        withQuerySpecification(body.querySpecification, from).
-          // Add organization statements.
-          optionalMap(body.queryOrganization)(withQueryResultClauses).
-          // Add insert.
-          optionalMap(body.insertInto())(withInsertInto)
+       withInsertInto(body.insertInto,
+         withQuerySpecification(body.selectStatement.querySpecification, from).
+           // Add organization statements.
+           optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
-    inserts match {
-      case Seq(query) => query
-      case queries => Union(queries)
+    if (inserts.length == 1) {
+      inserts.head
+    } else {
+      Union(inserts)
     }
   }
 
@@ -175,11 +210,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryTerm).
-      // Add organization statements.
-      optionalMap(ctx.queryOrganization)(withQueryResultClauses).
-      // Add insert.
-      optionalMap(ctx.insertInto())(withInsertInto)
+    withInsertInto(
+      ctx.insertInto(),
+      plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses))
   }
 
   /**
@@ -957,6 +990,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     FunctionIdentifier(ctx.function.getText, Option(ctx.db).map(_.getText))
   }
 
+  /**
+   * Create a multi-part identifier.
+   */
+  override def visitMultipartIdentifier(
+      ctx: MultipartIdentifierContext): Seq[String] = withOrigin(ctx) {
+    ctx.parts.asScala.map(_.getText)
+  }
+
   /* ********************************************************************************************
    * Expression parsing
    * ******************************************************************************************** */
@@ -1209,6 +1250,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         UnaryMinus(value)
       case SqlBaseParser.TILDE =>
         BitwiseNot(value)
+    }
+  }
+
+  override def visitCurrentDatetime(ctx: CurrentDatetimeContext): Expression = withOrigin(ctx) {
+    if (conf.ansiParserEnabled) {
+      ctx.name.getType match {
+        case SqlBaseParser.CURRENT_DATE =>
+          CurrentDate()
+        case SqlBaseParser.CURRENT_TIMESTAMP =>
+          CurrentTimestamp()
+      }
+    } else {
+      // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
+      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP`.
+      UnresolvedAttribute.quoted(ctx.name.getText)
     }
   }
 
@@ -1565,8 +1621,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       valueType match {
         case "DATE" => toLiteral(stringToDate, DateType)
         case "TIMESTAMP" =>
-          val timeZone = getTimeZone(SQLConf.get.sessionLocalTimeZone)
-          toLiteral(stringToTimestamp(_, timeZone), TimestampType)
+          val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
+          toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -1860,4 +1916,282 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
     if (STRING == null) structField else structField.withComment(string(STRING))
   }
+
+  /**
+   * Create location string.
+   */
+  override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {
+    string(ctx.STRING)
+  }
+
+  /**
+   * Create a [[BucketSpec]].
+   */
+  override def visitBucketSpec(ctx: BucketSpecContext): BucketSpec = withOrigin(ctx) {
+    BucketSpec(
+      ctx.INTEGER_VALUE.getText.toInt,
+      visitIdentifierList(ctx.identifierList),
+      Option(ctx.orderedIdentifierList)
+          .toSeq
+          .flatMap(_.orderedIdentifier.asScala)
+          .map { orderedIdCtx =>
+            Option(orderedIdCtx.ordering).map(_.getText).foreach { dir =>
+              if (dir.toLowerCase(Locale.ROOT) != "asc") {
+                operationNotAllowed(s"Column ordering must be ASC, was '$dir'", ctx)
+              }
+            }
+
+            orderedIdCtx.identifier.getText
+          })
+  }
+
+  /**
+   * Convert a table property list into a key-value map.
+   * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
+   */
+  override def visitTablePropertyList(
+      ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
+    val properties = ctx.tableProperty.asScala.map { property =>
+      val key = visitTablePropertyKey(property.key)
+      val value = visitTablePropertyValue(property.value)
+      key -> value
+    }
+    // Check for duplicate property names.
+    checkDuplicateKeys(properties, ctx)
+    properties.toMap
+  }
+
+  /**
+   * Parse a key-value map from a [[TablePropertyListContext]], assuming all values are specified.
+   */
+  def visitPropertyKeyValues(ctx: TablePropertyListContext): Map[String, String] = {
+    val props = visitTablePropertyList(ctx)
+    val badKeys = props.collect { case (key, null) => key }
+    if (badKeys.nonEmpty) {
+      operationNotAllowed(
+        s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
+    }
+    props
+  }
+
+  /**
+   * Parse a list of keys from a [[TablePropertyListContext]], assuming no values are specified.
+   */
+  def visitPropertyKeys(ctx: TablePropertyListContext): Seq[String] = {
+    val props = visitTablePropertyList(ctx)
+    val badKeys = props.filter { case (_, v) => v != null }.keys
+    if (badKeys.nonEmpty) {
+      operationNotAllowed(
+        s"Values should not be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
+    }
+    props.keys.toSeq
+  }
+
+  /**
+   * A table property key can either be String or a collection of dot separated elements. This
+   * function extracts the property key based on whether its a string literal or a table property
+   * identifier.
+   */
+  override def visitTablePropertyKey(key: TablePropertyKeyContext): String = {
+    if (key.STRING != null) {
+      string(key.STRING)
+    } else {
+      key.getText
+    }
+  }
+
+  /**
+   * A table property value can be String, Integer, Boolean or Decimal. This function extracts
+   * the property value based on whether its a string, integer, boolean or decimal literal.
+   */
+  override def visitTablePropertyValue(value: TablePropertyValueContext): String = {
+    if (value == null) {
+      null
+    } else if (value.STRING != null) {
+      string(value.STRING)
+    } else if (value.booleanValue != null) {
+      value.getText.toLowerCase(Locale.ROOT)
+    } else {
+      value.getText
+    }
+  }
+
+  /**
+   * Type to keep track of a table header: (identifier, isTemporary, ifNotExists, isExternal).
+   */
+  type TableHeader = (TableIdentifier, Boolean, Boolean, Boolean)
+
+  /**
+   * Validate a create table statement and return the [[TableIdentifier]].
+   */
+  override def visitCreateTableHeader(
+      ctx: CreateTableHeaderContext): TableHeader = withOrigin(ctx) {
+    val temporary = ctx.TEMPORARY != null
+    val ifNotExists = ctx.EXISTS != null
+    if (temporary && ifNotExists) {
+      operationNotAllowed("CREATE TEMPORARY TABLE ... IF NOT EXISTS", ctx)
+    }
+    (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists, ctx.EXTERNAL != null)
+  }
+
+  /**
+   * Parse a list of transforms.
+   */
+  override def visitTransformList(ctx: TransformListContext): Seq[Transform] = withOrigin(ctx) {
+    def getFieldReference(
+        ctx: ApplyTransformContext,
+        arg: v2.expressions.Expression): FieldReference = {
+      lazy val name: String = ctx.identifier.getText
+      arg match {
+        case ref: FieldReference =>
+          ref
+        case nonRef =>
+          throw new ParseException(
+            s"Expected a column reference for transform $name: ${nonRef.describe}", ctx)
+      }
+    }
+
+    def getSingleFieldReference(
+        ctx: ApplyTransformContext,
+        arguments: Seq[v2.expressions.Expression]): FieldReference = {
+      lazy val name: String = ctx.identifier.getText
+      if (arguments.size > 1) {
+        throw new ParseException(s"Too many arguments for transform $name", ctx)
+      } else if (arguments.isEmpty) {
+        throw new ParseException(s"Not enough arguments for transform $name", ctx)
+      } else {
+        getFieldReference(ctx, arguments.head)
+      }
+    }
+
+    ctx.transforms.asScala.map {
+      case identityCtx: IdentityTransformContext =>
+        IdentityTransform(FieldReference(
+          identityCtx.qualifiedName.identifier.asScala.map(_.getText)))
+
+      case applyCtx: ApplyTransformContext =>
+        val arguments = applyCtx.argument.asScala.map(visitTransformArgument)
+
+        applyCtx.identifier.getText match {
+          case "bucket" =>
+            val numBuckets: Int = arguments.head match {
+              case LiteralValue(shortValue, ShortType) =>
+                shortValue.asInstanceOf[Short].toInt
+              case LiteralValue(intValue, IntegerType) =>
+                intValue.asInstanceOf[Int]
+              case LiteralValue(longValue, LongType) =>
+                longValue.asInstanceOf[Long].toInt
+              case lit =>
+                throw new ParseException(s"Invalid number of buckets: ${lit.describe}", applyCtx)
+            }
+
+            val fields = arguments.tail.map(arg => getFieldReference(applyCtx, arg))
+
+            BucketTransform(LiteralValue(numBuckets, IntegerType), fields)
+
+          case "years" =>
+            YearsTransform(getSingleFieldReference(applyCtx, arguments))
+
+          case "months" =>
+            MonthsTransform(getSingleFieldReference(applyCtx, arguments))
+
+          case "days" =>
+            DaysTransform(getSingleFieldReference(applyCtx, arguments))
+
+          case "hours" =>
+            HoursTransform(getSingleFieldReference(applyCtx, arguments))
+
+          case name =>
+            ApplyTransform(name, arguments)
+        }
+    }
+  }
+
+  /**
+   * Parse an argument to a transform. An argument may be a field reference (qualified name) or
+   * a value literal.
+   */
+  override def visitTransformArgument(ctx: TransformArgumentContext): v2.expressions.Expression = {
+    withOrigin(ctx) {
+      val reference = Option(ctx.qualifiedName)
+          .map(nameCtx => FieldReference(nameCtx.identifier.asScala.map(_.getText)))
+      val literal = Option(ctx.constant)
+          .map(typedVisit[Literal])
+          .map(lit => LiteralValue(lit.value, lit.dataType))
+      reference.orElse(literal)
+          .getOrElse(throw new ParseException(s"Invalid transform argument", ctx))
+    }
+  }
+
+  /**
+   * Create a table, returning a [[CreateTableStatement]] logical plan.
+   *
+   * Expected format:
+   * {{{
+   *   CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   USING table_provider
+   *   create_table_clauses
+   *   [[AS] select_statement];
+   *
+   *   create_table_clauses (order insensitive):
+   *     [OPTIONS table_property_list]
+   *     [PARTITIONED BY (col_name, transform(col_name), transform(constant, col_name), ...)]
+   *     [CLUSTERED BY (col_name, col_name, ...)
+   *       [SORTED BY (col_name [ASC|DESC], ...)]
+   *       INTO num_buckets BUCKETS
+   *     ]
+   *     [LOCATION path]
+   *     [COMMENT table_comment]
+   *     [TBLPROPERTIES (property_name=property_value, ...)]
+   * }}}
+   */
+  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
+    val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    if (external) {
+      operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
+    }
+
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+
+    val schema = Option(ctx.colTypeList()).map(createSchema)
+    val partitioning: Seq[Transform] =
+      Option(ctx.partitioning).map(visitTransformList).getOrElse(Nil)
+    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+
+    val provider = ctx.tableProvider.qualifiedName.getText
+    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
+    val comment = Option(ctx.comment).map(string)
+
+    Option(ctx.query).map(plan) match {
+      case Some(_) if temp =>
+        operationNotAllowed("CREATE TEMPORARY TABLE ... USING ... AS query", ctx)
+
+      case Some(_) if schema.isDefined =>
+        operationNotAllowed(
+          "Schema may not be specified in a Create Table As Select (CTAS) statement",
+          ctx)
+
+      case Some(query) =>
+        CreateTableAsSelectStatement(
+          table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
+          ifNotExists = ifNotExists)
+
+      case None if temp =>
+        // CREATE TEMPORARY TABLE ... USING ... is not supported by the catalyst parser.
+        // Use CREATE TEMPORARY VIEW ... USING ... instead.
+        operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
+
+      case _ =>
+        CreateTableStatement(table, schema.getOrElse(new StructType), partitioning, bucketSpec,
+          properties, provider, options, location, comment, ifNotExists = ifNotExists)
+    }
+  }
+
 }

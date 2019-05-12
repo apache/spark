@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistrib
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
 /**
  * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
@@ -145,7 +146,16 @@ case class FlatMapGroupsInPandasExec(
         sessionLocalTimeZone,
         pythonRunnerConf).compute(grouped, context.partitionId(), context)
 
-      columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
+      val unsafeProj = UnsafeProjection.create(output, output)
+
+      columnarBatchIter.flatMap { batch =>
+        // Grouped Map UDF returns a StructType column in ColumnarBatch, select the children here
+        val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+        val outputVectors = output.indices.map(structVector.getChild)
+        val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
+        flattenedBatch.setNumRows(batch.numRows())
+        flattenedBatch.rowIterator.asScala
+      }.map(unsafeProj)
     }
   }
 }

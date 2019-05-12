@@ -218,6 +218,11 @@ class SessionCatalog(
     if (dbName == DEFAULT_DATABASE) {
       throw new AnalysisException(s"Can not drop default database")
     }
+    if (cascade && databaseExists(dbName)) {
+      listTables(dbName).foreach { t =>
+        invalidateCachedTable(QualifiedTableName(dbName, t.table))
+      }
+    }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
 
@@ -1100,10 +1105,11 @@ class SessionCatalog(
    * Check if the function with the specified name exists
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
-    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
-    requireDbExists(db)
-    functionRegistry.functionExists(name) ||
+    functionRegistry.functionExists(name) || {
+      val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+      requireDbExists(db)
       externalCatalog.functionExists(db, name.funcName)
+    }
   }
 
   // ----------------------------------------------------------------
