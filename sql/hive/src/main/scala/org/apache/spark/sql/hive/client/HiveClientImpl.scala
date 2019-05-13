@@ -856,20 +856,31 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    client.getAllTables("default").asScala.foreach { t =>
-      logDebug(s"Deleting table $t")
-      val table = client.getTable("default", t)
+    val allTables = client.getAllTables("default")
+    val (mvs, others) = allTables.asScala.map(t => client.getTable("default", t))
+      .partition(_.getTableType.toString.equals("MATERIALIZED_VIEW"))
+
+    // Remove materialized view first, otherwise caused a violation of foreign key constraint.
+    mvs.foreach { table =>
+      val tableName = table.getTableName
+      logDebug(s"Deleting materialized view $tableName")
+      client.dropTable("default", table.getTableName)
+    }
+
+    others.foreach { table =>
+      val tableName = table.getTableName
+      logDebug(s"Deleting table $tableName")
       try {
-        client.getIndexes("default", t, 255).asScala.foreach { index =>
-          shim.dropIndex(client, "default", t, index.getIndexName)
+        client.getIndexes("default", tableName, 255).asScala.foreach { index =>
+          shim.dropIndex(client, "default", tableName, index.getIndexName)
         }
         if (!table.isIndexTable) {
-          client.dropTable("default", t)
+          client.dropTable("default", tableName)
         }
       } catch {
         case _: NoSuchMethodError =>
           // HIVE-18448 Hive 3.0 remove index APIs
-          client.dropTable("default", t)
+          client.dropTable("default", tableName)
       }
     }
     client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
