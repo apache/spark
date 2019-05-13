@@ -31,6 +31,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming.{Offset => _, _}
 import org.apache.spark.sql.execution.streaming.sources.TextSocketReader
@@ -198,6 +199,11 @@ class TextSocketContinuousStream(
 
   private def includeTimestamp: Boolean = options.getBoolean("includeTimestamp", false)
 
+  override val streamId: Int = {
+    val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
+    require(session.isDefined)
+    session.get.getNewStreamId()
+  }
 }
 
 /**

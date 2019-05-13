@@ -58,6 +58,8 @@ class FakeDataStream extends MicroBatchStream with ContinuousStream {
   override def createContinuousReaderFactory(): ContinuousPartitionReaderFactory = {
     throw new IllegalStateException("fake source - cannot actually read")
   }
+
+  override val streamId: Int = 0
 }
 
 class FakeScanBuilder extends ScanBuilder with Scan {

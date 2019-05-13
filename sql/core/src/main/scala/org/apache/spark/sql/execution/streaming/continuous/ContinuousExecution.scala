@@ -195,7 +195,7 @@ class ContinuousExecution(
     val stream = withNewSources.collect {
       case relation: StreamingDataSourceV2Relation =>
         relation.stream.asInstanceOf[ContinuousStream]
-    }.head
+    }
 
     sparkSessionForQuery.sparkContext.setLocalProperty(
       StreamExecution.IS_CONTINUOUS_PROCESSING, true.toString)
@@ -226,7 +226,8 @@ class ContinuousExecution(
           triggerExecutor.execute(() => {
             startTrigger()
 
-            if (stream.needsReconfiguration && state.compareAndSet(ACTIVE, RECONFIGURING)) {
+            if (stream.exists(_.needsReconfiguration)
+              && state.compareAndSet(ACTIVE, RECONFIGURING)) {
               if (queryExecutionThread.isAlive) {
                 queryExecutionThread.interrupt()
               }
@@ -299,18 +300,22 @@ class ContinuousExecution(
    */
   def addOffset(
       epoch: Long,
-      stream: ContinuousStream,
-      partitionOffsets: Seq[PartitionOffset]): Unit = {
-    assert(sources.length == 1, "only one continuous source supported currently")
+      streams: Seq[ContinuousStream],
+      partitionOffsets: Seq[(Int, PartitionOffset)]): Unit = {
+//    assert(sources.length == 1, "only one continuous source supported currently")
 
-    val globalOffset = stream.mergeOffsets(partitionOffsets.toArray)
+    val globalOffsets = streams.map(stream => {
+      val thisStreamOffsets =
+        partitionOffsets.collect { case (i, o) if i == stream.streamId() => o }
+      stream.mergeOffsets(thisStreamOffsets.toArray)
+    })
     val oldOffset = synchronized {
-      offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
+      offsetLog.add(epoch, OffsetSeq.fill(globalOffsets: _*))
       offsetLog.get(epoch - 1)
     }
 
     // If offset hasn't changed since last epoch, there's been no new data.
-    if (oldOffset.contains(OffsetSeq.fill(globalOffset))) {
+    if (oldOffset.contains(OffsetSeq.fill(globalOffsets: _*))) {
       noNewData = true
     }
 
@@ -329,7 +334,7 @@ class ContinuousExecution(
   def commit(epoch: Long): Unit = {
     updateStatusMessage(s"Committing epoch $epoch")
 
-    assert(sources.length == 1, "only one continuous source supported currently")
+//    assert(sources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
 
     synchronized {
@@ -337,10 +342,11 @@ class ContinuousExecution(
       recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
       if (queryExecutionThread.isAlive) {
         commitLog.add(epoch, CommitMetadata())
-        val offset =
-          sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
-        committedOffsets ++= Seq(sources(0) -> offset)
-        sources(0).commit(offset.asInstanceOf[v2.reader.streaming.Offset])
+        sources.zip(offsetLog.get(epoch).get.offsets).foreach { case (source, off) =>
+          val offset = source.deserializeOffset(off.get.json)
+          committedOffsets ++= Seq(source -> offset)
+          source.commit(offset.asInstanceOf[v2.reader.streaming.Offset])
+        }
       } else {
         return
       }

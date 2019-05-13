@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.continuous
 import org.json4s.DefaultFormats
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
@@ -98,6 +99,11 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
       }.toMap)
   }
 
+  override val streamId: Int = {
+    val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
+    require(session.isDefined)
+    session.get.getNewStreamId()
+  }
 }
 
 case class RateStreamContinuousInputPartition(

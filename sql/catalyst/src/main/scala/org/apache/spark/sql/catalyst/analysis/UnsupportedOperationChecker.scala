@@ -18,13 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -352,6 +350,7 @@ object UnsupportedOperationChecker {
               _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
         case Repartition(1, false, _) =>
+        case Union(_) =>
         case node: Aggregate =>
           val aboveSinglePartitionCoalesce = node.find {
             case Repartition(1, false, _) => true
@@ -363,7 +362,7 @@ object UnsupportedOperationChecker {
               s"aggregate operation ${node.nodeName}.")
           }
         case node =>
-          throwError(s"Continuous processing does not support ${node.nodeName} operations.")
+          throwError(s"111, Continuous processing does not support ${node.nodeName} operations.")
       }
 
       subPlan.expressions.foreach { e =>

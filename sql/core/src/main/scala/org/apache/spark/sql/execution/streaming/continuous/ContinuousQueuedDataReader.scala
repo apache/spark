@@ -43,7 +43,8 @@ class ContinuousQueuedDataReader(
     schema: StructType,
     context: TaskContext,
     dataQueueSize: Int,
-    epochPollIntervalMs: Long) extends Closeable {
+    epochPollIntervalMs: Long,
+    streamId: Int) extends Closeable {
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset = reader.getOffset
 
@@ -113,7 +114,7 @@ class ContinuousQueuedDataReader(
     currentEntry match {
       case EpochMarker =>
         epochCoordEndpoint.send(ReportPartitionOffset(
-          partitionIndex, EpochTracker.getCurrentEpoch.get, currentOffset))
+          streamId, partitionIndex, EpochTracker.getCurrentEpoch.get, currentOffset))
         null
       case ContinuousRow(row, offset) =>
         currentOffset = offset

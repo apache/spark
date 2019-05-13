@@ -27,6 +27,8 @@ import org.apache.spark.sql.sources.v2.reader.Scan;
 @Evolving
 public interface ContinuousStream extends SparkDataStream {
 
+  int streamId();
+
   /**
    * Returns a list of {@link InputPartition input partitions} given the start offset. Each
    * {@link InputPartition} represents a data split that can be processed by one Spark task. The

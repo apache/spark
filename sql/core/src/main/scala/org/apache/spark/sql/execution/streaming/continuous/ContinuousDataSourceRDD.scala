@@ -52,7 +52,8 @@ class ContinuousDataSourceRDD(
     epochPollIntervalMs: Long,
     private val inputPartitions: Seq[InputPartition],
     schema: StructType,
-    partitionReaderFactory: ContinuousPartitionReaderFactory)
+    partitionReaderFactory: ContinuousPartitionReaderFactory,
+    streamId: Int)
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -81,8 +82,8 @@ class ContinuousDataSourceRDD(
       if (partition.queueReader == null) {
         val partitionReader = partitionReaderFactory.createReader(
           partition.inputPartition)
-        partition.queueReader = new ContinuousQueuedDataReader(
-          partition.index, partitionReader, schema, context, dataQueueSize, epochPollIntervalMs)
+        partition.queueReader = new ContinuousQueuedDataReader(partition.index, partitionReader,
+          schema, context, dataQueueSize, epochPollIntervalMs, streamId)
       }
 
       partition.queueReader

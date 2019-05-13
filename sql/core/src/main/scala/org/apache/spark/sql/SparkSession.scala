@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -169,6 +169,9 @@ class SparkSession private(
    */
   @transient
   val sqlContext: SQLContext = new SQLContext(this)
+
+  private val nextStreamId = new AtomicInteger(0)
+  private[sql] def getNewStreamId() = nextStreamId.getAndIncrement()
 
   /**
    * Runtime configuration interface for Spark.

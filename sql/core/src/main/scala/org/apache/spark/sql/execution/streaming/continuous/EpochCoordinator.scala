@@ -69,6 +69,7 @@ private[sql] case class CommitPartitionEpoch(
  * Report that a partition is ending the specified epoch at the specified offset.
  */
 private[sql] case class ReportPartitionOffset(
+    streamId: Int,
     partitionId: Int,
     epoch: Long,
     offset: PartitionOffset) extends EpochCoordinatorMessage
@@ -83,14 +84,14 @@ private[sql] object EpochCoordinatorRef extends Logging {
    */
   def create(
       writeSupport: StreamingWrite,
-      stream: ContinuousStream,
+      streams: Seq[ContinuousStream],
       query: ContinuousExecution,
       epochCoordinatorId: String,
       startEpoch: Long,
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
     val coordinator = new EpochCoordinator(
-      writeSupport, stream, query, startEpoch, session, env.rpcEnv)
+      writeSupport, streams, query, startEpoch, session, env.rpcEnv)
     val ref = env.rpcEnv.setupEndpoint(endpointName(epochCoordinatorId), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
@@ -116,7 +117,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
  */
 private[continuous] class EpochCoordinator(
     writeSupport: StreamingWrite,
-    stream: ContinuousStream,
+    streams: Seq[ContinuousStream],
     query: ContinuousExecution,
     startEpoch: Long,
     session: SparkSession,
@@ -128,8 +129,8 @@ private[continuous] class EpochCoordinator(
 
   private var queryWritesStopped: Boolean = false
 
-  private var numReaderPartitions: Int = _
-  private var numWriterPartitions: Int = _
+  private var numReaderPartitions: Int = -1
+  private var numWriterPartitions: Int = -1
 
   private var currentDriverEpoch = startEpoch
 
@@ -138,7 +139,7 @@ private[continuous] class EpochCoordinator(
     mutable.Map[(Long, Int), WriterCommitMessage]()
   // (epoch, partition) -> offset
   private val partitionOffsets =
-    mutable.Map[(Long, Int), PartitionOffset]()
+    mutable.Map[(Long, (Int, Int)), PartitionOffset]()
 
   private var lastCommittedEpoch = startEpoch - 1
   // Remembers epochs that have to wait for previous epochs to be committed first.
@@ -218,13 +219,14 @@ private[continuous] class EpochCoordinator(
         checkProcessingQueueBoundaries()
       }
 
-    case ReportPartitionOffset(partitionId, epoch, offset) =>
-      partitionOffsets.put((epoch, partitionId), offset)
-      val thisEpochOffsets =
-        partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
+    case ReportPartitionOffset(streamId, partitionId, epoch, offset) =>
+      partitionOffsets.put((epoch, (streamId, partitionId)), offset)
+      val thisEpochOffsets = partitionOffsets.toSeq
+        .filter { case ((e, (_, _)), _) => e == epoch }
+        .map { case ((_, (i, _)), o) => (i, o) }
       if (thisEpochOffsets.size == numReaderPartitions) {
         logDebug(s"Epoch $epoch has offsets reported from all partitions: $thisEpochOffsets")
-        query.addOffset(epoch, stream, thisEpochOffsets.toSeq)
+        query.addOffset(epoch, streams, thisEpochOffsets)
         resolveCommitsAtEpoch(epoch)
       }
       checkProcessingQueueBoundaries()
@@ -256,7 +258,11 @@ private[continuous] class EpochCoordinator(
       context.reply(currentDriverEpoch)
 
     case SetReaderPartitions(numPartitions) =>
-      numReaderPartitions = numPartitions
+      if (numReaderPartitions > 0) {
+        numReaderPartitions += numPartitions
+      } else {
+        numReaderPartitions = numPartitions
+      }
       context.reply(())
 
     case SetWriterPartitions(numPartitions) =>
