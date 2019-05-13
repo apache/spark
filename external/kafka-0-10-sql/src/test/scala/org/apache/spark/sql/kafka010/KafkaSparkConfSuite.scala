@@ -14,27 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
 
-import java.util.concurrent.TimeUnit
+package org.apache.spark.sql.kafka010
 
-import org.apache.kafka.common.TopicPartition
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
+import org.apache.spark.util.ResetSystemProperties
 
-import org.apache.spark.internal.config.ConfigBuilder
+class KafkaSparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
+  test("deprecated configs") {
+    val conf = new SparkConf()
 
-package object kafka010 {   // scalastyle:ignore
-  // ^^ scalastyle:ignore is for ignoring warnings about digits in package name
-  type PartitionOffsetMap = Map[TopicPartition, Long]
-
-  private[kafka010] val PRODUCER_CACHE_TIMEOUT =
-    ConfigBuilder("spark.kafka.producer.cache.timeout")
-      .doc("The expire time to remove the unused producers.")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("10m")
-
-  private[kafka010] val CONSUMER_CACHE_CAPACITY =
-    ConfigBuilder("spark.kafka.consumer.cache.capacity")
-      .doc("The number of consumers cached.")
-      .intConf
-      .createWithDefault(64)
+    conf.set("spark.sql.kafkaConsumerCache.capacity", "32")
+    assert(conf.get(CONSUMER_CACHE_CAPACITY) === 32)
+  }
 }
