@@ -235,9 +235,9 @@ of the most common options to set are:
  <td><code>spark.executor.resource.{resourceType}.discoveryScript</code></td>
   <td>None</td>
   <td>
-    The script the executor should run to discover a particular resource type. This should
+    A script for the executor to run to discover a particular resource type. This should
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
-    name and array of addresses.
+    name and an array of addresses.
   </td>
 </tr>
 <tr>

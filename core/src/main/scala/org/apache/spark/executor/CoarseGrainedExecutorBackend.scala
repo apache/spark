@@ -104,11 +104,11 @@ private[spark] class CoarseGrainedExecutorBackend(
         // also make sure the resource count on start matches the
         // resource configs specified by user
         val userCountConfigName =
-        resourceConfigPrefix + rName + SPARK_RESOURCE_COUNT_POSTFIX
+          resourceConfigPrefix + rName + SPARK_RESOURCE_COUNT_POSTFIX
         val userConfigCount = env.conf.getOption(userCountConfigName).
           getOrElse(throw new SparkException(s"Resource: $rName not specified " +
             s"via config: $userCountConfigName, but required, " +
-            s"please fix your configuration"))
+            "please fix your configuration"))
 
         if (userConfigCount.toLong > resourceInfo.addresses.size) {
           throw new SparkException(s"Resource: $rName, with addresses: " +
@@ -147,7 +147,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       }}.getOrElse(ResourceDiscoverer.findResources(env.conf, isDriver = false))
 
       if (execResources.isEmpty) {
-        throw new SparkException(s"User specified resources per task via: " +
+        throw new SparkException("User specified resources per task via: " +
           s"$SPARK_TASK_RESOURCE_PREFIX, but can't find any resources available on the executor.")
       }
       // get just the map of resource name to count
@@ -159,7 +159,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         execResources)
 
       logInfo("===============================================================================")
-      logInfo("Executor ${executorId} Resources:")
+      logInfo("Executor $executorId Resources:")
       execResources.foreach { case (k, v) => logInfo(s"$k -> $v") }
       logInfo("===============================================================================")
 
