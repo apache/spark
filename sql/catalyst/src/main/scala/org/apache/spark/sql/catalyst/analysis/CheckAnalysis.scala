@@ -301,7 +301,7 @@ trait CheckAnalysis extends PredicateHelper {
           case CreateTableAsSelect(_, _, partitioning, query, _, _, _) =>
             val references = partitioning.flatMap(_.references).toSet
             val badReferences = references.map(_.fieldNames).flatMap { column =>
-              query.schema.findNestedField(column).map(_.dataType) match {
+              query.schema.findNestedField(column) match {
                 case Some(_) =>
                   None
                 case _ =>

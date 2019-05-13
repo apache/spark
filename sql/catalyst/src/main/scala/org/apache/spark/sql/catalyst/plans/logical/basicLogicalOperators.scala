@@ -423,7 +423,7 @@ case class CreateTableAsSelect(
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
     references.map(_.fieldNames).forall { column =>
-      query.schema.findNestedField(column).map(_.dataType) match {
+      query.schema.findNestedField(column) match {
         case Some(_) =>
           true
         case _ =>

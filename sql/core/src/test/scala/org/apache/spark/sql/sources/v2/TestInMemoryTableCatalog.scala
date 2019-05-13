@@ -122,6 +122,8 @@ private class InMemoryTable(
     replaceData(data)
   }
 
+  def rows: Seq[InternalRow] = data.flatMap(_.rows)
+
   @volatile var data: Array[BufferedRows] = Array.empty
 
   def replaceData(buffers: Array[BufferedRows]): Unit = synchronized {
