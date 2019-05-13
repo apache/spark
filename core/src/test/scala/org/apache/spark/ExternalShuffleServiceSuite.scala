@@ -127,8 +127,6 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     val rddSplit0Block = sc.env.blockManager.getRemoteValues(blockId)
     assert(rddSplit0Block.isDefined)
 
-    // Invalidate the registered executors, disallowing access to their shuffle blocks (without
-    // deleting the actual shuffle files, so we could access them without the shuffle service).
-    rpcHandler.applicationRemoved(sc.conf.getAppId, false /* cleanupLocalDirs */)
+    rpcHandler.applicationRemoved(sc.conf.getAppId, true)
   }
 }
