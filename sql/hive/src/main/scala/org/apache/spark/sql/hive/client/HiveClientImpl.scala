@@ -52,6 +52,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -191,7 +192,29 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = state.getConf
+  def conf: HiveConf = if (!HiveUtils.isHive23) {
+    state.getConf
+  } else {
+    val hiveConf = state.getConf
+    // Hive changed the default of datanucleus.schema.autoCreateAll from true to false
+    // and hive.metastore.schema.verification from false to true since Hive 2.0.
+    // For details, see the JIRA HIVE-6113, HIVE-12463 and HIVE-1841.
+    // isEmbeddedMetaStore should not be true in the production environment.
+    // We hard-code hive.metastore.schema.verification and datanucleus.schema.autoCreateAll to allow
+    // bin/spark-shell, bin/spark-sql and sbin/start-thriftserver.sh to automatically create the
+    // Derby Metastore when running Spark in the non-production environment.
+    val isEmbeddedMetaStore = {
+      val msUri = hiveConf.getVar(ConfVars.METASTOREURIS)
+      val msConnUrl = hiveConf.getVar(ConfVars.METASTORECONNECTURLKEY)
+      (msUri == null || msUri.trim().isEmpty) &&
+        (msConnUrl != null && msConnUrl.startsWith("jdbc:derby"))
+    }
+    if (isEmbeddedMetaStore) {
+      hiveConf.setBoolean("hive.metastore.schema.verification", false)
+      hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
+    }
+    hiveConf
+  }
 
   private val userName = conf.getUser
 
