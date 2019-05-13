@@ -250,7 +250,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(e.getMessage contains "cancel")
 
     // Once A is cancelled, job B should finish fairly quickly.
-    assert(ThreadUtils.awaitResult(jobB, 60.seconds) === 100)
+    assert(ThreadUtils.awaitResult(jobB, 1.minute) === 100)
   }
 
   test("task reaper will not kill JVM if spark.task.killTimeout == -1") {
@@ -290,7 +290,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(e.getMessage contains "cancel")
 
     // Once A is cancelled, job B should finish fairly quickly.
-    assert(ThreadUtils.awaitResult(jobB, 60.seconds) === 100)
+    assert(ThreadUtils.awaitResult(jobB, 1.minute) === 100)
   }
 
   test("two jobs sharing the same stage") {

@@ -83,9 +83,9 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertTrue(abs(corr - 0.95734012) < 1e-6)
 
     def test_sampleby(self):
-        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(10)]).toDF()
+        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(100)]).toDF()
         sampled = df.stat.sampleBy(u"b", fractions={0: 0.5, 1: 0.5}, seed=0)
-        self.assertTrue(sampled.count() == 3)
+        self.assertTrue(sampled.count() == 35)
 
     def test_cov(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
@@ -129,6 +129,12 @@ class FunctionsTests(ReusedSQLTestCase):
                      df.select(functions.pow(df.a, 2.0)).collect())
         assert_close([math.hypot(i, 2 * i) for i in range(10)],
                      df.select(functions.hypot(df.a, df.b)).collect())
+        assert_close([math.hypot(i, 2 * i) for i in range(10)],
+                     df.select(functions.hypot("a", u"b")).collect())
+        assert_close([math.hypot(i, 2) for i in range(10)],
+                     df.select(functions.hypot("a", 2)).collect())
+        assert_close([math.hypot(i, 2) for i in range(10)],
+                     df.select(functions.hypot(df.a, 2)).collect())
 
     def test_rand_functions(self):
         df = self.df
@@ -151,7 +157,8 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(sorted(rndn1), sorted(rndn2))
 
     def test_string_functions(self):
-        from pyspark.sql.functions import col, lit
+        from pyspark.sql import functions
+        from pyspark.sql.functions import col, lit, _string_functions
         df = self.spark.createDataFrame([['nick']], schema=['name'])
         self.assertRaisesRegexp(
             TypeError,
@@ -161,6 +168,11 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertRaises(
                 TypeError,
                 lambda: df.select(col('name').substr(long(0), long(1))))
+
+        for name in _string_functions.keys():
+            self.assertEqual(
+                df.select(getattr(functions, name)("name")).first()[0],
+                df.select(getattr(functions, name)(col("name"))).first()[0])
 
     def test_array_contains_function(self):
         from pyspark.sql.functions import array_contains

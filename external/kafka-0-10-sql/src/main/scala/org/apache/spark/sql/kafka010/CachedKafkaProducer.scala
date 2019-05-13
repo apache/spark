@@ -31,6 +31,7 @@ import org.apache.kafka.clients.producer.KafkaProducer
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.KafkaConfigUpdater
 
 private[kafka010] case class CachedKafkaProducer(
     private val id: String = ju.UUID.randomUUID().toString,
@@ -78,10 +79,9 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private val defaultCacheExpireTimeout = TimeUnit.MINUTES.toMillis(10)
 
-  private lazy val cacheExpireTimeout: Long =
-    Option(SparkEnv.get).map(_.conf.getTimeAsMs(
-      "spark.kafka.producer.cache.timeout",
-      s"${defaultCacheExpireTimeout}ms")).getOrElse(defaultCacheExpireTimeout)
+  private lazy val cacheExpireTimeout: Long = Option(SparkEnv.get)
+    .map(_.conf.get(PRODUCER_CACHE_TIMEOUT))
+    .getOrElse(defaultCacheExpireTimeout)
 
   private val cacheLoader = new CacheLoader[Seq[(String, Object)], CachedKafkaProducer] {
     override def load(params: Seq[(String, Object)]): CachedKafkaProducer = {
@@ -115,6 +115,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     CacheBuilder.newBuilder().expireAfterAccess(cacheExpireTimeout, TimeUnit.MILLISECONDS)
       .removalListener(removalListener)
       .build[Seq[(String, Object)], CachedKafkaProducer](cacheLoader)
+
 
   /**
    * Get a cached KafkaProducer for a given configuration. If matching KafkaProducer doesn't

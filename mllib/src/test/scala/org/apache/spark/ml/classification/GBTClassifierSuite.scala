@@ -345,7 +345,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("Tests of feature subset strategy") {
     val numClasses = 2
     val gbt = new GBTClassifier()
-      .setSeed(123)
+      .setSeed(42)
       .setMaxDepth(3)
       .setMaxIter(5)
       .setFeatureSubsetStrategy("all")

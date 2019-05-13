@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.time.ZoneOffset
 import java.util.Date
 
 import scala.collection.mutable
@@ -373,7 +374,7 @@ object CatalogTable {
 /**
  * This class of statistics is used in [[CatalogTable]] to interact with metastore.
  * We define this new class instead of directly using [[Statistics]] here because there are no
- * concepts of attributes or broadcast hint in catalog.
+ * concepts of attributes in catalog.
  */
 case class CatalogStatistics(
     sizeInBytes: BigInt,
@@ -477,7 +478,7 @@ object CatalogColumnStat extends Logging {
   val VERSION = 2
 
   private def getTimestampFormatter(): TimestampFormatter = {
-    TimestampFormatter(format = "yyyy-MM-dd HH:mm:ss.SSSSSS", timeZone = DateTimeUtils.TimeZoneUTC)
+    TimestampFormatter(format = "yyyy-MM-dd HH:mm:ss.SSSSSS", zoneId = ZoneOffset.UTC)
   }
 
   /**

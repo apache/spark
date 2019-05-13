@@ -2,6 +2,21 @@
 layout: global
 title: Monitoring and Instrumentation
 description: Monitoring, metrics, and instrumentation guide for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 There are several ways to monitor Spark applications: web UIs, metrics, and external instrumentation.
@@ -609,7 +624,150 @@ A list of the available metrics, with a short description:
   </tr>
 </table>
 
+### Executor Metrics
 
+Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC infomation. Metrics `peakExecutorMetrics.*` are only enabled if `spark.eventLog.logStageExecutorMetrics.enabled` is true.
+A list of the available metrics, with a short description:
+
+<table class="table">
+  <tr><th>Executor Level Metric name</th>
+      <th>Short description</th>
+  </tr>
+  <tr>
+    <td>totalGCTime</td>
+    <td>Elapsed time the JVM spent in garbage collection summed in this Executor.
+    The value is expressed in milliseconds.</td>
+  </tr>
+  <tr>
+    <td>totalInputBytes</td>
+    <td>Total input bytes summed in this Executor.</td>
+  </tr>
+  <tr>
+    <td>totalShuffleRead</td>
+    <td>Total shuffer read bytes summed in this Executor.</td>
+  </tr>
+  <tr>
+    <td>totalShuffleWrite</td>
+    <td>Total shuffer write bytes summed in this Executor.</td>
+  </tr>
+  <tr>
+    <td>maxMemory</td>
+    <td>Total amount of memory available for storage, in bytes.</td>
+  </tr>
+  <tr>
+    <td>memoryMetrics.*</td>
+    <td>Current value of memory metrics:</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.usedOnHeapStorageMemory</td>
+    <td>Used on heap memory currently for storage, in bytes.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.usedOffHeapStorageMemory</td>
+    <td>Used off heap memory currently for storage, in bytes.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.totalOnHeapStorageMemory</td>
+    <td>Total available on heap memory for storage, in bytes. This amount can vary over time,  on the MemoryManager implementation.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.totalOffHeapStorageMemory</td>
+    <td>Total available off heap memory for storage, in bytes. This amount can vary over time, depending on the MemoryManager implementation.</td>
+  </tr>
+  <tr>
+    <td>peakMemoryMetrics.*</td>
+    <td>Peak value of memory (and GC) metrics:</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.JVMHeapMemory</td>
+    <td>Peak memory usage of the heap that is used for object allocation.
+    The heap consists of one or more memory pools. The used and committed size of the returned memory usage is the sum of those values of all heap memory pools whereas the init and max size of the returned memory usage represents the setting of the heap memory which may not be the sum of those of all heap memory pools.
+    The amount of used memory in the returned memory usage is the amount of memory occupied by both live objects and garbage objects that have not been collected, if any.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.JVMOffHeapMemory</td>
+    <td>Peak memory usage of non-heap memory that is used by the Java virtual machine. The non-heap memory consists of one or more memory pools. The used and committed size of the returned memory usage is the sum of those values of all non-heap memory pools whereas the init and max size of the returned memory usage represents the setting of the non-heap memory which may not be the sum of those of all non-heap memory pools.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.OnHeapExecutionMemory</td>
+    <td>Peak on heap execution memory in use, in bytes.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.OffHeapExecutionMemory</td>
+    <td>Peak off heap execution memory in use, in bytes.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.OnHeapStorageMemory</td>
+    <td>Peak on heap storage memory in use, in bytes.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.OffHeapStorageMemory</td>
+    <td>Peak off heap storage memory in use, in bytes.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.OnHeapUnifiedMemory</td>
+    <td>Peak on heap memory (execution and storage).</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.OffHeapUnifiedMemory</td>
+    <td>Peak off heap memory (execution and storage).</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.DirectPoolMemory</td>
+    <td>Peak memory that the JVM is using for direct buffer pool ([[java.lang.management.BufferPoolMXBean]])</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.MappedPoolMemory</td>
+    <td>Peak memory that the JVM is using for mapped buffer pool ([[java.lang.management.BufferPoolMXBean]])</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeJVMVMemory</td>
+    <td>Virtual memory size in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeJVMRSSMemory</td>
+    <td>Resident Set Size: number of pages the process has
+      in real memory.  This is just the pages which count
+      toward text, data, or stack space.  This does not
+      include pages which have not been demand-loaded in,
+      or which are swapped out. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreePythonVMemory</td>
+    <td>Virtual memory size for Python in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreePythonRSSMemory</td>
+    <td>Resident Set Size for Python. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeOtherVMemory</td>
+    <td>Virtual memory size for other kind of process in bytes. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.ProcessTreeOtherRSSMemory</td>
+    <td>Resident Set Size for other kind of process. Enabled if spark.eventLog.logStageExecutorProcessTreeMetrics.enabled is true.</td>
+  </tr>
+    <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.MinorGCCount</td>
+    <td>Total minor GC count. For example, the garbage collector is one of     Copy, PS Scavenge, ParNew, G1 Young Generation and so on.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.MinorGCTime</td>
+    <td>Elapsed total minor GC time. 
+    The value is expressed in milliseconds.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.MajorGCCount</td>
+    <td>Total major GC count. For example, the garbage collector is one of     MarkSweepCompact, PS MarkSweep, ConcurrentMarkSweep, G1 Old Generation and so on.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.MajorGCTime</td>
+    <td>Elapsed total major GC time. 
+    The value is expressed in milliseconds.</td>
+  </tr>
+</table>
+The computation of RSS and Vmem are based on [proc(5)](http://man7.org/linux/man-pages/man5/proc.5.html)
 
 ### API Versioning Policy
 
@@ -788,6 +946,7 @@ This is the component with the largest amount of instrumented metrics
    `spark.app.status.metrics.enabled=true` (default is false)
   - stages.failedStages.count
   - stages.skippedStages.count
+  - stages.completedStages.count
   - tasks.blackListedExecutors.count
   - tasks.completedTasks.count
   - tasks.failedTasks.count
@@ -804,7 +963,7 @@ This is the component with the largest amount of instrumented metrics
   - LongAccumulatorSource
 
 - namespace=spark.streaming
-  - **note** applies to Spark Structured Streaming only. Conditional to a configuration
+  - **note:** This applies to Spark Structured Streaming only. Conditional to a configuration
   parameter: `spark.sql.streaming.metricsEnabled=true` (default is false) 
   - eventTime-watermark
   - inputRate-total
@@ -932,7 +1091,7 @@ Note: applies when running in Spark standalone as worker
 - coresFree
 - memFree_MB
 
-## Component instance = shuffleService
+### Component instance = shuffleService
 Note: applies to the shuffle service
 
 - blockTransferRateBytes (meter)

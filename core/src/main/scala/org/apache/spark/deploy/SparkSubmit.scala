@@ -22,9 +22,10 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.{URI, URL}
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
-import java.util.UUID
+import java.util.{ServiceLoader, UUID}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.{Properties, Try}
 
@@ -96,20 +97,35 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   /**
-   * Kill an existing submission using the REST protocol. Standalone and Mesos cluster mode only.
+   * Kill an existing submission.
    */
   private def kill(args: SparkSubmitArguments): Unit = {
-    new RestSubmissionClient(args.master)
-      .killSubmission(args.submissionToKill)
+    if (RestSubmissionClient.supportsRestClient(args.master)) {
+      new RestSubmissionClient(args.master)
+        .killSubmission(args.submissionToKill)
+    } else {
+      val sparkConf = args.toSparkConf()
+      sparkConf.set("spark.master", args.master)
+      SparkSubmitUtils
+        .getSubmitOperations(args.master)
+        .kill(args.submissionToKill, sparkConf)
+    }
   }
 
   /**
-   * Request the status of an existing submission using the REST protocol.
-   * Standalone and Mesos cluster mode only.
+   * Request the status of an existing submission.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
-    new RestSubmissionClient(args.master)
-      .requestSubmissionStatus(args.submissionToRequestStatusFor)
+    if (RestSubmissionClient.supportsRestClient(args.master)) {
+      new RestSubmissionClient(args.master)
+        .requestSubmissionStatus(args.submissionToRequestStatusFor)
+    } else {
+      val sparkConf = args.toSparkConf()
+      sparkConf.set("spark.master", args.master)
+      SparkSubmitUtils
+        .getSubmitOperations(args.master)
+        .printSubmissionStatus(args.submissionToRequestStatusFor, sparkConf)
+    }
   }
 
   /** Print version information to the log. */
@@ -320,7 +336,8 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    args.sparkProperties.foreach { case (k, v) => sparkConf.set(k, v) }
+    // update spark config from args
+    args.toSparkConf(Option(sparkConf))
     val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
     val targetDir = Utils.createTempDir()
 
@@ -527,10 +544,14 @@ private[spark] class SparkSubmit extends Logging {
 
       // Yarn only
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.queue"),
-      OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.pyFiles"),
-      OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.jars"),
-      OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.files"),
-      OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.archives"),
+      OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.pyFiles",
+        mergeFn = Some(mergeFileLists(_, _))),
+      OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.jars",
+        mergeFn = Some(mergeFileLists(_, _))),
+      OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.files",
+        mergeFn = Some(mergeFileLists(_, _))),
+      OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.archives",
+        mergeFn = Some(mergeFileLists(_, _))),
 
       // Other options
       OptionAssigner(args.numExecutors, YARN | KUBERNETES, ALL_DEPLOY_MODES,
@@ -542,10 +563,10 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = CORES_MAX.key),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.files"),
-      OptionAssigner(args.jars, LOCAL, CLIENT, confKey = "spark.jars"),
+        confKey = FILES.key),
+      OptionAssigner(args.jars, LOCAL, CLIENT, confKey = JARS.key),
       OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.jars"),
+        confKey = JARS.key),
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
         confKey = DRIVER_MEMORY.key),
       OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
@@ -591,7 +612,13 @@ private[spark] class SparkSubmit extends Logging {
           (deployMode & opt.deployMode) != 0 &&
           (clusterManager & opt.clusterManager) != 0) {
         if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
-        if (opt.confKey != null) { sparkConf.set(opt.confKey, opt.value) }
+        if (opt.confKey != null) {
+          if (opt.mergeFn.isDefined && sparkConf.contains(opt.confKey)) {
+            sparkConf.set(opt.confKey, opt.mergeFn.get.apply(sparkConf.get(opt.confKey), opt.value))
+          } else {
+            sparkConf.set(opt.confKey, opt.value)
+          }
+        }
       }
     }
 
@@ -826,18 +853,6 @@ private[spark] class SparkSubmit extends Logging {
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
       mainClass.getConstructor().newInstance().asInstanceOf[SparkApplication]
     } else {
-      // Scala object subclassing scala.App has its whole class body executed in the
-      // main method it inherits. Fields of the object will not have been initialized
-      // before the main method has been executed, which will cause problems like SPARK-4170
-      // Note two Java classes are generated, the childMainClass and childMainClass$.
-      // Users will pass in childMainClass which will delegate all invocations to childMainClass$
-      // but it's childMainClass$ that subclasses scala.App and we should check for.
-      Try {
-        if (classOf[scala.App].isAssignableFrom(Utils.classForName(s"$childMainClass$$"))) {
-          logWarning("Subclasses of scala.App may not work correctly. " +
-            "Use a main() method instead.")
-        }
-      }
       new JavaMainApplication(mainClass)
     }
 
@@ -1087,7 +1102,7 @@ private[spark] object SparkSubmitUtils {
     val sp: IBiblioResolver = new IBiblioResolver
     sp.setM2compatible(true)
     sp.setUsepoms(true)
-    sp.setRoot("http://dl.bintray.com/spark-packages/maven")
+    sp.setRoot("https://dl.bintray.com/spark-packages/maven")
     sp.setName("spark-packages")
     cr.add(sp)
     cr
@@ -1348,6 +1363,23 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
+  private[deploy] def getSubmitOperations(master: String): SparkSubmitOperation = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoaders =
+      ServiceLoader.load(classOf[SparkSubmitOperation], loader)
+        .asScala
+        .filter(_.supports(master))
+
+    serviceLoaders.size match {
+      case x if x > 1 =>
+        throw new SparkException(s"Multiple($x) external SparkSubmitOperations " +
+          s"clients registered for master url ${master}.")
+      case 1 => serviceLoaders.headOption.get
+      case _ =>
+        throw new IllegalArgumentException(s"No external SparkSubmitOperations " +
+          s"clients found for master url: '$master'")
+    }
+  }
 }
 
 /**
@@ -1359,4 +1391,14 @@ private case class OptionAssigner(
     clusterManager: Int,
     deployMode: Int,
     clOption: String = null,
-    confKey: String = null)
+    confKey: String = null,
+    mergeFn: Option[(String, String) => String] = None)
+
+private[spark] trait SparkSubmitOperation {
+
+  def kill(submissionId: String, conf: SparkConf): Unit
+
+  def printSubmissionStatus(submissionId: String, conf: SparkConf): Unit
+
+  def supports(master: String): Boolean
+}

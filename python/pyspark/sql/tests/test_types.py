@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -738,6 +739,17 @@ class DataTypeTests(unittest.TestCase):
     def test_timestamp_microsecond(self):
         tst = TimestampType()
         self.assertEqual(tst.toInternal(datetime.datetime.max) % 1000000, 999999)
+
+    # regression test for SPARK-23299
+    def test_row_without_column_name(self):
+        row = Row("Alice", 11)
+        self.assertEqual(repr(row), "<Row('Alice', 11)>")
+
+        # test __repr__ with unicode values
+        if sys.version_info.major >= 3:
+            self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
+        else:
+            self.assertEqual(repr(Row(u"数", u"量")), r"<Row(u'\u6570', u'\u91cf')>")
 
     def test_empty_row(self):
         row = Row()

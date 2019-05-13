@@ -23,7 +23,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.MoreExecutors
@@ -58,18 +57,18 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
       // Only remove the result once, since we'd like to test the case where the task eventually
       // succeeds.
       serializer.get().deserialize[TaskResult[_]](serializedData) match {
-        case IndirectTaskResult(blockId, size) =>
+        case IndirectTaskResult(blockId, _) =>
           sparkEnv.blockManager.master.removeBlock(blockId)
           // removeBlock is asynchronous. Need to wait it's removed successfully
           try {
-            eventually(timeout(3 seconds), interval(200 milliseconds)) {
+            eventually(timeout(3.seconds), interval(200.milliseconds)) {
               assert(!sparkEnv.blockManager.master.contains(blockId))
             }
             removeBlockSuccessfully = true
           } catch {
             case NonFatal(e) => removeBlockSuccessfully = false
           }
-        case directResult: DirectTaskResult[_] =>
+        case _: DirectTaskResult[_] =>
           taskSetManager.abort("Internal error: expect only indirect results")
       }
       serializedData.rewind()
