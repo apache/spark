@@ -151,7 +151,14 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val chain = mock(classOf[FilterChain])
     val filter = new HttpSecurityFilter(conf, secMgr)
 
+    // First try with a non-admin so that the admin check is verified. This ensures that
+    // the admin check is setting the expected error, since the impersonated user would
+    // have permissions to process the request.
     when(req.getParameter("doAs")).thenReturn("proxy")
+    when(req.getRemoteUser()).thenReturn("bob")
+    filter.doFilter(req, res, chain)
+    verify(res, times(1)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
+
     when(req.getRemoteUser()).thenReturn("admin")
     filter.doFilter(req, res, chain)
     verify(chain, times(1)).doFilter(any(), any())
@@ -164,10 +171,6 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
 
     // Impersonating a user without view permissions should cause an error.
     when(req.getParameter("doAs")).thenReturn("alice")
-    filter.doFilter(req, res, chain)
-    verify(res).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
-
-    when(req.getRemoteUser()).thenReturn("bob")
     filter.doFilter(req, res, chain)
     verify(res, times(2)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
   }
