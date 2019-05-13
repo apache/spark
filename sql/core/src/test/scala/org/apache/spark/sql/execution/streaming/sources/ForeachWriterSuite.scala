@@ -291,24 +291,25 @@ object ForeachWriterSuite {
 }
 
 class ForeachWriterAbortSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+
   import testImplicits._
 
   var mockOutputCommitCoordinator: OutputCommitCoordinator = null
 
   override protected def sparkConf = {
     new SparkConf()
-        .setMaster("local[2]")
-        .setAppName(classOf[ForeachWriterAbortSuite].getSimpleName)
-        .set("spark.hadoop.outputCommitCoordination.enabled", "true")
+      .setMaster("local[2]")
+      .setAppName(classOf[ForeachWriterAbortSuite].getSimpleName)
+      .set("spark.hadoop.outputCommitCoordination.enabled", "true")
   }
 
   override protected def createSparkSession: TestSparkSession = {
     SparkSession.cleanupAnyExistingSession()
     val sc = new SparkContext(sparkConf) {
       override private[spark] def createSparkEnv(
-                                                    conf: SparkConf,
-                                                    isLocal: Boolean,
-                                                    listenerBus: LiveListenerBus): SparkEnv = {
+                                                  conf: SparkConf,
+                                                  isLocal: Boolean,
+                                                  listenerBus: LiveListenerBus): SparkEnv = {
         mockOutputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
@@ -322,13 +323,13 @@ class ForeachWriterAbortSuite extends StreamTest with SharedSQLContext with Befo
 
   testQuietly("foreach with abort") {
     when(mockOutputCommitCoordinator.canCommit(any(), any(), any(), any()))
-        .thenThrow(new RuntimeException("ForeachSinkSuite error"))
+      .thenThrow(new RuntimeException("ForeachSinkSuite error"))
 
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(1).writeStream
-          .option("checkpointLocation", checkpointDir.getCanonicalPath)
-          .foreach(new TestForeachWriter()).start()
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .foreach(new TestForeachWriter()).start()
       input.addData(1, 2, 3, 4)
 
       // Error in `process` should fail the Spark job
