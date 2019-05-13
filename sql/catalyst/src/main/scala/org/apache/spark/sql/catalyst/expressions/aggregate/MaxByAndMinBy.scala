@@ -49,45 +49,46 @@ abstract class MaxMinBy extends DeclarativeAggregate {
     TypeUtils.checkForOrderingExpr(orderingExpr.dataType, s"function $funcName")
 
   // The attributes used to keep extremum (max or min) and associated aggregated values.
-  private lazy val maxOrdering = AttributeReference("maxOrdering", orderingExpr.dataType)()
-  private lazy val valueWithMaxOrdering =
-    AttributeReference("valueWithMaxOrdering", valueExpr.dataType)()
+  private lazy val extremumOrdering =
+    AttributeReference("extremumOrdering", orderingExpr.dataType)()
+  private lazy val valueWithExtremumOrdering =
+    AttributeReference("valueWithExtremumOrdering", valueExpr.dataType)()
 
   override lazy val aggBufferAttributes: Seq[AttributeReference] =
-    valueWithMaxOrdering :: maxOrdering :: Nil
+    valueWithExtremumOrdering :: extremumOrdering :: Nil
 
   private lazy val nullValue = Literal.create(null, valueExpr.dataType)
   private lazy val nullOrdering = Literal.create(null, orderingExpr.dataType)
 
   override lazy val initialValues: Seq[Literal] = Seq(
-    /* valueWithMaxOrdering = */ nullValue,
-    /* maxOrdering = */ nullOrdering
+    /* valueWithExtremumOrdering = */ nullValue,
+    /* extremumOrdering = */ nullOrdering
   )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* valueWithMaxOrdering = */
+    /* valueWithExtremumOrdering = */
     CaseWhen(
-      (maxOrdering.isNull && orderingExpr.isNull, nullValue) ::
-        (maxOrdering.isNull, valueExpr) ::
-        (orderingExpr.isNull, valueWithMaxOrdering) :: Nil,
-      If(predicate(maxOrdering, orderingExpr), valueWithMaxOrdering, valueExpr)
+      (extremumOrdering.isNull && orderingExpr.isNull, nullValue) ::
+        (extremumOrdering.isNull, valueExpr) ::
+        (orderingExpr.isNull, valueWithExtremumOrdering) :: Nil,
+      If(predicate(extremumOrdering, orderingExpr), valueWithExtremumOrdering, valueExpr)
     ),
-    /* maxOrdering = */ orderingUpdater(maxOrdering, orderingExpr)
+    /* extremumOrdering = */ orderingUpdater(extremumOrdering, orderingExpr)
   )
 
   override lazy val mergeExpressions: Seq[Expression] = Seq(
-    /* valueWithMaxOrdering = */
+    /* valueWithExtremumOrdering = */
     CaseWhen(
-      (maxOrdering.left.isNull && maxOrdering.right.isNull, nullValue) ::
-        (maxOrdering.left.isNull, valueWithMaxOrdering.right) ::
-        (maxOrdering.right.isNull, valueWithMaxOrdering.left) :: Nil,
-      If(predicate(maxOrdering.left, maxOrdering.right),
-        valueWithMaxOrdering.left, valueWithMaxOrdering.right)
+      (extremumOrdering.left.isNull && extremumOrdering.right.isNull, nullValue) ::
+        (extremumOrdering.left.isNull, valueWithExtremumOrdering.right) ::
+        (extremumOrdering.right.isNull, valueWithExtremumOrdering.left) :: Nil,
+      If(predicate(extremumOrdering.left, extremumOrdering.right),
+        valueWithExtremumOrdering.left, valueWithExtremumOrdering.right)
     ),
-    /* maxOrdering = */ orderingUpdater(maxOrdering.left, maxOrdering.right)
+    /* extremumOrdering = */ orderingUpdater(extremumOrdering.left, extremumOrdering.right)
   )
 
-  override lazy val evaluateExpression: AttributeReference = valueWithMaxOrdering
+  override lazy val evaluateExpression: AttributeReference = valueWithExtremumOrdering
 }
 
 @ExpressionDescription(
