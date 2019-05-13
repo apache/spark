@@ -3050,7 +3050,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql("select * from t1 where '2000' >= d"), Row(result))
     checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
 
-    withSQLConf(SQLConf.LEGACY_CAST_DATE_TIMESTAMP_TO_STRING.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
       checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
       checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
       checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Row(result))
@@ -3091,7 +3091,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql("select * from t1 where '2000' >= d"), Nil)
     checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
 
-    withSQLConf(SQLConf.LEGACY_CAST_DATE_TIMESTAMP_TO_STRING.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
       checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
       checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
       checkAnswer(sql("select * from t1 where d <= '2000-1-1'"), Row(result))
