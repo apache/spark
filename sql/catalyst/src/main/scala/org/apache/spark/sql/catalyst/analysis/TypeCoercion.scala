@@ -120,6 +120,14 @@ object TypeCoercion {
    */
   private def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
+    case (StringType, DateType)
+      => if (conf.castDateTimestampToString) Some(StringType) else Some(DateType)
+    case (DateType, StringType)
+      => if (conf.castDateTimestampToString) Some(StringType) else Some(DateType)
+    case (StringType, TimestampType)
+      => if (conf.castDateTimestampToString) Some(StringType) else Some(TimestampType)
+    case (TimestampType, StringType)
+      => if (conf.castDateTimestampToString) Some(StringType) else Some(TimestampType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
 
