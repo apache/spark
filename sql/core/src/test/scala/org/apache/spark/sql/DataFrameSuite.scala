@@ -2622,4 +2622,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(res, Row("1-1", 6, 6))
     }
   }
+
+  test("SPARK-27671: Fix analysis exception when casting null in nested field in struct") {
+    val df = sql("SELECT * FROM VALUES (('a', (10, null))), (('b', (10, 50))), " +
+      "(('c', null)) AS tab(x, y)")
+    checkAnswer(df, Row("a", Row(10, null)) :: Row("b", Row(10, 50)) :: Row("c", null) :: Nil)
+
+    val cast = sql("SELECT cast(struct(1, null) AS struct<a:int,b:int>)")
+    checkAnswer(cast, Row(Row(1, null)) :: Nil)
+  }
 }
