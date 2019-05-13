@@ -132,7 +132,7 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
-  val BROADCAST_EXCHANGE_MAX_THREAD_THREASHOLD =
+  val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
       .internal()
       .doc("The maximum degree of parallelism to fetch and broadcast the table. " +
