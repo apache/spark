@@ -48,42 +48,46 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForOrderingExpr(orderingExpr.dataType, s"function $funcName")
 
-  private lazy val ordering = AttributeReference("ordering", orderingExpr.dataType)()
-  private lazy val value = AttributeReference("value", valueExpr.dataType)()
+  // The attributes used to keep extremum (max or min) and associated aggregated values.
+  private lazy val maxOrdering = AttributeReference("maxOrdering", orderingExpr.dataType)()
+  private lazy val valueWithMaxOrdering =
+    AttributeReference("valueWithMaxOrdering", valueExpr.dataType)()
 
-  override lazy val aggBufferAttributes: Seq[AttributeReference] = value :: ordering :: Nil
+  override lazy val aggBufferAttributes: Seq[AttributeReference] =
+    valueWithMaxOrdering :: maxOrdering :: Nil
 
   private lazy val nullValue = Literal.create(null, valueExpr.dataType)
   private lazy val nullOrdering = Literal.create(null, orderingExpr.dataType)
 
   override lazy val initialValues: Seq[Literal] = Seq(
-    /* value = */ nullValue,
-    /* ordering = */ nullOrdering
+    /* valueWithMaxOrdering = */ nullValue,
+    /* maxOrdering = */ nullOrdering
   )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* value = */
+    /* valueWithMaxOrdering = */
     CaseWhen(
-      (ordering.isNull && orderingExpr.isNull, nullValue) ::
-        (ordering.isNull, valueExpr) ::
-        (orderingExpr.isNull, value) :: Nil,
-      If(predicate(ordering, orderingExpr), value, valueExpr)
+      (maxOrdering.isNull && orderingExpr.isNull, nullValue) ::
+        (maxOrdering.isNull, valueExpr) ::
+        (orderingExpr.isNull, valueWithMaxOrdering) :: Nil,
+      If(predicate(maxOrdering, orderingExpr), valueWithMaxOrdering, valueExpr)
     ),
-    /* ordering = */ orderingUpdater(ordering, orderingExpr)
+    /* maxOrdering = */ orderingUpdater(maxOrdering, orderingExpr)
   )
 
   override lazy val mergeExpressions: Seq[Expression] = Seq(
-    /* value = */
+    /* valueWithMaxOrdering = */
     CaseWhen(
-      (ordering.left.isNull && ordering.right.isNull, nullValue) ::
-        (ordering.left.isNull, value.right) ::
-        (ordering.right.isNull, value.left) :: Nil,
-      If(predicate(ordering.left, ordering.right), value.left, value.right)
+      (maxOrdering.left.isNull && maxOrdering.right.isNull, nullValue) ::
+        (maxOrdering.left.isNull, valueWithMaxOrdering.right) ::
+        (maxOrdering.right.isNull, valueWithMaxOrdering.left) :: Nil,
+      If(predicate(maxOrdering.left, maxOrdering.right),
+        valueWithMaxOrdering.left, valueWithMaxOrdering.right)
     ),
-    /* ordering = */ orderingUpdater(ordering.left, ordering.right)
+    /* maxOrdering = */ orderingUpdater(maxOrdering.left, maxOrdering.right)
   )
 
-  override lazy val evaluateExpression: AttributeReference = value
+  override lazy val evaluateExpression: AttributeReference = valueWithMaxOrdering
 }
 
 @ExpressionDescription(
@@ -98,7 +102,7 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   override protected def funcName: String = "max_by"
 
   override protected def predicate(oldExpr: Expression, newExpr: Expression): Expression =
-    GreaterThan(oldExpr, newExpr)
+    oldExpr > newExpr
 
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     greatest(oldExpr, newExpr)
@@ -116,7 +120,7 @@ case class MinBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   override protected def funcName: String = "min_by"
 
   override protected def predicate(oldExpr: Expression, newExpr: Expression): Expression =
-    LessThan(oldExpr, newExpr)
+    oldExpr < newExpr
 
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     least(oldExpr, newExpr)
