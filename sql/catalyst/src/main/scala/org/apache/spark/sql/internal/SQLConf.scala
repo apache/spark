@@ -1760,11 +1760,6 @@ object SQLConf {
     .internal()
     .intConf
     .createWithDefault(Int.MaxValue)
-
-  val DEFAULT_V2_CATALOG = buildConf("spark.sql.default.catalog")
-      .doc("Name of the default v2 catalog, used when an catalog is not identified in queries")
-      .stringConf
-      .createOptional
 }
 
 /**
@@ -2215,8 +2210,6 @@ class SQLConf extends Serializable with Logging {
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
-
-  def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   /** ********************** SQLConf functionality methods ************ */
 

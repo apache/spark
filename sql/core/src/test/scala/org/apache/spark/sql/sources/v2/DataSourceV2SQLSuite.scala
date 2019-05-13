@@ -66,7 +66,8 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
   }
 
-  test("CreateTableAsSelect: use v2 plan because provider is v2") {
+  // TODO(rblue): enable this test after the default catalog is available
+  ignore("CreateTableAsSelect: use v2 plan because provider is v2") {
     spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
 
     val testCatalog = spark.catalog("testcat").asTableCatalog
