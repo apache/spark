@@ -172,6 +172,8 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(sql("SELECT mystrlen('abc', 1)").head().getInt(0) == 4)
     val plan2 = sql("SELECT mystrlen('abc', 1)").queryExecution.optimizedPlan
     assert(udfNodesCount(plan2) == 0)
+    val plan3 = sql("SELECT mystrlen('abc', mystrlen('c', 1))").queryExecution.optimizedPlan
+    assert(udfNodesCount(plan3) == 0)
 
     // udf is deterministic and args are not literal
     withTempView("temp1") {
