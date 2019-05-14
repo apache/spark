@@ -219,9 +219,9 @@ class CacheManager extends Logging {
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
-          // The returned hint list is in top-down order. We should reverse it so that the top hint
-          // is still in the top node.
-          hints.reverse.foldLeft[LogicalPlan](cachedPlan) { case (p, hint) =>
+          // The returned hint list is in top-down order, we should create the hint nodes from
+          // right to left.
+          hints.foldRight[LogicalPlan](cachedPlan) { case (hint, p) =>
             ResolvedHint(p, hint)
           }
         }.getOrElse(currentFragment)
