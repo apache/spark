@@ -155,7 +155,9 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
         spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
       }
 
-      assert(exc.getMessage.contains("Default catalog is not set"))
+      assert(exc.getMessage.contains("No catalog specified for table"))
+      assert(exc.getMessage.contains("table_name"))
+      assert(exc.getMessage.contains("no default catalog is set"))
 
     } finally {
       conf.setConfString("spark.sql.default.catalog", originalDefaultCatalog)

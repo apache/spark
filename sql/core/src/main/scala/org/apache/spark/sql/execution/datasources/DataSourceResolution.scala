@@ -68,7 +68,8 @@ case class DataSourceResolution(
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = create.tableName
       val catalog = maybeCatalog
-          .getOrElse(throw new AnalysisException("Default catalog is not set"))
+          .getOrElse(throw new AnalysisException(
+            s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
           .asTableCatalog
       convertCTAS(catalog, identifier, create)
   }
@@ -137,6 +138,19 @@ case class DataSourceResolution(
     if (ctas.options.contains("path") && ctas.location.isDefined) {
       throw new AnalysisException(
         "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
+            "you can only specify one of them.")
+    }
+
+    if ((ctas.options.contains("provider") || ctas.properties.contains("provider"))
+        && ctas.comment.isDefined) {
+      throw new AnalysisException(
+        "COMMENT and option/property 'comment' are both used to set the table comment, you can " +
+            "only specify one of them.")
+    }
+
+    if (ctas.options.contains("provider") || ctas.properties.contains("provider")) {
+      throw new AnalysisException(
+        "USING and option/property 'provider' are both used to set the provider implementation, " +
             "you can only specify one of them.")
     }
 
