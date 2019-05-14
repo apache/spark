@@ -3189,6 +3189,23 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         return _create_udf(f=f, returnType=return_type, evalType=eval_type)
 
 
+    def test_input_file_name_reset_for_rdd(self):
+        from pyspark.sql.functions import udf, input_file_name
+        rdd = self.sc.textFile('python/test_support/hello/hello.txt').map(lambda x: {'data': x})
+        df = self.spark.createDataFrame(rdd, StructType([StructField('data', StringType(), True)]))
+        df.select(input_file_name().alias('file')).collect()
+
+        non_file_df = self.spark.range(0, 100, 1, 100).select(input_file_name().alias('file'))
+
+        results = non_file_df.collect()
+        self.assertTrue(len(results) == 100)
+
+        # [SC-12160]: if everything was properly reset after the last job, this should return
+        # empty string rather than the file read in the last job.
+        for result in results:
+            assert(result[0] == '')
+
+
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()
            if not k.startswith('_') and k[0].islower() and callable(v) and k not in blacklist]
