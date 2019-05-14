@@ -104,80 +104,80 @@ class LikeSimplificationSuite extends PlanTest {
   test("null pattern") {
     val originalQuery = testRelation.where('a like Literal(null, StringType)).analyze
     val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, testRelation.where(Literal(false, BooleanType)).analyze)
+    comparePlans(optimized, testRelation.where(Literal(null, BooleanType)).analyze)
   }
 
   test("optimize limit queries that start with single underscore.") {
-      val singleUnderscoreStarsWithQuery =
-        testRelation
-          .where('a like "_abc")
-      val optimized = Optimize.execute(singleUnderscoreStarsWithQuery.analyze)
-      val correctAnswer = testRelation
-        .where(
-            And(EqualTo(Length('a), Literal(4)),
-              EndsWith('a, Literal("abc"))))
-        .analyze
-      comparePlans(optimized, correctAnswer)
+    val singleUnderscoreStarsWithQuery =
+      testRelation
+        .where('a like "_abc")
+    val optimized = Optimize.execute(singleUnderscoreStarsWithQuery.analyze)
+    val correctAnswer = testRelation
+      .where(
+        And(EqualTo(Length('a), Literal(4)),
+          EndsWith('a, Literal("abc"))))
+      .analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   test("optimize limit queries that end with single underscore.") {
-      val singleUnderscoreEndsWithQuery =
-        testRelation
-          .where('a like "abc_")
-      val optimized = Optimize.execute(singleUnderscoreEndsWithQuery.analyze)
-      val correctAnswer = testRelation
-        .where(
-            And(EqualTo(Length('a), Literal(4)),
-              StartsWith('a, Literal("abc"))))
-        .analyze
-      comparePlans(optimized, correctAnswer)
+    val singleUnderscoreEndsWithQuery =
+      testRelation
+        .where(('a like "abc_") || ('a like "ghi\\_"))
+    val optimized = Optimize.execute(singleUnderscoreEndsWithQuery.analyze)
+    val correctAnswer = testRelation
+      .where(
+        And(EqualTo(Length('a), Literal(4)),
+          StartsWith('a, Literal("abc"))) || ('a like "ghi\\_"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   test("expressions that start and end with single underscore, " +
     "underscore optimization should be ignored.") {
-      val singleUnderscoreEndsWithQuery =
-        testRelation
-          .where('a like "_abc_")
-      val optimized = Optimize.execute(singleUnderscoreEndsWithQuery.analyze)
-      val correctAnswer = testRelation
+    val singleUnderscoreEndsWithQuery =
+      testRelation
         .where('a like "_abc_")
-        .analyze
-      comparePlans(optimized, correctAnswer)
+    val optimized = Optimize.execute(singleUnderscoreEndsWithQuery.analyze)
+    val correctAnswer = testRelation
+      .where('a like "_abc_")
+      .analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   test("optimize limit queries that have single underscore in between.") {
-      val singleUnderscoreInQuery =
-        testRelation
-          .where('a like "abc_def")
-      val optimized = Optimize.execute(singleUnderscoreInQuery.analyze)
-      val correctAnswer = testRelation
-        .where(
-          And(EqualTo(Length('a), Literal(7)),
-              And(StartsWith('a, Literal("abc")),
-                EndsWith('a, Literal("def")))))
-        .analyze
-      comparePlans(optimized, correctAnswer)
+    val singleUnderscoreInQuery =
+      testRelation
+        .where(('a like "abc_def") || ('a like "abc\\_def"))
+    val optimized = Optimize.execute(singleUnderscoreInQuery.analyze)
+    val correctAnswer = testRelation
+      .where(
+        And(EqualTo(Length('a), Literal(7)),
+          And(StartsWith('a, Literal("abc")),
+            EndsWith('a, Literal("def")))) || ('a like "abc\\_def"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   test("Ignore optimization in the case of multiple underscore characters") {
-      val singleUnderscoreInQuery =
-        testRelation
-          .where('a like "abc__def")
-      val optimized = Optimize.execute(singleUnderscoreInQuery.analyze)
-      val correctAnswer = testRelation
+    val singleUnderscoreInQuery =
+      testRelation
         .where('a like "abc__def")
-        .analyze
-      comparePlans(optimized, correctAnswer)
+    val optimized = Optimize.execute(singleUnderscoreInQuery.analyze)
+    val correctAnswer = testRelation
+      .where('a like "abc__def")
+      .analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   test("Ignore optimization in the case of multiple single underscore characters") {
-      val singleUnderscoreInQuery =
-        testRelation
-          .where('a like "abc_def_ghi")
-      val optimized = Optimize.execute(singleUnderscoreInQuery.analyze)
-      val correctAnswer = testRelation
+    val singleUnderscoreInQuery =
+      testRelation
         .where('a like "abc_def_ghi")
-        .analyze
-      comparePlans(optimized, correctAnswer)
+    val optimized = Optimize.execute(singleUnderscoreInQuery.analyze)
+    val correctAnswer = testRelation
+      .where('a like "abc_def_ghi")
+      .analyze
+    comparePlans(optimized, correctAnswer)
   }
 }

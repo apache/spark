@@ -481,13 +481,13 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
   private val endsWithUnderscore = "([^_%]+)_".r
   private val startsWithUnderscore = "_([^_%]+)".r
-  private val startsAndEndsWithUnderscore = "([^_%]+)_([^_%]+)".r
+  private val singleUnderScoreInPattern = "([^_%]+)_([^_%]+)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(input, Literal(pattern, StringType)) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
-        Literal(false, BooleanType)
+        Literal(null, BooleanType)
       } else {
         pattern.toString match {
           case startsWith(prefix) if !prefix.endsWith("\\") =>
@@ -504,7 +504,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
           case equalTo(str) =>
             EqualTo(input, Literal(str))
           // case: abc_
-          case endsWithUnderscore(prefix) =>
+          case endsWithUnderscore(prefix) if !prefix.endsWith("\\") =>
             And(EqualTo(Length(input), Literal(prefix.length + 1)),
               StartsWith(input, Literal(prefix)))
           // case: _abc
@@ -512,7 +512,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
             And(EqualTo(Length(input), Literal(suffix.length + 1)),
               EndsWith(input, Literal(suffix)))
           // case: abc_xyz
-          case startsAndEndsWithUnderscore(prefix, suffix) =>
+          case singleUnderScoreInPattern(prefix, suffix) if !prefix.endsWith("\\") =>
             And(EqualTo(Length(input), Literal(prefix.length + suffix.length + 1)),
               And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(suffix))))
           case _ =>
