@@ -75,6 +75,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     when(mockContext.env) thenReturn (mockEnvironment)
     val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
     val registry = PrivateMethod[MetricRegistry]('registry)
+
     val laFirst = mockContext.longAccumulator
     val laSecond = mockContext.longAccumulator
     val laThird = mockContext.longAccumulator
@@ -82,9 +83,11 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
       LongAccumulatorSource.register(mockContext, Map("laF" -> laFirst, "laS" -> laSecond))
     LongAccumulatorSource.register(mockContext, Map("laT" -> laThird))
     assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 2)
+
     val notRegisteredSource = new LongAccumulatorSource
     metricsSystem.removeSource(notRegisteredSource)
     assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 2)
+
     metricsSystem.removeSource(laSource)
     assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
     assert(metricsSystem.invokePrivate(registry()).getNames.contains("AccumulatorSource.laT"))

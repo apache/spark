@@ -20,9 +20,10 @@ package org.apache.spark.metrics
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import scala.collection.{mutable, JavaConverters}
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import com.codahale.metrics.{Metric, MetricRegistry}
+import com.codahale.metrics.MetricRegistry
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -152,10 +153,10 @@ private[spark] class MetricsSystem private (
     } else { defaultName }
   }
 
-  private[spark] def getRegisteredNames(source: Source): Seq[String] = {
+  private[spark] def getRegisteredNames(source: Source): mutable.Set[String] = {
     val sourceNamePrefix = buildRegistryName(source)
     val metricNames = source.metricRegistry.getMetrics.keySet()
-    JavaConverters.asScalaSet(metricNames).map(k => s"${sourceNamePrefix}.${k}").toSeq
+    metricNames.asScala.map(k => MetricRegistry.name(sourceNamePrefix, k))
   }
 
   def getSourcesByName(sourceName: String): Seq[Source] =
@@ -176,7 +177,7 @@ private[spark] class MetricsSystem private (
     if (index != -1) {
       sources.remove(index)
       val regNames = getRegisteredNames(source)
-      registry.removeMatching((name: String, _: Metric) => regNames.contains(name))
+      regNames.foreach(k => registry.remove(k))
     }
   }
 
