@@ -34,7 +34,8 @@ package object kafka010 {   // scalastyle:ignore
 
   private[kafka010] val CONSUMER_CACHE_CAPACITY =
     ConfigBuilder("spark.kafka.consumer.cache.capacity")
-      .doc("The number of consumers cached.")
+      .doc("The maximum number of consumers cached. Please note it's a soft limit" +
+        " (check Structured Streaming Kafka integration guide for further details).")
       .intConf
       .createWithDefault(64)
 }
