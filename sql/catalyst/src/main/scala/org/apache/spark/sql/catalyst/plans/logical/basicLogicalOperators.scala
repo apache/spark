@@ -230,9 +230,19 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
   }
 
   // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] =
-    children.map(_.output).transpose.map(attrs =>
-      attrs.head.withNullability(attrs.exists(_.nullable)))
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
