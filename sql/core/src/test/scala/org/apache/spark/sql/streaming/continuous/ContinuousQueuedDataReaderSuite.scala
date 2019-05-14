@@ -44,7 +44,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
     super.beforeEach()
     epochEndpoint = EpochCoordinatorRef.create(
       mock[StreamingWrite],
-      mock[ContinuousStream],
+      mock[Seq[ContinuousStream]],
       mock[ContinuousExecution],
       coordinatorId,
       startEpoch,
@@ -94,7 +94,8 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
       new StructType().add("i", "int"),
       mockContext,
       dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize,
-      epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs)
+      epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs,
+      1)
 
     (queue, reader)
   }

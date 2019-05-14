@@ -59,7 +59,7 @@ class EpochCoordinatorSuite
         .set(CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE, epochBacklogQueueSize)))
 
     epochCoordinator
-      = EpochCoordinatorRef.create(writeSupport, stream, query, "test", 1, spark, SparkEnv.get)
+      = EpochCoordinatorRef.create(writeSupport, Seq(stream), query, "test", 1, spark, SparkEnv.get)
   }
 
   test("single epoch") {
@@ -267,7 +267,7 @@ class EpochCoordinatorSuite
 
   private def reportPartitionOffset(partitionId: Int, epoch: Long): Unit = {
     val dummyOffset: PartitionOffset = mock[PartitionOffset]
-    epochCoordinator.send(ReportPartitionOffset(partitionId, epoch, dummyOffset))
+    epochCoordinator.send(ReportPartitionOffset(1, partitionId, epoch, dummyOffset))
   }
 
   private def makeSynchronousCall(): Unit = {

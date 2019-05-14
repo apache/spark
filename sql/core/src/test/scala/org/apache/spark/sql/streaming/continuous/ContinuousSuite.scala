@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
-import org.apache.spark.sql.streaming.{StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
 
 class ContinuousSuiteBase extends StreamTest {
@@ -224,6 +224,44 @@ class ContinuousSuite extends ContinuousSuiteBase {
 
     val results = spark.read.table("noharness").collect()
     assert(Set(0, 1, 2, 3).map(Row(_)).subsetOf(results.toSet))
+  }
+
+  test("query with multiple stream") {
+    val input1 = ContinuousMemoryStream[Int]
+    val input2 = ContinuousMemoryStream[Int]
+
+    val df1 = input1.toDF()
+    val df2 = input2.toDF()
+    val df = df1.union(df2)
+
+    testStream(df)(
+      StartStream(),
+      AddData(input1, 0, 1),
+      AddData(input2, 2, 3),
+      CheckAnswer(0, 1, 2, 3),
+      StopStream)
+  }
+
+  test("aggregate with multiple stream") {
+    val input1 = ContinuousMemoryStream[Int]
+    val input2 = ContinuousMemoryStream[Int]
+
+    val df1 = input1.toDF()
+    val df2 = input2.toDF()
+    val df = df1.union(df2).coalesce(1).agg(max('value))
+
+    testStream(df, OutputMode.Complete)(
+      StartStream(),
+      AddData(input1, 0, 1),
+      AddData(input2, 2, 3),
+      CheckAnswer(3),
+      StopStream,
+      AddData(input1, 3, 4, 5),
+      StartStream(),
+      CheckAnswer(5),
+      AddData(input2, -1, -2, -3),
+      CheckAnswer(5),
+      StopStream)
   }
 }
 
