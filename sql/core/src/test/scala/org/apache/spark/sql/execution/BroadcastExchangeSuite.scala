@@ -36,11 +36,11 @@ class BroadcastExchangeSuite extends SparkPlanTest with SharedSQLContext {
     var jobEvents: Seq[SparkListenerEvent] = Seq.empty[SparkListenerEvent]
     spark.sparkContext.addSparkListener(new SparkListener {
       override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        jobEvents +:= jobEnd
+        jobEvents :+= jobEnd
         endLatch.countDown()
       }
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        jobEvents +:= jobStart
+        jobEvents :+= jobStart
         startLatch.countDown()
       }
     })
@@ -72,8 +72,8 @@ class BroadcastExchangeSuite extends SparkPlanTest with SharedSQLContext {
 
     def jobCancelled(): Boolean = {
       val events = jobEvents.toArray
-      val hasStart = events(1).isInstanceOf[SparkListenerJobStart]
-      val hasCancelled = events(0).asInstanceOf[SparkListenerJobEnd].jobResult
+      val hasStart = events(0).isInstanceOf[SparkListenerJobStart]
+      val hasCancelled = events(1).asInstanceOf[SparkListenerJobEnd].jobResult
         .asInstanceOf[JobFailed].exception.getMessage.contains("cancelled job group")
       events.length == 2 && hasStart && hasCancelled
     }

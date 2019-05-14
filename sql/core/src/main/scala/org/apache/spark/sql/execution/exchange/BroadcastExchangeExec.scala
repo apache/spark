@@ -163,9 +163,6 @@ case class BroadcastExchangeExec(
           s"You can increase the timeout for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or " +
           s"disable broadcast join by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1",
           ex)
-      case NonFatal(ex) =>
-        throw new SparkException("Exception thrown in Future.get: ", ex)
-
     }
   }
 }
