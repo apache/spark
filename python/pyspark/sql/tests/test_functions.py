@@ -19,6 +19,7 @@ import datetime
 import sys
 
 from pyspark.sql import Row
+from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
