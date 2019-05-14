@@ -168,6 +168,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /** Set multiple parameters together */
+  def setAll(settings: Iterable[(String, String)]): SparkConf = {
+    settings.foreach { case (k, v) => set(k, v) }
+    this
+  }
+
+  /**
+   * Set multiple parameters together
+   */
+  @deprecated("Use setAll(Iterable) instead", "3.0.0")
   def setAll(settings: Traversable[(String, String)]): SparkConf = {
     settings.foreach { case (k, v) => set(k, v) }
     this

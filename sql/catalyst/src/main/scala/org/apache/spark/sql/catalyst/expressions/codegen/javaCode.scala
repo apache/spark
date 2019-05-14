@@ -183,7 +183,7 @@ trait Block extends TreeNode[Block] with JavaCode {
     def doTransform(arg: Any): AnyRef = arg match {
       case e: ExprValue => transform(e)
       case Some(value) => Some(doTransform(value))
-      case seq: Traversable[_] => seq.map(doTransform)
+      case seq: Iterable[_] => seq.map(doTransform)
       case other: AnyRef => other
     }
 
