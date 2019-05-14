@@ -529,9 +529,9 @@ private[parquet] class ParquetFilters(
       case sources.Or(lhs, rhs) =>
         for {
           lhsFilter <-
-            createFilterHelper(nameToParquetField, lhs, canPartialPushDownConjuncts = false)
+            createFilterHelper(nameToParquetField, lhs, canPartialPushDownConjuncts = true)
           rhsFilter <-
-            createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts = false)
+            createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts = true)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>

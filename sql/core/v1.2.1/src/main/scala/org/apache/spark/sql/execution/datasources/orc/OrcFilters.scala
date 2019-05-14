@@ -176,11 +176,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
       case Or(left, right) =>
         for {
-          _ <- createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts = false)
-          _ <- createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts = false)
+          _ <- createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts = true)
+          _ <- createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts = true)
           lhs <- createBuilder(dataTypeMap, left,
-            builder.startOr(), canPartialPushDownConjuncts = false)
-          rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts = false)
+            builder.startOr(), canPartialPushDownConjuncts = true)
+          rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts = true)
         } yield rhs.end()
 
       case Not(child) =>
