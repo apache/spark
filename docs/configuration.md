@@ -222,6 +222,25 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.executor.resource.{resourceType}.count</code></td>
+  <td>0</td>
+  <td>
+    The number of a particular resource type to use per executor process.
+    If this is used, you must also specify the
+    <code>spark.executor.resource.{resourceType}.discoveryScript</code>
+    for the executor to find the resource on startup.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.resource.{resourceType}.discoveryScript</code></td>
+  <td>None</td>
+  <td>
+    A script for the executor to run to discover a particular resource type. This should
+    write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
+    name and an array of addresses.
+  </td>
+</tr>
+<tr>
   <td><code>spark.extraListeners</code></td>
   <td>(none)</td>
   <td>
@@ -1791,6 +1810,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>1</td>
   <td>
     Number of cores to allocate for each task.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.task.resource.{resourceType}.count</code></td>
+  <td>1</td>
+  <td>
+    Number of a particular resource type to allocate for each task. If this is specified
+    you must also provide the executor config <code>spark.executor.resource.{resourceType}.count</code>
+    and any corresponding discovery configs so that your executors are created with that resource type.
   </td>
 </tr>
 <tr>
