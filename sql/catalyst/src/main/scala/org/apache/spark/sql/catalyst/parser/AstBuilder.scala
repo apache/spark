@@ -2031,7 +2031,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     if (temporary && ifNotExists) {
       operationNotAllowed("CREATE TEMPORARY TABLE ... IF NOT EXISTS", ctx)
     }
-    val multipartIdentifier: Seq[String] = ctx.multipartIdentifier.parts.asScala.map(_.getText)
+    val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText)
     (multipartIdentifier, temporary, ifNotExists, ctx.EXTERNAL != null)
   }
 
