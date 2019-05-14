@@ -48,6 +48,7 @@ COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
 
 ENV SPARK_HOME /opt/spark
+ENV LD_LIBRARY_PATH /lib64/
 
 WORKDIR /opt/spark/work-dir
 RUN chmod g+w /opt/spark/work-dir
