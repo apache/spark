@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
@@ -29,7 +30,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Spark-opinionated builder for Kubernetes clients. It uses a prefix plus common suffixes to
@@ -46,6 +47,16 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       sparkConf: SparkConf,
       defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
+    val websocketTimeout =
+      sparkConf.getOption(s"$kubernetesAuthConfPrefix.websocketTimeout")
+    val websocketPingInterval =
+      sparkConf.getOption(s"$kubernetesAuthConfPrefix.websocketPingInterval")
+    val connectTimeout =
+      sparkConf.getOption(s"$kubernetesAuthConfPrefix.connectTimeout")
+    val readTimeout =
+      sparkConf.getOption(s"$kubernetesAuthConfPrefix.readTimeout")
+    val writeTimeout =
+      sparkConf.getOption(s"$kubernetesAuthConfPrefix.writeTimeout")
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
     val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
@@ -97,10 +108,21 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       }.withOption(namespace) {
         (ns, configBuilder) => configBuilder.withNamespace(ns)
       }.build()
+
+    websocketTimeout.map(Utils.timeStringAsMs).foreach(config.setWebsocketTimeout)
+    websocketPingInterval.map(Utils.timeStringAsMs).foreach(config.setWebsocketPingInterval)
+
     val baseHttpClient = HttpClientUtils.createHttpClient(config)
-    val httpClientWithCustomDispatcher = baseHttpClient.newBuilder()
-      .dispatcher(dispatcher)
-      .build()
+    val builder = baseHttpClient.newBuilder().dispatcher(dispatcher)
+
+    connectTimeout.map(Utils.timeStringAsMs)
+      .foreach(builder.connectTimeout(_, TimeUnit.MILLISECONDS))
+    readTimeout.map(Utils.timeStringAsMs)
+      .foreach(builder.readTimeout(_, TimeUnit.MILLISECONDS))
+    writeTimeout.map(Utils.timeStringAsMs)
+      .foreach(builder.writeTimeout(_, TimeUnit.MILLISECONDS))
+
+    val httpClientWithCustomDispatcher = builder.build()
     new DefaultKubernetesClient(httpClientWithCustomDispatcher, config)
   }
 
