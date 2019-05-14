@@ -3188,7 +3188,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     else:
         return _create_udf(f=f, returnType=return_type, evalType=eval_type)
 
-
     def test_input_file_name_reset_for_rdd(self):
         from pyspark.sql.functions import udf, input_file_name
         rdd = self.sc.textFile('python/test_support/hello/hello.txt').map(lambda x: {'data': x})
