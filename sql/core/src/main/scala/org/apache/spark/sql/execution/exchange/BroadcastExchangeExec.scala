@@ -44,6 +44,7 @@ case class BroadcastExchangeExec(
     child: SparkPlan) extends Exchange {
 
   override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
@@ -97,7 +98,7 @@ case class BroadcastExchangeExec(
               throw new SparkException("[BUG] BroadcastMode.transform returned unexpected type: " +
                   relation.getClass.getName)
           }
-
+          longMetric("numOutputRows") += numRows
           longMetric("dataSize") += dataSize
           if (dataSize >= (8L << 30)) {
             throw new SparkException(
