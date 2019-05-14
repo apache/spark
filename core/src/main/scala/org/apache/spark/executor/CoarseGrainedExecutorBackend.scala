@@ -159,7 +159,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         execResources)
 
       logInfo("===============================================================================")
-      logInfo("Executor $executorId Resources:")
+      logInfo(s"Executor $executorId Resources:")
       execResources.foreach { case (k, v) => logInfo(s"$k -> $v") }
       logInfo("===============================================================================")
 
