@@ -409,7 +409,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
     * Get all parameters that start with `prefix` and end with 'postfix'
     */
-  def getAllWithPrefixAndPostFix(prefix: String, postfix: String): Array[(String, String)] = {
+  def getAllWithPrefixAndPostfix(prefix: String, postfix: String): Array[(String, String)] = {
     getAll.filter { case (k, v) => k.startsWith(prefix) && k.endsWith(postfix) }
       .map { case (k, v) => (k.substring(prefix.length, (k.length - postfix.length)), v) }
   }
@@ -598,9 +598,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     // Make sure the executor resources were specified and are large enough if
     // any task resources were specified.
     val taskResourcesAndCount =
-    getAllWithPrefixAndPostFix(SPARK_TASK_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_POSTFIX).toMap
+    getAllWithPrefixAndPostfix(SPARK_TASK_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_POSTFIX).toMap
     val executorResourcesAndCounts =
-      getAllWithPrefixAndPostFix(SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_POSTFIX).toMap
+      getAllWithPrefixAndPostfix(SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_POSTFIX).toMap
 
     taskResourcesAndCount.foreach { case (rName, taskCount) =>
       val execCount = executorResourcesAndCounts.get(rName).getOrElse(

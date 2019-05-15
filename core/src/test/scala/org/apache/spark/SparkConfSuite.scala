@@ -115,7 +115,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set("spark.prefix.main.postfix", "v1")
     val prefix = "spark.prefix."
     val postfix = ".postfix"
-    assert(conf.getAllWithPrefixAndPostFix(prefix, postfix).toSet ===
+    assert(conf.getAllWithPrefixAndPostfix(prefix, postfix).toSet ===
       Set(("main", "v1")))
 
     conf.set("spark.prefix.main2.postfix", "v2")
@@ -123,7 +123,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set("spark.prefix.main4.extra2.nonmatchingpostfix", "v4")
     conf.set("spark.notmatchingprefix.main4.postfix", "v5")
 
-    assert(conf.getAllWithPrefixAndPostFix(prefix, postfix).toSet ===
+    assert(conf.getAllWithPrefixAndPostfix(prefix, postfix).toSet ===
       Set(("main", "v1"), ("main2", "v2"), ("main3.extra1", "v3")))
   }
 
