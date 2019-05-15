@@ -307,9 +307,9 @@ class ForeachWriterAbortSuite extends StreamTest with SharedSQLContext with Befo
     SparkSession.cleanupAnyExistingSession()
     val sc = new SparkContext(sparkConf) {
       override private[spark] def createSparkEnv(
-                                                  conf: SparkConf,
-                                                  isLocal: Boolean,
-                                                  listenerBus: LiveListenerBus): SparkEnv = {
+          conf: SparkConf,
+          isLocal: Boolean,
+          listenerBus: LiveListenerBus): SparkEnv = {
         mockOutputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
