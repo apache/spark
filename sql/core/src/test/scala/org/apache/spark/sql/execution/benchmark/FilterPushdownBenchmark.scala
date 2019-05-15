@@ -403,7 +403,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
           Seq(1, 250, 500).foreach { numFilter =>
-            val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" or ")
+            val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" and ")
             // Note: InferFiltersFromConstraints will add more filters to this given filters
             filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
           }
