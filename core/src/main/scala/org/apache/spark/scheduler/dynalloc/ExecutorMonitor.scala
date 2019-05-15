@@ -36,14 +36,19 @@ import org.apache.spark.util.Clock
 private[spark] class ExecutorMonitor(
     conf: SparkConf,
     client: ExecutorAllocationClient,
-    clock: Clock) extends SparkListener with Logging {
+    listenerBus: LiveListenerBus,
+    clock: Clock) extends SparkListener with CleanerListener with Logging {
 
   private val idleTimeoutMs = TimeUnit.SECONDS.toMillis(
     conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT))
   private val storageTimeoutMs = TimeUnit.SECONDS.toMillis(
     conf.get(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT))
+  private val shuffleTimeoutMs = conf.get(DYN_ALLOCATION_SHUFFLE_TIMEOUT)
+
   private val fetchFromShuffleSvcEnabled = conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
+  private val shuffleTrackingEnabled = !conf.get(SHUFFLE_SERVICE_ENABLED) &&
+    conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING)
 
   private val executors = new ConcurrentHashMap[String, Tracker]()
 
@@ -63,6 +68,26 @@ private[spark] class ExecutorMonitor(
   // from being removed.
   private val nextTimeout = new AtomicLong(Long.MaxValue)
   private var timedOutExecs = Seq.empty[String]
+
+  // Active job tracking.
+  //
+  // The following state is used when an external shuffle service is not in use, and allows Spark
+  // to scale down based on whether the shuffle data stored in executors is in use.
+  //
+  // The algorithm works as following: when jobs start, some state is kept that tracks which stages
+  // are part of that job, and which shuffle ID is attached to those stages. As tasks finish, the
+  // executor tracking code is updated to include the list of shuffles for which it's storing
+  // shuffle data.
+  //
+  // If executors hold shuffle data that is related to an active job, then the executor is
+  // considered to be in "shuffle busy" state; meaning that the executor is not allowed to be
+  // removed. If the executor has shuffle data but it doesn't relate to any active job, then it
+  // may be removed when idle, following the same timeout configuration used for cache blocks.
+  //
+  // The following fields are not thread-safe and should be only used from the event thread.
+  private val shuffleToActiveJobs = new mutable.HashMap[Int, mutable.ArrayBuffer[Int]]()
+  private val stageToShuffleID = new mutable.HashMap[Int, Int]()
+  private val jobToStageIDs = new mutable.HashMap[Int, Seq[Int]]()
 
   def reset(): Unit = {
     executors.clear()
@@ -85,7 +110,7 @@ private[spark] class ExecutorMonitor(
 
       var newNextTimeout = Long.MaxValue
       timedOutExecs = executors.asScala
-        .filter { case (_, exec) => !exec.pendingRemoval }
+        .filter { case (_, exec) => !exec.pendingRemoval && !exec.hasActiveShuffle }
         .filter { case (_, exec) =>
           val deadline = exec.timeoutAt
           if (deadline > now) {
@@ -124,6 +149,98 @@ private[spark] class ExecutorMonitor(
 
   def pendingRemovalCount: Int = executors.asScala.count { case (_, exec) => exec.pendingRemoval }
 
+  override def onJobStart(event: SparkListenerJobStart): Unit = {
+    if (!shuffleTrackingEnabled) {
+      return
+    }
+
+    val shuffleStages = event.stageInfos.flatMap { s =>
+      s.shuffleDepId.toSeq.map { shuffleId =>
+        s.stageId -> shuffleId
+      }
+    }
+
+    var updateExecutors = false
+    shuffleStages.foreach { case (sid, shuffle) =>
+      val jobIDs = shuffleToActiveJobs.get(shuffle) match {
+        case Some(jobs) =>
+          // If a shuffle is being re-used, we need to re-scan the executors and update their
+          // tracker with the information that the shuffle data they're storing is in use.
+          logDebug(s"Reusing shuffle $shuffle in job ${event.jobId}.")
+          updateExecutors = true
+          jobs
+
+        case _ =>
+          logDebug(s"Registered new shuffle $shuffle (from stage $sid).")
+          val jobs = new mutable.ArrayBuffer[Int]()
+          shuffleToActiveJobs(shuffle) = jobs
+          jobs
+      }
+      jobIDs += event.jobId
+    }
+
+    if (updateExecutors) {
+      val active = shuffleStages.map(_._2).toSeq
+      var needTimeoutUpdate = false
+      executors.asScala.foreach { case (id, exec) =>
+        if (!exec.hasActiveShuffle) {
+          exec.updateActiveShuffles(active)
+          if (exec.hasActiveShuffle) {
+            logDebug(s"Executor $id has data needed by new active job.")
+            needTimeoutUpdate = true
+          }
+        }
+      }
+
+      if (needTimeoutUpdate) {
+        nextTimeout.set(Long.MinValue)
+      }
+    }
+
+    stageToShuffleID ++= shuffleStages
+    jobToStageIDs(event.jobId) = shuffleStages.map(_._1).toSeq
+  }
+
+  override def onJobEnd(event: SparkListenerJobEnd): Unit = {
+    if (!shuffleTrackingEnabled) {
+      return
+    }
+
+    var updateExecutors = false
+    val activeShuffles = new mutable.ArrayBuffer[Int]()
+    shuffleToActiveJobs.foreach { case (shuffleId, jobs) =>
+      jobs -= event.jobId
+      if (jobs.nonEmpty) {
+        activeShuffles += shuffleId
+      } else {
+        // If a shuffle went idle we need to update all executors to make sure they're correctly
+        // tracking active shuffles.
+        updateExecutors = true
+      }
+    }
+
+    if (updateExecutors) {
+      if (log.isDebugEnabled()) {
+        if (activeShuffles.nonEmpty) {
+          logDebug(
+            s"Job ${event.jobId} ended, shuffles ${activeShuffles.mkString(",")} still active.")
+        } else {
+          logDebug(s"Job ${event.jobId} ended, no active shuffles remain.")
+        }
+      }
+
+      executors.asScala.foreach { case (id, exec) =>
+        if (exec.hasActiveShuffle) {
+          exec.updateActiveShuffles(activeShuffles)
+        }
+      }
+    }
+
+    jobToStageIDs.remove(event.jobId).foreach { stages =>
+      stages.foreach { id => stageToShuffleID -= id }
+    }
+  }
+
   override def onTaskStart(event: SparkListenerTaskStart): Unit = {
     val executorId = event.taskInfo.executorId
     // Guard against a late arriving task start event (SPARK-26927).
@@ -137,6 +254,21 @@ private[spark] class ExecutorMonitor(
     val executorId = event.taskInfo.executorId
     val exec = executors.get(executorId)
     if (exec != null) {
+      // If the task succeeded and the stage generates shuffle data, record that this executor
+      // holds data for the shuffle. Note that this ignores speculation, since this code is not
+      // directly tied to the map output tracker that knows exactly which shuffle blocks are
+      // being used. This means that an executor may be marked as having shuffle data even though
+      // it may not - although that's probably unlikely since it would require a single task for
+      // a stage to be run on that executor, and that particular task's output to not being used
+      // (because of another task for the same partition that ran somewhere else "winning").
+      if (shuffleTrackingEnabled && event.reason == Success) {
+        stageToShuffleID.get(event.stageId).foreach { shuffleId =>
+          exec.addShuffle(shuffleId)
+        }
+      }
+
+      // Update the number of running tasks after checking for shuffle data, so that the shuffle
+      // information is up-to-date in case the executor is going idle.
       exec.updateRunningTasks(-1)
     }
   }
@@ -171,7 +303,6 @@ private[spark] class ExecutorMonitor(
     // available. So don't count blocks that can be served by the external service.
     if (storageLevel.isValid && (!fetchFromShuffleSvcEnabled || !storageLevel.useDisk)) {
       val hadCachedBlocks = exec.cachedBlocks.nonEmpty
-
       val blocks = exec.cachedBlocks.getOrElseUpdate(blockId.rddId,
         new mutable.BitSet(blockId.splitIndex))
       blocks += blockId.splitIndex
@@ -201,6 +332,25 @@ private[spark] class ExecutorMonitor(
     }
   }
 
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+    case ShuffleCleanedEvent(id) => cleanupShuffle(id)
+    case _ =>
+  }
+
+  override def rddCleaned(rddId: Int): Unit = { }
+
+  override def shuffleCleaned(shuffleId: Int): Unit = {
+    // Because this is called in a completely separate thread, we post a custom event to the
+    // listener bus so that the internal state is safely updated.
+    listenerBus.post(ShuffleCleanedEvent(shuffleId))
+  }
+
+  override def broadcastCleaned(broadcastId: Long): Unit = { }
+
+  override def accumCleaned(accId: Long): Unit = { }
+
+  override def checkpointCleaned(rddId: Long): Unit = { }
+
   // Visible for testing.
   private[dynalloc] def isExecutorIdle(id: String): Boolean = {
     Option(executors.get(id)).map(_.isIdle).getOrElse(throw new NoSuchElementException(id))
@@ -209,7 +359,7 @@ private[spark] class ExecutorMonitor(
   // Visible for testing
   private[dynalloc] def timedOutExecutors(when: Long): Seq[String] = {
     executors.asScala.flatMap { case (id, tracker) =>
-      if (tracker.timeoutAt <= when) Some(id) else None
+      if (tracker.isIdle && tracker.timeoutAt <= when) Some(id) else None
     }.toSeq
   }
 
@@ -236,6 +386,14 @@ private[spark] class ExecutorMonitor(
     }
   }
 
+  private def cleanupShuffle(id: Int): Unit = {
+    logDebug(s"Cleaning up state related to shuffle $id.")
+    shuffleToActiveJobs -= id
+    executors.asScala.foreach { case (_, exec) =>
+      exec.removeShuffle(id)
+    }
+  }
+
   private class Tracker {
     @volatile var timeoutAt: Long = Long.MaxValue
 
@@ -244,6 +402,7 @@ private[spark] class ExecutorMonitor(
     @volatile var timedOut: Boolean = false
 
     var pendingRemoval: Boolean = false
+    var hasActiveShuffle: Boolean = false
 
     private var idleStart: Long = -1
     private var runningTasks: Int = 0
@@ -252,8 +411,11 @@ private[spark] class ExecutorMonitor(
     // This should only be used in the event thread.
     val cachedBlocks = new mutable.HashMap[Int, mutable.BitSet]()
 
-    // For testing.
-    def isIdle: Boolean = idleStart >= 0
+    // The set of shuffles for which shuffle data is held by the executor.
+    // This should only be used in the event thread.
+    private val shuffleIds = if (shuffleTrackingEnabled) new mutable.HashSet[Int]() else null
+
+    def isIdle: Boolean = idleStart >= 0 && !hasActiveShuffle
 
     def updateRunningTasks(delta: Int): Unit = {
       runningTasks = math.max(0, runningTasks + delta)
@@ -264,7 +426,18 @@ private[spark] class ExecutorMonitor(
     def updateTimeout(): Unit = {
       val oldDeadline = timeoutAt
       val newDeadline = if (idleStart >= 0) {
-        idleStart + (if (cachedBlocks.nonEmpty) storageTimeoutMs else idleTimeoutMs)
+        val timeout = if (cachedBlocks.nonEmpty || (shuffleIds != null && shuffleIds.nonEmpty)) {
+          val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutMs else Long.MaxValue
+          val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
+            shuffleTimeoutMs
+          } else {
+            Long.MaxValue
+          }
+          math.min(_cacheTimeout, _shuffleTimeout)
+        } else {
+          idleTimeoutMs
+        }
+        idleStart + timeout
       } else {
         Long.MaxValue
       }
@@ -279,5 +452,35 @@ private[spark] class ExecutorMonitor(
         updateNextTimeout(newDeadline)
       }
     }
+
+    def addShuffle(id: Int): Unit = {
+      if (shuffleIds.add(id)) {
+        hasActiveShuffle = true
+        if (!isIdle) {
+          updateTimeout()
+        }
+      }
+    }
+
+    def removeShuffle(id: Int): Unit = {
+      if (shuffleIds.remove(id) && shuffleIds.isEmpty) {
+        hasActiveShuffle = false
+        if (isIdle) {
+          updateTimeout()
+        }
+      }
+    }
+
+    def updateActiveShuffles(ids: Iterable[Int]): Unit = {
+      val hadActiveShuffle = hasActiveShuffle
+      hasActiveShuffle = ids.exists(shuffleIds.contains)
+      if (hadActiveShuffle && isIdle) {
+        updateTimeout()
+      }
+    }
+  }
+
+  private case class ShuffleCleanedEvent(id: Int) extends SparkListenerEvent {
+    override protected[spark] def logEvent: Boolean = false
   }
 }
