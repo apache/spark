@@ -613,6 +613,8 @@ class StructType(DataType):
                 return tuple(obj.get(n) for n in self.names)
             elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
                 return tuple(obj[n] for n in self.names)
+            elif isinstance(obj, Row) and hasattr(obj, "__fields__"):
+                return tuple(obj[n] for n in self.names)
             elif isinstance(obj, (list, tuple)):
                 return tuple(obj)
             elif hasattr(obj, "__dict__"):

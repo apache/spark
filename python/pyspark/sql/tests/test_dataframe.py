@@ -705,6 +705,12 @@ class DataFrameTests(ReusedSQLTestCase):
                     break
             self.assertEqual(df.take(8), result)
 
+    def test_different_col_order(self):
+        row = self.spark.createDataFrame(
+            self.sc.parallelize([Row(A="1", B="2")]), "B string, A string").first()
+        self.assertEqual(row['A'], "1")
+        self.assertEqual(row['B'], "2")
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
