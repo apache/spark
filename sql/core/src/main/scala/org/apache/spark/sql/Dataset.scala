@@ -696,10 +696,12 @@ class Dataset[T] private[sql](
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
     val parsedDelay =
       try {
-        CalendarInterval.fromUserString("interval " + delayThreshold)
+        CalendarInterval.fromCaseInsensitiveString(delayThreshold)
       } catch {
         case e: IllegalArgumentException =>
-          throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'", Some(e))
+          throw new AnalysisException(
+            s"Unable to parse time delay '$delayThreshold'",
+            cause = Some(e))
       }
     require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
       s"delay threshold ($delayThreshold) should not be negative.")
