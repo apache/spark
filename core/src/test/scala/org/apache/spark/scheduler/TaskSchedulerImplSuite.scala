@@ -77,7 +77,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
-    val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
+    setupSchedulerWithMaster("local", confs: _*)
+  }
+
+  def setupSchedulerWithMaster(master: String, confs: (String, String)*): TaskSchedulerImpl = {
+    val conf = new SparkConf().setMaster(master).setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
     taskScheduler = new TaskSchedulerImpl(sc)
@@ -155,7 +159,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler correctly accounts for multiple CPUs per task") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
     // Give zero core offers. Should not generate any tasks
     val zeroCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 0),
       new WorkerOffer("executor1", "host1", 0))
@@ -185,7 +191,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("Scheduler does not crash when tasks are not serializable") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
     val numFreeCores = 1
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
@@ -1113,135 +1121,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
-  test("SPARK-23433/25250 Completions in zombie tasksets update status of non-zombie taskset") {
-    val taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
-    val valueSer = SparkEnv.get.serializer.newInstance()
-
-    def completeTaskSuccessfully(tsm: TaskSetManager, partition: Int): Unit = {
-      val indexInTsm = tsm.partitionToIndex(partition)
-      val matchingTaskInfo = tsm.taskAttempts.flatten.filter(_.index == indexInTsm).head
-      val result = new DirectTaskResult[Int](valueSer.serialize(1), Seq())
-      tsm.handleSuccessfulTask(matchingTaskInfo.taskId, result)
-    }
-
-    // Submit a task set, have it fail with a fetch failed, and then re-submit the task attempt,
-    // two times, so we have three TaskSetManagers(2 zombie, 1 active) for one stage.  (For this
-    // to really happen, you'd need the previous stage to also get restarted, and then succeed,
-    // in between each attempt, but that happens outside what we're mocking here.)
-    val zombieAttempts = (0 until 2).map { stageAttempt =>
-      val attempt = FakeTask.createTaskSet(10, stageAttemptId = stageAttempt)
-      taskScheduler.submitTasks(attempt)
-      val tsm = taskScheduler.taskSetManagerForAttempt(0, stageAttempt).get
-      val offers = (0 until 10).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
-      taskScheduler.resourceOffers(offers)
-      assert(tsm.runningTasks === 10)
-      // fail attempt
-      tsm.handleFailedTask(tsm.taskAttempts.head.head.taskId, TaskState.FAILED,
-        FetchFailed(null, 0, 0, 0, "fetch failed"))
-      // the attempt is a zombie, but the tasks are still running (this could be true even if
-      // we actively killed those tasks, as killing is best-effort)
-      assert(tsm.isZombie)
-      assert(tsm.runningTasks === 9)
-      tsm
-    }
-    // we've now got 2 zombie attempts, each with 9 tasks still running. And there's no active
-    // attempt exists in taskScheduler by now.
-
-    // finish partition 1,2 by completing the tasks before a new attempt for the same stage submit.
-    // This is possible since the behaviour of submitting new attempt and handling successful task
-    // is from two different threads, which are "task-result-getter" and "dag-scheduler-event-loop"
-    // separately.
-    (0 until 2).foreach { i =>
-      completeTaskSuccessfully(zombieAttempts(i), i + 1)
-      assert(taskScheduler.stageIdToFinishedPartitions(0).contains(i + 1))
-    }
-
-    // Submit the 3rd attempt still with 10 tasks, this happens due to the race between thread
-    // "task-result-getter" and "dag-scheduler-event-loop", where a TaskSet gets submitted with
-    // already completed tasks. And this time with insufficient resources so not all tasks are
-    // active.
-    val finalAttempt = FakeTask.createTaskSet(10, stageAttemptId = 2)
-    taskScheduler.submitTasks(finalAttempt)
-    val finalTsm = taskScheduler.taskSetManagerForAttempt(0, 2).get
-    // Though finalTSM gets submitted with 10 tasks, the call to taskScheduler.submitTasks should
-    // realize that 2 tasks have already completed, and mark them appropriately, so it won't launch
-    // any duplicate tasks later (SPARK-25250).
-    (0 until 2).map(_ + 1).foreach { partitionId =>
-      val index = finalTsm.partitionToIndex(partitionId)
-      assert(finalTsm.successful(index))
-    }
-
-    val offers = (0 until 5).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
-    val finalAttemptLaunchedPartitions = taskScheduler.resourceOffers(offers).flatten.map { task =>
-      finalAttempt.tasks(task.index).partitionId
-    }.toSet
-    assert(finalTsm.runningTasks === 5)
-    assert(!finalTsm.isZombie)
-
-    // We continually simulate late completions from our zombie tasksets(but this time, there's one
-    // active attempt exists in taskScheduler), corresponding to all the pending partitions in our
-    // final attempt. This means we're only waiting on the tasks we've already launched.
-    val finalAttemptPendingPartitions = (0 until 10).toSet.diff(finalAttemptLaunchedPartitions)
-    finalAttemptPendingPartitions.foreach { partition =>
-      completeTaskSuccessfully(zombieAttempts(0), partition)
-      assert(taskScheduler.stageIdToFinishedPartitions(0).contains(partition))
-    }
-
-    // If there is another resource offer, we shouldn't run anything.  Though our final attempt
-    // used to have pending tasks, now those tasks have been completed by zombie attempts. The
-    // remaining tasks to compute are already active in the non-zombie attempt.
-    assert(
-      taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec-1", "host-1", 1))).flatten.isEmpty)
-
-    val remainingTasks = finalAttemptLaunchedPartitions.toIndexedSeq.sorted
-
-    // finally, if we finish the remaining partitions from a mix of tasksets, all attempts should be
-    // marked as zombie.
-    // for each of the remaining tasks, find the tasksets with an active copy of the task, and
-    // finish the task.
-    remainingTasks.foreach { partition =>
-      val tsm = if (partition == 0) {
-        // we failed this task on both zombie attempts, this one is only present in the latest
-        // taskset
-        finalTsm
-      } else {
-        // should be active in every taskset.  We choose a zombie taskset just to make sure that
-        // we transition the active taskset correctly even if the final completion comes
-        // from a zombie.
-        zombieAttempts(partition % 2)
-      }
-      completeTaskSuccessfully(tsm, partition)
-    }
-
-    assert(finalTsm.isZombie)
-
-    // no taskset has completed all of its tasks, so no updates to the blacklist tracker yet
-    verify(blacklist, never).updateBlacklistForSuccessfulTaskSet(anyInt(), anyInt(), any())
-
-    // finally, lets complete all the tasks.  We simulate failures in attempt 1, but everything
-    // else succeeds, to make sure we get the right updates to the blacklist in all cases.
-    (zombieAttempts ++ Seq(finalTsm)).foreach { tsm =>
-      val stageAttempt = tsm.taskSet.stageAttemptId
-      tsm.runningTasksSet.foreach { index =>
-        if (stageAttempt == 1) {
-          tsm.handleFailedTask(tsm.taskInfos(index).taskId, TaskState.FAILED, TaskResultLost)
-        } else {
-          val result = new DirectTaskResult[Int](valueSer.serialize(1), Seq())
-          tsm.handleSuccessfulTask(tsm.taskInfos(index).taskId, result)
-        }
-      }
-
-      // we update the blacklist for the stage attempts with all successful tasks.  Even though
-      // some tasksets had failures, we still consider them all successful from a blacklisting
-      // perspective, as the failures weren't from a problem w/ the tasks themselves.
-      verify(blacklist).updateBlacklistForSuccessfulTaskSet(meq(0), meq(stageAttempt), any())
-    }
-    assert(taskScheduler.stageIdToFinishedPartitions.isEmpty)
-  }
-
   test("don't schedule for a barrier taskSet if available slots are less than pending tasks") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
 
     val numFreeCores = 3
     val workerOffers = IndexedSeq(
@@ -1258,7 +1142,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("schedule tasks for a barrier taskSet if all tasks can be launched together") {
     val taskCpus = 2
-    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString)
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
 
     val numFreeCores = 3
     val workerOffers = IndexedSeq(

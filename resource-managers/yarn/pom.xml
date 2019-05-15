@@ -29,7 +29,7 @@
   <name>Spark Project YARN</name>
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
-    <jersey-1.version>1.9</jersey-1.version>
+    <jersey-1.version>1.19</jersey-1.version>
   </properties>
 
   <dependencies>
@@ -163,6 +163,12 @@
      <dependency>
        <groupId>com.sun.jersey.contribs</groupId>
        <artifactId>jersey-guice</artifactId>
+       <scope>test</scope>
+       <version>${jersey-1.version}</version>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey</groupId>
+       <artifactId>jersey-servlet</artifactId>
        <scope>test</scope>
        <version>${jersey-1.version}</version>
      </dependency>

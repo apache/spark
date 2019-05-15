@@ -66,6 +66,11 @@ case class DataSourceV2Relation(
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
   }
+
+  override def refresh(): Unit = table match {
+    case table: FileTable => table.fileIndex.refresh()
+    case _ => // Do nothing.
+  }
 }
 
 /**

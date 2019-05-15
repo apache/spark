@@ -25,19 +25,19 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CSVDataSourceV2 extends FileDataSourceV2 {
 
-  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[CSVFileFormat]
+  override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[CSVFileFormat]
 
   override def shortName(): String = "csv"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)
-    CSVTable(tableName, sparkSession, options, paths, None)
+    CSVTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)
-    CSVTable(tableName, sparkSession, options, paths, Some(schema))
+    CSVTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
   }
 }

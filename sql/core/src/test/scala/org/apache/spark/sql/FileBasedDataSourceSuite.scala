@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.{File, FileNotFoundException}
+import java.io.{File, FilenameFilter, FileNotFoundException}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT, NullData, NullUDT}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -332,7 +333,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       // TODO: test file source V2 after write path is fixed.
       Seq(true).foreach { useV1 =>
         val useV1List = if (useV1) {
-          "csv,orc"
+          "csv,json,orc"
         } else {
           ""
         }
@@ -489,6 +490,156 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           assert(bytesReads.sum === 7860)
         } finally {
           sparkContext.removeSparkListener(bytesReadListener)
+        }
+      }
+    }
+  }
+
+  test("Do not use cache on overwrite") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          val path = dir.toString
+          spark.range(1000).write.mode("overwrite").orc(path)
+          val df = spark.read.orc(path).cache()
+          assert(df.count() == 1000)
+          spark.range(10).write.mode("overwrite").orc(path)
+          assert(df.count() == 10)
+          assert(spark.read.orc(path).count() == 10)
+        }
+      }
+    }
+  }
+
+  test("Do not use cache on append") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          val path = dir.toString
+          spark.range(1000).write.mode("append").orc(path)
+          val df = spark.read.orc(path).cache()
+          assert(df.count() == 1000)
+          spark.range(10).write.mode("append").orc(path)
+          assert(df.count() == 1010)
+          assert(spark.read.orc(path).count() == 1010)
+        }
+      }
+    }
+  }
+
+  test("UDF input_file_name()") {
+    Seq("", "orc").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(10).write.orc(path)
+          val row = spark.read.orc(path).select(input_file_name).first()
+          assert(row.getString(0).contains(path))
+        }
+      }
+    }
+  }
+
+  test("Option pathGlobFilter: filter files correctly") {
+    withTempPath { path =>
+      val dataDir = path.getCanonicalPath
+      Seq("foo").toDS().write.text(dataDir)
+      Seq("bar").toDS().write.mode("append").orc(dataDir)
+      val df = spark.read.option("pathGlobFilter", "*.txt").text(dataDir)
+      checkAnswer(df, Row("foo"))
+
+      // Both glob pattern in option and path should be effective to filter files.
+      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*.orc")
+      checkAnswer(df2, Seq.empty)
+
+      val df3 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*xt")
+      checkAnswer(df3, Row("foo"))
+    }
+  }
+
+  test("Option pathGlobFilter: simple extension filtering should contains partition info") {
+    withTempPath { path =>
+      val input = Seq(("foo", 1), ("oof", 2)).toDF("a", "b")
+      input.write.partitionBy("b").text(path.getCanonicalPath)
+      Seq("bar").toDS().write.mode("append").orc(path.getCanonicalPath + "/b=1")
+
+      // If we use glob pattern in the path, the partition column won't be shown in the result.
+      val df = spark.read.text(path.getCanonicalPath + "/*/*.txt")
+      checkAnswer(df, input.select("a"))
+
+      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(path.getCanonicalPath)
+      checkAnswer(df2, input)
+    }
+  }
+
+  test("Return correct results when data columns overlap with partition columns") {
+    Seq("parquet", "orc", "json").foreach { format =>
+      withTempPath { path =>
+        val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
+        Seq((1, 2, 3, 4, 5)).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+          .write.format(format).save(tablePath.getCanonicalPath)
+
+        val df = spark.read.format(format).load(path.getCanonicalPath)
+          .select("CoL1", "Col2", "CoL5", "CoL3")
+        checkAnswer(df, Row("a", 2, "e", "c"))
+      }
+    }
+  }
+
+  test("sizeInBytes should be the total size of all files") {
+    Seq("orc", "").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          dir.delete()
+          spark.range(1000).write.orc(dir.toString)
+          // ignore hidden files
+          val allFiles = dir.listFiles(new FilenameFilter {
+            override def accept(dir: File, name: String): Boolean = {
+              !name.startsWith(".") && !name.startsWith("_")
+            }
+          })
+          val totalSize = allFiles.map(_.length()).sum
+          val df = spark.read.orc(dir.toString)
+          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(totalSize))
+        }
+      }
+    }
+  }
+
+  test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
+    Seq(1.0, 0.5).foreach { compressionFactor =>
+      withSQLConf("spark.sql.sources.fileCompressionFactor" -> compressionFactor.toString,
+        "spark.sql.autoBroadcastJoinThreshold" -> "250") {
+        withTempPath { workDir =>
+          // the file size is 486 bytes
+          val workDirPath = workDir.getAbsolutePath
+          val data1 = Seq(100, 200, 300, 400).toDF("count")
+          data1.write.orc(workDirPath + "/data1")
+          val df1FromFile = spark.read.orc(workDirPath + "/data1")
+          val data2 = Seq(100, 200, 300, 400).toDF("count")
+          data2.write.orc(workDirPath + "/data2")
+          val df2FromFile = spark.read.orc(workDirPath + "/data2")
+          val joinedDF = df1FromFile.join(df2FromFile, Seq("count"))
+          if (compressionFactor == 0.5) {
+            val bJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case bJoin: BroadcastHashJoinExec => bJoin
+            }
+            assert(bJoinExec.nonEmpty)
+            val smJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case smJoin: SortMergeJoinExec => smJoin
+            }
+            assert(smJoinExec.isEmpty)
+          } else {
+            // compressionFactor is 1.0
+            val bJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case bJoin: BroadcastHashJoinExec => bJoin
+            }
+            assert(bJoinExec.isEmpty)
+            val smJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case smJoin: SortMergeJoinExec => smJoin
+            }
+            assert(smJoinExec.nonEmpty)
+          }
         }
       }
     }

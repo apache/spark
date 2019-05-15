@@ -33,6 +33,8 @@ import org.apache.spark.sql.types._
  */
 trait CheckAnalysis extends PredicateHelper {
 
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
   /**
    * Override to provide additional checks for correct analysis.
    * These rules will be evaluated after our built-in check rules.
@@ -178,7 +180,7 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
-            def isAggregateExpression(expr: Expression) = {
+            def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
 
@@ -296,6 +298,21 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
+          case CreateTableAsSelect(_, _, partitioning, query, _, _, _) =>
+            val references = partitioning.flatMap(_.references).toSet
+            val badReferences = references.map(_.fieldNames).flatMap { column =>
+              query.schema.findNestedField(column) match {
+                case Some(_) =>
+                  None
+                case _ =>
+                  Some(s"${column.quoted} is missing or is in a map or array")
+              }
+            }
+
+            if (badReferences.nonEmpty) {
+              failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
+            }
+
           case _ => // Fallbacks to the following checks
         }
 
@@ -375,6 +392,25 @@ trait CheckAnalysis extends PredicateHelper {
           case _: UnresolvedHint =>
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
+
+          case f @ Filter(condition, _)
+            if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
+            val invalidExprSqls = PlanHelper.specialExpressionsInUnsupportedOperator(f).map(_.sql)
+            failAnalysis(
+              s"""
+                 |Aggregate/Window/Generate expressions are not valid in where clause of the query.
+                 |Expression in where clause: [${condition.sql}]
+                 |Invalid expressions: [${invalidExprSqls.mkString(", ")}]""".stripMargin)
+
+          case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
+            val invalidExprSqls =
+              PlanHelper.specialExpressionsInUnsupportedOperator(other).map(_.sql)
+            failAnalysis(
+              s"""
+                 |The query operator `${other.nodeName}` contains one or more unsupported
+                 |expression types Aggregate, Window or Generate.
+                 |Invalid expressions: [${invalidExprSqls.mkString(", ")}]""".stripMargin
+            )
 
           case _ => // Analysis successful!
         }

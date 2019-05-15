@@ -81,14 +81,14 @@ if (!(Test-Path $tools)) {
 # ========================== Maven
 Push-Location $tools
 
-$mavenVer = "3.6.0"
+$mavenVer = "3.6.1"
 Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 
 # extract
 Invoke-Expression "7z.exe x maven.zip"
 
 # add maven to environment variables
-$env:Path += ";$tools\apache-maven-$mavenVer\bin"
+$env:PATH = "$tools\apache-maven-$mavenVer\bin;" + $env:PATH
 $env:M2_HOME = "$tools\apache-maven-$mavenVer"
 $env:MAVEN_OPTS = "-Xmx2g -XX:ReservedCodeCacheSize=512m"
 

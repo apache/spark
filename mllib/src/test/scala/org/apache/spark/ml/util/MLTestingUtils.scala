@@ -24,7 +24,6 @@ import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasWeightCol
-import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
@@ -255,8 +254,8 @@ object MLTestingUtils extends SparkFunSuite {
    * one having double array "features" column with float precision, and one having float array
    * "features" column.
    */
-  def generateArrayFeatureDataset(dataset: Dataset[_],
-    featuresColName: String = "features"): (Dataset[_], Dataset[_], Dataset[_]) = {
+  def generateArrayFeatureDataset(dataset: DataFrame,
+    featuresColName: String = "features"): (DataFrame, DataFrame, DataFrame) = {
     val toFloatVectorUDF = udf { (features: Vector) =>
       Vectors.dense(features.toArray.map(_.toFloat.toDouble))}
     val toDoubleArrayUDF = udf { (features: Vector) => features.toArray}

@@ -35,7 +35,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // LeftSemi/LeftAnti over Project
     case Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-      if pList.forall(_.deterministic) &&
+        if pList.forall(_.deterministic) &&
         !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
         canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
       if (joinCond.isEmpty) {
@@ -52,79 +52,29 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     // LeftSemi/LeftAnti over Aggregate
-    case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-      if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
+    case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), _, _)
+        if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
         !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
-      if (joinCond.isEmpty) {
-        // No join condition, just push down Join below Aggregate
-        agg.copy(child = Join(agg.child, rightOp, joinType, joinCond, hint))
-      } else {
-        val aliasMap = PushDownPredicate.getAliasMap(agg)
-
-        // For each join condition, expand the alias and check if the condition can be evaluated
-        // using attributes produced by the aggregate operator's child operator.
-        val (pushDown, stayUp) = splitConjunctivePredicates(joinCond.get).partition { cond =>
-          val replaced = replaceAlias(cond, aliasMap)
-          cond.references.nonEmpty &&
-            replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
-        }
-
-        // Check if the remaining predicates do not contain columns from the right
-        // hand side of the join. Since the remaining predicates will be kept
-        // as a filter over aggregate, this check is necessary after the left semi
-        // or left anti join is moved below aggregate. The reason is, for this kind
-        // of join, we only output from the left leg of the join.
-        val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
-
-        if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
-          val pushDownPredicate = pushDown.reduce(And)
-          val replaced = replaceAlias(pushDownPredicate, aliasMap)
-          val newAgg = agg.copy(child = Join(agg.child, rightOp, joinType, Option(replaced), hint))
-          // If there is no more filter to stay up, just return the Aggregate over Join.
-          // Otherwise, create "Filter(stayUp) <- Aggregate <- Join(pushDownPredicate)".
-          if (stayUp.isEmpty) newAgg else Filter(stayUp.reduce(And), newAgg)
-        } else {
-          // The join condition is not a subset of the Aggregate's GROUP BY columns,
-          // no push down.
-          join
-        }
+      val aliasMap = PushDownPredicate.getAliasMap(agg)
+      val canPushDownPredicate = (predicate: Expression) => {
+        val replaced = replaceAlias(predicate, aliasMap)
+        predicate.references.nonEmpty &&
+          replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
       }
+      val makeJoinCondition = (predicates: Seq[Expression]) => {
+        replaceAlias(predicates.reduce(And), aliasMap)
+      }
+      pushDownJoin(join, canPushDownPredicate, makeJoinCondition)
 
     // LeftSemi/LeftAnti over Window
-    case join @ Join(w: Window, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-      if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
-      if (joinCond.isEmpty) {
-        // No join condition, just push down Join below Window
-        w.copy(child = Join(w.child, rightOp, joinType, joinCond, hint))
-      } else {
-        val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references)) ++
-          rightOp.outputSet
-
-        val (pushDown, stayUp) = splitConjunctivePredicates(joinCond.get).partition { cond =>
-          cond.references.subsetOf(partitionAttrs)
-        }
-
-        // Check if the remaining predicates do not contain columns from the right
-        // hand side of the join. Since the remaining predicates will be kept
-        // as a filter over window, this check is necessary after the left semi
-        // or left anti join is moved below window. The reason is, for this kind
-        // of join, we only output from the left leg of the join.
-        val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
-
-        if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
-          val predicate = pushDown.reduce(And)
-          val newPlan = w.copy(child = Join(w.child, rightOp, joinType, Option(predicate), hint))
-          if (stayUp.isEmpty) newPlan else Filter(stayUp.reduce(And), newPlan)
-        } else {
-          // The join condition is not a subset of the Window's PARTITION BY clause,
-          // no push down.
-          join
-        }
-      }
+    case join @ Join(w: Window, rightOp, LeftSemiOrAnti(_), _, _)
+        if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references)) ++ rightOp.outputSet
+      pushDownJoin(join, _.references.subsetOf(partitionAttrs), _.reduce(And))
 
     // LeftSemi/LeftAnti over Union
-    case join @ Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-      if canPushThroughCondition(union.children, joinCond, rightOp) =>
+    case Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
+        if canPushThroughCondition(union.children, joinCond, rightOp) =>
       if (joinCond.isEmpty) {
         // Push down the Join below Union
         val newGrandChildren = union.children.map { Join(_, rightOp, joinType, joinCond, hint) }
@@ -143,11 +93,10 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     // LeftSemi/LeftAnti over UnaryNode
-    case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-      if PushDownPredicate.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
-      pushDownJoin(join, u.child) { joinCond =>
-        u.withNewChildren(Seq(Join(u.child, rightOp, joinType, joinCond, hint)))
-      }
+    case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(_), _, _)
+        if PushDownPredicate.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
+      val validAttrs = u.child.outputSet ++ rightOp.outputSet
+      pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
   }
 
   /**
@@ -170,28 +119,147 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-
   private def pushDownJoin(
       join: Join,
-      grandchild: LogicalPlan)(insertJoin: Option[Expression] => LogicalPlan): LogicalPlan = {
+      canPushDownPredicate: Expression => Boolean,
+      makeJoinCondition: Seq[Expression] => Expression): LogicalPlan = {
+    assert(join.left.children.length == 1)
+
     if (join.condition.isEmpty) {
-      insertJoin(None)
+      join.left.withNewChildren(Seq(join.copy(left = join.left.children.head)))
     } else {
       val (pushDown, stayUp) = splitConjunctivePredicates(join.condition.get)
-        .partition {_.references.subsetOf(grandchild.outputSet ++ join.right.outputSet)}
+        .partition(canPushDownPredicate)
 
-      val rightOpColumns = AttributeSet(stayUp.toSet).intersect(join.right.outputSet)
-      if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
-        val newChild = insertJoin(Option(pushDown.reduceLeft(And)))
-        if (stayUp.nonEmpty) {
-          Filter(stayUp.reduceLeft(And), newChild)
-        } else {
-          newChild
-        }
-      } else {
+      // Check if the remaining predicates do not contain columns from the right hand side of the
+      // join. Since the remaining predicates will be kept as a filter over the operator under join,
+      // this check is necessary after the left-semi/anti join is pushed down. The reason is, for
+      // this kind of join, we only output from the left leg of the join.
+      val referRightSideCols = AttributeSet(stayUp.toSet).intersect(join.right.outputSet).nonEmpty
+
+      if (pushDown.isEmpty || referRightSideCols)  {
         join
+      } else {
+        val newPlan = join.left.withNewChildren(Seq(join.copy(
+          left = join.left.children.head, condition = Some(makeJoinCondition(pushDown)))))
+        // If there is no more filter to stay up, return the new plan that has join pushed down.
+        if (stayUp.isEmpty) {
+          newPlan
+        } else {
+          join.joinType match {
+            // In case of Left semi join, the part of the join condition which does not refer to
+            // to attributes of the grandchild are kept as a Filter above.
+            case LeftSemi => Filter(stayUp.reduce(And), newPlan)
+            // In case of left-anti join, the join is pushed down only when the entire join
+            // condition is eligible to be pushed down to preserve the semantics of left-anti join.
+            case _ => join
+          }
+        }
       }
     }
   }
 }
+
+/**
+ * This rule is a variant of [[PushPredicateThroughJoin]] which can handle
+ * pushing down Left semi and Left Anti joins below a join operator. The
+ * allowable join types are:
+ *  1) Inner
+ *  2) Cross
+ *  3) LeftOuter
+ *  4) RightOuter
+ *
+ * TODO:
+ * Currently this rule can push down the left semi or left anti joins to either
+ * left or right leg of the child join. This matches the behaviour of `PushPredicateThroughJoin`
+ * when the lefi semi or left anti join is in expression form. We need to explore the possibility
+ * to push the left semi/anti joins to both legs of join if the join condition refers to
+ * both left and right legs of the child join.
+ */
+object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Define an enumeration to identify whether a LeftSemi/LeftAnti join can be pushed down to
+   * the left leg or the right leg of the join.
+   */
+  object PushdownDirection extends Enumeration {
+    val TO_LEFT_BRANCH, TO_RIGHT_BRANCH, NONE = Value
+  }
+
+  object AllowedJoin {
+    def unapply(join: Join): Option[Join] = join.joinType match {
+      case Inner | Cross | LeftOuter | RightOuter => Some(join)
+      case _ => None
+    }
+  }
+
+  /**
+   * Determine which side of the join a LeftSemi/LeftAnti join can be pushed to.
+   */
+  private def pushTo(leftChild: Join, rightChild: LogicalPlan, joinCond: Option[Expression]) = {
+    val left = leftChild.left
+    val right = leftChild.right
+    val joinType = leftChild.joinType
+    val rightOutput = rightChild.outputSet
+
+    if (joinCond.nonEmpty) {
+      val conditions = splitConjunctivePredicates(joinCond.get)
+      val (leftConditions, rest) =
+        conditions.partition(_.references.subsetOf(left.outputSet ++ rightOutput))
+      val (rightConditions, commonConditions) =
+        rest.partition(_.references.subsetOf(right.outputSet ++ rightOutput))
+
+      if (rest.isEmpty && leftConditions.nonEmpty) {
+        // When the join conditions can be computed based on the left leg of
+        // leftsemi/anti join then push the leftsemi/anti join to the left side.
+        PushdownDirection.TO_LEFT_BRANCH
+      } else if (leftConditions.isEmpty && rightConditions.nonEmpty && commonConditions.isEmpty) {
+        // When the join conditions can be computed based on the attributes from right leg of
+        // leftsemi/anti join then push the leftsemi/anti join to the right side.
+        PushdownDirection.TO_RIGHT_BRANCH
+      } else {
+        PushdownDirection.NONE
+      }
+    } else {
+      /**
+       * When the join condition is empty,
+       * 1) if this is a left outer join or inner join, push leftsemi/anti join down
+       *    to the left leg of join.
+       * 2) if a right outer join, to the right leg of join,
+       */
+      joinType match {
+        case _: InnerLike | LeftOuter =>
+          PushdownDirection.TO_LEFT_BRANCH
+        case RightOuter =>
+          PushdownDirection.TO_RIGHT_BRANCH
+        case _ =>
+          PushdownDirection.NONE
+      }
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // push LeftSemi/LeftAnti down into the join below
+    case j @ Join(AllowedJoin(left), right, LeftSemiOrAnti(joinType), joinCond, parentHint) =>
+      val (childJoinType, childLeft, childRight, childCondition, childHint) =
+        (left.joinType, left.left, left.right, left.condition, left.hint)
+      val action = pushTo(left, right, joinCond)
+
+      action match {
+        case PushdownDirection.TO_LEFT_BRANCH
+          if (childJoinType == LeftOuter || childJoinType.isInstanceOf[InnerLike]) =>
+          // push down leftsemi/anti join to the left table
+          val newLeft = Join(childLeft, right, joinType, joinCond, parentHint)
+          Join(newLeft, childRight, childJoinType, childCondition, childHint)
+        case PushdownDirection.TO_RIGHT_BRANCH
+          if (childJoinType == RightOuter || childJoinType.isInstanceOf[InnerLike]) =>
+          // push down leftsemi/anti join to the right table
+          val newRight = Join(childRight, right, joinType, joinCond, parentHint)
+          Join(childLeft, newRight, childJoinType, childCondition, childHint)
+        case _ =>
+          // Do nothing
+          j
+      }
+  }
+}
+
 

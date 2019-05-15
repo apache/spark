@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import org.apache.orc.storage.common.`type`.HiveDecimal
-import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
-import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
-import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
-import org.apache.orc.storage.serde2.io.HiveDecimalWritable
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
+import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._

@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
@@ -180,7 +179,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val listeners = (1 to 5).map(_ => new EventCollector)
     try {
       listeners.foreach(listener => spark.streams.addListener(listener))
-      testStream(df, OutputMode.Append, useV2Sink = true)(
+      testStream(df, OutputMode.Append)(
         StartStream(Trigger.Continuous(1000)),
         StopStream,
         AssertOnQuery { query =>
@@ -297,8 +296,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       }
       spark.streams.addListener(listener)
       try {
+        var numTriggers = 0
         val input = new MemoryStream[Int](0, sqlContext) {
-          @volatile var numTriggers = 0
           override def latestOffset(): OffsetV2 = {
             numTriggers += 1
             super.latestOffset()
@@ -312,7 +311,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         }
         actions += AssertOnQuery { _ =>
           eventually(timeout(streamingTimeout)) {
-            assert(input.numTriggers > 100) // at least 100 triggers have occurred
+            assert(numTriggers > 100) // at least 100 triggers have occurred
           }
           true
         }

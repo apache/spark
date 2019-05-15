@@ -192,11 +192,9 @@ private[yarn] class YarnAllocator(
    * A sequence of pending container requests at the given location that have not yet been
    * fulfilled.
    */
-  private def getPendingAtLocation(location: String): Seq[ContainerRequest] = {
+  private def getPendingAtLocation(location: String): Seq[ContainerRequest] =
     amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala
       .flatMap(_.asScala)
-      .toSeq
-  }
 
   /**
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
@@ -384,7 +382,7 @@ private[yarn] class YarnAllocator(
   def stop(): Unit = {
     // Forcefully shut down the launcher pool, in case this is being called in the middle of
     // container allocation. This will prevent queued executors from being started - and
-    // potentially interrupt active ExecutorRunnable instaces too.
+    // potentially interrupt active ExecutorRunnable instances too.
     launcherPool.shutdownNow()
   }
 
@@ -434,7 +432,7 @@ private[yarn] class YarnAllocator(
         override def run(): Unit = {
           try {
             for (allocatedContainer <- remainingAfterHostMatches) {
-              val rack = resolver.resolve(conf, allocatedContainer.getNodeId.getHost)
+              val rack = resolver.resolve(allocatedContainer.getNodeId.getHost)
               matchContainerToRequest(allocatedContainer, rack, containersToUse,
                 remainingAfterRackMatches)
             }
@@ -467,7 +465,7 @@ private[yarn] class YarnAllocator(
         remainingAfterOffRackMatches)
     }
 
-    if (!remainingAfterOffRackMatches.isEmpty) {
+    if (remainingAfterOffRackMatches.nonEmpty) {
       logDebug(s"Releasing ${remainingAfterOffRackMatches.size} unneeded containers that were " +
         s"allocated to us")
       for (container <- remainingAfterOffRackMatches) {
@@ -550,35 +548,33 @@ private[yarn] class YarnAllocator(
       if (runningExecutors.size() < targetNumExecutors) {
         numExecutorsStarting.incrementAndGet()
         if (launchContainers) {
-          launcherPool.execute(new Runnable {
-            override def run(): Unit = {
-              try {
-                new ExecutorRunnable(
-                  Some(container),
-                  conf,
-                  sparkConf,
-                  driverUrl,
-                  executorId,
-                  executorHostname,
-                  executorMemory,
-                  executorCores,
-                  appAttemptId.getApplicationId.toString,
-                  securityMgr,
-                  localResources
-                ).run()
-                updateInternalState()
-              } catch {
-                case e: Throwable =>
-                  numExecutorsStarting.decrementAndGet()
-                  if (NonFatal(e)) {
-                    logError(s"Failed to launch executor $executorId on container $containerId", e)
-                    // Assigned container should be released immediately
-                    // to avoid unnecessary resource occupation.
-                    amClient.releaseAssignedContainer(containerId)
-                  } else {
-                    throw e
-                  }
-              }
+          launcherPool.execute(() => {
+            try {
+              new ExecutorRunnable(
+                Some(container),
+                conf,
+                sparkConf,
+                driverUrl,
+                executorId,
+                executorHostname,
+                executorMemory,
+                executorCores,
+                appAttemptId.getApplicationId.toString,
+                securityMgr,
+                localResources
+              ).run()
+              updateInternalState()
+            } catch {
+              case e: Throwable =>
+                numExecutorsStarting.decrementAndGet()
+                if (NonFatal(e)) {
+                  logError(s"Failed to launch executor $executorId on container $containerId", e)
+                  // Assigned container should be released immediately
+                  // to avoid unnecessary resource occupation.
+                  amClient.releaseAssignedContainer(containerId)
+                } else {
+                  throw e
+                }
             }
           })
         } else {
@@ -776,7 +772,7 @@ private[yarn] class YarnAllocator(
       }
     }
 
-    (localityMatched.toSeq, localityUnMatched.toSeq, localityFree.toSeq)
+    (localityMatched, localityUnMatched, localityFree)
   }
 
 }

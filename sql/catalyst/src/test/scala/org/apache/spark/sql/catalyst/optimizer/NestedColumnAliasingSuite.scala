@@ -140,7 +140,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("Pushing a single nested field projection - negative") {
-    val ops = Array(
+    val ops = Seq(
       (input: LogicalPlan) => input.distribute('name)(1),
       (input: LogicalPlan) => input.distribute($"name.middle")(1),
       (input: LogicalPlan) => input.orderBy('name.asc),
@@ -156,11 +156,15 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         .analyze
     }
 
-    val optimizedQueries = queries.map(Optimize.execute)
-    val expectedQueries = queries
+    val optimizedQueries :+ optimizedUnion = queries.map(Optimize.execute)
+    val expectedQueries = queries.init
     optimizedQueries.zip(expectedQueries).foreach { case (optimized, expected) =>
       comparePlans(optimized, expected)
     }
+    val expectedUnion =
+      contact.select('name).union(contact.select('name.as('name)))
+        .select(GetStructField('name, 1, Some("middle"))).analyze
+    comparePlans(optimizedUnion, expectedUnion)
   }
 
   test("Pushing a single nested field projection through filters - negative") {

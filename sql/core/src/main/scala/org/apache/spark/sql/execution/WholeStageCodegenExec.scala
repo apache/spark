@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -50,6 +51,7 @@ trait CodegenSupport extends SparkPlan {
     case _: SortMergeJoinExec => "smj"
     case _: RDDScanExec => "rdd"
     case _: DataSourceScanExec => "scan"
+    case _: InMemoryTableScanExec => "memoryScan"
     case _ => nodeName.toLowerCase(Locale.ROOT)
   }
 
@@ -382,13 +384,16 @@ trait CodegenSupport extends SparkPlan {
   def limitNotReachedChecks: Seq[String] = parent.limitNotReachedChecks
 
   /**
+   * Check if the node is supposed to produce limit not reached checks.
+   */
+  protected def canCheckLimitNotReached: Boolean = children.isEmpty
+
+  /**
    * A helper method to generate the data producing loop condition according to the
    * limit-not-reached checks.
    */
   final def limitNotReachedCond: String = {
-    // InputAdapter is also a leaf node.
-    val isLeafNode = children.isEmpty || this.isInstanceOf[InputAdapter]
-    if (!isLeafNode && !this.isInstanceOf[BlockingOperatorWithCodegen]) {
+    if (!canCheckLimitNotReached) {
       val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
         "in its data producing loop."
       if (Utils.isTesting) {
@@ -426,6 +431,9 @@ trait BlockingOperatorWithCodegen extends CodegenSupport {
   // that upstream operators will not generate useless conditions (which are always evaluated to
   // false) for the Limit operators after this blocking operator.
   override def limitNotReachedChecks: Seq[String] = Nil
+
+  // This is a blocking node so the node can produce these checks
+  override protected def canCheckLimitNotReached: Boolean = true
 }
 
 /**
@@ -499,6 +507,9 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
   }
 
   override def inputRDD: RDD[InternalRow] = child.execute()
+
+  // This is a leaf node so the node can produce limit not reached checks.
+  override protected def canCheckLimitNotReached: Boolean = true
 
   // InputAdapter does not need UnsafeProjection.
   protected val createUnsafeProjection: Boolean = false

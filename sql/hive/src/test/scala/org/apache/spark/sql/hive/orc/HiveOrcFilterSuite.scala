@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 
@@ -76,13 +77,25 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
     checkFilterPredicate(df, predicate, checkComparisonOperator)
   }
 
-  private def checkFilterPredicate
+  private def checkFilterPredicateWithDiffHiveVersion
       (predicate: Predicate, stringExpr: String)
       (implicit df: DataFrame): Unit = {
     def checkLogicalOperator(filter: SearchArgument) = {
-      assert(filter.toString == stringExpr)
+      if (HiveUtils.isHive23) {
+        assert(filter.toString == stringExpr.replace("\n", ", "))
+      } else {
+        assert(filter.toString == stringExpr)
+      }
     }
     checkFilterPredicate(df, predicate, checkLogicalOperator)
+  }
+
+  private def assertResultWithDiffHiveVersion(expected : String)(c : scala.Any) = {
+    if (HiveUtils.isHive23) {
+      assertResult(expected.replace("\n", ", "))(c)
+    } else {
+      assertResult(expected)(c)
+    }
   }
 
   private def checkNoFilterPredicate
@@ -295,30 +308,30 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       // such as `and`, `or` or `not`. So, this function uses `SearchArgument.toString()`
       // to produce string expression and then compare it to given string expression below.
       // This might have to be changed after Hive version is upgraded.
-      checkFilterPredicate(
+      checkFilterPredicateWithDiffHiveVersion(
         '_1.isNotNull,
         """leaf-0 = (IS_NULL _1)
           |expr = (not leaf-0)""".stripMargin.trim
       )
-      checkFilterPredicate(
+      checkFilterPredicateWithDiffHiveVersion(
         '_1 =!= 1,
         """leaf-0 = (IS_NULL _1)
           |leaf-1 = (EQUALS _1 1)
           |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
-      checkFilterPredicate(
+      checkFilterPredicateWithDiffHiveVersion(
         !('_1 < 4),
         """leaf-0 = (IS_NULL _1)
           |leaf-1 = (LESS_THAN _1 4)
           |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
-      checkFilterPredicate(
+      checkFilterPredicateWithDiffHiveVersion(
         '_1 < 2 || '_1 > 3,
         """leaf-0 = (LESS_THAN _1 2)
           |leaf-1 = (LESS_THAN_EQUALS _1 3)
           |expr = (or leaf-0 (not leaf-1))""".stripMargin.trim
       )
-      checkFilterPredicate(
+      checkFilterPredicateWithDiffHiveVersion(
         '_1 < 2 && '_1 > 3,
         """leaf-0 = (IS_NULL _1)
           |leaf-1 = (LESS_THAN _1 2)
@@ -341,9 +354,11 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       checkNoFilterPredicate('_1 <=> 1.b)
     }
     // DateType
-    val stringDate = "2015-01-01"
-    withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate)))) { implicit df =>
-      checkNoFilterPredicate('_1 === Date.valueOf(stringDate))
+    if (!HiveUtils.isHive23) {
+      val stringDate = "2015-01-01"
+      withOrcDataFrame(Seq(Tuple1(Date.valueOf(stringDate)))) { implicit df =>
+        checkNoFilterPredicate('_1 === Date.valueOf(stringDate))
+      }
     }
     // MapType
     withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
@@ -358,7 +373,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       Array(
         StructField("a", IntegerType, nullable = true),
         StructField("b", StringType, nullable = true)))
-    assertResult(
+    assertResultWithDiffHiveVersion(
       """leaf-0 = (LESS_THAN a 10)
         |expr = leaf-0
       """.stripMargin.trim
@@ -370,7 +385,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
     }
 
     // The `LessThan` should be converted while the whole inner `And` shouldn't
-    assertResult(
+    assertResultWithDiffHiveVersion(
       """leaf-0 = (LESS_THAN a 10)
         |expr = leaf-0
       """.stripMargin.trim
@@ -396,7 +411,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
     )).isEmpty)
 
     // Safely remove unsupported `StringContains` predicate and push down `LessThan`
-    assertResult(
+    assertResultWithDiffHiveVersion(
       """leaf-0 = (LESS_THAN a 10)
         |expr = leaf-0
       """.stripMargin.trim
@@ -410,7 +425,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
     }
 
     // Safely remove unsupported `StringContains` predicate, push down `LessThan` and `GreaterThan`.
-    assertResult(
+    assertResultWithDiffHiveVersion(
       """leaf-0 = (LESS_THAN a 10)
         |leaf-1 = (LESS_THAN_EQUALS a 1)
         |expr = (and leaf-0 (not leaf-1))
