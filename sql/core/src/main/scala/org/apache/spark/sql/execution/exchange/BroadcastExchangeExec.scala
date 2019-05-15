@@ -21,7 +21,7 @@ import java.util.UUID
 import java.util.concurrent._
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
+import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
@@ -59,14 +59,7 @@ case class BroadcastExchangeExec(
   }
 
   @transient
-  private val timeout: Duration = {
-    val timeoutValue = sqlContext.conf.broadcastTimeout
-    if (timeoutValue < 0) {
-      Duration.Inf
-    } else {
-      timeoutValue.seconds
-    }
-  }
+  private val timeout: Long = SQLConf.get.broadcastTimeout
 
   @transient
   private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
@@ -78,6 +71,7 @@ case class BroadcastExchangeExec(
         // with the correct execution.
         SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
           try {
+            // Setup a job group here so later it may get cancelled by groupId if necessary.
             sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
               interruptOnCancel = true)
             val beforeCollect = System.nanoTime()
@@ -152,14 +146,15 @@ case class BroadcastExchangeExec(
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
     try {
-      relationFuture.get(timeout.toSeconds, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
+      relationFuture.get(timeout, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
     } catch {
       case ex: TimeoutException =>
+        logError(s"Could not execute broadcast in $timeout secs.", ex)
         if (!relationFuture.isDone) {
           sparkContext.cancelJobGroup(runId.toString)
           relationFuture.cancel(true)
         }
-        throw new SparkException(s"Could not execute broadcast in ${timeout.toSeconds} secs. " +
+        throw new SparkException(s"Could not execute broadcast in $timeout secs. " +
           s"You can increase the timeout for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or " +
           s"disable broadcast join by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1",
           ex)

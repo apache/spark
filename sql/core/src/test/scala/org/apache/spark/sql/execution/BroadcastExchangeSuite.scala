@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.HashedRelation
+import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -76,6 +77,17 @@ class BroadcastExchangeSuite extends SparkPlanTest with SharedSQLContext {
       val hasCancelled = events(1).asInstanceOf[SparkListenerJobEnd].jobResult
         .asInstanceOf[JobFailed].exception.getMessage.contains("cancelled job group")
       events.length == 2 && hasStart && hasCancelled
+    }
+  }
+
+  test("set broadcastTimeout to -1") {
+    withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> "-1") {
+      val df = spark.range(1).toDF()
+      val joinDF = df.join(broadcast(df), "id")
+      val broadcastExchangeExec = joinDF.queryExecution.executedPlan
+        .collect { case p: BroadcastExchangeExec => p }
+      assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
+      assert(joinDF.collect().length == 1)
     }
   }
 }
