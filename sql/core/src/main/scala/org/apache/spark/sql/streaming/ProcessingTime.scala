@@ -76,18 +76,7 @@ object ProcessingTime {
    */
   @deprecated("use Trigger.ProcessingTime(interval)", "2.2.0")
   def apply(interval: String): ProcessingTime = {
-    if (StringUtils.isBlank(interval)) {
-      throw new IllegalArgumentException(
-        "interval cannot be null or blank.")
-    }
-    val cal = if (interval.startsWith("interval")) {
-      CalendarInterval.fromString(interval)
-    } else {
-      CalendarInterval.fromString("interval " + interval)
-    }
-    if (cal == null) {
-      throw new IllegalArgumentException(s"Invalid interval: $interval")
-    }
+    val cal = CalendarInterval.fromUserString(interval)
     if (cal.months > 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }
