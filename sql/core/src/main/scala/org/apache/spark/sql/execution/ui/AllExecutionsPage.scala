@@ -388,7 +388,7 @@ private[ui] class ExecutionPagedTable(
         +details
       </span> ++
       <div class="stage-details collapsed">
-        <pre>{execution.description}<br></br>{execution.details}</pre>
+        <pre>{Unparsed(execution.description)}<br></br>{execution.details}</pre>
       </div>
     } else {
       Nil
