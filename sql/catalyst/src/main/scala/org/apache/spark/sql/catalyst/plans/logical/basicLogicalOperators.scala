@@ -408,6 +408,17 @@ trait V2WriteCommand extends Command {
 }
 
 /**
+ * Create a new table with a v2 catalog.
+ */
+case class CreateV2Table(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    properties: Map[String, String],
+    ignoreIfExists: Boolean) extends Command
+
+/**
  * Create a new table from a select query with a v2 catalog.
  */
 case class CreateTableAsSelect(
