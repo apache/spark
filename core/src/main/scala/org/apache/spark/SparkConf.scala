@@ -406,6 +406,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
+  /**
+    * Get all parameters that start with `prefix` and end with 'postfix'
+    */
+  def getAllWithPrefixAndPostFix(prefix: String, postfix: String): Array[(String, String)] = {
+    getAll.filter { case (k, v) => k.startsWith(prefix) && k.endsWith(postfix) }
+      .map { case (k, v) => (k.substring(prefix.length, (k.length - postfix.length)), v) }
+  }
 
   /**
    * Get a parameter as an integer, falling back to a default if not set
@@ -587,6 +594,30 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
       s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be no less than the value of " +
       s"spark.executor.heartbeatInterval=${executorHeartbeatIntervalMs}ms.")
+
+    // Make sure the executor resources were specified and are large enough if
+    // any task resources were specified.
+    val taskResourcesAndCount =
+    getAllWithPrefixAndPostFix(SPARK_TASK_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_POSTFIX).toMap
+    val executorResourcesAndCounts =
+      getAllWithPrefixAndPostFix(SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_POSTFIX).toMap
+
+    taskResourcesAndCount.foreach { case (rName, taskCount) =>
+      val execCount = executorResourcesAndCounts.get(rName).getOrElse(
+        throw new SparkException(
+          s"The executor resource config: " +
+            s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_POSTFIX} " +
+            "needs to be specified since a task requirement config: " +
+            s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_POSTFIX} was specified")
+      )
+      if (execCount.toLong < taskCount.toLong) {
+        throw new SparkException(
+          s"The executor resource config: " +
+            s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_POSTFIX} " +
+            s"= $execCount has to be >= the task config: " +
+            s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_POSTFIX} = $taskCount")
+      }
+    }
   }
 
   /**

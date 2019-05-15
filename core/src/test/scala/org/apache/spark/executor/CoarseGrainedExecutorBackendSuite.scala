@@ -148,7 +148,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
-      assert(error.contains("doesn't meet the requirements of needing"))
+      assert(error.contains("Resource: gpu, with addresses: 0 is less than what the " +
+        "user requested: 2"))
     }
 
     // missing resource on the executor
@@ -163,7 +164,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
-      assert(error.contains("Executor resource config missing required task resource"))
+      assert(error.contains("Resource: gpu required but wasn't discovered on startup"))
     }
   }
 
@@ -189,33 +190,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
-      assert(error.contains("is less than what the user requested for count"))
-    }
-  }
-
-  test("parsing resources task configs with missing executor config") {
-    val conf = new SparkConf
-    conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
-    val serializer = new JavaSerializer(conf)
-    val env = createMockEnv(conf, serializer)
-    // we don't really use this, just need it to get at the parser function
-    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
-      4, Seq.empty[URL], env, None)
-
-    withTempDir { tmpDir =>
-      val gpuArgs =
-        ("name" -> "gpu") ~
-          ("addresses" -> Seq("0", "1"))
-      val ja = JArray(List(gpuArgs))
-      val f1 = writeFileWithJson(tmpDir, ja)
-
-      var error = intercept[SparkException] {
-        val parsedResources = backend.parseOrFindResources(Some(f1))
-      }.getMessage()
-
-      assert(error.contains("Resource: gpu not specified via config: " +
-        "spark.executor.resource.gpu.count, but required, please " +
-        "fix your configuration"))
+      assert(error.contains("gpu, with addresses: 0,1 is less than what the user requested: 4"))
     }
   }
 
