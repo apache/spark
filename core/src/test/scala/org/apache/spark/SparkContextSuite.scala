@@ -754,7 +754,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       eventually(timeout(10.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.size == 1)
       }
-      // DRIVER_GPU_ADDRESSES should take precedence over the script
+      assert(sc.resources().size === 1)
       assert(sc.resources().get("gpu").get.addresses === Array("5", "6"))
       assert(sc.resources().get("gpu").get.name === "gpu")
     }
@@ -781,56 +781,45 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       eventually(timeout(10.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.size == 1)
       }
-      // DRIVER_GPU_ADDRESSES should take precedence over the script
+      // driver gpu addresses config should take precedence over the script
+      assert(sc.resources().size === 1)
       assert(sc.resources().get("gpu").get.addresses === Array("0", "1", "8"))
       assert(sc.resources().get("gpu").get.name === "gpu")
     }
   }
 
   test("Test parsing resources task configs with missing executor config") {
-    withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val scriptPath = mockDiscoveryScript(gpuFile,
-        """'{"name": "gpu","addresses":["5", "6"]}'""")
+    val conf = new SparkConf()
+      .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_COUNT_POSTFIX, "1")
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
 
-      val conf = new SparkConf()
-        .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_COUNT_POSTFIX, "1")
-        .setMaster("local-cluster[1, 1, 1024]")
-        .setAppName("test-cluster")
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
 
-      var error = intercept[SparkException] {
-        sc = new SparkContext(conf)
-      }.getMessage()
-
-      assert(error.contains("The executor resource config: spark.executor.resource.gpu.count " +
-        "needs to be specified since a task requirement config: spark.task.resource.gpu.count " +
-        "was specified"))
-    }
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.count " +
+      "needs to be specified since a task requirement config: spark.task.resource.gpu.count " +
+      "was specified"))
   }
 
   test("Test parsing resources executor config < task requirements") {
-    withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val scriptPath = mockDiscoveryScript(gpuFile,
-        """'{"name": "gpu","addresses":["5", "6"]}'""")
+    val conf = new SparkConf()
+      .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_COUNT_POSTFIX, "2")
+      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_COUNT_POSTFIX, "1")
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
 
-      val conf = new SparkConf()
-        .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_COUNT_POSTFIX, "2")
-        .set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_COUNT_POSTFIX, "1")
-        .setMaster("local-cluster[1, 1, 1024]")
-        .setAppName("test-cluster")
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
 
-      var error = intercept[SparkException] {
-        sc = new SparkContext(conf)
-      }.getMessage()
-
-      assert(error.contains("The executor resource config: " +
-        "spark.executor.resource.gpu.count = 1 has to be >= the task config: " +
-        "spark.task.resource.gpu.count = 2"))
-    }
+    assert(error.contains("The executor resource config: " +
+      "spark.executor.resource.gpu.count = 1 has to be >= the task config: " +
+      "spark.task.resource.gpu.count = 2"))
   }
 
   def mockDiscoveryScript(file: File, result: String): String = {

@@ -45,8 +45,8 @@ private[spark] object ResourceDiscoverer extends Logging {
   /**
     * This function will discover information about a set of resources by using the
     * user specified script (spark.{driver/executor}.resource.{resourceName}.discoveryScript).
-    * This function either takes a set of resource names or if that isn't
-    * specified it uses the config prefix to look at the executor or driver configs
+    * It either takes a set of resource names or if that isn't specified
+    * it uses the config prefix to look at the executor or driver configs
     * to get the resource names. Then for each resource it will run the discovery script
     * and get the ResourceInformation about it.
     *

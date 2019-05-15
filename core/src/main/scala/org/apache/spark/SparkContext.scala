@@ -366,7 +366,8 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Checks to see if any resources (GPU/FPGA/etc) are available to the driver by looking
    * at and processing the spark.driver.resource.resourceName.addresses and
-   * spark.driver.resource.resourceName.discoveryScript configs.
+   * spark.driver.resource.resourceName.discoveryScript configs. The configs have to be
+   * present when the driver starts, setting them after startup does not work.
    *
    * If any resource addresses configs were specified then assume all resources will be specified
    * in that way. Otherwise use the discovery scripts to find the resources. Users should
