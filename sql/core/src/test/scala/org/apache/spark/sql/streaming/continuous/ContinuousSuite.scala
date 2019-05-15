@@ -226,7 +226,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
     assert(Set(0, 1, 2, 3).map(Row(_)).subsetOf(results.toSet))
   }
 
-  test("query with multiple stream") {
+  test("query with multiple streams") {
     val input1 = ContinuousMemoryStream[Int]
     val input2 = ContinuousMemoryStream[Int]
 
@@ -242,7 +242,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       StopStream)
   }
 
-  test("aggregate with multiple stream") {
+  test("aggregate with multiple streams") {
     val input1 = ContinuousMemoryStream[Int]
     val input2 = ContinuousMemoryStream[Int]
 

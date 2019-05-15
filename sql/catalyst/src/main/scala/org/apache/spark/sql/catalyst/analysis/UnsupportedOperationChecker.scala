@@ -362,7 +362,7 @@ object UnsupportedOperationChecker {
               s"aggregate operation ${node.nodeName}.")
           }
         case node =>
-          throwError(s"111, Continuous processing does not support ${node.nodeName} operations.")
+          throwError(s"Continuous processing does not support ${node.nodeName} operations.")
       }
 
       subPlan.expressions.foreach { e =>

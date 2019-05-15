@@ -302,8 +302,6 @@ class ContinuousExecution(
       epoch: Long,
       streams: Seq[ContinuousStream],
       partitionOffsets: Seq[(Int, PartitionOffset)]): Unit = {
-//    assert(sources.length == 1, "only one continuous source supported currently")
-
     val globalOffsets = streams.map(stream => {
       val thisStreamOffsets =
         partitionOffsets.collect { case (i, o) if i == stream.streamId() => o }
@@ -333,8 +331,6 @@ class ContinuousExecution(
    */
   def commit(epoch: Long): Unit = {
     updateStatusMessage(s"Committing epoch $epoch")
-
-//    assert(sources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
 
     synchronized {
