@@ -228,7 +228,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def getConf: SparkConf = conf.clone()
 
-  def resources(): Map[String, ResourceInformation] = _resources
+  def resources: Map[String, ResourceInformation] = _resources
 
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files

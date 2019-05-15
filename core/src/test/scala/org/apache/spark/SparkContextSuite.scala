@@ -754,9 +754,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       eventually(timeout(10.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.size == 1)
       }
-      assert(sc.resources().size === 1)
-      assert(sc.resources().get("gpu").get.addresses === Array("5", "6"))
-      assert(sc.resources().get("gpu").get.name === "gpu")
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get("gpu").get.addresses === Array("5", "6"))
+      assert(sc.resources.get("gpu").get.name === "gpu")
     }
   }
 
@@ -782,9 +782,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         assert(sc.statusTracker.getExecutorInfos.size == 1)
       }
       // driver gpu addresses config should take precedence over the script
-      assert(sc.resources().size === 1)
-      assert(sc.resources().get("gpu").get.addresses === Array("0", "1", "8"))
-      assert(sc.resources().get("gpu").get.name === "gpu")
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get("gpu").get.addresses === Array("0", "1", "8"))
+      assert(sc.resources.get("gpu").get.name === "gpu")
     }
   }
 
