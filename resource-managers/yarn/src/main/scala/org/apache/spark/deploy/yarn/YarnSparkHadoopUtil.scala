@@ -25,7 +25,8 @@ import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
@@ -39,6 +40,29 @@ object YarnSparkHadoopUtil {
   val MEMORY_OVERHEAD_MIN = 384L
 
   val ANY_HOST = "*"
+
+  val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
+  val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
+
+  // the only resources we know how to map from spark configs to yarn configs are
+  // gpus and fpgas, everything else the user has to specify themselves via the
+  // YARN_DRIVER_RESOURCE_TYPES_PREFIX or YARN_AM_RESOURCE_TYPES_PREFIX
+  private[yarn] def getYarnResourcesFromSparkResources(
+      confPrefix: String,
+      sparkConf: SparkConf
+      ): Map[String, String] = {
+    val sparkToYarnResources = new HashMap[String, String]()
+    Map("gpu" -> YARN_GPU_RESOURCE_CONFIG,
+        "fpga" -> YARN_FPGA_RESOURCE_CONFIG).foreach {
+      case (rName, yarnName) =>
+        val count = sparkConf.getOption(confPrefix + rName + SPARK_RESOURCE_COUNT_POSTFIX).
+          getOrElse("0")
+        if (count.toLong > 0) {
+          sparkToYarnResources(yarnName) = count
+        }
+    }
+    sparkToYarnResources.toMap
+  }
 
   // All RM requests are issued with same priority : we do not (yet) have any distinction between
   // request types (like map/reduce in hadoop for example)

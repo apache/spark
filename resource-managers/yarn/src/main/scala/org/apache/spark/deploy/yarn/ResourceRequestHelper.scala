@@ -26,6 +26,7 @@ import scala.util.Try
 import org.apache.hadoop.yarn.api.records.Resource
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -67,10 +68,14 @@ private object ResourceRequestHelper extends Logging {
       (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
+      (SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga.count",
+        YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + YARN_FPGA_RESOURCE_CONFIG),
+      (SPARK_DRIVER_RESOURCE_PREFIX + "fpga.count",
+        YARN_DRIVER_RESOURCE_TYPES_PREFIX + YARN_FPGA_RESOURCE_CONFIG),
       (SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu.count",
-        YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "yarn.io/gpu"),
+        YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + YARN_GPU_RESOURCE_CONFIG),
       (SPARK_DRIVER_RESOURCE_PREFIX + "gpu.count",
-        YARN_DRIVER_RESOURCE_TYPES_PREFIX + "yarn.io/gpu"))
+        YARN_DRIVER_RESOURCE_TYPES_PREFIX + YARN_GPU_RESOURCE_CONFIG))
 
     val errorMessage = new mutable.StringBuilder()
 
