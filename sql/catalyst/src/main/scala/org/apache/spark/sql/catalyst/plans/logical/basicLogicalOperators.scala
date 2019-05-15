@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -399,6 +401,28 @@ trait V2WriteCommand extends Command {
                 DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
                 (outAttr.nullable || !inAttr.nullable)
         }
+  }
+}
+
+/**
+ * Create a new table from a select query with a v2 catalog.
+ */
+case class CreateTableAsSelect(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    partitioning: Seq[Transform],
+    query: LogicalPlan,
+    properties: Map[String, String],
+    writeOptions: Map[String, String],
+    ignoreIfExists: Boolean) extends Command {
+
+  override def children: Seq[LogicalPlan] = Seq(query)
+
+  override lazy val resolved: Boolean = {
+    // the table schema is created from the query schema, so the only resolution needed is to check
+    // that the columns referenced by the table's partitioning exist in the query schema
+    val references = partitioning.flatMap(_.references).toSet
+    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
   }
 }
 

@@ -19,25 +19,34 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.StructType
 
-case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport  {
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.TransformHelper
+case class DataSourceResolution(
+    conf: SQLConf,
+    findCatalog: String => CatalogPlugin)
+  extends Rule[LogicalPlan] with CastSupport with LookupCatalog {
+
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
+  override def lookupCatalog: Option[String => CatalogPlugin] = Some(findCatalog)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
-        table, schema, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
-        location, comment, ifNotExists) =>
+        AsTableIdentifier(table), schema, partitionCols, bucketSpec, properties,
+        V1WriteProvider(provider), options, location, comment, ifNotExists) =>
 
       val tableDesc = buildCatalogTable(table, schema, partitionCols, bucketSpec, properties,
         provider, options, location, comment, ifNotExists)
@@ -46,14 +55,23 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
       CreateTable(tableDesc, mode, None)
 
     case CreateTableAsSelectStatement(
-        table, query, partitionCols, bucketSpec, properties, V1WriteProvider(provider), options,
-        location, comment, ifNotExists) =>
+        AsTableIdentifier(table), query, partitionCols, bucketSpec, properties,
+        V1WriteProvider(provider), options, location, comment, ifNotExists) =>
 
       val tableDesc = buildCatalogTable(table, new StructType, partitionCols, bucketSpec,
         properties, provider, options, location, comment, ifNotExists)
       val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
       CreateTable(tableDesc, mode, Some(query))
+
+    case create: CreateTableAsSelectStatement =>
+      // the provider was not a v1 source, convert to a v2 plan
+      val CatalogObjectIdentifier(maybeCatalog, identifier) = create.tableName
+      val catalog = maybeCatalog
+          .getOrElse(throw new AnalysisException(
+            s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
+          .asTableCatalog
+      convertCTAS(catalog, identifier, create)
   }
 
   object V1WriteProvider {
@@ -111,5 +129,55 @@ case class DataSourceResolution(conf: SQLConf) extends Rule[LogicalPlan] with Ca
       bucketSpec = bucketSpec,
       properties = properties,
       comment = comment)
+  }
+
+  private def convertCTAS(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      ctas: CreateTableAsSelectStatement): CreateTableAsSelect = {
+    if (ctas.options.contains("path") && ctas.location.isDefined) {
+      throw new AnalysisException(
+        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
+            "you can only specify one of them.")
+    }
+
+    if ((ctas.options.contains("provider") || ctas.properties.contains("provider"))
+        && ctas.comment.isDefined) {
+      throw new AnalysisException(
+        "COMMENT and option/property 'comment' are both used to set the table comment, you can " +
+            "only specify one of them.")
+    }
+
+    if (ctas.options.contains("provider") || ctas.properties.contains("provider")) {
+      throw new AnalysisException(
+        "USING and option/property 'provider' are both used to set the provider implementation, " +
+            "you can only specify one of them.")
+    }
+
+    val options = ctas.options.filterKeys(_ != "path")
+
+    // convert the bucket spec and add it as a transform
+    val partitioning = ctas.partitioning ++ ctas.bucketSpec.map(_.asTransform)
+
+    // create table properties from TBLPROPERTIES and OPTIONS clauses
+    val properties = new mutable.HashMap[String, String]()
+    properties ++= ctas.properties
+    properties ++= options
+
+    // convert USING, LOCATION, and COMMENT clauses to table properties
+    properties += ("provider" -> ctas.provider)
+    ctas.comment.map(text => properties += ("comment" -> text))
+    ctas.location
+        .orElse(ctas.options.get("path"))
+        .map(loc => properties += ("location" -> loc))
+
+    CreateTableAsSelect(
+      catalog,
+      identifier,
+      partitioning,
+      ctas.asSelect,
+      properties.toMap,
+      writeOptions = options,
+      ignoreIfExists = ctas.ifNotExists)
   }
 }
