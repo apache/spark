@@ -414,6 +414,16 @@ The following configurations are optional:
   issues, set the Kafka consumer session timeout (by setting option "kafka.session.timeout.ms") to
   be very small. When this is set, option "groupIdPrefix" will be ignored. </td>
 </tr>
+<tr>
+  <td>setCommitOffsetsOnCheckpoints</td>
+  <td>string</td>
+  <td>false</td>
+  <td>streaming</td>
+  <td>Whetherer to commit back the offsets read by the driver consumer per batch.
+  Due to the fact that each batch will get its offsets committed when a new is constructed there might be a lag
+  wrt last batch. 
+  </td>
+</tr>
 </table>
 
 ## Writing Data to Kafka

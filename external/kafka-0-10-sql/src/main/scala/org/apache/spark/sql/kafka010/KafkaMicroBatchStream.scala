@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.IOUtils
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -72,6 +73,11 @@ private[kafka010] class KafkaMicroBatchStream(
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
 
   private var endPartitionOffsets: KafkaSourceOffset = _
+
+  private lazy val offsetMetrics = new KafkaCommitsSource()
+
+  private val shouldSetCommitOffsetsOnCheckpoints =
+    Option(options.get("setCommitOffsetsOnCheckpoints")).exists(_.toBoolean)
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -168,7 +174,15 @@ private[kafka010] class KafkaMicroBatchStream(
     KafkaSourceOffset(JsonUtils.partitionOffsets(json))
   }
 
-  override def commit(end: Offset): Unit = {}
+  override def commit(end: Offset): Unit = {
+    if (shouldSetCommitOffsetsOnCheckpoints) {
+      end match {
+        case KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) =>
+          kafkaOffsetReader.commitOffsetsAsync(partitionToOffsets, offsetMetrics)
+        case _ =>
+      }
+    }
+  }
 
   override def stop(): Unit = {
     kafkaOffsetReader.close()

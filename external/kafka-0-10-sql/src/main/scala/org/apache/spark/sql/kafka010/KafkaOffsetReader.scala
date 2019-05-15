@@ -26,7 +26,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
-import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer, OffsetAndMetadata, OffsetCommitCallback}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
@@ -108,6 +108,34 @@ private[kafka010] class KafkaOffsetReader(
   def close(): Unit = {
     if (_consumer != null) runUninterruptibly { stopConsumer() }
     kafkaReaderThread.shutdown()
+  }
+
+  /**
+   * Commits offsets to the consumer_offsets topic
+   * for the driver consumer.
+  */
+  def commitOffsetsAsync(
+      partitionToOffsets: Map[TopicPartition, Long],
+      s: KafkaCommitsSource)
+    : Unit = {
+    if (_consumer != null) runUninterruptibly {
+     val commitCallback = new OffsetCommitCallback() {
+        override def onComplete(
+            offsets: ju.Map[TopicPartition,
+            OffsetAndMetadata], exception: Exception)
+        : Unit = {
+          if (exception != null) {
+            log.warn("Committing offsets to Kafka failed. This does " +
+              "not compromise Spark's checkpoints.", exception)
+            s.FAILED_COMMITS.inc()
+          } else {
+            s.SUCCESSFUL_COMMITS.inc()
+          }
+        }
+      }
+      val topicOffsetsMetadata = partitionToOffsets.map (p => (p._1, new OffsetAndMetadata(p._2)))
+      _consumer.commitAsync(topicOffsetsMetadata.asJava, commitCallback)
+    }
   }
 
   /**
