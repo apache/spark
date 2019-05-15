@@ -43,6 +43,8 @@ case class DataSourceResolution(
 
   override def lookupCatalog: Option[String => CatalogPlugin] = Some(findCatalog)
 
+  def defaultCatalog: Option[CatalogPlugin] = conf.defaultV2Catalog.map(findCatalog)
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
         AsTableIdentifier(table), schema, partitionCols, bucketSpec, properties,
@@ -67,7 +69,7 @@ case class DataSourceResolution(
     case create: CreateTableAsSelectStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = create.tableName
-      val catalog = maybeCatalog
+      val catalog = maybeCatalog.orElse(defaultCatalog)
           .getOrElse(throw new AnalysisException(
             s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
           .asTableCatalog
