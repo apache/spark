@@ -238,12 +238,23 @@ private[spark] class Client(
   def createApplicationSubmissionContext(
       newApp: YarnClientApplication,
       containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
-    val amResources =
+    var amResources =
       if (isClusterMode) {
         sparkConf.getAllWithPrefix(config.YARN_DRIVER_RESOURCE_TYPES_PREFIX).toMap
       } else {
         sparkConf.getAllWithPrefix(config.YARN_AM_RESOURCE_TYPES_PREFIX).toMap
       }
+    // map spark driver resource configs into yarn gpu config
+    val driverResources = sparkConf.getAllWithPrefixAndPostfix(SPARK_DRIVER_RESOURCE_PREFIX,
+      SPARK_RESOURCE_COUNT_POSTFIX)
+    driverResources.foreach { case (rName, count) =>
+        amResources ++ Map
+    }
+    if (driverGpus > 0) {
+      amResources = amResources ++
+        Map(YARN_GPU_RESOURCE_CONFIG -> driverGpus.toString)
+    }
+
     logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))
