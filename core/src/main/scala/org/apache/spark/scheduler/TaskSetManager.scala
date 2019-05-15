@@ -538,8 +538,7 @@ private[spark] class TaskSetManager(
         val extraResources = if (sched.GPUS_PER_TASK > 0) {
           // doing minimal checking here to keep things fast
           val indices = hostGpuIndices.take(sched.GPUS_PER_TASK).toArray
-          Map(ResourceInformation.GPU -> new ResourceInformation(gpuResources.getName(),
-            gpuResources.getUnits(), sched.GPUS_PER_TASK, indices))
+          Map(ResourceInformation.GPU -> new ResourceInformation(gpuResources.getName(), indices))
         } else {
           Map.empty[String, ResourceInformation]
         }

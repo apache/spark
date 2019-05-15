@@ -35,3 +35,8 @@ class ResourceInformation(
 
   override def toString: String = s"[name: ${name}, addresses: ${addresses.mkString(",")}]"
 }
+
+object ResourceInformation {
+  // known types of resources
+  final val GPU: String = "gpu"
+}

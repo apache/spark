@@ -525,13 +525,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         s"the size of device addresses is ${resourceAddresses.size}.")
     }
     val prefix = if (isDriver) {
-      s"$SPARK_DRIVER_RESOURCE_PREFIX.$resourceName"
+      s"$SPARK_DRIVER_RESOURCE_PREFIX$resourceName"
     } else {
-      s"$SPARK_EXECUTOR_RESOURCE_PREFIX.$resourceName"
+      s"$SPARK_EXECUTOR_RESOURCE_PREFIX$resourceName"
     }
-    set(s"$prefix.$SPARK_RESOURCE_COUNT", resourceCount.toString)
+    set(s"$prefix$SPARK_RESOURCE_COUNT_POSTFIX", resourceCount.toString)
     if (resourceAddresses.isDefined) {
-      set(s"$prefix.$SPARK_RESOURCE_ADDRESSES", resourceAddresses.get.mkString(","))
+      set(s"$prefix$SPARK_RESOURCE_ADDRESSES_POSTFIX", resourceAddresses.get.mkString(","))
     }
     this
   }
@@ -541,7 +541,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    */
   private[spark] def setResourceRequirement(
       resourceName: String, resourceCount: Int): SparkConf = {
-    val key = s"$SPARK_TASK_RESOURCE_PREFIX.$resourceName.$SPARK_RESOURCE_COUNT"
+    val key = s"$SPARK_TASK_RESOURCE_PREFIX$resourceName$SPARK_RESOURCE_COUNT_POSTFIX"
     set(key, resourceCount.toString)
     this
   }
@@ -562,10 +562,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       val keys = tuple._1.split("\\.")
       if (keys.size == 2) {
         val resourceName = keys.head
-        if (keys.last.equals(SPARK_RESOURCE_COUNT)) {
+        if (keys.last.equals(SPARK_RESOURCE_COUNT_POSTFIX)) {
           val resourceCount = tuple._2.toInt
           resourceCountMap.put(resourceName, resourceCount)
-        } else if (keys.last.equals(SPARK_RESOURCE_ADDRESSES)) {
+        } else if (keys.last.equals(SPARK_RESOURCE_ADDRESSES_POSTFIX)) {
           val resourceAddresses = tuple._2.split(",").map(_.trim())
           resourceAddressMap.put(resourceName, resourceAddresses)
         }
@@ -575,9 +575,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     resourceCountMap.map { case (resourceName, resourceCount) =>
       if (resourceAddressMap.contains(resourceName)) {
         val resourceAddresses = resourceAddressMap.get(resourceName).get
-        (resourceName, new ResourceInformation(resourceName, "", resourceCount, resourceAddresses))
+        (resourceName, new ResourceInformation(resourceName, resourceAddresses))
       } else {
-        (resourceName, new ResourceInformation(resourceName, "", resourceCount, Array.empty))
+        (resourceName, new ResourceInformation(resourceName, Array.empty))
       }
     }.toMap
   }
@@ -590,7 +590,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       val keys = tuple._1.split("\\.")
       val resourceName = keys.head
       if (keys.size == 2) {
-        if (keys.last.equals(SPARK_RESOURCE_COUNT)) {
+        if (keys.last.equals(SPARK_RESOURCE_COUNT_POSTFIX)) {
           val resourceCount = tuple._2.toInt
           (resourceName, resourceCount)
         } else {
@@ -696,7 +696,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           s"available on executors.")
       } else {
         val resourceInformation = resources.get(resourceName).get
-        val executorResourceCount = resourceInformation.getCount()
+        val executorResourceCount = resourceInformation.addresses.size
         if (executorResourceCount < resourceCount) {
           throw new SparkException(s"Available $resourceName resource count on executors is " +
             s"$executorResourceCount, which is less than the task requirement $resourceCount.")

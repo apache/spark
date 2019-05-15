@@ -352,7 +352,7 @@ private[spark] class TaskSchedulerImpl(
             executorIdToRunningTaskIds(execId).add(tid)
             availableCpus(i) -= CPUS_PER_TASK
             task.resources.get("gpu").foreach { addrs =>
-              availableGpuIndices(i) --= addrs.getAddresses()
+              availableGpuIndices(i) --= addrs.addresses
             }
             assert(availableCpus(i) >= 0 && availableGpuIndices(i).size >= 0)
             // Only update hosts for a barrier task.

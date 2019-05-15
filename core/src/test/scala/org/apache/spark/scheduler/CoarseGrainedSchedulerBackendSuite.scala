@@ -205,7 +205,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val baseUrl = s"http://newhost:9999/logs/clusters/${attributes("CLUSTER_ID")}" +
       s"/users/${attributes("USER")}/containers/${attributes("CONTAINER_ID")}"
     val resources = Map(ResourceInformation.GPU ->
-      new ResourceInformation(ResourceInformation.GPU, "", 3, Array("0", "1", "3")))
+      new ResourceInformation(ResourceInformation.GPU, Array("0", "1", "3")))
 
     var executorAddedCount: Int = 0
     val listener = new SparkListener() {
@@ -214,10 +214,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         assert(executorAdded.executorInfo.totalResources.get(ResourceInformation.GPU).nonEmpty)
         val totalResources = executorAdded.executorInfo.totalResources.
           get(ResourceInformation.GPU).get
-        assert(totalResources.getAddresses() === Array("0", "1", "3"))
-        assert(totalResources.getCount() == 3)
-        assert(totalResources.getName() == ResourceInformation.GPU)
-        assert(totalResources.getUnits() == "")
+        assert(totalResources.addresses === Array("0", "1", "3"))
+        assert(totalResources.name == ResourceInformation.GPU)
       }
     }
 
@@ -236,12 +234,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     var gpuExecResources = backend.getExecutorAvailableResources("1")
 
-    assert(gpuExecResources.get("gpu").get.getCount() === 3)
     assert(gpuExecResources.get("gpu").get.getAddresses() === Array("0", "1", "3"))
 
     var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
-      new Properties(), immutable.Map("gpu" -> new ResourceInformation("gpu", "", 1, Array("0"))),
+      new Properties(), immutable.Map("gpu" -> new ResourceInformation("gpu", Array("0"))),
       bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     // resource offer such that gpu 0 gets removed
@@ -251,17 +248,15 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     eventually(timeout(5 seconds), interval(10 millis)) {
       gpuExecResources = backend.getExecutorAvailableResources("1")
-      assert(gpuExecResources.get("gpu").get.getCount() === 2)
       assert(gpuExecResources.get("gpu").get.getAddresses() === Array("1", "3"))
     }
 
-    var finishedTaskResources = Map("gpu" -> new ResourceInformation("gpu", "", 1, Array("0")))
+    var finishedTaskResources = Map("gpu" -> new ResourceInformation("gpu", Array("0")))
     backend.driverEndpoint.send(
       StatusUpdate("1", 1, TaskState.FINISHED, buffer, finishedTaskResources))
 
     eventually(timeout(5 seconds), interval(10 millis)) {
       gpuExecResources = backend.getExecutorAvailableResources("1")
-      assert(gpuExecResources.get("gpu").get.getCount() === 3)
       assert(gpuExecResources.get("gpu").get.getAddresses() === Array("1", "3", "0"))
     }
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)

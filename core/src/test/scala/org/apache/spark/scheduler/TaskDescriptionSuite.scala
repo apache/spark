@@ -55,7 +55,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
     }
 
     val originalResources =
-      Map("gpu" -> new ResourceInformation("gpu", "", 3, Array("1", "2", "3")))
+      Map("gpu" -> new ResourceInformation("gpu", Array("1", "2", "3")))
 
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
@@ -94,10 +94,8 @@ class TaskDescriptionSuite extends SparkFunSuite {
         target: Map[String, ResourceInformation]): Boolean = {
       original.size == target.size && original.forall { case (name, info) =>
         target.get(name).exists { targetInfo =>
-          info.getName().equals(targetInfo.getName()) &&
-            info.getUnits().equals(targetInfo.getUnits()) &&
-            info.getCount() === targetInfo.getCount() &&
-            info.getAddresses().sameElements(targetInfo.getAddresses())
+          info.name.equals(targetInfo.name) &&
+            info.addresses.sameElements(targetInfo.addresses)
         }
       }
     }

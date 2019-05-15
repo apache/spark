@@ -76,11 +76,9 @@ private[spark] object TaskDescription {
     dataOut.writeInt(map.size)
     for ((key, value) <- map) {
       dataOut.writeUTF(key)
-      dataOut.writeUTF(value.getName())
-      dataOut.writeUTF(value.getUnits())
-      dataOut.writeLong(value.getCount())
-      dataOut.writeInt(value.getAddresses.size)
-      for (identifier <- value.getAddresses()) {
+      dataOut.writeUTF(value.name)
+      dataOut.writeInt(value.addresses.size)
+      for (identifier <- value.addresses) {
         dataOut.writeUTF(identifier)
       }
     }
@@ -140,14 +138,12 @@ private[spark] object TaskDescription {
     for (i <- 0 until mapSize) {
       val resType = dataIn.readUTF()
       val name = dataIn.readUTF()
-      val units = dataIn.readUTF()
-      val count = dataIn.readLong()
       val numIdentifier = dataIn.readInt()
       val identifiers = new ArrayBuffer[String](numIdentifier)
       for (j <- 0 until numIdentifier) {
         identifiers += dataIn.readUTF()
       }
-      map(resType) = new ResourceInformation(name, units, count, identifiers.toArray)
+      map(resType) = new ResourceInformation(name, identifiers.toArray)
     }
     map.toMap
   }

@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
@@ -66,7 +66,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   // to be changed so that we don't share the serializer instance across threads
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
-  private[this] val taskResources = new HashMap[Long, Map[String, ResourceInformation]]
+  private[this] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
   override def onStart() {
     logInfo("Connecting to driver: " + driverUrl)

@@ -148,8 +148,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               for ((k, v) <- resources) {
                 executorInfo.availableResources.get(k).foreach { r =>
-                  r.incCount(v.getCount())
-                  r.addAddresses(v.getAddresses())
+                  r.addAddresses(v.addresses)
                 }
               }
               makeOffers(executorId)
@@ -219,8 +218,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes, resources,
             mutable.Map.empty[String, SchedulerResourceInformation] ++= resources.mapValues(v =>
-              new SchedulerResourceInformation(v.getName(), v.getUnits(), v.getCount(),
-                v.getAddresses().to[ArrayBuffer])))
+              new SchedulerResourceInformation(v.name, v.addresses.to[ArrayBuffer])))
 
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
@@ -339,8 +337,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
           for ((k, v) <- task.resources) {
             executorData.availableResources.get(k).foreach { r =>
-              r.decCount(v.getCount())
-              r.removeAddresses(v.getAddresses())
+              r.removeAddresses(v.addresses)
             }
           }
 

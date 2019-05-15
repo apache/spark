@@ -453,14 +453,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     // only specify resource count
     conf.setResources("gpu", 2, None, false)
-    assert(conf.getResources(false).get("gpu").get.getCount() == 2)
-    assert(conf.getResources(false).get("gpu").get.getAddresses().sameElements(Array.empty[String]))
+    assert(conf.getResources(false).get("gpu").get.addresses.sameElements(Array.empty[String]))
     conf.validateSettings()
 
     // specify resource count and addresses
     conf.setResources("gpu", 2, Some(Seq("0", "1")), false)
-    assert(conf.getResources(false).get("gpu").get.getCount() == 2)
-    assert(conf.getResources(false).get("gpu").get.getAddresses().sameElements(Seq("0", "1")))
+    assert(conf.getResources(false).get("gpu").get.addresses.sameElements(Seq("0", "1")))
     conf.validateSettings()
 
     // conflict number of resource count and addresses size
@@ -471,8 +469,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     // specify resource on the driver
     assert(conf.getResources(true).isEmpty)
     conf.setResources("gpu", 2, Some(Seq("0", "1")), true)
-    assert(conf.getResources(true).get("gpu").get.getCount() == 2)
-    assert(conf.getResources(true).get("gpu").get.getAddresses().sameElements(Seq("0", "1")))
+    assert(conf.getResources(true).get("gpu").get.addresses.sameElements(Seq("0", "1")))
     conf.validateSettings()
   }
 

@@ -32,21 +32,9 @@ import org.apache.spark.internal.Logging
 @Evolving
 private[spark] class SchedulerResourceInformation(
     private val name: String,
-    private val units: String,
-    private var count: Long,
     private val addresses: ArrayBuffer[String] = ArrayBuffer.empty) extends Logging {
 
   def getName(): String = name
-  def getUnits(): String = units
-  def getCount(): Long = count
-
-  def decCount(cnt: Long): Unit = {
-    count -= cnt
-  }
-
-  def incCount(cnt: Long): Unit = {
-    count += cnt
-  }
 
   def getAddresses(): ArrayBuffer[String] = addresses
 
@@ -63,6 +51,6 @@ private[spark] class SchedulerResourceInformation(
   }
 }
 private[spark] object SchedulerResourceInformation {
-  def empty: SchedulerResourceInformation = new SchedulerResourceInformation(
-    ResourceInformation.GPU, "", 0, ArrayBuffer.empty[String])
+  def empty: SchedulerResourceInformation = new SchedulerResourceInformation("gpu",
+    ArrayBuffer.empty[String])
 }

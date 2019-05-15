@@ -1245,16 +1245,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val executorGpus = 4
     val executorCpus = 4
     val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString,
-      s"${config.SPARK_TASK_RESOURCE_PREFIX}.gpu.${config.SPARK_RESOURCE_COUNT}" ->
+      s"${config.SPARK_TASK_RESOURCE_PREFIX}gpu${config.SPARK_RESOURCE_COUNT_POSTFIX}" ->
         taskGpus.toString,
-      s"${config.SPARK_EXECUTOR_RESOURCE_PREFIX}.gpu.${config.SPARK_RESOURCE_COUNT}" ->
+      s"${config.SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${config.SPARK_RESOURCE_COUNT_POSTFIX}" ->
         executorGpus.toString,
       config.EXECUTOR_CORES.key -> executorCpus.toString)
     val taskSet = FakeTask.createTaskSet(3)
 
     val numFreeCores = 2
     val gpuresources = Map("gpu" ->
-      new SchedulerResourceInformation("gpu", "", 4, ArrayBuffer("0", "1", "2", "3")))
+      new SchedulerResourceInformation("gpu", ArrayBuffer("0", "1", "2", "3")))
     val singleCoreWorkerOffers =
       IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, gpuresources))
     val zeroGpuWorkerOffers =
@@ -1268,8 +1268,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
     assert(2 === taskDescriptions.length)
     assert(!failedTaskSet)
-    assert(1 === taskDescriptions(0).resources.get("gpu").get.getCount())
-    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get("gpu").get.getAddresses())
-    assert(ArrayBuffer("1") === taskDescriptions(1).resources.get("gpu").get.getAddresses())
+    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get("gpu").get.addresses)
+    assert(ArrayBuffer("1") === taskDescriptions(1).resources.get("gpu").get.addresses)
   }
 }
