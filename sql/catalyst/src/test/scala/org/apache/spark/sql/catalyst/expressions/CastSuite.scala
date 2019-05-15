@@ -963,16 +963,43 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       case _ => numericPrecedence.indexOf(from) <= numericPrecedence.indexOf(to)
     }
 
+    def makeComplexTypes(dt: NumericType, nullable: Boolean): Seq[DataType] = {
+      Seq(
+        new StructType().add("a", dt, nullable).add("b", dt, nullable),
+        ArrayType(dt, nullable),
+        MapType(dt, dt, nullable),
+        ArrayType(new StructType().add("a", dt, nullable), nullable),
+        new StructType().add("a", ArrayType(dt, nullable), nullable)
+      )
+    }
+
     import DataTypeTestUtils.numericTypes
     numericTypes.foreach { from =>
       val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
 
       safeTargetTypes.foreach { to =>
         assert(Cast.canUpCast(from, to), s"It should be possible to up-cast $from to $to")
+
+        // If the nullability is compatible, we can up-cast complex types too.
+        Seq(true -> true, false -> false, false -> true).foreach { case (fn, tn) =>
+          makeComplexTypes(from, fn).zip(makeComplexTypes(to, tn)).foreach {
+            case (complexFromType, complexToType) =>
+              assert(Cast.canUpCast(complexFromType, complexToType))
+          }
+        }
+
+        makeComplexTypes(from, true).zip(makeComplexTypes(to, false)).foreach {
+          case (complexFromType, complexToType) =>
+            assert(!Cast.canUpCast(complexFromType, complexToType))
+        }
       }
 
       unsafeTargetTypes.foreach { to =>
         assert(!Cast.canUpCast(from, to), s"It shouldn't be possible to up-cast $from to $to")
+        makeComplexTypes(from, true).zip(makeComplexTypes(to, true)).foreach {
+          case (complexFromType, complexToType) =>
+            assert(!Cast.canUpCast(complexFromType, complexToType))
+        }
       }
     }
   }
