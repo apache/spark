@@ -86,7 +86,6 @@ private[spark] class CoarseGrainedExecutorBackend(
   // visible for testing
   def parseOrFindResources(resourcesFile: Option[String]): Map[String, ResourceInformation] = {
     // only parse the resources if a task requires them
-
     val resourceInfo = if (env.conf.getAllWithPrefix(SPARK_TASK_RESOURCE_PREFIX).nonEmpty) {
       val actualExecResources = resourcesFile.map { resourceFileStr => {
         val source = new BufferedInputStream(new FileInputStream(resourceFileStr))
