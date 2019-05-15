@@ -140,7 +140,8 @@ object Cast {
 
   /**
    * Returns true iff we can safely up-cast the `from` type to `to` type without any truncating or
-   * precision lose, e.g. int -> long, date -> timestamp.
+   * precision lose or possible runtime failures. For example, long -> int, string -> int are not
+   * up-cast.
    */
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
