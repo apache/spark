@@ -187,11 +187,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
         // As per the logical in And predicate, we can push down (a1 OR b1).
         for {
-          _ <- createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts = true)
-          _ <- createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts = true)
+          _ <- createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
+          _ <- createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
           lhs <- createBuilder(dataTypeMap, left,
-            builder.startOr(), canPartialPushDownConjuncts = true)
-          rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts = true)
+            builder.startOr(), canPartialPushDownConjuncts)
+          rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjunct)
         } yield rhs.end()
 
       case Not(child) =>

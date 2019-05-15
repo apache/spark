@@ -540,9 +540,9 @@ private[parquet] class ParquetFilters(
         // As per the logical in And predicate, we can push down (a1 OR b1).
         for {
           lhsFilter <-
-            createFilterHelper(nameToParquetField, lhs, canPartialPushDownConjuncts = true)
+            createFilterHelper(nameToParquetField, lhs, canPartialPushDownConjuncts)
           rhsFilter <-
-            createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts = true)
+            createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
