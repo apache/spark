@@ -2883,7 +2883,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // Finish the first task of the shuffle map stage.
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(0), Success, makeMapStatus("hostA", 4),
-      Seq.empty, createFakeTaskInfoWithId(0)))
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
 
     // The second task of the shuffle map stage failed with FetchFailed.
     runEvent(makeCompletionEvent(
@@ -2899,19 +2899,19 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // Finish the first task of the second attempt of the shuffle map stage.
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0), Success, makeMapStatus("hostA", 4),
-      Seq.empty, createFakeTaskInfoWithId(0)))
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
 
     // Finish the third task of the first attempt of the shuffle map stage.
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(2), Success, makeMapStatus("hostA", 4),
-      Seq.empty, createFakeTaskInfoWithId(0)))
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
     assert(tasksMarkedAsCompleted.length == 1)
     assert(tasksMarkedAsCompleted.head.partitionId == 2)
 
     // Finish the forth task of the first attempt of the shuffle map stage.
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(3), Success, makeMapStatus("hostA", 4),
-      Seq.empty, createFakeTaskInfoWithId(0)))
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
     assert(tasksMarkedAsCompleted.length == 2)
     assert(tasksMarkedAsCompleted.last.partitionId == 3)
 

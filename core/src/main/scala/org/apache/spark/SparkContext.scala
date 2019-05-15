@@ -2428,9 +2428,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private def reportHeartBeat(): Unit = {
     val currentMetrics = ExecutorMetrics.getCurrentMetrics(env.memoryManager)
     val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
-    // In the driver, we do not track per-stage metrics, so use a dummy stage
-    // for the key
-    driverUpdates.put((-1, -1), new ExecutorMetrics(currentMetrics))
+    // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
+    driverUpdates.put(EventLoggingListener.DRIVER_STAGE_KEY, new ExecutorMetrics(currentMetrics))
     val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
     listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
       driverUpdates))

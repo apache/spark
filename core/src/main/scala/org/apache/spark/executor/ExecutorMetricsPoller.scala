@@ -97,9 +97,7 @@ private[spark] class ExecutorMetricsPoller(
   /** Starts the polling thread. */
   def start(): Unit = {
     if (poller != null) {
-      val pollingTask = new Runnable() {
-        override def run(): Unit = Utils.logUncaughtExceptions(poll())
-      }
+      val pollingTask: Runnable = () => Utils.logUncaughtExceptions(poll())
       poller.scheduleAtFixedRate(pollingTask, 0L, pollingInterval, TimeUnit.MILLISECONDS)
     }
   }
@@ -179,15 +177,14 @@ private[spark] class ExecutorMetricsPoller(
    * (the last time this method was called).
    */
   def getExecutorUpdates(): HashMap[StageKey, ExecutorMetrics] = {
-    // build the executor level memory metrics
     val executorUpdates = new HashMap[StageKey, ExecutorMetrics]
-    stageTCMP.forEach((k, v) => executorUpdates.put(k, new ExecutorMetrics(v._2)))
 
-    // reset the peaks
-    def resetPeaks(k: StageKey, v: TCMP): TCMP =
+    def getUpdateAndResetPeaks(k: StageKey, v: TCMP): TCMP = {
+      executorUpdates.put(k, new ExecutorMetrics(v._2))
       (v._1, new AtomicLongArray(ExecutorMetricType.numMetrics))
+    }
 
-    stageTCMP.replaceAll(resetPeaks)
+    stageTCMP.replaceAll(getUpdateAndResetPeaks)
 
     executorUpdates
   }

@@ -283,8 +283,7 @@ private[spark] class EventLoggingListener(
           // If the update came from the driver, stageKey1 will be the dummy key (-1, -1),
           // so record those peaks for all active stages.
           // Otherwise, record the peaks for the matching stage.
-          val driverStageKey = (-1, -1)
-          if (stageKey1 == driverStageKey || stageKey1 == stageKey2) {
+          if (stageKey1 == DRIVER_STAGE_KEY || stageKey1 == stageKey2) {
             val metrics = metricsPerExecutor.getOrElseUpdate(
               event.execId, new ExecutorMetrics())
             metrics.compareAndUpdatePeakValues(peaks)
@@ -349,6 +348,8 @@ private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
+  // Dummy stage key used by driver in executor metrics updates
+  val DRIVER_STAGE_KEY = (-1, -1)
 
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 

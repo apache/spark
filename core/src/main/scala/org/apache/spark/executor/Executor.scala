@@ -590,6 +590,8 @@ private[spark] class Executor(
           logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
+          // Here and below, put task metric peaks in a WrappedArray to expose them as a Seq
+          // without requiring a copy.
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
           val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates, accums, metricPeaks))
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
