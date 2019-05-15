@@ -407,8 +407,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-    * Get all parameters that start with `prefix` and end with 'postfix'
-    */
+   * Get all parameters that start with `prefix` and end with 'postfix'
+   */
   def getAllWithPrefixAndPostfix(prefix: String, postfix: String): Array[(String, String)] = {
     getAll.filter { case (k, v) => k.startsWith(prefix) && k.endsWith(postfix) }
       .map { case (k, v) => (k.substring(prefix.length, (k.length - postfix.length)), v) }
