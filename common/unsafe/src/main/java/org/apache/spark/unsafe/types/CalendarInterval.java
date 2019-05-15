@@ -105,7 +105,7 @@ public final class CalendarInterval implements Serializable {
     String sInLowerCase = s.trim().toLowerCase(Locale.ROOT);
     String interval =
       sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
-    CalendarInterval cal = CalendarInterval.fromString(interval);
+    CalendarInterval cal = fromString(interval);
     if (cal == null) {
       throw new IllegalArgumentException("Invalid interval: " + s);
     }
