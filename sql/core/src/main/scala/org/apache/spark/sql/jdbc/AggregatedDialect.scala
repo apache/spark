@@ -76,4 +76,8 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
       cascade: Option[Boolean] = isCascadingTruncateTable): String = {
     dialects.head.getTruncateQuery(table, cascade)
   }
+
+  override def getRenameTableQuery(oldtable: String, newtable: String): String = {
+    dialects.head.getRenameTableQuery(oldtable, newtable)
+  }
 }

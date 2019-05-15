@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
-import java.util.Locale
+import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -38,7 +38,7 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.NextIterator
+import org.apache.spark.util.{LongAccumulator, NextIterator}
 
 /**
  * Util functions for JDBC tables.
@@ -97,6 +97,24 @@ object JdbcUtils extends Logging {
     try {
       statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(s"DROP TABLE $table")
+    } finally {
+      statement.close()
+    }
+  }
+
+  /**
+   * Rename a table to a new name.
+   */
+  def renameTable(
+      conn: Connection,
+      originTable: String,
+      newTable: String,
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    val statement = conn.prepareStatement(dialect.getRenameTableQuery(originTable, newTable))
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.executeQuery()
     } finally {
       statement.close()
     }
@@ -615,7 +633,8 @@ object JdbcUtils extends Logging {
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int,
-      options: JDBCOptions): Iterator[Byte] = {
+      options: JDBCOptions,
+      accumulator: Option[LongAccumulator] = None): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
 
@@ -687,6 +706,7 @@ object JdbcUtils extends Logging {
         conn.commit()
       }
       committed = true
+      accumulator.foreach(_.add(1L))
       Iterator.empty
     } catch {
       case e: SQLException =>
@@ -817,7 +837,7 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Saves the RDD to the database in a single transaction.
+   * Saves the RDD to the database for each partition in a single transaction.
    */
   def saveTable(
       df: DataFrame,
@@ -847,15 +867,116 @@ object JdbcUtils extends Logging {
   }
 
   /**
+   * Saves the RDD to the database in a single transaction.
+   */
+  def transactionalSaveTable(
+      df: DataFrame,
+      tableSchema: Option[StructType],
+      isCaseSensitive: Boolean,
+      options: JdbcOptionsInWrite): Unit = {
+    val url = options.url
+    val table = s"${options.table}_${UUID.randomUUID().toString.filterNot(_ == '-')}_temp"
+    val dialect = JdbcDialects.get(url)
+    val rddSchema = df.schema
+    val getConnection: () => Connection = createConnectionFactory(options)
+    val batchSize = options.batchSize
+    val isolationLevel = options.isolationLevel
+    var transSuccessful = false
+    var tempTblCreated = false
+
+    val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
+    val repartitionedDF = options.numPartitions match {
+      case Some(n) if n <= 0 => throw new IllegalArgumentException(
+        s"Invalid value `$n` for parameter `${JDBCOptions.JDBC_NUM_PARTITIONS}` in table writing " +
+          "via JDBC. The minimum value is 1.")
+      case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
+      case _ => df
+    }
+
+    val accumulator = repartitionedDF.sparkSession.sparkContext.longAccumulator("successPartitions")
+    val partNum = repartitionedDF.rdd.getNumPartitions
+    val conn = JdbcUtils.createConnectionFactory(options)()
+
+    try {
+      createTableWithSpecifiedName(conn, repartitionedDF, options, Some(table))
+      tempTblCreated = true
+      repartitionedDF.rdd.foreachPartition(iterator => savePartition(
+        getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
+        options, Some(accumulator))
+      )
+
+      if (accumulator.value == partNum) {
+        if (tableExists(conn, options)) {
+          dropTable(conn, options.table, options)
+        }
+        renameTable(conn, table, options.table, options)
+        transSuccessful = true
+      } else {
+        throw new JdbcPartitionSaveFailureException(
+          s"""
+             | Job aborted for that there are some partitions failed to save data to database:
+             | Total partitions is: ${partNum} and successful partitions is: ${accumulator.value}.
+             | You can retry again.
+           """.stripMargin)
+      }
+    } finally {
+      if (!transSuccessful && tempTblCreated) {
+        retryingDropTableSilent(conn, table, options)
+      }
+      try {
+        conn.close()
+      } catch {
+        case e: Exception => logError("Close the connection failed.", e)
+      }
+    }
+  }
+
+  /**
+   * Drop the table and retry automatically when exception occured.
+   */
+  def retryingDropTableSilent(conn: Connection, table: String, options: JDBCOptions): Unit = {
+    val dropTmpTableMaxRetry = 3
+    var dropTempTableRetryCount = 0
+    var dropSuccess = false
+
+    while (!dropSuccess && dropTempTableRetryCount < dropTmpTableMaxRetry) {
+      try {
+        dropTable(conn, table, options)
+        dropSuccess = true
+      } catch {
+        case e: Exception =>
+          dropTempTableRetryCount += 1
+          logWarning(s"Drop tempTable $table failed for $dropTempTableRetryCount" +
+            s"/${dropTmpTableMaxRetry} times, and will retry.", e)
+      }
+    }
+    if (!dropSuccess) {
+      logError(s"Drop tempTable $table failed for $dropTmpTableMaxRetry times," +
+        s" and will not retry.")
+    }
+  }
+
+  /**
    * Creates a table with a given schema.
    */
   def createTable(
       conn: Connection,
       df: DataFrame,
       options: JdbcOptionsInWrite): Unit = {
+    createTableWithSpecifiedName(conn, df, options, None)
+  }
+
+  /**
+   * Creates a table with a given schema and specified name.
+   */
+  def createTableWithSpecifiedName(
+      conn: Connection,
+      df: DataFrame,
+      options: JdbcOptionsInWrite,
+      specifiedName: Option[String]): Unit = {
     val strSchema = schemaString(
       df, options.url, options.createTableColumnTypes)
-    val table = options.table
+    val table = specifiedName.getOrElse(options.table)
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be

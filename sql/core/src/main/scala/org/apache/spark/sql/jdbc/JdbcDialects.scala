@@ -104,6 +104,18 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
+   * Get the SQL query that should be used to rename a table to new name. Dialects can
+   * override this method to return a query that works best in a particular database.
+   * @param oldTable  The name of the origin table.
+   * @param newTable THe name of the new table.
+   * @return The SQL query to use for rename the table.
+   */
+  @Since("2.4.3")
+  def getRenameTableQuery(oldTable: String, newTable: String): String = {
+    s"RENAME TABLE $oldTable TO $newTable"
+  }
+
+  /**
    * The SQL query that should be used to discover the schema of a table. It only needs to
    * ensure that the result set has the same schema as the table, such as by calling
    * "SELECT * ...". Dialects can override this method to return a query that works best in a
@@ -246,4 +258,8 @@ object JdbcDialects {
  */
 private object NoopDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = true
+
+  override def getRenameTableQuery(oldTable: String, newTable: String): String = {
+    s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
 }

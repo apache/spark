@@ -91,6 +91,19 @@ private object PostgresDialect extends JdbcDialect {
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   /**
+   * The SQL query used to rename a table. For Postgres, this behaviour only alter the
+   * origin table's name, does not change the schema.
+   *
+   * @param oldTable  The name of the origin table.
+   * @param newTable THe name of the new table.
+   * @return The SQL query to use for rename the table.
+   */
+  override def getRenameTableQuery(oldTable: String, newTable: String): String = {
+    val withOutSchemaName = newTable.split("\\.").last
+    s"ALTER TABLE $oldTable RENAME TO $withOutSchemaName"
+  }
+
+  /**
    * The SQL query used to truncate a table. For Postgres, the default behaviour is to
    * also truncate any descendant tables. As this is a (possibly unwanted) side-effect,
    * the Postgres dialect adds 'ONLY' to truncate only the table in question

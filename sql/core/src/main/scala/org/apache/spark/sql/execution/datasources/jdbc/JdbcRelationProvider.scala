@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.sql.Connection
+
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
@@ -44,6 +46,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       df: DataFrame): BaseRelation = {
     val options = new JdbcOptionsInWrite(parameters)
     val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
+    val transactional = options.isolationLevel != Connection.TRANSACTION_NONE
 
     val conn = JdbcUtils.createConnectionFactory(options)()
     try {
@@ -58,9 +61,13 @@ class JdbcRelationProvider extends CreatableRelationProvider
               saveTable(df, tableSchema, isCaseSensitive, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
-              dropTable(conn, options.table, options)
-              createTable(conn, df, options)
-              saveTable(df, Some(df.schema), isCaseSensitive, options)
+              if (transactional) {
+                transactionalSaveTable(df, Some(df.schema), isCaseSensitive, options)
+              } else {
+                dropTable(conn, options.table, options)
+                createTable(conn, df, options)
+                saveTable(df, Some(df.schema), isCaseSensitive, options)
+              }
             }
 
           case SaveMode.Append =>
@@ -78,8 +85,12 @@ class JdbcRelationProvider extends CreatableRelationProvider
             // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
-        createTable(conn, df, options)
-        saveTable(df, Some(df.schema), isCaseSensitive, options)
+        if (transactional) {
+          transactionalSaveTable(df, Some(df.schema), isCaseSensitive, options)
+        } else {
+          createTable(conn, df, options)
+          saveTable(df, Some(df.schema), isCaseSensitive, options)
+        }
       }
     } finally {
       conn.close()

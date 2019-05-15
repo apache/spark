@@ -49,4 +49,17 @@ private object DB2Dialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  /**
+   * The SQL query used to rename a table. For DB2, this behaviour only alter the
+   * origin table's name, does not change the schema.
+   *
+   * @param oldTable  The name of the origin table.
+   * @param newTable THe name of the new table.
+   * @return The SQL query to use for rename the table.
+   */
+  override def getRenameTableQuery(oldTable: String, newTable: String): String = {
+    val withOutSchemaName = newTable.split("\\.").last
+    s"RENAME  TABLE $oldTable TO $withOutSchemaName"
+  }
 }
