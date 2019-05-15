@@ -1394,8 +1394,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     val taskSetManager = sched.taskSetManagerForAttempt(0, 0).get
     assert(taskSetManager.runningTasks === 8)
-    taskSetManager.markPartitionCompleted(8, 0)
-    assert(!taskSetManager.successfulTaskDurations.isEmpty())
+    taskSetManager.markPartitionCompleted(8)
+    assert(taskSetManager.successfulTaskDurations.isEmpty())
     taskSetManager.checkSpeculatableTasks(0)
   }
 

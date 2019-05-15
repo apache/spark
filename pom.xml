@@ -202,7 +202,7 @@
     <test.include.tags></test.include.tags>
 
     <!-- Package to use when relocating shaded classes. -->
-    <spark.shade.packageName>org.spark_project</spark.shade.packageName>
+    <spark.shade.packageName>org.sparkproject</spark.shade.packageName>
 
     <!-- Modules that copy jars to the build directory should do so under this location. -->
     <jars.target.dir>${project.build.directory}/scala-${scala.binary.version}/jars</jars.target.dir>

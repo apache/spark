@@ -86,7 +86,7 @@ private[spark] case class PythonFunction(
 private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 
 /** Thrown for exceptions in user Python code. */
-private[spark] class PythonException(msg: String, cause: Exception)
+private[spark] class PythonException(msg: String, cause: Throwable)
   extends RuntimeException(msg, cause)
 
 /**
@@ -163,8 +163,63 @@ private[spark] object PythonRDD extends Logging {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
   }
 
+  /**
+   * A helper function to create a local RDD iterator and serve it via socket. Partitions are
+   * are collected as separate jobs, by order of index. Partition data is first requested by a
+   * non-zero integer to start a collection job. The response is prefaced by an integer with 1
+   * meaning partition data will be served, 0 meaning the local iterator has been consumed,
+   * and -1 meaining an error occurred during collection. This function is used by
+   * pyspark.rdd._local_iterator_from_socket().
+   *
+   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from these jobs, and the secret for authentication.
+   */
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
-    serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
+    val (port, secret) = SocketAuthServer.setupOneConnectionServer(
+        authHelper, "serve toLocalIterator") { s =>
+      val out = new DataOutputStream(s.getOutputStream)
+      val in = new DataInputStream(s.getInputStream)
+      Utils.tryWithSafeFinally {
+
+        // Collects a partition on each iteration
+        val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
+          rdd.sparkContext.runJob(rdd, (iter: Iterator[Any]) => iter.toArray, Seq(i)).head
+        }
+
+        // Read request for data and send next partition if nonzero
+        var complete = false
+        while (!complete && in.readInt() != 0) {
+          if (collectPartitionIter.hasNext) {
+            try {
+              // Attempt to collect the next partition
+              val partitionArray = collectPartitionIter.next()
+
+              // Send response there is a partition to read
+              out.writeInt(1)
+
+              // Write the next object and signal end of data for this iteration
+              writeIteratorToStream(partitionArray.toIterator, out)
+              out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+              out.flush()
+            } catch {
+              case e: SparkException =>
+                // Send response that an error occurred followed by error message
+                out.writeInt(-1)
+                writeUTF(e.getMessage, out)
+                complete = true
+            }
+          } else {
+            // Send response there are no more partitions to read and close
+            out.writeInt(0)
+            complete = true
+          }
+        }
+      } {
+        out.close()
+        in.close()
+      }
+    }
+    Array(port, secret)
   }
 
   def readRDDFromFile(

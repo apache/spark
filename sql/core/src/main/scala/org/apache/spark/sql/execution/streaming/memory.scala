@@ -61,9 +61,11 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
     Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
   }
 
-  def addData(data: A*): Offset = {
+  def addData(data: A*): OffsetV2 = {
     addData(data.toTraversable)
   }
+
+  def addData(data: TraversableOnce[A]): OffsetV2
 
   def fullSchema(): StructType = encoder.schema
 
@@ -76,8 +78,6 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
       attributes,
       None)(sqlContext.sparkSession)
   }
-
-  def addData(data: TraversableOnce[A]): Offset
 
   override def initialOffset(): OffsetV2 = {
     throw new IllegalStateException("should not be called.")
@@ -226,22 +226,15 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def commit(end: OffsetV2): Unit = synchronized {
-    def check(newOffset: LongOffset): Unit = {
-      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+    val newOffset = end.asInstanceOf[LongOffset]
+    val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
-      if (offsetDiff < 0) {
-        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
-      }
-
-      batches.trimStart(offsetDiff)
-      lastOffsetCommitted = newOffset
+    if (offsetDiff < 0) {
+      sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 
-    LongOffset.convert(end) match {
-      case Some(lo) => check(lo)
-      case None => sys.error(s"MemoryStream.commit() received an offset ($end) " +
-        "that did not originate with an instance of this class")
-    }
+    batches.trimStart(offsetDiff)
+    lastOffsetCommitted = newOffset
   }
 
   override def stop() {}

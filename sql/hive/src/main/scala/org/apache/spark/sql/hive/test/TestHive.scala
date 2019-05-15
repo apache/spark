@@ -63,6 +63,9 @@ object TestHive
         // SPARK-8910
         .set(UI_ENABLED, false)
         .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
+        // Hive changed the default of hive.metastore.disallow.incompatible.col.type.changes
+        // from false to true. For details, see the JIRA HIVE-12320 and HIVE-17764.
+        .set("spark.hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false")
         // Disable ConvertToLocalRelation for better test coverage. Test cases built on
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as
@@ -120,8 +123,10 @@ class TestHiveContext(
     @transient override val sparkSession: TestHiveSparkSession)
   extends SQLContext(sparkSession) {
 
-  val HIVE_CONTRIB_JAR: String = "hive-contrib-0.13.1.jar"
-  val HIVE_HCATALOG_CORE_JAR: String = "hive-hcatalog-core-0.13.1.jar"
+  val HIVE_CONTRIB_JAR: String =
+    if (HiveUtils.isHive23) "hive-contrib-2.3.4.jar" else "hive-contrib-0.13.1.jar"
+  val HIVE_HCATALOG_CORE_JAR: String =
+    if (HiveUtils.isHive23) "hive-hcatalog-core-2.3.4.jar" else "hive-hcatalog-core-0.13.1.jar"
 
   /**
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true

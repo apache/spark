@@ -18,8 +18,11 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalog.v2.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
+import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -29,6 +32,10 @@ import java.util.Set;
  * <p>
  * This interface can mixin the following interfaces to support different operations, like
  * {@code SupportsRead}.
+ * <p>
+ * The default implementation of {@link #partitioning()} returns an empty array of partitions, and
+ * the default implementation of {@link #properties()} returns an empty map. These should be
+ * overridden by implementations that support partitioning and table properties.
  */
 @Evolving
 public interface Table {
@@ -44,6 +51,20 @@ public interface Table {
    * empty schema can be returned here.
    */
   StructType schema();
+
+  /**
+   * Returns the physical partitioning of this table.
+   */
+  default Transform[] partitioning() {
+    return new Transform[0];
+  }
+
+  /**
+   * Returns the string map of table properties.
+   */
+  default Map<String, String> properties() {
+    return Collections.emptyMap();
+  }
 
   /**
    * Returns the set of capabilities for this table.
