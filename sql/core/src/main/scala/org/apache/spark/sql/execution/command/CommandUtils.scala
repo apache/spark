@@ -43,17 +43,17 @@ object CommandUtils extends Logging {
   /** Change statistics after changing data by commands. */
   def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
     val catalog = sparkSession.sessionState.catalog
-    if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-      val newTable = catalog.getTableMetadata(table.identifier)
-      if (newTable.stats == table.stats) {
-        val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
+    val statsMaybeUpdatedByHive = catalog.getTableMetadata(table.identifier)
+    if (statsMaybeUpdatedByHive.stats == table.stats) {
+      if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+        val newSize = CommandUtils.calculateTotalSize(sparkSession, statsMaybeUpdatedByHive)
         val newStats = CatalogStatistics(sizeInBytes = newSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
-      } else {
-        logInfo(s"Skip to update statistics for ${table.qualifiedName} as it updated by Hive.")
+      } else if (table.stats.nonEmpty) {
+        catalog.alterTableStats(table.identifier, None)
       }
-    } else if (table.stats.nonEmpty) {
-      catalog.alterTableStats(table.identifier, None)
+    } else {
+      logInfo(s"Skip to update statistics for ${table.qualifiedName} as it updated by Hive.")
     }
   }
 
