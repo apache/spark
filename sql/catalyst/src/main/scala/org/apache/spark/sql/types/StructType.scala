@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.{mutable, Map}
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -516,7 +516,7 @@ object StructType extends AbstractDataType {
           leftContainsNull || rightContainsNull)
 
       case (StructType(leftFields), StructType(rightFields)) =>
-        val newFields = ArrayBuffer.empty[StructField]
+        val newFields = mutable.ArrayBuffer.empty[StructField]
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
@@ -575,7 +575,10 @@ object StructType extends AbstractDataType {
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {
-    import scala.collection.breakOut
-    fields.map(s => (s.name, s))(breakOut)
+    // Mimics the optimization of breakOut, not present in Scala 2.13, while working in 2.12
+    val map = mutable.Map[String, StructField]()
+    map.sizeHint(fields.length)
+    fields.foreach(s => map.put(s.name, s))
+    map
   }
 }
