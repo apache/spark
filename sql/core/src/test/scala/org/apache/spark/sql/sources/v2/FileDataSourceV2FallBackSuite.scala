@@ -132,7 +132,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
       val path = file.getCanonicalPath
       // Dummy File writer should fail as expected.
       val exception = intercept[AnalysisException] {
-        df.write.format(dummyParquetWriterV2).mode("append").save(path)
+        df.write.format(dummyParquetWriterV2).save(path)
       }
       assert(exception.message.equals("Dummy file writer"))
       df.write.parquet(path)
@@ -152,7 +152,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
         withTempPath { file =>
           val path = file.getCanonicalPath
           // Writes should fall back to v1 and succeed.
-          df.write.format(dummyParquetWriterV2).mode("append").save(path)
+          df.write.format(dummyParquetWriterV2).save(path)
           checkAnswer(spark.read.parquet(path), df)
         }
       }
@@ -162,7 +162,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
         val path = file.getCanonicalPath
         // Dummy File reader should fail as USE_V1_SOURCE_READER_LIST doesn't include it.
         val exception = intercept[AnalysisException] {
-          df.write.format(dummyParquetWriterV2).mode("append").save(path)
+          df.write.format(dummyParquetWriterV2).save(path)
         }
         assert(exception.message.equals("Dummy file writer"))
       }

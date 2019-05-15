@@ -274,7 +274,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
         val numPartition = 6
         spark.range(0, 10, 1, numPartition).select('id as 'i, -'id as 'j).write.format(cls.getName)
-          .option("path", path).mode("append").save()
+          .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
@@ -361,7 +361,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
           val format = classOf[SimpleWritableDataSource].getName
 
           val df = Seq((1L, 2L)).toDF("i", "j")
-          df.write.format(format).option("path", optionPath).mode("append").save()
+          df.write.format(format).option("path", optionPath).save()
           assert(!new File(sessionPath).exists)
           checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
         }

@@ -31,7 +31,6 @@ class NoopSuite extends SharedSQLContext {
         x
       }
       .write
-      .mode("append")
       .format("noop")
       .save()
     assert(accum.value == numElems)
@@ -44,7 +43,6 @@ class NoopSuite extends SharedSQLContext {
       spark.range(numElems)
         .select('id mod 10 as "key", 'id as "value")
         .write
-        .mode("append")
         .partitionBy("key")
         .parquet(path)
 
@@ -56,7 +54,7 @@ class NoopSuite extends SharedSQLContext {
           accum.add(1)
           x
         }
-        .write.format("noop").mode("append").save()
+        .write.format("noop").save()
       assert(accum.value == numElems)
     }
   }
