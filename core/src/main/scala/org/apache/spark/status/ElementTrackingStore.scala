@@ -19,7 +19,7 @@ package org.apache.spark.status
 
 import java.util.Collection
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
@@ -28,7 +28,7 @@ import com.google.common.util.concurrent.MoreExecutors
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.Status._
-import org.apache.spark.status.ElementTrackingStore.{WriteQueueResult, WriteSkippedQueue}
+import org.apache.spark.status.ElementTrackingStore._
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
 
@@ -51,17 +51,19 @@ import org.apache.spark.util.kvstore._
 private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) extends KVStore {
 
   private class LatchedTriggers(val triggers: Seq[Trigger[_]]) {
-    val countDeferred = new AtomicInteger(0)
+    private val pending = new AtomicBoolean(false)
 
-    def fireOnce(f: Seq[Trigger[_]] => Unit): Boolean = {
-      val shouldExecute = countDeferred.compareAndSet(0, 1)
-      if (shouldExecute) {
+    def fireOnce(f: Seq[Trigger[_]] => Unit): WriteQueueResult = {
+      val shouldEnqueue = pending.compareAndSet(false, true)
+      if (shouldEnqueue) {
         doAsync {
-          countDeferred.set(0)
+          pending.set(false)
           f(triggers)
         }
+        WriteQueued
+      } else {
+        WriteSkippedQueue
       }
-      shouldExecute
     }
 
     def :+(addlTrigger: Trigger[_]): LatchedTriggers = {
@@ -129,25 +131,29 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
 
     if (checkTriggers && !stopped) {
       triggers.get(value.getClass).map { latchedList =>
-        WriteQueueResult(latchedList.fireOnce { list =>
+        latchedList.fireOnce { list =>
           val count = store.count(value.getClass)
           list.foreach { t =>
             if (count > t.threshold) {
               t.action(count)
             }
           }
-        })
+        }
       }.getOrElse(WriteSkippedQueue)
     } else {
       WriteSkippedQueue
     }
   }
 
-  def removeAllByKeys[T](klass: Class[T], index: String, keys: Iterable[_]): Boolean =
-    removeAllByKeys(klass, index, keys.asJavaCollection)
+  def removeAllByIndexValues[T](klass: Class[T], index: String, indexValues: Iterable[_]): Boolean =
+    removeAllByIndexValues(klass, index, indexValues.asJavaCollection)
 
-  override def removeAllByKeys[T](klass: Class[T], index: String, keys: Collection[_]): Boolean =
-    store.removeAllByKeys(klass, index, keys)
+  override def removeAllByIndexValues[T](
+      klass: Class[T],
+      index: String,
+      indexValues: Collection[_]): Boolean = {
+    store.removeAllByIndexValues(klass, index, indexValues)
+  }
 
   override def delete(klass: Class[_], naturalKey: Any): Unit = store.delete(klass, naturalKey)
 
@@ -200,15 +206,6 @@ private[spark] object ElementTrackingStore {
    * The result of write() is otherwise unused.
    */
   sealed trait WriteQueueResult
-  object WriteQueueResult {
-    def apply(b: Boolean): WriteQueueResult = {
-      if (b) {
-        WriteQueued
-      } else {
-        WriteSkippedQueue
-      }
-    }
-  }
 
   object WriteQueued extends WriteQueueResult
   object WriteSkippedQueue extends WriteQueueResult

@@ -161,17 +161,17 @@ public class InMemoryStoreSuite {
     HashSet set = new HashSet();
     set.add(new int[] {0, 0, 0});
     set.add(new int[] { 2, 2, 2 });
-    store.removeAllByKeys(ArrayKeyIndexType.class, KVIndex.NATURAL_INDEX_NAME, set);
+    store.removeAllByIndexValues(ArrayKeyIndexType.class, KVIndex.NATURAL_INDEX_NAME, set);
     assertEquals(7, store.count(ArrayKeyIndexType.class));
 
     set.clear();
     set.add(new String[] { "things" });
-    store.removeAllByKeys(ArrayKeyIndexType.class, "id", set);
+    store.removeAllByIndexValues(ArrayKeyIndexType.class, "id", set);
     assertEquals(4, store.count(ArrayKeyIndexType.class));
 
     set.clear();
     set.add(new String[] { "more things" });
-    store.removeAllByKeys(ArrayKeyIndexType.class, "id", set);
+    store.removeAllByIndexValues(ArrayKeyIndexType.class, "id", set);
     assertEquals(0, store.count(ArrayKeyIndexType.class));
   }
 

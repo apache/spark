@@ -198,16 +198,16 @@ public class LevelDB implements KVStore {
   }
 
   @Override
-  public <T> boolean removeAllByKeys(
+  public <T> boolean removeAllByIndexValues(
       Class<T> klass,
       String index,
-      Collection keys) throws Exception {
+      Collection<?> indexValues) throws Exception {
     LevelDBTypeInfo.Index naturalIndex = getTypeInfo(klass).naturalIndex();
     boolean removed = false;
     KVStoreView<T> view = view(klass).index(index);
 
-    for (Object key : keys) {
-      for (T value: view.first(key).last(key)) {
+    for (Object indexValue : indexValues) {
+      for (T value: view.first(indexValue).last(indexValue)) {
         Object itemKey = naturalIndex.getValue(value);
         delete(klass, itemKey);
         removed = true;

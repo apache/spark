@@ -112,13 +112,15 @@ public class InMemoryStore implements KVStore {
     inMemoryLists.clear();
   }
 
-  @SuppressWarnings("unchecked")
   @Override
-  public <T> boolean removeAllByKeys(Class<T> klass, String index, Collection keys) {
+  public <T> boolean removeAllByIndexValues(
+      Class<T> klass,
+      String index,
+      Collection<?> indexValues) {
     InstanceList<T> list = inMemoryLists.get(klass);
 
     if (list != null) {
-      return list.countingRemoveAllByKeys(index, keys) > 0;
+      return list.countingRemoveAllByIndexValues(index, indexValues) > 0;
     } else {
       return false;
     }
@@ -146,7 +148,7 @@ public class InMemoryStore implements KVStore {
 
     @SuppressWarnings("unchecked")
     public <T> InstanceList<T> get(Class<T> type) {
-      return (InstanceList<T>)data.get(type);
+      return (InstanceList<T>) data.get(type);
     }
 
     @SuppressWarnings("unchecked")
@@ -163,10 +165,23 @@ public class InMemoryStore implements KVStore {
 
   private static class InstanceList<T> {
 
+    /**
+     * A BiConsumer to control multi-entity removal.  We use this in a forEach rather than an
+     * iterator because there is a bug in jdk8 which affects remove() on all concurrent map
+     * iterators.  https://bugs.openjdk.java.net/browse/JDK-8078645
+     */
     private static class CountingRemoveIfForEach<T> implements BiConsumer<Comparable<Object>, T> {
-      ConcurrentMap<Comparable<Object>, T> data;
-      Predicate<? super T> filter;
-      int count = 0;
+      private final ConcurrentMap<Comparable<Object>, T> data;
+      private final Predicate<? super T> filter;
+
+      /**
+       * Keeps a count of the number of elements removed.  This count is not currently surfaced
+       * to clients of KVStore as Java's generic removeAll() construct returns only a boolean,
+       * but I found it handy to have the count of elements removed while debugging; a count being
+       * no more complicated than a boolean, I've retained that behavior here, even though there
+       * is no current requirement.
+       */
+      private int count = 0;
 
       CountingRemoveIfForEach(
           ConcurrentMap<Comparable<Object>, T> data,
@@ -176,15 +191,14 @@ public class InMemoryStore implements KVStore {
       }
 
       public void accept(Comparable<Object> key, T value) {
-        // To address https://bugs.openjdk.java.net/browse/JDK-8078645 which affects remove() on
-        // all iterators of concurrent maps, and specifically makes countingRemoveIf difficult to
-        // implement correctly against the values() iterator, we use forEach instead....
         if (filter.test(value)) {
           if (data.remove(key, value)) {
             count++;
           }
         }
       }
+
+      public int count() { return count; }
     }
 
     private final KVTypeInfo ti;
@@ -201,18 +215,12 @@ public class InMemoryStore implements KVStore {
       return ti.getAccessor(indexName);
     }
 
-    // Note: removeIf returns a boolean if any element has been removed.
-    // While debugging this code, it was handy to have the count of elements
-    // removed, rather than an indicator of whether something has been
-    // removed, and a count is no more complicated than a boolean so I've
-    // retained that behavior here, although there is no current requirement.
-    @SuppressWarnings("unchecked")
-    int countingRemoveAllByKeys(String index, Collection keys) {
-      Predicate<? super T> filter = getPredicate(ti.getAccessor(index), keys);
+    int countingRemoveAllByIndexValues(String index, Collection<?> indexValues) {
+      Predicate<? super T> filter = getPredicate(ti.getAccessor(index), indexValues);
       CountingRemoveIfForEach<T> callback = new CountingRemoveIfForEach<>(data, filter);
 
       data.forEach(callback);
-      return callback.count;
+      return callback.count();
     }
 
     public T get(Object key) {
@@ -231,31 +239,29 @@ public class InMemoryStore implements KVStore {
       return data.size();
     }
 
-    @SuppressWarnings("unchecked")
     public InMemoryView<T> view() {
       return new InMemoryView<>(data.values(), ti);
     }
 
-    @SuppressWarnings("unchecked")
     private static <T> Predicate<? super T> getPredicate(
         KVTypeInfo.Accessor getter,
-        Collection keys) {
+        Collection<?> keys) {
       if (Comparable.class.isAssignableFrom(getter.getType())) {
-        HashSet set = new HashSet(keys);
+        HashSet<?> set = new HashSet<>(keys);
 
-        return (value) -> set.contains(keyFromValue(getter, value));
+        return (value) -> set.contains(indexValueForEntity(getter, value));
       } else {
         HashSet<Comparable> set = new HashSet<>(keys.size());
         for (Object key : keys) {
           set.add(asKey(key));
         }
-        return (value) -> set.contains(asKey(keyFromValue(getter, value)));
+        return (value) -> set.contains(asKey(indexValueForEntity(getter, value)));
       }
     }
 
-    private static Object keyFromValue(KVTypeInfo.Accessor getter, Object value) {
+    private static Object indexValueForEntity(KVTypeInfo.Accessor getter, Object entity) {
       try {
-        return getter.get(value);
+        return getter.get(entity);
       } catch (ReflectiveOperationException e) {
         throw new RuntimeException(e);
       }
@@ -263,7 +269,8 @@ public class InMemoryStore implements KVStore {
   }
 
   private static class InMemoryView<T> extends KVStoreView<T> {
-    private static InMemoryView EMPTY_VIEW = new InMemoryView<>(Collections.emptyList(), null);
+    private static final InMemoryView EMPTY_VIEW =
+      new InMemoryView<>(Collections.emptyList(), null);
 
     private final Collection<T> elements;
     private final KVTypeInfo ti;

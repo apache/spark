@@ -130,5 +130,6 @@ public interface KVStore extends Closeable {
   /**
    * A cheaper way to remove multiple items from the KVStore
    */
-  <T> boolean removeAllByKeys(Class<T> klass, String index, Collection keys) throws Exception;
+  <T> boolean removeAllByIndexValues(Class<T> klass, String index, Collection<?> indexValues)
+          throws Exception;
 }

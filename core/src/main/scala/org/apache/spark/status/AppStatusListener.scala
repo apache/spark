@@ -1144,7 +1144,7 @@ private[spark] class AppStatusListener(
       s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
     }
 
-    val stageKeys = stages.map { s =>
+    val stageIndexValues = stages.map { s =>
       val key = Array(s.info.stageId, s.info.attemptId)
       kvstore.delete(s.getClass(), key)
 
@@ -1173,16 +1173,16 @@ private[spark] class AppStatusListener(
     }
 
     // Delete summaries in one pass, as deleting them for each stage is slow
-    val totalSummariesDeleted = kvstore.removeAllByKeys(
+    kvstore.removeAllByIndexValues(
       classOf[ExecutorStageSummaryWrapper],
       "stage",
-      stageKeys)
+      stageIndexValues)
 
     // Delete tasks for all stages in one pass, as deleting them for each stage individually is slow
-    kvstore.removeAllByKeys(
+    kvstore.removeAllByIndexValues(
       classOf[TaskDataWrapper],
       TaskIndexNames.STAGE,
-      stageKeys)
+      stageIndexValues)
   }
 
   private def cleanupTasks(stage: LiveStage): Unit = {

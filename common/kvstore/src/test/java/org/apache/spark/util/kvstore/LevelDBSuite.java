@@ -225,17 +225,17 @@ public class LevelDBSuite {
     HashSet set = new HashSet();
     set.add(new int[] {0, 0, 0});
     set.add(new int[] { 2, 2, 2 });
-    db.removeAllByKeys(ArrayKeyIndexType.class, KVIndex.NATURAL_INDEX_NAME, set);
+    db.removeAllByIndexValues(ArrayKeyIndexType.class, KVIndex.NATURAL_INDEX_NAME, set);
     assertEquals(7, db.count(ArrayKeyIndexType.class));
 
     set.clear();
     set.add(new String[] { "things" });
-    db.removeAllByKeys(ArrayKeyIndexType.class, "id", set);
+    db.removeAllByIndexValues(ArrayKeyIndexType.class, "id", set);
     assertEquals(4, db.count(ArrayKeyIndexType.class));
 
     set.clear();
     set.add(new String[] { "more things" });
-    db.removeAllByKeys(ArrayKeyIndexType.class, "id", set);
+    db.removeAllByIndexValues(ArrayKeyIndexType.class, "id", set);
     assertEquals(0, db.count(ArrayKeyIndexType.class));
   }
 
