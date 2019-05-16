@@ -182,8 +182,35 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
             && j1.hint.leftHint == j2.hint.rightHint && j1.hint.rightHint == j2.hint.leftHint)
       case (p1: Project, p2: Project) =>
         p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
+      case (u1: Union, u2: Union) =>
+        sameUnionPlan(u1.children, u2.children)
       case _ =>
         plan1 == plan2
+    }
+  }
+
+  private def sameUnionPlan(left: Seq[LogicalPlan], right: Seq[LogicalPlan]): Boolean = {
+    val leftSorted = left.sortBy(plan => plan.toString)
+    val rightSorted = left.sortBy(plan => plan.toString)
+    if (leftSorted.size != rightSorted.size) {
+      false
+    } else {
+      val zipped = leftSorted.zip(rightSorted)
+      leftSorted.zip(rightSorted).foreach {
+        case (j1: Join, j2: Join) =>
+          if (!sameJoinPlan(j1, j2)) {
+            return false
+          }
+        case (u1: Union, u2: Union) =>
+          if (!sameUnionPlan(Seq(u1), Seq(u2))) {
+            return false
+          }
+        case f =>
+          if (!(f._1 == f._2)) {
+            return false
+          }
+      }
+      true
     }
   }
 }

@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.optimizer.ga.JoinReorderGA
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -59,11 +59,19 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
   private def reorder(plan: LogicalPlan, output: Seq[Attribute]): LogicalPlan = {
     val (items, conditions) = extractInnerJoins(plan)
     val result =
-      // Do reordering if the number of items is appropriate and join conditions exist.
+      // Do reordering if the join conditions exist.
       // We also need to check if costs of all items can be evaluated.
-      if (items.size > 2 && items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty &&
+      if (items.size > 2 && conditions.nonEmpty &&
           items.forall(_.stats.rowCount.isDefined)) {
-        JoinReorderDP.search(conf, items, conditions, output)
+        // Reorder with DP when the the number of items is appropriate,
+        // otherwise try GA if it is enabled.
+        if (items.size <= conf.joinReorderDPThreshold) {
+          JoinReorderDP.search(conf, items, conditions, output)
+        } else if (conf.joinReorderGAEnabled) {
+          JoinReorderGA.search(conf, items, conditions, output).getOrElse(plan)
+        } else {
+          plan
+        }
       } else {
         plan
       }
@@ -183,7 +191,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     }
   }
 
-  private def sameOutput(plan: LogicalPlan, expectedOutput: Seq[Attribute]): Boolean = {
+  def sameOutput(plan: LogicalPlan, expectedOutput: Seq[Attribute]): Boolean = {
     val thisOutput = plan.output
     thisOutput.length == expectedOutput.length && thisOutput.zip(expectedOutput).forall {
       case (a1, a2) => a1.semanticEquals(a2)
@@ -251,7 +259,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
    * @param filters Join graph info to be used as filters by the search algorithm.
    * @return Builds and returns a new JoinPlan if both conditions hold. Otherwise, returns None.
    */
-  private def buildJoin(
+  private[optimizer] def buildJoin(
       oneJoinPlan: JoinPlan,
       otherJoinPlan: JoinPlan,
       conf: SQLConf,

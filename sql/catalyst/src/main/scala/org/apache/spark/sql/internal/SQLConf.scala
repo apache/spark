@@ -1302,6 +1302,43 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.9)
 
+  val JOIN_REORDER_GA_ENABLED =
+    buildConf("spark.sql.cbo.joinReorder.ga.enabled")
+      .doc("Enable genetic algorithm based join reorder or not. It is useful for multi table" +
+          " joins (#tables > spark.sql.cbo.joinReorder.dp.threshold, 12 by default), which can" +
+          " accelerate the search time for a solution.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val JOIN_REORDER_GA_RELAX_FACTOR =
+    buildConf("spark.sql.cbo.joinReorder.ga.relax-factor")
+        .doc("The relax factor. Larger relax-factor may decrease the solution finding time but" +
+            " may not give a better plan. We recommend a value in [3.0, 4.0]")
+        .doubleConf
+        .checkValue(size => size >= 1 && size <= 4, "Relax-factor should in [1.0, 4.0].")
+        .createWithDefault(3.5)
+
+  val JOIN_REORDER_GA_MIN_POP_SIZE =
+    buildConf("spark.sql.cbo.joinReorder.ga.min-pop-size")
+      .doc("The minimum size of the population.")
+      .intConf
+      .checkValue(size => size >= 2, "The minimum size should be larger or equal than 2.")
+      .createWithDefault(16)
+
+  val JOIN_REORDER_GA_MAX_POP_SIZE =
+    buildConf("spark.sql.cbo.joinReorder.ga.max-pop-size")
+      .doc("The maximum size of the population.")
+      .intConf
+      .checkValue(size => size >= 2, "The minimum size should be larger or equal than 2.")
+      .createWithDefault(128)
+
+  val JOIN_REORDER_GA_SELECTION_BIAS =
+    buildConf("spark.sql.cbo.joinReorder.ga.selection.bias")
+      .doc("The bias used for selecting the chromosomes as parents.")
+      .doubleConf
+      .checkValue(bias => bias >= 1.5 && bias <= 2.0, "Bias should in [1.5, 2.0].")
+      .createWithDefault(2.0)
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
@@ -2237,6 +2274,16 @@ class SQLConf extends Serializable with Logging {
   def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
 
   def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
+
+  def joinReorderGAEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_GA_ENABLED)
+
+  def joinReorderGARelaxFactor: Double = getConf(SQLConf.JOIN_REORDER_GA_RELAX_FACTOR)
+
+  def joinReorderGAMinPoPSize: Int = getConf(SQLConf.JOIN_REORDER_GA_MIN_POP_SIZE)
+
+  def joinReorderGAMaxPoPSize: Int = getConf(SQLConf.JOIN_REORDER_GA_MAX_POP_SIZE)
+
+  def joinReorderGASelectionBias: Double = getConf(SQLConf.JOIN_REORDER_GA_SELECTION_BIAS)
 
   def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
