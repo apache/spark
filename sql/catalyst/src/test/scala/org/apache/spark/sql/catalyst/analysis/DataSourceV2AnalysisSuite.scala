@@ -107,7 +107,7 @@ case class TestRelation(output: Seq[AttributeReference]) extends LeafNode with N
 case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
   extends LeafNode with NamedRelation {
   override def name: String = "test-name"
-  override def requireSchemaMatch: Boolean = false
+  override def skipSchemaResolution: Boolean = true
 }
 
 abstract class DataSourceV2AnalysisSuite extends AnalysisTest {

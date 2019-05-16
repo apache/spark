@@ -394,7 +394,7 @@ trait V2WriteCommand extends Command {
 
   def outputResolved: Boolean = {
     // If the table doesn't require schema match, we don't need to resolve the output columns.
-    !table.requireSchemaMatch || {
+    table.skipSchemaResolution || {
       table.resolved && query.resolved && query.output.size == table.output.size &&
         query.output.zip(table.output).forall {
           case (inAttr, outAttr) =>
