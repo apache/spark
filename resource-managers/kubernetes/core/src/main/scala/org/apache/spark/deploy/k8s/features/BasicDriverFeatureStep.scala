@@ -34,9 +34,9 @@ import org.apache.spark.util.Utils
 private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep {
 
-  private val driverPodName = conf
-    .get(KUBERNETES_DRIVER_POD_NAME)
-    .getOrElse(s"${conf.resourceNamePrefix}-driver")
+  private val driverPodName = KubernetesConf.getStandardPodName(conf
+      .get(KUBERNETES_DRIVER_POD_NAME)
+      .getOrElse(s"${conf.resourceNamePrefix}-driver"))
 
   private val driverContainerImage = conf
     .get(DRIVER_CONTAINER_IMAGE)

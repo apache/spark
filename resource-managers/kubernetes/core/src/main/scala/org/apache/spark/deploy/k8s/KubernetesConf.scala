@@ -19,13 +19,17 @@ package org.apache.spark.deploy.k8s
 import java.util.Locale
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
+import io.fabric8.kubernetes.client.utils.KubernetesResourceUtil
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.DriverServiceFeatureStep.{DRIVER_SVC_POSTFIX, MAX_SERVICE_NAME_LENGTH}
 import org.apache.spark.deploy.k8s.submit._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SystemClock, Utils}
+
 
 /**
  * Structure containing metadata for Kubernetes logic to build Spark pods.
@@ -168,7 +172,7 @@ private[spark] class KubernetesExecutorConf(
 
 }
 
-private[spark] object KubernetesConf {
+private[spark] object KubernetesConf extends Logging{
   def createDriverConf(
       sparkConf: SparkConf,
       appId: String,
@@ -199,4 +203,35 @@ private[spark] object KubernetesConf {
       .replaceAll("[^a-z0-9\\-]", "")
       .replaceAll("-+", "-")
   }
+
+  def getStandardPodName(driverPodName: String): String = {
+    KubernetesResourceUtil.sanitizeName(driverPodName).replaceAll("^-", "")
+  }
+
+  def getStandardSecretName(secretName: String): String = {
+    KubernetesResourceUtil.sanitizeName(secretName).replaceAll("^-", "")
+  }
+
+  def getStandardServiceName(serviceName: String): String = {
+    val preferredServiceName = KubernetesResourceUtil.sanitizeName(serviceName).replaceAll("^-", "")
+
+    val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH
+      && Character.isLetter(preferredServiceName.charAt(0))) {
+      preferredServiceName
+    } else {
+      val randomServiceId = KubernetesUtils.uniqueID(new SystemClock())
+      val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
+      logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
+        s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters)" +
+        s"or the first character of $preferredServiceName is not letter which is not support. " +
+        s"Falling back to use $shorterServiceName as the driver service's name.")
+      shorterServiceName
+    }
+    resolvedServiceName
+  }
+
+  def getStandardConfigMapName(configMapName: String): String = {
+    KubernetesResourceUtil.sanitizeName(configMapName).replaceAll("^-", "")
+  }
+
 }

@@ -20,14 +20,12 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
-
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
 import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -108,13 +106,16 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
 
   private def needKeytabUpload: Boolean = keytab.exists(!Utils.isLocalUri(_))
 
-  private def dtSecretName: String = s"${kubernetesConf.resourceNamePrefix}-delegation-tokens"
+  private def dtSecretName: String = KubernetesConf.getStandardSecretName(
+    s"${kubernetesConf.resourceNamePrefix}-delegation-tokens")
 
-  private def ktSecretName: String = s"${kubernetesConf.resourceNamePrefix}-kerberos-keytab"
+  private def ktSecretName: String = KubernetesConf.getStandardSecretName(
+    s"${kubernetesConf.resourceNamePrefix}-kerberos-keytab")
 
   private def hasKerberosConf: Boolean = krb5CMap.isDefined | krb5File.isDefined
 
-  private def newConfigMapName: String = s"${kubernetesConf.resourceNamePrefix}-krb5-file"
+  private def newConfigMapName: String = KubernetesConf.getStandardConfigMapName(
+    s"${kubernetesConf.resourceNamePrefix}-krb5-file")
 
   override def configurePod(original: SparkPod): SparkPod = {
     original.transform { case pod if hasKerberosConf =>

@@ -65,8 +65,9 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     clientKeyDataBase64.isDefined ||
     clientCertDataBase64.isDefined
 
-  private val driverCredentialsSecretName =
-    s"${kubernetesConf.resourceNamePrefix}-kubernetes-credentials"
+  private val driverCredentialsSecretName = KubernetesConf.getStandardSecretName(
+    s"${kubernetesConf.resourceNamePrefix}-kubernetes-credentials")
+
 
   override def configurePod(pod: SparkPod): SparkPod = {
     if (!shouldMountSecret) {

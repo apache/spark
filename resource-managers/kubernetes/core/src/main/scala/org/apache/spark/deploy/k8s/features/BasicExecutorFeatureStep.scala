@@ -77,7 +77,8 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
+    val name = KubernetesConf.getStandardPodName(
+      s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}")
 
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
