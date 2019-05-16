@@ -647,9 +647,8 @@ private[spark] class ExecutorAllocationManager(
 
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
-    // The number of tasks currently running across all stages.
-    // Include running-but-zombie stage attempts and sepective task
-    private val taskIdToNumLiveTasks = new mutable.HashMap[Long, Int]
+    private val liveTaskIds = new mutable.HashSet[Long]
+    private val liveSpeculativeTaskIds = new mutable.HashSet[Long]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
     // Number of speculative tasks to be scheduled in each stage
     private val stageIdToNumSpeculativeTasks = new mutable.HashMap[Int, Int]
@@ -717,7 +716,11 @@ private[spark] class ExecutorAllocationManager(
       val executorId = taskStart.taskInfo.executorId
 
       allocationManager.synchronized {
-        taskIdToNumLiveTasks(taskId) = taskIdToNumLiveTasks.getOrElse(taskId, 0) + 1
+        if (taskStart.taskInfo.speculative) {
+          liveSpeculativeTaskIds += taskId
+        } else {
+          liveTaskIds += taskId
+        }
         // This guards against the following race condition:
         // 1. The `SparkListenerTaskStart` event is posted before the
         // `SparkListenerExecutorAdded` event
@@ -753,12 +756,12 @@ private[spark] class ExecutorAllocationManager(
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
       allocationManager.synchronized {
-        if (taskIdToNumLiveTasks.contains(taskId)) {
-          taskIdToNumLiveTasks(taskId) -= 1
-          if (taskIdToNumLiveTasks(taskId) <= 0) {
-            taskIdToNumLiveTasks.remove(taskId)
-          }
+        if (taskEnd.taskInfo.speculative) {
+          liveSpeculativeTaskIds.remove(taskId)
+        } else {
+          liveTaskIds.remove(taskId)
         }
+
         // If the executor is no longer running any scheduled tasks, mark it as idle
         if (executorIdToTaskIds.contains(executorId)) {
           executorIdToTaskIds(executorId) -= taskId
@@ -838,7 +841,7 @@ private[spark] class ExecutorAllocationManager(
      * Include running-but-zombie stage attempts
      */
     def totalRunningTasks(): Int = {
-      taskIdToNumLiveTasks.values.sum
+      liveTaskIds.size + liveSpeculativeTaskIds.size
     }
 
     /**
