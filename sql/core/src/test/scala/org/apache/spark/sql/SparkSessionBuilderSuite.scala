@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, SparkHadoopConf}
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.internal.SQLConf
 
@@ -138,7 +138,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("SPARK-15887: hive-site.xml should be loaded") {
     val session = SparkSession.builder().master("local").getOrCreate()
     assert(session.sessionState.newHadoopConf().get("hive.in.test") == "true")
-    assert(session.sparkContext.getHadoopConf.get.get("hive.in.test") == "true")
+    assert(SparkHadoopConf.get().get.get("hive.in.test") == "true")
   }
 
   test("SPARK-15991: Set global Hadoop conf") {
@@ -146,10 +146,10 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     val mySpecialKey = "my.special.key.15991"
     val mySpecialValue = "msv"
     try {
-      session.sparkContext.getHadoopConf.get.set(mySpecialKey, mySpecialValue)
+      SparkHadoopConf.get().get.set(mySpecialKey, mySpecialValue)
       assert(session.sessionState.newHadoopConf().get(mySpecialKey) == mySpecialValue)
     } finally {
-      session.sparkContext.getHadoopConf.get.unset(mySpecialKey)
+      SparkHadoopConf.get().get.unset(mySpecialKey)
     }
   }
 }

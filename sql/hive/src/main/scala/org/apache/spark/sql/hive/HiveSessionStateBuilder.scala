@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.SparkHadoopConf
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.v2.CatalogPlugin
@@ -58,7 +59,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       new HiveMetastoreCatalog(session),
       functionRegistry,
       conf,
-      SessionState.newHadoopConf(session.sparkContext.getHadoopConf.get, conf),
+      SessionState.newHadoopConf(SparkHadoopConf.get().get, conf),
       sqlParser,
       resourceLoader)
     parentState.foreach(_.catalog.copyStateTo(catalog))

@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
-import org.apache.spark.{HashPartitioner, Partitioner}
+import org.apache.spark.{HashPartitioner, Partitioner, SparkHadoopConf}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
@@ -755,7 +755,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf(ssc.sparkContext.getHadoopConf.get)
+      conf: JobConf = new JobConf(SparkHadoopConf.get().get)
     ): Unit = ssc.withScope {
     // Wrap conf in SerializableWritable so that ForeachDStream can be serialized for checkpoints
     val serializableConf = new SerializableJobConf(conf)
@@ -789,7 +789,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      conf: Configuration = ssc.sparkContext.getHadoopConf.get
+      conf: Configuration = SparkHadoopConf.get().get
     ): Unit = ssc.withScope {
     // Wrap conf in SerializableWritable so that ForeachDStream can be serialized for checkpoints
     val serializableConf = new SerializableConfiguration(conf)

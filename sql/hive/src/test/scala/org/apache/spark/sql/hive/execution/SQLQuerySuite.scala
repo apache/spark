@@ -26,7 +26,7 @@ import java.util.{Locale, Set}
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.{SparkException, SparkHadoopConf, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
@@ -1642,7 +1642,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val path = new Path(
       new Path(s"file:$tempDir"),
       "drop_database_removes_partition_dirs_table2")
-    val fs = path.getFileSystem(sparkContext.getHadoopConf.get)
+    val fs = path.getFileSystem(SparkHadoopConf.get().get)
     // The partition dir is not empty.
     assert(fs.listStatus(new Path(path, "part=1")).nonEmpty)
 
@@ -1690,7 +1690,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("select '1' as part, key, value from src")
     )
     val path = new Path(new Path(s"file:$tempDir"), "drop_table_removes_partition_dirs_table2")
-    val fs = path.getFileSystem(sparkContext.getHadoopConf.get)
+    val fs = path.getFileSystem(SparkHadoopConf.get().get)
     // The partition dir is not empty.
     assert(fs.listStatus(new Path(path, "part=1")).nonEmpty)
 

@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
+import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext, SparkHadoopConf}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -959,7 +959,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       previousCheckpointFile.foreach { file =>
         try {
           val checkpointFile = new Path(file)
-          checkpointFile.getFileSystem(sc.getHadoopConf.get).delete(checkpointFile, true)
+          checkpointFile.getFileSystem(SparkHadoopConf.get().get).delete(checkpointFile, true)
         } catch {
           case e: IOException =>
             logWarning(s"Cannot delete checkpoint file $file:", e)

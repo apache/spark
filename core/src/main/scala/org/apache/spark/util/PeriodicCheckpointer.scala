@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkHadoopConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 
@@ -172,7 +172,7 @@ private[spark] abstract class PeriodicCheckpointer[T](
     val old = checkpointQueue.dequeue()
     // Since the old checkpoint is not deleted by Spark, we manually delete it.
     getCheckpointFiles(old).foreach(
-      PeriodicCheckpointer.removeCheckpointFile(_, sc.getHadoopConf.get))
+      PeriodicCheckpointer.removeCheckpointFile(_, SparkHadoopConf.get().get))
   }
 }
 

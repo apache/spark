@@ -35,6 +35,7 @@ import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.SparkHadoopConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -258,7 +259,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
         val sparkContext = ssc.sparkContext
-        val hc = sparkContext.getHadoopConf.get
+        val hc = SparkHadoopConf.get().get
         val fs = FileSystem.get(testPath.toUri, hc)
 
         fs.delete(testPath, true)

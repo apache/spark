@@ -30,7 +30,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException, SparkHadoopConf}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
@@ -674,7 +674,7 @@ private[ml] object MetaAlgorithmReadWrite {
 private[ml] class FileSystemOverwrite extends Logging {
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean, sc: SparkContext): Unit = {
-    val hadoopConf = sc.getHadoopConf.get
+    val hadoopConf = SparkHadoopConf.get().get
     val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

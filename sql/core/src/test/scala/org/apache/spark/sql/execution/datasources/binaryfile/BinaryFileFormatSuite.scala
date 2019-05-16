@@ -27,10 +27,11 @@ import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkHadoopConf}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources._
@@ -54,7 +55,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
 
     testDir = Utils.createTempDir().getAbsolutePath
     fsTestDir = new Path(testDir)
-    fs = fsTestDir.getFileSystem(sparkContext.getHadoopConf.get)
+    fs = fsTestDir.getFileSystem(SparkHadoopConf.get().get)
 
     val year2014Dir = new File(testDir, "year=2014")
     year2014Dir.mkdir()

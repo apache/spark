@@ -19,7 +19,7 @@ package org.apache.spark.graphx.util
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkContext, SparkFunSuite, SparkHadoopConf}
 import org.apache.spark.graphx.{Edge, Graph, LocalSparkContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -145,7 +145,7 @@ private object PeriodicGraphCheckpointerSuite {
     //       Instead, we check for the presence of the checkpoint files.
     //       This test should continue to work even after this graph.isCheckpointed issue
     //       is fixed (though it can then be simplified and not look for the files).
-    val hadoopConf = graph.vertices.sparkContext.getHadoopConf.get
+    val hadoopConf = SparkHadoopConf.get().get
     graph.getCheckpointFiles.foreach { checkpointFile =>
       val path = new Path(checkpointFile)
       val fs = path.getFileSystem(hadoopConf)

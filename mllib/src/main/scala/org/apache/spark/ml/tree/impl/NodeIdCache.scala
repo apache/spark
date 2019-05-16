@@ -23,6 +23,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkHadoopConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.tree.{LearningNode, Split}
 import org.apache.spark.rdd.RDD
@@ -78,7 +79,7 @@ private[spark] class NodeIdCache(
   private val canCheckpoint = nodeIdsForInstances.sparkContext.getCheckpointDir.nonEmpty
 
   // Hadoop Configuration for deleting checkpoints as needed
-  private val hadoopConf = nodeIdsForInstances.sparkContext.getHadoopConf.get
+  private val hadoopConf = SparkHadoopConf.get().get
 
   /**
    * Update the node index values in the cache.

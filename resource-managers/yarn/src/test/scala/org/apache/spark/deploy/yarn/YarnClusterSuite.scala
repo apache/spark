@@ -464,7 +464,7 @@ private object YarnClusterDriver extends Logging with Matchers {
           )
         }
 
-        val yarnConf = new YarnConfiguration(sc.getHadoopConf.get)
+        val yarnConf = new YarnConfiguration(SparkHadoopConf.get().get)
         val containerId = YarnContainerInfoHelper.getContainerId(container = None)
         val user = Utils.getCurrentUserName()
 

@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkHadoopConf}
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
@@ -83,7 +83,7 @@ private[sql] class SessionState(
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
-    sharedState.sparkContext.getHadoopConf.get,
+    SparkHadoopConf.get().get,
     conf)
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {

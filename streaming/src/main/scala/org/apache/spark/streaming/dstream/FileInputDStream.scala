@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
+import org.apache.spark.SparkHadoopConf
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamInputInfo
@@ -302,7 +303,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   private def fs: FileSystem = {
-    if (_fs == null) _fs = directoryPath.getFileSystem(ssc.sparkContext.getHadoopConf.get)
+    if (_fs == null) _fs = directoryPath.getFileSystem(SparkHadoopConf.get().get)
     _fs
   }
 

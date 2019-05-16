@@ -23,7 +23,7 @@ import scala.collection.immutable.IndexedSeq
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, SparkHadoopConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -63,9 +63,9 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
       logInfo(s"Local disk address is ${dir.toString}.")
 
       // Set the minsize per node and rack to be larger than the size of the input file.
-      sc.getHadoopConf.get.setLong(
+      SparkHadoopConf.get().get.setLong(
         "mapreduce.input.fileinputformat.split.minsize.per.node", 123456)
-      sc.getHadoopConf.get.setLong(
+      SparkHadoopConf.get().get.setLong(
         "mapreduce.input.fileinputformat.split.minsize.per.rack", 123456)
 
       WholeTextFileInputFormatSuite.files.foreach { case (filename, contents) =>

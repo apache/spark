@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, SparkHadoopConf}
 import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.Utils
@@ -48,7 +48,7 @@ class HiveSharedStateSuite extends SparkFunSuite {
     assert(state.warehousePath !== invalidPath, "warehouse path can't determine by session options")
     assert(sc.conf.get(WAREHOUSE_PATH.key) !== invalidPath,
       "warehouse conf in session options can't affect application wide spark conf")
-    assert(sc.getHadoopConf.get.get(ConfVars.METASTOREWAREHOUSE.varname) !== invalidPath,
+    assert(SparkHadoopConf.get().get.get(ConfVars.METASTOREWAREHOUSE.varname) !== invalidPath,
       "warehouse conf in session options can't affect application wide hadoop conf")
 
     assert(!state.sparkContext.conf.contains("spark.foo"),

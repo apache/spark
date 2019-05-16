@@ -107,7 +107,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private val receiverInputStreamIds = receiverInputStreams.map { _.id }
   private val receivedBlockTracker = new ReceivedBlockTracker(
     ssc.sparkContext.conf,
-    ssc.sparkContext.getHadoopConf.get,
+    SparkHadoopConf.get().get,
     receiverInputStreamIds,
     ssc.scheduler.clock,
     ssc.isCheckpointPresent,
@@ -579,7 +579,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       val checkpointDirOption = Option(ssc.checkpointDir)
       val serializableHadoopConf =
-        new SerializableConfiguration(ssc.sparkContext.getHadoopConf.get)
+        new SerializableConfiguration(SparkHadoopConf.get().get)
 
       // Function to start the receiver on the worker node
       val startReceiverFunc: Iterator[Receiver[_]] => Unit =

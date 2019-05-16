@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
+import org.apache.spark.SparkHadoopConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -41,7 +42,7 @@ class HiveSessionStateSuite extends SessionStateSuite with TestHiveSingleton {
 
   test("Clone then newSession") {
     val sparkSession = hiveContext.sparkSession
-    val conf = sparkSession.sparkContext.getHadoopConf.get
+    val conf = SparkHadoopConf.get().get
     val oldValue = conf.get(ConfVars.METASTORECONNECTURLKEY.varname)
     sparkSession.cloneSession()
     sparkSession.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]

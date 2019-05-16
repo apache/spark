@@ -41,7 +41,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     _partitioner: Option[Partitioner] = None
   ) extends CheckpointRDD[T](sc) {
 
-  @transient private val hadoopConf = sc.getHadoopConf.get
+  @transient private val hadoopConf = SparkHadoopConf.get().get
   @transient private val cpath = new Path(checkpointPath)
   @transient private val fs = cpath.getFileSystem(hadoopConf)
   private val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
@@ -128,14 +128,14 @@ private[spark] object ReliableCheckpointRDD extends Logging {
 
     // Create the output path for the checkpoint
     val checkpointDirPath = new Path(checkpointDir)
-    val fs = checkpointDirPath.getFileSystem(sc.getHadoopConf.get)
+    val fs = checkpointDirPath.getFileSystem(SparkHadoopConf.get().get)
     if (!fs.mkdirs(checkpointDirPath)) {
       throw new SparkException(s"Failed to create checkpoint path $checkpointDirPath")
     }
 
     // Save to file, and reload it as an RDD
     val broadcastedConf = sc.broadcast(
-      new SerializableConfiguration(sc.getHadoopConf.get))
+      new SerializableConfiguration(SparkHadoopConf.get().get))
     // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
     sc.runJob(originalRDD,
       writePartitionToCheckpointFile[T](checkpointDirPath.toString, broadcastedConf) _)
@@ -223,7 +223,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     try {
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
       val bufferSize = sc.conf.get(BUFFER_SIZE)
-      val fs = partitionerFilePath.getFileSystem(sc.getHadoopConf.get)
+      val fs = partitionerFilePath.getFileSystem(SparkHadoopConf.get().get)
       val fileOutputStream = fs.create(partitionerFilePath, false, bufferSize)
       val serializer = SparkEnv.get.serializer.newInstance()
       val serializeStream = serializer.serializeStream(fileOutputStream)
@@ -251,7 +251,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     try {
       val bufferSize = sc.conf.get(BUFFER_SIZE)
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
-      val fs = partitionerFilePath.getFileSystem(sc.getHadoopConf.get)
+      val fs = partitionerFilePath.getFileSystem(SparkHadoopConf.get().get)
       val fileInputStream = fs.open(partitionerFilePath, bufferSize)
       val serializer = SparkEnv.get.serializer.newInstance()
       val partitioner = Utils.tryWithSafeFinally {

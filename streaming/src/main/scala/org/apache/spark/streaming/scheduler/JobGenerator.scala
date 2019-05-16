@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.{Failure, Success, Try}
 
+import org.apache.spark.SparkHadoopConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
@@ -67,7 +68,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private lazy val shouldCheckpoint = ssc.checkpointDuration != null && ssc.checkpointDir != null
 
   private lazy val checkpointWriter = if (shouldCheckpoint) {
-    new CheckpointWriter(this, ssc.conf, ssc.checkpointDir, ssc.sparkContext.getHadoopConf.get)
+    new CheckpointWriter(this, ssc.conf, ssc.checkpointDir, SparkHadoopConf.get().get)
   } else {
     null
   }

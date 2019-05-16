@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.internal
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkHadoopConf}
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.catalog.v2.CatalogPlugin
@@ -145,7 +145,7 @@ abstract class BaseSessionStateBuilder(
       () => session.sharedState.globalTempViewManager,
       functionRegistry,
       conf,
-      SessionState.newHadoopConf(session.sparkContext.getHadoopConf.get, conf),
+      SessionState.newHadoopConf(SparkHadoopConf.get().get, conf),
       sqlParser,
       resourceLoader)
     parentState.foreach(_.catalog.copyStateTo(catalog))

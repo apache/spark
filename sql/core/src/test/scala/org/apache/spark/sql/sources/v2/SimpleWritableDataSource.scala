@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.SparkHadoopConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader._
@@ -85,7 +85,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
     override def buildForBatch(): BatchWrite = {
       val hadoopPath = new Path(path)
-      val hadoopConf = SparkContext.getActive.get.getHadoopConf.get
+      val hadoopConf = SparkHadoopConf.get().get
       val fs = hadoopPath.getFileSystem(hadoopConf)
 
       if (needTruncate) {
@@ -134,7 +134,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     extends SimpleBatchTable with SupportsWrite {
 
     private val path = options.get("path")
-    private val conf = SparkContext.getActive.get.getHadoopConf.get
+    private val conf = SparkHadoopConf.get().get
 
     override def schema(): StructType = tableSchema
 

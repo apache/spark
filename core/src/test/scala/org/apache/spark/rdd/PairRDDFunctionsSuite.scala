@@ -643,7 +643,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     val pairs = sc.parallelize(Array((Integer.valueOf(1), Integer.valueOf(2))), 1)
 
     def saveRddWithPath(path: String): Unit = {
-      val job = NewJob.getInstance(new Configuration(sc.getHadoopConf.get))
+      val job = NewJob.getInstance(new Configuration(SparkHadoopConf.get().get))
       job.setOutputKeyClass(classOf[Integer])
       job.setOutputValueClass(classOf[Integer])
       job.setOutputFormatClass(classOf[NewFakeFormat])
