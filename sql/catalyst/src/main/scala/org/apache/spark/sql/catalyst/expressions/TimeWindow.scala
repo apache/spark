@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
@@ -104,20 +102,7 @@ object TimeWindow {
    *         precision.
    */
   private def getIntervalInMicroSeconds(interval: String): Long = {
-    if (StringUtils.isBlank(interval)) {
-      throw new IllegalArgumentException(
-        "The window duration, slide duration and start time cannot be null or blank.")
-    }
-    val intervalString = if (interval.startsWith("interval")) {
-      interval
-    } else {
-      "interval " + interval
-    }
-    val cal = CalendarInterval.fromString(intervalString)
-    if (cal == null) {
-      throw new IllegalArgumentException(
-        s"The provided interval ($interval) did not correspond to a valid interval string.")
-    }
+    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
     if (cal.months > 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")
