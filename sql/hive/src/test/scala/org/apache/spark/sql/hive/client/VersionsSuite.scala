@@ -587,6 +587,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: sql read hive materialized view") {
       // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
       if (version == "2.3" || version == "3.1") {
+        // Since HIVE-14498(Hive 3.0), Automatic rewriting for materialized view cannot be enabled
+        // if the materialized view uses non-transactional tables.
         val disableRewrite = if (version == "2.3") "" else "DISABLE REWRITE"
         client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
         client.runSqlHive(
