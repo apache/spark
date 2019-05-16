@@ -118,6 +118,20 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       ))
   }
 
+  test("run Spark in yarn-cluster mode with gpu confs") {
+    testBasicYarnApp(false,
+      Map(
+        DRIVER_MEMORY.key -> "512m",
+        DRIVER_CORES.key -> "1",
+        EXECUTOR_CORES.key -> "1",
+        EXECUTOR_MEMORY.key -> "512m",
+        EXECUTOR_INSTANCES.key -> "2"
+        /* SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX -> "1",
+        SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX -> "1",
+        SPARK_DRIVER_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX -> "1" */
+      ))
+  }
+
   test("yarn-cluster should respect conf overrides in SparkHadoopUtil (SPARK-16414, SPARK-23630)") {
     // Create a custom hadoop config file, to make sure it's contents are propagated to the driver.
     val customConf = Utils.createTempDir()

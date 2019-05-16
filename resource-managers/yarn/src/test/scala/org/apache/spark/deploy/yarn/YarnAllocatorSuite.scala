@@ -182,6 +182,30 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(containerRequest.getCapability === expectedResources)
   }
 
+  test("custom resource requested from spark resource configs") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
+
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val handler = createAllocator(1, mockAmClient,
+      Map(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2",
+        SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX -> "3"))
+
+    handler.updateResourceRequests()
+    val container = createContainer("host1", resource = handler.resource)
+    handler.handleAllocatedContainers(Array(container))
+
+    // get amount of memory and vcores from resource, so effectively skipping their validation
+    val expectedResources = Resource.newInstance(handler.resource.getMemory(),
+      handler.resource.getVirtualCores)
+    ResourceRequestHelper.setResourceRequests(Map("gpu" -> "2"), expectedResources)
+    val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
+
+    verify(mockAmClient).addContainerRequest(captor.capture())
+    val containerRequest: ContainerRequest = captor.getValue
+    assert(containerRequest.getCapability === expectedResources)
+  }
+
   test("container should not be created if requested number if met") {
     // request a single container and receive it
     val handler = createAllocator(1)
