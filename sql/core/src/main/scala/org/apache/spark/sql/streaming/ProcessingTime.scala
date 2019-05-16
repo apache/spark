@@ -76,7 +76,7 @@ object ProcessingTime {
    */
   @deprecated("use Trigger.ProcessingTime(interval)", "2.2.0")
   def apply(interval: String): ProcessingTime = {
-    val cal = CalendarInterval.fromUserString(interval)
+    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
     if (cal.months > 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }

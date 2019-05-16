@@ -105,7 +105,7 @@ public class CalendarIntervalSuite {
   }
 
   @Test
-  public void fromUserStringTest() {
+  public void fromCaseInsensitiveStringTest() {
     for (String input : new String[]{"5 MINUTES", "5 minutes", "5 Minutes"}) {
       assertEquals(fromCaseInsensitiveString(input), new CalendarInterval(0, 5L * 60 * 1_000_000));
     }
