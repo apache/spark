@@ -18,26 +18,23 @@
 package org.apache.spark.storage
 
 import java.io.IOException
-import java.nio.ByteBuffer
 import java.util.{HashMap => JHashMap}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 import org.apache.spark.SparkConf
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.network.shuffle.ExternalShuffleClient
-import org.apache.spark.network.shuffle.protocol.{BlocksRemoved, BlockTransferMessage}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
  * BlockManagerMasterEndpoint is an [[ThreadSafeRpcEndpoint]] on the master node to track statuses
@@ -80,6 +77,8 @@ class BlockManagerMasterEndpoint(
   }
 
   val proactivelyReplicate = conf.get(config.STORAGE_REPLICATION_PROACTIVE)
+
+  val defaultRpcTimeout = RpcUtils.askRpcTimeout(conf)
 
   logInfo("BlockManagerMasterEndpoint up")
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
@@ -204,11 +203,12 @@ class BlockManagerMasterEndpoint(
     val removeRddBlockViaExtShuffleServiceFutures = externalShuffleClient.map { shuffleClient =>
       blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
         Future[Int] {
-          shuffleClient.removeBlocks(
+          val numRemovedBlocks = shuffleClient.removeBlocks(
             bmId.host,
             bmId.port,
             bmId.executorId,
-            blockIds.map(_.toString).toArray).get()
+            blockIds.map(_.toString).toArray)
+          numRemovedBlocks.get(defaultRpcTimeout.duration.toSeconds, TimeUnit.SECONDS)
         }
       }
     }.getOrElse(Seq.empty)

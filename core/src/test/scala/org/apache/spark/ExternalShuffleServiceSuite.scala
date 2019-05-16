@@ -125,6 +125,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     }
 
     assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
+
+    // test unpersist: as executors are killed the blocks will be removed via the shuffle service
     rdd.unpersist(true)
     assert(sc.env.blockManager.getRemoteValues(blockId).isEmpty)
     rpcHandler.applicationRemoved(sc.conf.getAppId, true)
