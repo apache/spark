@@ -256,6 +256,35 @@ case class AlterTableSetPropertiesCommand(
 }
 
 /**
+ * A command that update table BucketSpec.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table_name
+ *     [CLUSTERED BY (col_name [, col_name, ...])
+ *      [SORTED BY (col_name  [, col_name  ...])]
+ *      INTO number_of_buckets BUCKETS];
+ * }}}
+ */
+case class AlterTableBucketCommand(
+    tableName: TableIdentifier,
+    bucket: BucketSpec) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+
+    if (table.bucketSpec.isDefined) {
+      val bucketTable = table.copy(bucketSpec = Some(bucket))
+      catalog.alterTable(bucketTable)
+    } else {
+      throw new AnalysisException(s"This ${table.identifier.table} has no bucket info.")
+    }
+    Seq.empty[Row]
+  }
+}
+
+/**
  * A command that unsets table/view properties.
  *
  * The syntax of this command is:

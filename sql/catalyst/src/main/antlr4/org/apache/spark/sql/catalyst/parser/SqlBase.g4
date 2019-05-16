@@ -138,6 +138,7 @@ statement
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
     | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
+    | ALTER TABLE tableIdentifier bucketSpec                           #updateTableBucket
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?

@@ -1097,15 +1097,23 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("alter table: bucketing is not supported") {
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    assertUnsupported("ALTER TABLE dbx.tab1 CLUSTERED BY (blood, lemon, grape) INTO 11 BUCKETS")
-    assertUnsupported("ALTER TABLE dbx.tab1 CLUSTERED BY (fuji) SORTED BY (grape) INTO 5 BUCKETS")
-    assertUnsupported("ALTER TABLE dbx.tab1 NOT CLUSTERED")
-    assertUnsupported("ALTER TABLE dbx.tab1 NOT SORTED")
+  test("alter table: bucketing is supported") {
+    withTable("tab1") {
+      val catalog = spark.sessionState.catalog
+      sql(
+        """
+          |create table tab1(
+          |id int,
+          |name string,
+          |age int) USING parquet
+          |clustered by(age) into 4 buckets
+        """.stripMargin)
+      sql("ALTER TABLE tab1 CLUSTERED BY (name) SORTED BY (age) INTO 11 BUCKETS")
+      val table = catalog.getTableMetadata(TableIdentifier("tab1"))
+      assert(table.bucketSpec.get.bucketColumnNames.exists(_.equals("name")))
+      assert(table.bucketSpec.get.sortColumnNames.exists(_.equals("age")))
+      assert(table.bucketSpec.get.numBuckets == 11)
+    }
   }
 
   test("alter table: skew is not supported") {

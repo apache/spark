@@ -490,6 +490,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       "MSCK REPAIR TABLE")
   }
 
+	/**
+	 * Create a [[AlterTableBucketCommand]] command.
+	 *
+	 * For example:
+	 * {{{
+	 *   ALTER TABLE table_name
+	 *       [CLUSTERED BY (col_name [, col_name, ...])
+	 *        [SORTED BY (col_name  [, col_name  ...])]
+	 *        INTO number_of_buckets BUCKETS];
+	 * }}}
+	 */
+	override def visitUpdateTableBucket(ctx: UpdateTableBucketContext): LogicalPlan = withOrigin(ctx) {
+		val tableIdentifier = visitTableIdentifier(ctx.tableIdentifier())
+		val bucketSpec = visitBucketSpec(ctx.bucketSpec())
+		AlterTableBucketCommand(tableIdentifier, bucketSpec)
+	}
+
   /**
    * Create a [[CreateDatabaseCommand]] command.
    *
