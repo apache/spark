@@ -460,12 +460,17 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     val query = TestRelation(StructType(Seq(
       StructField("s", StringType))).toAttributes)
 
-    val plan1 = byName(table, query)
-    val plan2 = byPosition(table, query)
-    assertResolved(plan1)
-    assertResolved(plan2)
-    checkAnalysis(plan1, plan1)
-    checkAnalysis(plan2, plan2)
+    withClue("byName") {
+      val parsedPlan = byName(table, query)
+      assertResolved(parsedPlan)
+      checkAnalysis(parsedPlan, parsedPlan)
+    }
+
+    withClue("byPosition") {
+      val parsedPlan = byPosition(table, query)
+      assertResolved(parsedPlan)
+      checkAnalysis(parsedPlan, parsedPlan)
+    }
   }
 
   def assertNotResolved(logicalPlan: LogicalPlan): Unit = {
