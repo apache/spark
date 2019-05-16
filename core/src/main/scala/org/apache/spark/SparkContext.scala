@@ -286,7 +286,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
+  @deprecated("please use SparkHadoopConf.get().get or hadoopConf.get.", "3.0.0")
   def hadoopConfiguration: Configuration = SparkHadoopConf.get().get
+
+  /**
+   * A global Hadoop Conf used to set, track hadoop related configurations.
+   */
+  def hadoopConf: SparkHadoopConf = SparkHadoopConf.get()
 
   private[spark] def executorMemory: Int = _executorMemory
 

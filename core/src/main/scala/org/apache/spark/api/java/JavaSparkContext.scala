@@ -600,8 +600,16 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
+  @deprecated("please use hadoopConf().get()", "3.0.0")
   def hadoopConfiguration(): Configuration = {
-    SparkHadoopConf.get().get
+    sc.hadoopConfiguration
+  }
+
+  /**
+   * A global Hadoop Conf used to set, track hadoop related configurations.
+   */
+  def hadoopConf(): SparkHadoopConf = {
+    SparkHadoopConf.get()
   }
 
   /**
