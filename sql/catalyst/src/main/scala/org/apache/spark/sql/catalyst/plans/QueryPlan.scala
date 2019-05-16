@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTagName}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -271,6 +271,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 }
 
 object QueryPlan extends PredicateHelper {
+  val LOGICAL_PLAN_TAG_NAME = TreeNodeTagName("logical_plan")
+
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
    * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we

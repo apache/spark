@@ -620,4 +620,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       assert(planString.startsWith("Truncated plan of"))
     }
   }
+
+  test("tags will be carried over after copy") {
+
+  }
 }
