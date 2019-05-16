@@ -26,7 +26,8 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.FilePartition
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2974,6 +2975,23 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       withTable("t") {
         sql("create table t (s struct<i: Int>) using json")
         checkAnswer(sql("select s.I from t group by s.i"), Nil)
+      }
+    }
+  }
+
+  test("SPARK-27699 Converting disjunctions into ORC SearchArguments") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+      withTempPath { dir =>
+        spark.range(10).map(i => (i, i.toString)).toDF("id", "s").write.orc(dir.getCanonicalPath)
+        val df = spark.read.orc(dir.getCanonicalPath)
+          .where(('id < 2 and 's.contains("foo")) or ('id > 10 and 's.contains("bar")))
+        val scan = df.queryExecution.sparkPlan
+          .find(_.isInstanceOf[BatchScanExec]).get.asInstanceOf[BatchScanExec]
+          .scan
+        assert(scan.isInstanceOf[OrcScan])
+        assertResult(Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10)))) {
+          scan.asInstanceOf[OrcScan].pushedFilters
+        }
       }
     }
   }
