@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkHadoopConf}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkHadoopConf}
 import org.apache.spark.deploy.yarn.ApplicationMaster
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.YarnContainerInfoHelper
