@@ -44,7 +44,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
-        // A map from translated data source filters to original catalyst filter expressions.
+        // A map from translated data source leaf node filters to original catalyst filter
+        // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
+        // pushed down. This map can used to construct a catalyst filter expression from the input
+        // filter, or a superset(partial push down filter) of the input filter.
         val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
         val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
         // Catalyst filter expression that can't be translated to data source filters.

@@ -516,9 +516,9 @@ object DataSourceStrategy {
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
    * @param predicate The input [[Expression]] to be translated as [[Filter]]
-   * @param translatedFilterToExpr Optional Mapping of all the leaf node filter expression to its
-   *                               translated [[Filter]]. The map is used for rebuilding Expression
-   *                               from [[Filter]]s.
+   * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
+   *                               translated [[Filter]]. The map is used for rebuilding
+   *                               [[Expression]] from [[Filter]].
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
