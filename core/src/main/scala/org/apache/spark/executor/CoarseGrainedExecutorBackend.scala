@@ -112,8 +112,8 @@ private[spark] class CoarseGrainedExecutorBackend(
           s"$SPARK_TASK_RESOURCE_PREFIX, but can't find any resources available on the executor.")
       }
       val execReqResourcesAndCounts =
-        env.conf.getAllWithPrefixAndPostfix(SPARK_EXECUTOR_RESOURCE_PREFIX,
-          SPARK_RESOURCE_COUNT_POSTFIX).toMap
+        env.conf.getAllWithPrefixAndSuffix(SPARK_EXECUTOR_RESOURCE_PREFIX,
+          SPARK_RESOURCE_COUNT_SUFFIX).toMap
 
       ResourceDiscoverer.checkActualResourcesMeetRequirements(execReqResourcesAndCounts,
         actualExecResources)

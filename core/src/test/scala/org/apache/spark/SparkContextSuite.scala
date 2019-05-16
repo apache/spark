@@ -743,9 +743,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       val conf = new SparkConf()
         .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_COUNT_POSTFIX, "1")
+          SPARK_RESOURCE_COUNT_SUFFIX, "1")
         .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, scriptPath)
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
       sc = new SparkContext(conf)
@@ -768,11 +768,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       val conf = new SparkConf()
         .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_COUNT_POSTFIX, "1")
+          SPARK_RESOURCE_COUNT_SUFFIX, "1")
         .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_ADDRESSES_POSTFIX, "0, 1, 8")
+          SPARK_RESOURCE_ADDRESSES_SUFFIX, "0, 1, 8")
         .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, scriptPath)
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
       sc = new SparkContext(conf)
@@ -791,7 +791,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("Test parsing resources task configs with missing executor config") {
     val conf = new SparkConf()
       .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_COUNT_POSTFIX, "1")
+        SPARK_RESOURCE_COUNT_SUFFIX, "1")
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
 
@@ -807,9 +807,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("Test parsing resources executor config < task requirements") {
     val conf = new SparkConf()
       .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_COUNT_POSTFIX, "2")
+        SPARK_RESOURCE_COUNT_SUFFIX, "2")
       .set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_COUNT_POSTFIX, "1")
+        SPARK_RESOURCE_COUNT_SUFFIX, "1")
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
 

@@ -55,7 +55,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val scriptPath = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu","addresses":["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, scriptPath)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
       val resources =
         ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
       val gpuValue = resources.get("gpu")
@@ -77,9 +77,9 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val fpgaScript = mockDiscoveryScript(fpgaFile,
         """'{"name": "fpga","addresses":["f0", "f1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuScript)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuScript)
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, fpgaScript)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, fpgaScript)
       // it should only look at the resources passed in and ignore fpga conf
       val resources =
         ResourceDiscoverer.discoverResourcesInformation(sparkconf,
@@ -101,7 +101,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val scriptPath = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu"}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, scriptPath)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
       val resources =
         ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
       val gpuValue = resources.get("gpu")
@@ -119,13 +119,13 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val gpuDiscovery = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu", "addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuDiscovery)
 
       val fpgaFile = new File(dir, "fpgaDiscoverScript")
       val fpgaDiscovery = mockDiscoveryScript(fpgaFile,
         """'{"name": "fpga", "addresses": ["f1", "f2", "f3"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, fpgaDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, fpgaDiscovery)
 
       val resources =
         ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
@@ -153,9 +153,9 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val gpuDiscovery = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu", "addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuDiscovery)
       sparkconf set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, "boguspath")
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, "boguspath")
       // make sure it reads from correct config, here it should use driver
       val resources =
         ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_DRIVER_RESOURCE_PREFIX)
@@ -175,7 +175,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val gpuDiscovery = mockDiscoveryScript(gpuFile,
         """'{"name": "fpga", "addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuDiscovery)
       val error = intercept[SparkException] {
         ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_DRIVER_RESOURCE_PREFIX)
       }.getMessage()
@@ -192,7 +192,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val gpuDiscovery = mockDiscoveryScript(gpuFile,
         """'{"addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuDiscovery)
       val error = intercept[SparkException] {
         ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
       }.getMessage()
@@ -207,7 +207,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val file1 = new File(dir, "bogusfilepath")
       try {
         sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, file1.getPath())
 
         val error = intercept[SparkException] {
           ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
@@ -223,7 +223,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
   test("gpu's specified but not discovery script") {
     val sparkconf = new SparkConf
     sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-      SPARK_RESOURCE_COUNT_POSTFIX, "2")
+      SPARK_RESOURCE_COUNT_SUFFIX, "2")
 
     val error = intercept[SparkException] {
       ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)

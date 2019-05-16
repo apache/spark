@@ -63,7 +63,7 @@ private[spark] object ResourceDiscoverer extends Logging {
     val resourceNames = resources.getOrElse(
       // get unique resource names by grabbing first part config with multiple periods,
       // ie resourceName.count, grab resourceName part
-      sparkConf.getAllWithPrefix(confPrefix).map { case (k, _) => k.split('.').head }.toSet
+      SparkConf.getBaseOfConfigs(sparkConf.getAllWithPrefix(confPrefix))
     )
     resourceNames.map { rName => {
       val rInfo = getResourceInfo(sparkConf, confPrefix, rName)
@@ -75,7 +75,7 @@ private[spark] object ResourceDiscoverer extends Logging {
       sparkConf: SparkConf,
       confPrefix: String,
       resourceName: String): ResourceInformation = {
-    val discoveryConf = confPrefix + resourceName + SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX
+    val discoveryConf = confPrefix + resourceName + SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX
     val script = sparkConf.getOption(discoveryConf)
     val result = if (script.nonEmpty) {
       val scriptFile = new File(script.get)

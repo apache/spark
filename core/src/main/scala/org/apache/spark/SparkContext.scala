@@ -379,11 +379,8 @@ class SparkContext(config: SparkConf) extends Logging {
     // Only call getAllWithPrefix once and filter on those since there could be a lot of spark
     // configs.
     val allDriverResourceConfs = _conf.getAllWithPrefix(SPARK_DRIVER_RESOURCE_PREFIX)
-    // allDriverResourceConfs is in the format Map("gpu.addresses" -> "1,2,3"),
-    // get just the resource name "gpu" and the addresses "1,2,3"
-    val resourcesWithAddrsInConfs = allDriverResourceConfs.filter {
-      case (rConf, _) => rConf.contains(SPARK_RESOURCE_ADDRESSES_POSTFIX)
-    }.map { case (k, v) => (k.split('.').head, v) }
+    val resourcesWithAddrsInConfs =
+      SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_ADDRESSES_SUFFIX)
 
     _resources = if (resourcesWithAddrsInConfs.nonEmpty) {
       resourcesWithAddrsInConfs.map { case (rName, addrString) =>
@@ -393,14 +390,13 @@ class SparkContext(config: SparkConf) extends Logging {
     } else {
       // we already have the resources confs here so just pass in the unique resource names
       // rather then having the resource discoverer reparse all the configs.
-      val uniqueResources = allDriverResourceConfs.map { case (k, _) => k.split('.').head }.toSet
+      val uniqueResources = SparkConf.getBaseOfConfigs(allDriverResourceConfs)
       ResourceDiscoverer.discoverResourcesInformation(_conf, SPARK_DRIVER_RESOURCE_PREFIX,
         Some(uniqueResources))
     }
     // verify the resources we discovered are what the user requested
-    val driverReqResourcesAndCounts = allDriverResourceConfs.filter { case (rName, _) =>
-      rName.endsWith(SPARK_RESOURCE_COUNT_POSTFIX)
-    }.map { case (k, v) => (k.split('.').head, v) }.toMap
+    val driverReqResourcesAndCounts =
+      SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_COUNT_SUFFIX).toMap
     ResourceDiscoverer.checkActualResourcesMeetRequirements(driverReqResourcesAndCounts, _resources)
   }
 
