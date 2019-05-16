@@ -37,8 +37,21 @@ case class CreateTableExec(
     ignoreIfExists: Boolean) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    if (!catalog.tableExists(identifier)) {
+    def create(): Unit = {
       catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+    }
+
+    if (!catalog.tableExists(identifier)) {
+      if (ignoreIfExists) {
+        try {
+          create()
+        } catch {
+          case _: TableAlreadyExistsException =>
+            // ignore the table that was created after checking existence
+        }
+      } else {
+        create()
+      }
     } else if (!ignoreIfExists) {
       throw new TableAlreadyExistsException(identifier)
     }
