@@ -21,8 +21,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.Duration
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.unsafe.types.CalendarInterval
 
