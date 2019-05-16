@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.sql.Date
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
@@ -160,20 +158,7 @@ private[sql] class GroupStateImpl[S] private(
   def getTimeoutTimestamp: Long = timeoutTimestamp
 
   private def parseDuration(duration: String): Long = {
-    if (StringUtils.isBlank(duration)) {
-      throw new IllegalArgumentException(
-        "Provided duration is null or blank.")
-    }
-    val intervalString = if (duration.startsWith("interval")) {
-      duration
-    } else {
-      "interval " + duration
-    }
-    val cal = CalendarInterval.fromString(intervalString)
-    if (cal == null) {
-      throw new IllegalArgumentException(
-        s"Provided duration ($duration) is not valid.")
-    }
+    val cal = CalendarInterval.fromCaseInsensitiveString(duration)
     if (cal.milliseconds < 0 || cal.months < 0) {
       throw new IllegalArgumentException(s"Provided duration ($duration) is not positive")
     }
