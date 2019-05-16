@@ -45,7 +45,6 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
-import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
@@ -130,11 +129,12 @@ private[spark] class BlockManager(
     shuffleManager: ShuffleManager,
     val blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
-    numUsableCores: Int)
+    externalShuffleClient: Option[ExternalShuffleClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
-  private[spark] val externalShuffleServiceEnabled =
-    conf.get(config.SHUFFLE_SERVICE_ENABLED)
+  // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
+  private[spark] val externalShuffleServiceEnabled: Boolean = externalShuffleClient.isDefined
+
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
 
@@ -174,13 +174,7 @@ private[spark] class BlockManager(
 
   // Client to read other executors' shuffle files. This is either an external service, or just the
   // standard BlockTransferService to directly connect to other Executors.
-  private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
-    val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-    new ExternalShuffleClient(transConf, securityManager,
-      securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
-  } else {
-    blockTransferService
-  }
+  private[spark] val shuffleClient = externalShuffleClient.getOrElse(blockTransferService)
 
   // Max number of failures before this block manager refreshes the block locations from the driver
   private val maxFailuresBeforeLocationRefresh =
@@ -401,8 +395,9 @@ private[spark] class BlockManager(
    */
   def initialize(appId: String): Unit = {
     blockTransferService.init(this)
-    shuffleClient.init(appId)
-
+    externalShuffleClient.foreach { shuffleClient =>
+      shuffleClient.init(appId)
+    }
     blockReplicationPolicy = {
       val priorityClass = conf.get(config.STORAGE_REPLICATION_POLICY)
       val clazz = Utils.classForName(priorityClass)

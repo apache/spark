@@ -28,6 +28,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -60,6 +61,8 @@ public class ExternalShuffleIntegrationSuite {
   private static final int SPLIT_INDEX_VALID_BLOCK = 0;
   private static final int SPLIT_INDEX_MISSING_FILE = 1;
   private static final int SPLIT_INDEX_CORRUPT_LENGTH = 2;
+  private static final int SPLIT_INDEX_VALID_BLOCK_TO_RM = 3;
+  private static final int SPLIT_INDEX_MISSING_BLOCK_TO_RM = 4;
 
   // Executor 0 is sort-based
   static TestShuffleDataContext dataContext0;
@@ -69,7 +72,8 @@ public class ExternalShuffleIntegrationSuite {
   static TransportConf conf;
   static TransportContext transportContext;
 
-  static byte[] exec0RddBlock = new byte[123];
+  static byte[] exec0RddBlockValid = new byte[123];
+  static byte[] exec0RddBlockToRemove = new byte[124];
 
   static byte[][] exec0Blocks = new byte[][] {
     new byte[123],
@@ -92,12 +96,14 @@ public class ExternalShuffleIntegrationSuite {
     for (byte[] block: exec1Blocks) {
       rand.nextBytes(block);
     }
-    rand.nextBytes(exec0RddBlock);
+    rand.nextBytes(exec0RddBlockValid);
+    rand.nextBytes(exec0RddBlockToRemove);
 
     dataContext0 = new TestShuffleDataContext(2, 5);
     dataContext0.create();
     dataContext0.insertSortShuffleData(0, 0, exec0Blocks);
-    dataContext0.insertCachedRddData( RDD_ID, SPLIT_INDEX_VALID_BLOCK, exec0RddBlock);
+    dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK, exec0RddBlockValid);
+    dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK_TO_RM, exec0RddBlockToRemove);
 
     HashMap<String, String> config = new HashMap<>();
     config.put("spark.shuffle.io.maxRetries", "0");
@@ -245,7 +251,7 @@ public class ExternalShuffleIntegrationSuite {
     FetchResult execFetch = fetchBlocks("exec-1", new String[] { validBlockId });
     assertTrue(execFetch.failedBlocks.isEmpty());
     assertEquals(Sets.newHashSet(validBlockId), execFetch.successBlocks);
-    assertBuffersEqual(new NioManagedBuffer(ByteBuffer.wrap(exec0RddBlock)),
+    assertBuffersEqual(new NioManagedBuffer(ByteBuffer.wrap(exec0RddBlockValid)),
       execFetch.buffers.get(0));
   }
 
@@ -256,6 +262,23 @@ public class ExternalShuffleIntegrationSuite {
     FetchResult execFetch = fetchBlocks("exec-1", new String[] { missingBlockId });
     assertTrue(execFetch.successBlocks.isEmpty());
     assertEquals(Sets.newHashSet(missingBlockId), execFetch.failedBlocks);
+  }
+
+  @Test
+  public void testRemoveRddBlocks() throws Exception {
+    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+    String validBlockIdToRemove = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_VALID_BLOCK_TO_RM;
+    String missingBlockIdToRemove = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_MISSING_BLOCK_TO_RM;
+
+    try (ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, 5000)) {
+      client.init(APP_ID);
+      Future<Integer> numRemovedBlocks = client.removeBlocks(
+        TestUtils.getLocalHost(),
+        server.getPort(),
+        "exec-1",
+          new String[] { validBlockIdToRemove, missingBlockIdToRemove });
+      assertEquals(1, numRemovedBlocks.get().intValue());
+    }
   }
 
   @Test

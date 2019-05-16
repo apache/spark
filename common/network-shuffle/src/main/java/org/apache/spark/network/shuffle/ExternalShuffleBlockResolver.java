@@ -365,6 +365,24 @@ public class ExternalShuffleBlockResolver {
     return pathname.intern();
   }
 
+  public int removeBlocks(String appId, String execId, String[] blockIds) {
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    if (executor == null) {
+      throw new RuntimeException(
+        String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
+    }
+    int numRemovedBlocks = 0;
+    for (String blockId : blockIds) {
+      File file = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
+      if (file.delete()) {
+        numRemovedBlocks++;
+      } else {
+        logger.warn("Failed to delete existing block: " + file.getAbsolutePath());
+      }
+    }
+    return numRemovedBlocks;
+  }
+
   /** Simply encodes an executor's full ID, which is appId + execId. */
   public static class AppExecId {
     public final String appId;

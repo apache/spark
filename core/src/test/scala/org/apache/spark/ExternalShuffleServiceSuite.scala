@@ -124,9 +124,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
         "external shuffle service port should be contained")
     }
 
-    val rddSplit0Block = sc.env.blockManager.getRemoteValues(blockId)
-    assert(rddSplit0Block.isDefined)
-
+    assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
+    rdd.unpersist(true)
+    assert(sc.env.blockManager.getRemoteValues(blockId).isEmpty)
     rpcHandler.applicationRemoved(sc.conf.getAppId, true)
   }
 }

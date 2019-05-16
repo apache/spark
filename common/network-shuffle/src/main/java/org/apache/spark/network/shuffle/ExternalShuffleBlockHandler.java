@@ -100,11 +100,12 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         long streamId = streamManager.registerStream(client.getClientId(),
           new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds), client.getChannel());
         if (logger.isTraceEnabled()) {
-          logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
-                       streamId,
-                       msg.blockIds.length,
-                       client.getClientId(),
-                       getRemoteAddress(client.getChannel()));
+          logger.trace(
+            "Registered streamId {} with {} buffers for client {} from host {}",
+            streamId,
+            msg.blockIds.length,
+            client.getClientId(),
+            getRemoteAddress(client.getChannel()));
         }
         callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
       } finally {
@@ -122,6 +123,12 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       } finally {
         responseDelayContext.stop();
       }
+
+    } else if (msgObj instanceof RemoveBlocks) {
+      RemoveBlocks msg = (RemoveBlocks) msgObj;
+      checkAuth(client, msg.appId);
+      int numRemovedBlocks = blockManager.removeBlocks(msg.appId, msg.execId, msg.blockIds);
+      callback.onSuccess(new BlocksRemoved(numRemovedBlocks).toByteBuffer());
 
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);

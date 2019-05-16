@@ -18,16 +18,22 @@
 package org.apache.spark.storage
 
 import java.io.IOException
+import java.nio.ByteBuffer
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.collection.mutable.ListBuffer
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.Random
 
 import org.apache.spark.SparkConf
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.network.client.RpcResponseCallback
+import org.apache.spark.network.shuffle.ExternalShuffleClient
+import org.apache.spark.network.shuffle.protocol.{BlocksRemoved, BlockTransferMessage}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
@@ -42,7 +48,8 @@ class BlockManagerMasterEndpoint(
     override val rpcEnv: RpcEnv,
     val isLocal: Boolean,
     conf: SparkConf,
-    listenerBus: LiveListenerBus)
+    listenerBus: LiveListenerBus,
+    externalShuffleClient: Option[ExternalShuffleClient])
   extends ThreadSafeRpcEndpoint with Logging {
 
   // Mapping from block manager id to the block manager's information.
@@ -75,7 +82,8 @@ class BlockManagerMasterEndpoint(
   val proactivelyReplicate = conf.get(config.STORAGE_REPLICATION_PROACTIVE)
 
   logInfo("BlockManagerMasterEndpoint up")
-  private val externalShuffleServiceEnabled: Boolean = conf.get(config.SHUFFLE_SERVICE_ENABLED)
+  // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
+  private val externalShuffleServiceEnabled: Boolean = externalShuffleClient.isDefined
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -158,29 +166,68 @@ class BlockManagerMasterEndpoint(
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the slaves.
 
-    // Find all blocks for the given RDD, remove the block from both blockLocations and
-    // the blockManagerInfo that is tracking the blocks.
-    val blocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
-    blocks.foreach { blockId =>
-      val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)
-      bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId)))
-      blockLocations.remove(blockId)
-    }
-
-    // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
-    // The dispatcher is used as an implicit argument into the Future sequence construction.
+    // The message sent to the slaves to remove the RDD
     val removeMsg = RemoveRdd(rddId)
 
-    val futures = blockManagerInfo.values.map { bm =>
-      bm.slaveEndpoint.ask[Int](removeMsg).recover {
-        case e: IOException =>
-          logWarning(s"Error trying to remove RDD $rddId from block manager ${bm.blockManagerId}",
-            e)
-          0 // zero blocks were removed
-      }
-    }.toSeq
+    // Find all blocks for the given RDD, remove the block from both blockLocations and
+    // the blockManagerInfo that is tracking the blocks and create the futures which asynchronously
+    // remove the blocks from those slaves which contains the blocks and gives back the number of
+    // removed blocks
+    val blocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+    val removeRddFromExecutorsFutures = new ListBuffer[Future[Int]]()
+    val blocksToDeleteByShuffleService =
+      new mutable.HashMap[BlockManagerId, mutable.HashSet[RDDBlockId]]
 
-    Future.sequence(futures)
+    blocks.foreach { blockId =>
+      val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
+
+      val (bmIdExtShuffle, bmIdExecutor) = bms.partition(_.port == externalShuffleServicePort)
+      if (bmIdExecutor.isEmpty && bmIdExtShuffle.nonEmpty) {
+        // when original executor is already removed use the shuffle service to remove the blocks
+        bmIdExtShuffle.foreach { bmIdForShuffleService =>
+          val blockIdsToDel = blocksToDeleteByShuffleService.getOrElseUpdate(bmIdForShuffleService,
+            new mutable.HashSet[RDDBlockId]())
+          blockIdsToDel += blockId
+          blockStatusByShuffleService.get(bmIdForShuffleService).foreach { blockStatus =>
+            blockStatus.remove(blockId)
+          }
+        }
+      } else {
+        bmIdExecutor.foreach { bm =>
+          blockManagerInfo.get(bm).foreach { bmInfo =>
+            bmInfo.removeBlock(blockId)
+            removeRddFromExecutorsFutures += askRemoveRddFromExecutor(removeMsg, bmInfo)
+          }
+        }
+      }
+    }
+    val removeRddBlockViaExtShuffleServiceFutures = externalShuffleClient.map { shuffleClient =>
+      blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
+        Future[Int] {
+          shuffleClient.removeBlocks(
+            bmId.host,
+            bmId.port,
+            bmId.executorId,
+            blockIds.map(_.toString).toArray).get()
+        }
+      }
+    }.getOrElse(Seq.empty)
+
+    Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
+  }
+
+  /**
+   * Ask the slaves to remove the RDD.
+   */
+  private def askRemoveRddFromExecutor(
+      removeMsg: RemoveRdd,
+      bmInfo: BlockManagerInfo): Future[Int] = {
+    bmInfo.slaveEndpoint.ask[Int](removeMsg).recover {
+      case e: IOException =>
+        logWarning(s"Error trying to remove RDD ${removeMsg.rddId} " +
+          s"from block manager ${bmInfo.blockManagerId}", e)
+        0 // zero blocks were removed
+    }
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
@@ -529,6 +576,8 @@ case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long
 object BlockStatus {
   def empty: BlockStatus = BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
 }
+
+
 
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
