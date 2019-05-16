@@ -117,6 +117,33 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
   }
 
+  test("Check driver pod respects kubernetes driver request cores") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+
+    val basePod = SparkPod.initialPod()
+    val requests1 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
+      .configurePod(basePod)
+      .container.getResources
+      .getRequests.asScala
+    assert(requests1("cpu").getAmount === "1")
+
+    sparkConf.set(KUBERNETES_DRIVER_REQUEST_CORES, "0.1")
+    val requests2 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
+      .configurePod(basePod)
+      .container.getResources
+      .getRequests.asScala
+    assert(requests2("cpu").getAmount === "0.1")
+
+    sparkConf.set(KUBERNETES_DRIVER_REQUEST_CORES, "100m")
+    val requests3 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
+      .configurePod(basePod)
+      .container.getResources
+      .getRequests.asScala
+    assert(requests3("cpu").getAmount === "100m")
+  }
+
   test("Check appropriate entrypoint rerouting for various bindings") {
     val javaSparkConf = new SparkConf()
       .set(DRIVER_MEMORY.key, "4g")
