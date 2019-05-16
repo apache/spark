@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{LongType, StructType}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{Futures, ThreadUtils}
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
@@ -696,12 +696,8 @@ case class SubqueryExec(name: String, child: SparkPlan)
 
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {
-    // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    Future {
-      // This will run in another thread. Set the execution id so that we can connect these jobs
-      // with the correct execution.
-      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+    Futures.withLocalProperties(sparkContext) {
+      SQLExecution.withSQLConfPropagated(sqlContext.sparkSession) {
         val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val rows: Array[InternalRow] = child.executeCollect()
@@ -710,7 +706,10 @@ case class SubqueryExec(name: String, child: SparkPlan)
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
         longMetric("dataSize") += dataSize
 
-        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+        SQLMetrics.postDriverMetricUpdates(
+          sparkContext,
+          sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+          metrics.values.toSeq)
         rows
       }
     }(SubqueryExec.executionContext)
@@ -734,8 +733,9 @@ case class SubqueryExec(name: String, child: SparkPlan)
 }
 
 object SubqueryExec {
+  private[spark] val THREADS = 16
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+    ThreadUtils.newDaemonCachedThreadPool("subquery", THREADS))
 }
 
 /**
