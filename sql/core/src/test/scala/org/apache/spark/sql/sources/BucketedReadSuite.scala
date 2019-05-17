@@ -19,22 +19,30 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 import java.net.URI
+import java.util.Properties
 
 import scala.util.Random
 
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.scalatest.PrivateMethodTester
+
+import org.apache.spark.SparkEnv
+import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{ShuffleMapTask, TaskLocation}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.{expressions, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
-import org.apache.spark.sql.execution.datasources.BucketingUtils
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SortExec}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -46,7 +54,8 @@ class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedS
 }
 
 
-abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
+abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with PrivateMethodTester {
+
   import testImplicits._
 
   private val maxI = 5
@@ -394,7 +403,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def joinCondition(joinCols: Seq[String]) (left: DataFrame, right: DataFrame): Column = {
+  private def joinCondition(joinCols: Seq[String])(left: DataFrame, right: DataFrame): Column = {
     joinCols.map(col => left(col) === right(col)).reduce(_ && _)
   }
 
@@ -735,4 +744,60 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         df1.groupBy("j").agg(max("k")))
     }
   }
+
+  //  a test with a single bucketed partition where the number of files in the partition is large
+  //  tests for the condition where the serialization of such a task may result in a stack overflow
+  //  if the files list is stored in a recursive data structure
+  test("SPARK-27100 stack overflow: read bucketed data with large partitions") {
+    // Need a large number of files in the partition for the overflow
+    val numFilesInPartition = 100000
+    val partitionValues = InternalRow.apply(Array("a"))
+
+    val schema = new StructType()
+    val fakeHadoopFsRelation = new HadoopFsRelation(null, schema, schema, null, null, null)(spark)
+    val optionalBucketSet = null
+    val bucketSpec = new BucketSpec(1, Seq("a"), Seq("b"))
+    val files = (0 to numFilesInPartition).toStream.map { i =>
+      new FileStatus(10, false, 1, 512, 1000,
+        new Path(s"file${i}_0.zzz"))
+    }
+    val partitionDirectory = PartitionDirectory(partitionValues, files);
+
+    // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
+    val createBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createBucketedReadRDD)
+
+    val fileSource =
+     FileSourceScanExec(fakeHadoopFsRelation,
+      null,
+      schema,
+      null,
+      Option(optionalBucketSet),
+      Seq.empty,
+      Option(new TableIdentifier("stackOverflow")))
+
+    val inputRDD = fileSource invokePrivate createBucketedReadRDD(bucketSpec,
+        (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
+        Stream(partitionDirectory),
+        fakeHadoopFsRelation)
+    // check to make sure we've created the a big enough file partition.
+    // also guarantees that the 'files' Stream is initialized before we
+    // attempt to serialize it in the task.
+    val count = inputRDD.partitions(0).asInstanceOf[FilePartition].files.length;
+    assert(count == numFilesInPartition + 1)
+
+    // Create a task encapsulating the FilePartition
+    val task = new ShuffleMapTask(0, 0,
+      null, inputRDD.partitions(0), Seq(TaskLocation("host0", "execA")), new Properties, null)
+    // Serialize the task and catch the exception
+    val env = SparkEnv.get
+    val ser = env.closureSerializer.newInstance()
+    try {
+      ser.serialize(task)
+    } catch {
+      case ex: StackOverflowError =>
+        fail("Stack Overflow Exception in serializing task to read partitioned bucketed tables")
+      case _ => fail("Exception in serializing task to read partitioned bucketed tables")
+    }
+  }
+
 }

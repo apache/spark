@@ -381,7 +381,7 @@ case class FileSourceScanExec(
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
-      selectedPartitions.flatMap { p =>
+      selectedPartitions.toArray.flatMap { p =>
         p.files.map { f =>
           PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values)
         }
@@ -401,7 +401,7 @@ case class FileSourceScanExec(
     }
 
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Nil))
+      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
