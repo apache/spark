@@ -103,14 +103,14 @@ class ClientSuite extends SparkFunSuite with Matchers {
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
       val uri = new URI(entry)
       if (Utils.LOCAL_SCHEME.equals(uri.getScheme())) {
-        cp should contain (uri.getPath())
+        cp should contain(uri.getPath())
       } else {
         cp should not contain (uri.getPath())
       }
     })
     cp should not contain ("local")
     cp should contain(PWD)
-    cp should contain (s"$PWD${Path.SEPARATOR}${LOCALIZED_CONF_DIR}")
+    cp should contain(s"$PWD${Path.SEPARATOR}${LOCALIZED_CONF_DIR}")
     cp should not contain (APP_JAR)
   }
 
@@ -131,7 +131,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       new FileOutputStream(new File(tempDir, LOCALIZED_CONF_ARCHIVE)).close()
 
       client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
-      sparkConf.get(APP_JAR) should be (Some(USER))
+      sparkConf.get(APP_JAR) should be(Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
       // staging dir.
@@ -146,7 +146,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
         })
         .mkString(",")
 
-      sparkConf.get(SECONDARY_JARS) should be (Some(expected.split(",").toSeq))
+      sparkConf.get(SECONDARY_JARS) should be(Some(expected.split(",").toSeq))
     } finally {
       Utils.deleteRecursively(tempDir)
     }
@@ -159,15 +159,15 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(GATEWAY_ROOT_PATH, "/localPath")
       .set(REPLACEMENT_ROOT_PATH, "/remotePath")
 
-    getClusterPath(sparkConf, "/localPath") should be ("/remotePath")
-    getClusterPath(sparkConf, "/localPath/1:/localPath/2") should be (
+    getClusterPath(sparkConf, "/localPath") should be("/remotePath")
+    getClusterPath(sparkConf, "/localPath/1:/localPath/2") should be(
       "/remotePath/1:/remotePath/2")
 
     val env = new MutableHashMap[String, String]()
     populateClasspath(null, conf, sparkConf, env, extraClassPath = Some("/localPath/my1.jar"))
     val cp = classpath(env)
-    cp should contain ("/remotePath/spark.jar")
-    cp should contain ("/remotePath/my1.jar")
+    cp should contain("/remotePath/spark.jar")
+    cp should contain("/remotePath/my1.jar")
   }
 
   test("configuration and args propagate through createApplicationSubmissionContext") {
@@ -190,16 +190,16 @@ class ClientSuite extends SparkFunSuite with Matchers {
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
 
-    appContext.getApplicationName should be ("foo-test-app")
-    appContext.getQueue should be ("staging-queue")
-    appContext.getAMContainerSpec should be (containerLaunchContext)
-    appContext.getApplicationType should be ("SPARK")
+    appContext.getApplicationName should be("foo-test-app")
+    appContext.getQueue should be("staging-queue")
+    appContext.getAMContainerSpec should be(containerLaunchContext)
+    appContext.getApplicationType should be("SPARK")
     appContext.getClass.getMethods.filter(_.getName == "getApplicationTags").foreach { method =>
       val tags = method.invoke(appContext).asInstanceOf[java.util.Set[String]]
-      tags should contain allOf ("tag1", "dup", "tag2", "multi word")
-      tags.asScala.count(_.nonEmpty) should be (4)
+      tags should contain allOf("tag1", "dup", "tag2", "multi word")
+      tags.asScala.count(_.nonEmpty) should be(4)
     }
-    appContext.getMaxAppAttempts should be (42)
+    appContext.getMaxAppAttempts should be(42)
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
@@ -233,10 +233,10 @@ class ClientSuite extends SparkFunSuite with Matchers {
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val cp = classpath(client)
-    cp should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
+    cp should contain(buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
     cp should not contain (jar3.getPath())
-    cp should contain (jar4.getPath())
-    cp should contain (buildPath(single.getAbsolutePath(), "*"))
+    cp should contain(jar4.getPath())
+    cp should contain(buildPath(single.getAbsolutePath(), "*"))
   }
 
   test("distribute jars archive") {
@@ -249,7 +249,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort(),
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
-    classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
+    classpath(client) should contain(buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
     sparkConf.set(SPARK_ARCHIVE, Utils.LOCAL_SCHEME + ":" + archive.getPath())
     intercept[IllegalArgumentException] {
@@ -326,7 +326,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> temp.getAbsolutePath()))
     val client = createClient(sparkConf)
     client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
-    classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
+    classpath(client) should contain(buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
   }
 
   test("ignore same name jars") {
@@ -357,7 +357,31 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     // Only jar2 will be added to SECONDARY_JARS, jar3 which has the same name with jar2 will be
     // ignored.
-    sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
+    sparkConf.get(SECONDARY_JARS) should be(Some(Seq(new File(jar2.toURI).getName)))
+  }
+
+  test(s"custom resource request yarn config to spark config") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val resources = Map("yarn.io/gpu" -> 2)
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster").
+      set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX, "2")
+
+    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+    val client = new Client(new ClientArguments(Array()), conf, null)
+    val newContext = client.createApplicationSubmissionContext(
+      new YarnClientApplication(getNewApplicationResponse, appContext),
+      containerLaunchContext)
+
+    val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName() -> rInfo.getValue())).toMap
+    assert(allResourceInfo.get("yarn.io/gpu").nonEmpty)
+    assert(allResourceInfo.get("yarn.io/gpu").get === 2)
+    assert(allResourceInfo.get("gpu").isEmpty)
   }
 
   Seq(
@@ -384,14 +408,14 @@ class ClientSuite extends SparkFunSuite with Matchers {
         containerLaunchContext)
 
       resources.foreach { case (name, value) =>
-        ResourceRequestTestHelper.getRequestedValue(appContext.getResource, name) should be (value)
+        ResourceRequestTestHelper.getRequestedValue(appContext.getResource, name) should be(value)
       }
     }
   }
 
   test(s"custom resource request yarn config and spark config fails") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    val resources = Map("fpga" -> 2, "gpu" -> 3)
+    val resources = Map("yarn.io/fpga" -> 2, "yarn.io/gpu" -> 3)
     ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
 
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster").
@@ -400,19 +424,14 @@ class ClientSuite extends SparkFunSuite with Matchers {
       conf.set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + name, v.toString)
     }
 
-    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
-    val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
-    val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
-
-    val client = new Client(new ClientArguments(Array()), conf, null)
     val error = intercept[SparkException] {
-      client.createApplicationSubmissionContext(
-        new YarnClientApplication(getNewApplicationResponse, appContext),
-        containerLaunchContext)
+      ResourceRequestHelper.validateResources(conf)
     }.getMessage()
 
-    assert(error.contains("only set the spark config spark.driver.resource.gpu.count " +
-      " to specify gpus, do not use: spark.yarn.driver.resource.io.yarn/gpu"))
+    assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/fpga," +
+      " please use spark.driver.resource.fpga.count"))
+    assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/gpu," +
+      " please use spark.driver.resource.gpu.count"))
   }
 
   private val matching = Seq(

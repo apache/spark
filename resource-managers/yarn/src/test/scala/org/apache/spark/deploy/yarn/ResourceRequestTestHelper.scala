@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.yarn.api.records.{ResourceInformation => YarnResourceInformation}
 import org.apache.hadoop.yarn.api.records.Resource
 
 import org.apache.spark.util.Utils
@@ -83,6 +84,11 @@ object ResourceRequestTestHelper {
   private def invokeMethod(resourceInformation: AnyRef, methodName: String): AnyRef = {
     val getValueMethod = resourceInformation.getClass.getMethod(methodName)
     getValueMethod.invoke(resourceInformation)
+  }
+
+  def getResources(res: Resource): Array[YarnResourceInformation] = {
+    val getResourceInformationMethod = res.getClass.getMethod("getResources")
+    getResourceInformationMethod.invoke(res).asInstanceOf[Array[YarnResourceInformation]]
   }
 
   case class ResourceInformation(name: String, value: Long, unit: String)

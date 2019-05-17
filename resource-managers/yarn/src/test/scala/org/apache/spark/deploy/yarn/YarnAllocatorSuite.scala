@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn
 import java.util.Collections
 
 import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
@@ -29,15 +28,15 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.ResourceRequestHelper.RESOURCE_INFO_CLASS
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{ManualClock, Utils}
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
@@ -182,28 +181,20 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(containerRequest.getCapability === expectedResources)
   }
 
-  test("custom resource requested from spark resource configs") {
+  test("custom yarn resource mapped from spark resource configs") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
+    ResourceRequestTestHelper.initializeResourceTypes(List("yarn.io/gpu"))
 
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val handler = createAllocator(1, mockAmClient,
-      Map(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2",
-        SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX -> "3"))
+      Map(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX -> "3"))
 
     handler.updateResourceRequests()
-    val container = createContainer("host1", resource = handler.resource)
-    handler.handleAllocatedContainers(Array(container))
-
-    // get amount of memory and vcores from resource, so effectively skipping their validation
-    val expectedResources = Resource.newInstance(handler.resource.getMemory(),
-      handler.resource.getVirtualCores)
-    ResourceRequestHelper.setResourceRequests(Map("gpu" -> "2"), expectedResources)
-    val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
-
-    verify(mockAmClient).addContainerRequest(captor.capture())
-    val containerRequest: ContainerRequest = captor.getValue
-    assert(containerRequest.getCapability === expectedResources)
+    val yarnRInfo = ResourceRequestTestHelper.getResources(handler.resource)
+    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.getName() -> rInfo.getValue()) ).toMap
+    assert(allResourceInfo.get("yarn.io/gpu").nonEmpty)
+    assert(allResourceInfo.get("yarn.io/gpu").get === 3)
+    assert(allResourceInfo.get("gpu").isEmpty)
   }
 
   test("container should not be created if requested number if met") {

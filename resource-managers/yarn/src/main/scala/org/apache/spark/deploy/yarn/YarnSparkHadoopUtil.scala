@@ -44,16 +44,17 @@ object YarnSparkHadoopUtil {
   val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
   val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
 
-  // the only resources we know how to map from spark configs to yarn configs are
-  // gpus and fpgas, everything else the user has to specify themselves via the
-  // YARN_DRIVER_RESOURCE_TYPES_PREFIX or YARN_AM_RESOURCE_TYPES_PREFIX
+  /**
+   * The only resources we know how to map from spark configs to yarn configs are
+   * gpus and fpgas, everything else the user has to specify them in both the
+   * spark.yarn.*.resource and the spark.*.resource configs.
+   */
   private[yarn] def getYarnResourcesFromSparkResources(
       confPrefix: String,
       sparkConf: SparkConf
       ): Map[String, String] = {
     val sparkToYarnResources = new HashMap[String, String]()
-    Map("gpu" -> YARN_GPU_RESOURCE_CONFIG,
-        "fpga" -> YARN_FPGA_RESOURCE_CONFIG).foreach {
+    Map("gpu" -> YARN_GPU_RESOURCE_CONFIG, "fpga" -> YARN_FPGA_RESOURCE_CONFIG).foreach {
       case (rName, yarnName) =>
         val count = sparkConf.getOption(confPrefix + rName + SPARK_RESOURCE_COUNT_POSTFIX).
           getOrElse("0")
