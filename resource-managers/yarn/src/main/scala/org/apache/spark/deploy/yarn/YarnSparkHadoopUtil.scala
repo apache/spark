@@ -45,6 +45,7 @@ object YarnSparkHadoopUtil {
   val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
 
   /**
+   * Convert Spark resources into YARN resources.
    * The only resources we know how to map from spark configs to yarn configs are
    * gpus and fpgas, everything else the user has to specify them in both the
    * spark.yarn.*.resource and the spark.*.resource configs.
