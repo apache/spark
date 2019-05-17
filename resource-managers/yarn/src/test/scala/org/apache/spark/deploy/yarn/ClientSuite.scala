@@ -437,7 +437,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       containerLaunchContext)
 
     val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
-    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName() -> rInfo.getValue())).toMap
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
     assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
     assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
     assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)

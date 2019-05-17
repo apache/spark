@@ -196,7 +196,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     handler.updateResourceRequests()
     val yarnRInfo = ResourceRequestTestHelper.getResources(handler.resource)
-    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.getName() -> rInfo.getValue()) ).toMap
+    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
     assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
     assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
     assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
