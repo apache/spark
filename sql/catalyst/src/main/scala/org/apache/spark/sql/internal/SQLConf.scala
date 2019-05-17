@@ -1735,6 +1735,11 @@ object SQLConf {
          "and from_utc_timestamp() functions.")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
+    .doc("When true, the upcast will be loose and allows string to numeric/boolean.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
