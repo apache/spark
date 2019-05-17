@@ -111,23 +111,20 @@ class NettyBlockTransferServiceSuite
     })
 
     val listener = mock(classOf[BlockFetchingListener])
-    // This is used to throw a ExecutorDeadException for unit test, when the fetch is failed
-    // because of ExecutorDeadException.
+    var hitExecutorDeadException = false
     when(listener.onBlockFetchFailure(any(), any(classOf[ExecutorDeadException])))
-      .thenAnswer(_ => {throw new ExecutorDeadException("Executor is dead.")})
+      .thenAnswer(_ => {hitExecutorDeadException = true})
 
     service0 = createService(port, driverEndpointRef)
     val clientFactoryField = service0.getClass.getField(
       "org$apache$spark$network$netty$NettyBlockTransferService$$clientFactory")
     clientFactoryField.setAccessible(true)
-    val originClientFactory = clientFactoryField.get(service0)
     clientFactoryField.set(service0, clientFactory)
 
-    // The ExecutorDeadException is thrown by listener when fetch failed for ExecutorDeadException.
-    intercept[ExecutorDeadException](service0.fetchBlocks("localhost", port, "exec1",
-      Array("block1"), listener, mock(classOf[DownloadFileManager])))
+    service0.fetchBlocks("localhost", port, "exec1",
+      Array("block1"), listener, mock(classOf[DownloadFileManager]))
     assert(createClientCount === 1)
-    clientFactoryField.set(service0, originClientFactory)
+    assert(hitExecutorDeadException)
   }
 
   private def verifyServicePort(expectedPort: Int, actualPort: Int): Unit = {
