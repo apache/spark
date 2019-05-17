@@ -926,7 +926,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       // Reading reversed avro file with provided original schema
       val avroDf = spark.read.format("avro").option("avroSchema", avroSchema).load(tempSaveDir)
       checkAnswer(df, avroDf)
-      assert(df.schema == avroDf.schema)
+      assert(avroDf.schema.fieldNames.sameElements(Array("Age", "Name")))
     }
   }
 
