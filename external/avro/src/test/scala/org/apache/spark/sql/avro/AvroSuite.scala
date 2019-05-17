@@ -37,7 +37,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.{IntervalData, NullData, NullUDT}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
@@ -1004,7 +1003,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       assert(msg.contains("Cannot save interval data type into external storage."))
 
       msg = intercept[AnalysisException] {
-        spark.udf.register("testType", udf(() => new IntervalData()))
+        spark.udf.register("testType", () => new IntervalData())
         sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.toLowerCase(Locale.ROOT)

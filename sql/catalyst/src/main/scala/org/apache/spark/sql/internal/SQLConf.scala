@@ -150,7 +150,7 @@ object SQLConf {
     }
   }
 
-  val UDF_DETERMINISTIC_FOLD_ENABLED = buildConf("spark.deterministic.udf.folding.enabled")
+  val DETERMINISTIC_UDF_FOLD_ENABLED = buildConf("spark.deterministic.udf.folding.enabled")
     .doc("When true, it will enable the optimization for a UDF that is deterministic and the " +
       "inputs are all literals. When your inputs to the UDF are all literal and UDF is " +
       "deterministic, we can optimize this to evaluate the UDF once and use the output " +
@@ -2149,7 +2149,7 @@ class SQLConf extends Serializable with Logging {
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
-  def deterministicUdfFoldEnabled: Boolean = getConf(UDF_DETERMINISTIC_FOLD_ENABLED)
+  def deterministicUdfFoldEnabled: Boolean = getConf(DETERMINISTIC_UDF_FOLD_ENABLED)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

@@ -159,7 +159,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       }).length
     }
 
-    withSQLConf(SQLConf.UDF_DETERMINISTIC_FOLD_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.DETERMINISTIC_UDF_FOLD_ENABLED.key -> "true") {
       // Non deterministic
       val foo = udf(() => Math.random())
       spark.udf.register("random0", foo.asNondeterministic())
