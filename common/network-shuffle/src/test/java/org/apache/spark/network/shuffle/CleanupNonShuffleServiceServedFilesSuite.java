@@ -18,15 +18,22 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Random;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import org.apache.spark.network.util.MapConfigProvider;
@@ -36,20 +43,42 @@ public class CleanupNonShuffleServiceServedFilesSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
   private Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
-  private TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+
   private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
+  private static Set<String> expectedShuffleFilesToKeep =
+    ImmutableSet.of("shuffle_782_450_0.index", "shuffle_782_450_0.data");
+
+  private static Set<String> expectedShuffleAndRddFilesToKeep =
+    ImmutableSet.of("shuffle_782_450_0.index", "shuffle_782_450_0.data", "rdd_12_34");
+
+  private TransportConf getConf(boolean isFetchRddEnabled) {
+    return new TransportConf(
+      "shuffle",
+      new MapConfigProvider(ImmutableMap.of(
+        "spark.shuffle.service.fetch.rdd.enabled",
+        Boolean.toString(isFetchRddEnabled))));
+  }
+
   @Test
-  public void cleanupOnRemovedExecutorWithFilesToKeep() throws IOException {
-    cleanupOnRemovedExecutor(true);
+  public void cleanupOnRemovedExecutorWithFilesToKeepFetchRddEnabled() throws IOException {
+    cleanupOnRemovedExecutor(true, getConf(true), expectedShuffleAndRddFilesToKeep);
+  }
+
+  @Test
+  public void cleanupOnRemovedExecutorWithFilesToKeepFetchRddDisabled() throws IOException {
+    cleanupOnRemovedExecutor(true, getConf(false), expectedShuffleFilesToKeep);
   }
 
   @Test
   public void cleanupOnRemovedExecutorWithoutFilesToKeep() throws IOException {
-    cleanupOnRemovedExecutor(false);
+    cleanupOnRemovedExecutor(false, getConf(true), Collections.emptySet());
   }
 
-  private void cleanupOnRemovedExecutor(boolean withFilesToKeep) throws IOException {
+  private void cleanupOnRemovedExecutor(
+      boolean withFilesToKeep,
+      TransportConf conf,
+      Set<String> expectedFilesKept) throws IOException {
     TestShuffleDataContext dataContext = initDataContext(withFilesToKeep);
 
     ExternalShuffleBlockResolver resolver =
@@ -57,7 +86,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     resolver.registerExecutor("app", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
     resolver.executorRemoved("exec0", "app");
 
-    assertCleanedUp(dataContext);
+    assertContainedFilenames(dataContext, expectedFilesKept);
   }
 
   @Test
@@ -79,7 +108,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     Executor noThreadExecutor = runnable -> cleanupCalled.set(true);
 
     ExternalShuffleBlockResolver manager =
-      new ExternalShuffleBlockResolver(conf, null, noThreadExecutor);
+      new ExternalShuffleBlockResolver(getConf(true), null, noThreadExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
     manager.executorRemoved("exec0", "app");
@@ -89,16 +118,24 @@ public class CleanupNonShuffleServiceServedFilesSuite {
   }
 
   @Test
-  public void cleanupOnlyRemovedExecutorWithFilesToKeep() throws IOException {
-    cleanupOnlyRemovedExecutor(true);
+  public void cleanupOnlyRemovedExecutorWithFilesToKeepFetchRddEnabled() throws IOException {
+    cleanupOnlyRemovedExecutor(true, getConf(true), expectedShuffleAndRddFilesToKeep);
+  }
+
+  @Test
+  public void cleanupOnlyRemovedExecutorWithFilesToKeepFetchRddDisabled() throws IOException {
+    cleanupOnlyRemovedExecutor(true, getConf(false), expectedShuffleFilesToKeep);
   }
 
   @Test
   public void cleanupOnlyRemovedExecutorWithoutFilesToKeep() throws IOException {
-    cleanupOnlyRemovedExecutor(false);
+    cleanupOnlyRemovedExecutor(false, getConf(true) , Collections.emptySet());
   }
 
-  private void cleanupOnlyRemovedExecutor(boolean withFilesToKeep) throws IOException {
+  private void cleanupOnlyRemovedExecutor(
+      boolean withFilesToKeep,
+      TransportConf conf,
+      Set<String> expectedFilesKept) throws IOException {
     TestShuffleDataContext dataContext0 = initDataContext(withFilesToKeep);
     TestShuffleDataContext dataContext1 = initDataContext(withFilesToKeep);
 
@@ -113,30 +150,38 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     assertStillThere(dataContext1);
 
     resolver.executorRemoved("exec0", "app");
-    assertCleanedUp(dataContext0);
+    assertContainedFilenames(dataContext0, expectedFilesKept);
     assertStillThere(dataContext1);
 
     resolver.executorRemoved("exec1", "app");
-    assertCleanedUp(dataContext0);
-    assertCleanedUp(dataContext1);
+    assertContainedFilenames(dataContext0, expectedFilesKept);
+    assertContainedFilenames(dataContext1, expectedFilesKept);
 
     // Make sure it's not an error to cleanup multiple times
     resolver.executorRemoved("exec1", "app");
-    assertCleanedUp(dataContext0);
-    assertCleanedUp(dataContext1);
+    assertContainedFilenames(dataContext0, expectedFilesKept);
+    assertContainedFilenames(dataContext1, expectedFilesKept);
   }
 
   @Test
-  public void cleanupOnlyRegisteredExecutorWithFilesToKeep() throws IOException {
-    cleanupOnlyRegisteredExecutor(true);
+  public void cleanupOnlyRegisteredExecutorWithFilesToKeepFetchRddEnabled() throws IOException {
+    cleanupOnlyRegisteredExecutor(true, getConf(true), expectedShuffleAndRddFilesToKeep);
+  }
+
+  @Test
+  public void cleanupOnlyRegisteredExecutorWithFilesToKeepFetchRddDisabled() throws IOException {
+    cleanupOnlyRegisteredExecutor(true, getConf(false), expectedShuffleFilesToKeep);
   }
 
   @Test
   public void cleanupOnlyRegisteredExecutorWithoutFilesToKeep() throws IOException {
-    cleanupOnlyRegisteredExecutor(false);
+    cleanupOnlyRegisteredExecutor(false, getConf(true), Collections.emptySet());
   }
 
-  private void cleanupOnlyRegisteredExecutor(boolean withFilesToKeep) throws IOException {
+  private void cleanupOnlyRegisteredExecutor(
+      boolean withFilesToKeep,
+      TransportConf conf,
+      Set<String> expectedFilesKept) throws IOException {
     TestShuffleDataContext dataContext = initDataContext(withFilesToKeep);
 
     ExternalShuffleBlockResolver resolver =
@@ -147,7 +192,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     assertStillThere(dataContext);
 
     resolver.executorRemoved("exec0", "app");
-    assertCleanedUp(dataContext);
+    assertContainedFilenames(dataContext, expectedFilesKept);
   }
 
   private static void assertStillThere(TestShuffleDataContext dataContext) {
@@ -156,24 +201,32 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     }
   }
 
-  private static FilenameFilter filter = (dir, name) -> {
-    // Don't delete shuffle data or shuffle index files.
-    return !name.endsWith(".index") && !name.endsWith(".data") && !name.startsWith("rdd_");
-  };
-
-  private static boolean assertOnlyFilesToKeepInDir(File[] dirs) {
-    for (File dir : dirs) {
-      assertTrue(dir.getName() + " wasn't cleaned up", !dir.exists() ||
-        dir.listFiles(filter).length == 0 || assertOnlyFilesToKeepInDir(dir.listFiles()));
+  private static Set<String> collectFilenames(File[] files) {
+    Set<String> result = new HashSet<>();
+    for (File file : files) {
+      if (file.exists()) {
+        try (Stream<Path> walk = Files.walk(file.toPath())) {
+          result.addAll(walk
+            .filter(Files::isRegularFile)
+            .map(x -> x.toFile().getName())
+            .collect(Collectors.toSet()));
+        } catch (IOException e) {
+          throw new AssertionError(e);
+        }
+      }
     }
-    return true;
+    return result;
   }
 
-  private static void assertCleanedUp(TestShuffleDataContext dataContext) {
+  private static void assertContainedFilenames(
+      TestShuffleDataContext dataContext,
+      Set<String> expectedFilenames) {
+    Set<String> collectedFilenames = new HashSet<>();
     for (String localDir : dataContext.localDirs) {
       File[] dirs = new File[] {new File(localDir)};
-      assertOnlyFilesToKeepInDir(dirs);
+      collectedFilenames.addAll(collectFilenames(dirs));
     }
+    assertEquals(expectedFilenames, collectedFilenames);
   }
 
   private static TestShuffleDataContext initDataContext(boolean withFilesToKeep)

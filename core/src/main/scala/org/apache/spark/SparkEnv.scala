@@ -344,7 +344,11 @@ object SparkEnv extends Logging {
         isLocal,
         conf,
         listenerBus,
-        externalShuffleClient)),
+        if (conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)) {
+          externalShuffleClient
+        } else {
+          None
+        })),
       conf, isDriver)
 
     val blockTransferService =

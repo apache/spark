@@ -81,8 +81,9 @@ class BlockManagerMasterEndpoint(
   val defaultRpcTimeout = RpcUtils.askRpcTimeout(conf)
 
   logInfo("BlockManagerMasterEndpoint up")
-  // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
-  private val externalShuffleServiceEnabled: Boolean = externalShuffleClient.isDefined
+  // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)
+  //   && conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)`
+  private val externalShuffleServiceRddFetchEnabled: Boolean = externalShuffleClient.isDefined
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -444,7 +445,7 @@ class BlockManagerMasterEndpoint(
       blockManagerIdByExecutor(id.executorId) = id
 
       val externalShuffleServiceBlockStatus =
-        if (externalShuffleServiceEnabled) {
+        if (externalShuffleServiceRddFetchEnabled) {
           val externalShuffleServiceBlocks = blockStatusByShuffleService
             .getOrElseUpdate(externalShuffleServiceIdOnHost(id), new JHashMap[BlockId, BlockStatus])
           Some(externalShuffleServiceBlocks)
@@ -498,7 +499,7 @@ class BlockManagerMasterEndpoint(
       locations.remove(blockManagerId)
     }
 
-    if (blockId.isRDD && storageLevel.useDisk && externalShuffleServiceEnabled) {
+    if (blockId.isRDD && storageLevel.useDisk && externalShuffleServiceRddFetchEnabled) {
       val externalShuffleServiceId = externalShuffleServiceIdOnHost(blockManagerId)
       if (storageLevel.isValid) {
         locations.add(externalShuffleServiceId)
@@ -521,7 +522,7 @@ class BlockManagerMasterEndpoint(
   private def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
     val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val status = locations.headOption.flatMap { bmId =>
-      if (externalShuffleServiceEnabled && bmId.port == externalShuffleServicePort) {
+      if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
         Option(blockStatusByShuffleService(bmId).get(blockId))
       } else {
         blockManagerInfo(bmId).getStatus(blockId)

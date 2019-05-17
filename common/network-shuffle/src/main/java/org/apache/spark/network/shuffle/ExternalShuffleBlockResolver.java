@@ -86,6 +86,8 @@ public class ExternalShuffleBlockResolver {
 
   private final TransportConf conf;
 
+  private final boolean extShuffleServiceRddFetchEnabled;
+
   @VisibleForTesting
   final File registeredExecutorFile;
   @VisibleForTesting
@@ -109,6 +111,8 @@ public class ExternalShuffleBlockResolver {
       File registeredExecutorFile,
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
+    this.extShuffleServiceRddFetchEnabled =
+      Boolean.valueOf(conf.get("spark.shuffle.service.fetch.rdd.enabled", "true"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
@@ -245,7 +249,7 @@ public class ExternalShuffleBlockResolver {
         fullId, executor.localDirs.length);
 
       // Execute the actual deletion in a different thread, as it may take some time.
-      directoryCleaner.execute(() -> deleteNonShuffleNonRddFiles(executor.localDirs));
+      directoryCleaner.execute(() -> deleteNonShuffleServiceServedFiles(executor.localDirs));
     }
   }
 
@@ -265,22 +269,24 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Synchronously deletes non-shuffle and non-RDD files in each directory recursively.
+   * Synchronously deletes files not served by shuffle service in each directory recursively.
    * Should be executed in its own thread, as this may take a long time.
    */
-  private void deleteNonShuffleNonRddFiles(String[] dirs) {
+  private void deleteNonShuffleServiceServedFiles(String[] dirs) {
     FilenameFilter filter = (dir, name) -> {
       // Don't delete shuffle data, shuffle index files or cached RDD files.
-      return !name.endsWith(".index") && !name.endsWith(".data") && !name.startsWith("rdd_");
+      return !name.endsWith(".index") && !name.endsWith(".data")
+        && (!extShuffleServiceRddFetchEnabled || !name.startsWith("rdd_"));
     };
 
     for (String localDir : dirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir), filter);
-        logger.debug("Successfully cleaned up non-shuffle and non-RDD files in directory: {}",
+        logger.debug("Successfully cleaned up files not served by shuffle service in directory: {}",
           localDir);
       } catch (Exception e) {
-        logger.error("Failed to delete non-shuffle and non-RDD files in directory: " + localDir, e);
+        logger.error("Failed to delete files not served by shuffle service in directory: "
+          + localDir, e);
       }
     }
   }

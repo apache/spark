@@ -299,7 +299,8 @@ package object config {
 
   private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
-      .doc("Whether or not cleanup the non-shuffle and non-RDD files on executor exits.")
+      .doc("Whether or not cleanup the files not served by the external shuffle service " +
+        "on executor exits.")
       .booleanConf
       .createWithDefault(true)
 
@@ -365,6 +366,15 @@ package object config {
 
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
+
+  private[spark] val SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
+    ConfigBuilder("spark.shuffle.service.fetch.rdd.enabled")
+      .doc("Whether to use the ExternalShuffleService for fetching disk persisted RDD blocks. " +
+        "In case of dynamic allocation if this feature is enabled executors having only disk " +
+        "persisted blocks are considered idle after " +
+        "'spark.dynamicAllocation.executorIdleTimeout' and will be released accordingly.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_DB_ENABLED =
     ConfigBuilder("spark.shuffle.service.db.enabled")

@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.UUID;
 
 import com.google.common.io.Closeables;
 import com.google.common.io.Files;
@@ -97,17 +96,17 @@ public class TestShuffleDataContext {
 
   /** Creates spill file(s) within the local dirs. */
   public void insertSpillData() throws IOException {
-    String filename = "temp_local_" + UUID.randomUUID();
+    String filename = "temp_local_uuid";
     insertFile(filename);
   }
 
   public void insertBroadcastData() throws IOException {
-    String filename = "broadcast_12_"  + UUID.randomUUID();
+    String filename = "broadcast_12_uuid";
     insertFile(filename);
   }
 
   public void insertTempShuffleData() throws IOException {
-    String filename = "temp_shuffle_"  + UUID.randomUUID();
+    String filename = "temp_shuffle_uuid";
     insertFile(filename);
   }
 
