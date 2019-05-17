@@ -382,14 +382,14 @@ private[ui] class ExecutionPagedTable(
   }
 
   private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
-    val jobDescription = UIUtils.makeDescription(execution.description, basePath, plainText = false)
+    val executionDesc = UIUtils.makeDescription(execution.description, basePath, plainText = false)
     val details = if (execution.details != null && execution.details.nonEmpty) {
       <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
             class="expand-details">
         +details
       </span> ++
       <div class="stage-details collapsed">
-        <pre>{jobDescription}<br></br>{execution.details}</pre>
+        <pre>{executionDesc}<br></br>{execution.details}</pre>
       </div>
     } else {
       Nil
