@@ -44,11 +44,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
 
   // CPU settings
   private val driverCpuCores = conf.get(DRIVER_CORES.key, "1")
-  private val driverCoresRequest = if (conf.contains(KUBERNETES_DRIVER_REQUEST_CORES)) {
-    conf.get(KUBERNETES_DRIVER_REQUEST_CORES).get
-  } else {
-    driverCpuCores
-  }
+  private val driverCoresRequest = conf.get(KUBERNETES_DRIVER_REQUEST_CORES.key, driverCpuCores)
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
