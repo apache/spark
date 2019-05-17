@@ -199,4 +199,13 @@ private[spark] object KubernetesConf {
       .replaceAll("[^a-z0-9\\-]", "")
       .replaceAll("-+", "-")
   }
+
+  /**
+    * Build a resources name based on the vendor device plugin naming
+    * convention of: vendor-domain/resource. For example, an Nvidia GPU is
+    * advertised as nvidia.com/gpu.
+    */
+  def buildKubernetesResourceName(vendor: String, resourceName: String): String = {
+    s"${vendor}/${resourceName}"
+  }
 }

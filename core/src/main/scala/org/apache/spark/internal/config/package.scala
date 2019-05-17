@@ -38,6 +38,7 @@ package object config {
   private[spark] val SPARK_RESOURCE_COUNT_SUFFIX = ".count"
   private[spark] val SPARK_RESOURCE_ADDRESSES_SUFFIX = ".addresses"
   private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX = ".discoveryScript"
+  private[spark] val SPARK_RESOURCE_VENDOR_SUFFIX = ".vendor"
 
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional

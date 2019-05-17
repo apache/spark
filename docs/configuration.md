@@ -207,6 +207,13 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.driver.resource.{resourceName}.vendor</code></td>
+  <td>None</td>
+  <td>
+    Vendor of the resources to use for driver. This option is currently supported on Kubernetes.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
@@ -257,6 +264,13 @@ of the most common options to set are:
     A script for the executor to run to discover a particular resource type. This should
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
     name and an array of addresses.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.resource.{resourceName}.vendor</code></td>
+  <td>None</td>
+  <td>
+    Vendor of the resources to use for executors. This option is currently supported on Kubernetes.
   </td>
 </tr>
 <tr>
