@@ -231,42 +231,42 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val e: SparkException = intercept[SparkException] {
         df.select(checkedCast(lit(1231000000000L))).collect()
       }
-      assert(e.getCause().getMessage.contains(msg))
+      assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Decimal: out of range") {
       val e: SparkException = intercept[SparkException] {
         df.select(checkedCast(lit(1231000000000.0).cast(DecimalType(15, 2)))).collect()
       }
-      assert(e.getCause().getMessage.contains(msg))
+      assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Decimal: fractional part") {
       val e: SparkException = intercept[SparkException] {
         df.select(checkedCast(lit(123.1).cast(DecimalType(15, 2)))).collect()
       }
-      assert(e.getCause().getMessage.contains(msg))
+      assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Double: out of range") {
       val e: SparkException = intercept[SparkException] {
         df.select(checkedCast(lit(1231000000000.0))).collect()
       }
-      assert(e.getCause().getMessage.contains(msg))
+      assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Double: fractional part") {
       val e: SparkException = intercept[SparkException] {
         df.select(checkedCast(lit(123.1))).collect()
       }
-      assert(e.getCause().getMessage.contains(msg))
+      assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Type") {
       val e: SparkException = intercept[SparkException] {
         df.select(checkedCast(lit("123.1"))).collect()
       }
-      assert(e.getCause().getMessage.contains("was not numeric"))
+      assert(e.getMessage.contains("was not numeric"))
     }
   }
 

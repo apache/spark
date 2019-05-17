@@ -1004,12 +1004,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       assert(msg.contains("Cannot save interval data type into external storage."))
 
       msg = intercept[AnalysisException] {
-        // Here the IntervalData and corresponding UDT does not implement the serialize method
-        // so evaluation of udf will throw error. We are testing the error codepath for datasource
-        // SPARK-27692 optimizes evaluation of deterministic UDF with literal inputs and will
-        // evaluate the UDF in the optimizer. To bypass this optimization and to test
-        // the error codepath for datasource, mark the udf as non deterministic
-        spark.udf.register("testType", udf(() => new IntervalData()).asNondeterministic())
+        spark.udf.register("testType", udf(() => new IntervalData()))
         sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.toLowerCase(Locale.ROOT)

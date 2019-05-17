@@ -159,29 +159,31 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       }).length
     }
 
-    // Non deterministic
-    val foo = udf(() => Math.random())
-    spark.udf.register("random0", foo.asNondeterministic())
-    val plan = sql("SELECT random0()").queryExecution.optimizedPlan
-    assert(udfNodesCount(plan) == 1)
-
-    // udf is deterministic and args are literal
-    val foo2 = udf((x: String, i: Int) => x.length + i)
-    spark.udf.register("mystrlen", foo2)
-    assert(foo2.deterministic)
-    assert(sql("SELECT mystrlen('abc', 1)").head().getInt(0) == 4)
-    val plan2 = sql("SELECT mystrlen('abc', 1)").queryExecution.optimizedPlan
-    assert(udfNodesCount(plan2) == 0)
-    val plan3 = sql("SELECT mystrlen('abc', mystrlen('c', 1))").queryExecution.optimizedPlan
-    assert(udfNodesCount(plan3) == 0)
-
-    // udf is deterministic and args are not literal
-    withTempView("temp1") {
-      val df = sparkContext.parallelize(
-        (1 to 10).map(i => i.toString)).toDF("i1")
-      df.createOrReplaceTempView("temp1")
-      val plan = sql("SELECT mystrlen(i1, 1) FROM temp1").queryExecution.optimizedPlan
+    withSQLConf(SQLConf.UDF_DETERMINISTIC_FOLD_ENABLED.key -> "true") {
+      // Non deterministic
+      val foo = udf(() => Math.random())
+      spark.udf.register("random0", foo.asNondeterministic())
+      val plan = sql("SELECT random0()").queryExecution.optimizedPlan
       assert(udfNodesCount(plan) == 1)
+
+      // udf is deterministic and args are literal
+      val foo2 = udf((x: String, i: Int) => x.length + i)
+      spark.udf.register("mystrlen", foo2)
+      assert(foo2.deterministic)
+      assert(sql("SELECT mystrlen('abc', 1)").head().getInt(0) == 4)
+      val plan2 = sql("SELECT mystrlen('abc', 1)").queryExecution.optimizedPlan
+      assert(udfNodesCount(plan2) == 0)
+      val plan3 = sql("SELECT mystrlen('abc', mystrlen('c', 1))").queryExecution.optimizedPlan
+      assert(udfNodesCount(plan3) == 0)
+
+      // udf is deterministic and args are not literal
+      withTempView("temp1") {
+        val df = sparkContext.parallelize(
+          (1 to 10).map(i => i.toString)).toDF("i1")
+        df.createOrReplaceTempView("temp1")
+        val plan = sql("SELECT mystrlen(i1, 1) FROM temp1").queryExecution.optimizedPlan
+        assert(udfNodesCount(plan) == 1)
+      }
     }
   }
 
