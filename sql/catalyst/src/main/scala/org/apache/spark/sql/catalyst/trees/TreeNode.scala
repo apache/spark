@@ -87,8 +87,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /**
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
-   * when this node is copied via `makeCopy`. The tags will be kept after transforming, if
-   * the node is transformed to the same type. Otherwise, tags will be dropped.
+   * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
    */
   val tags: mutable.Map[TreeNodeTagName, Any] = mutable.Map.empty
 
@@ -273,12 +272,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (this fastEquals afterRule) {
       mapChildren(_.transformDown(rule))
     } else {
-      // If the transform function replaces this node with a new one of the same type, carry over
-      // the tags.
-      if (afterRule.getClass == this.getClass) {
-        afterRule.tags ++= this.tags
-      }
-
+      // If the transform function replaces this node with a new one, carry over the tags.
+      afterRule.tags ++= this.tags
       afterRule.mapChildren(_.transformDown(rule))
     }
   }
@@ -301,11 +296,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
       }
     }
-    // If the transform function replaces this node with a new one of the same type, carry over
-    // the tags.
-    if (newNode.getClass == this.getClass) {
-      newNode.tags ++= this.tags
-    }
+    // If the transform function replaces this node with a new one, carry over the tags.
+    newNode.tags ++= this.tags
     newNode
   }
 
