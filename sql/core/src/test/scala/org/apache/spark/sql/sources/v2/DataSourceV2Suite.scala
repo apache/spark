@@ -218,12 +218,18 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         val path = file.getCanonicalPath
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
-        // test with different save modes
         spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).mode("append").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
+
+        // default save mode is append
+        spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
+          .option("path", path).save()
+        checkAnswer(
+          spark.read.format(cls.getName).option("path", path).load(),
+          spark.range(10).union(spark.range(10)).select('id, -'id))
 
         spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
           .option("path", path).mode("overwrite").save()
