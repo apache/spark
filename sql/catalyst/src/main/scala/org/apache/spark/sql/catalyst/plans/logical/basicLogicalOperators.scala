@@ -393,19 +393,16 @@ trait V2WriteCommand extends Command {
   override lazy val resolved: Boolean = outputResolved
 
   def outputResolved: Boolean = {
-    table.resolved && query.resolved && {
-      // When the table schema is empty, skip the schema check.
-      // TODO: introduce a table capability to disable schema check.
-      table.schema.isEmpty || {
-        query.output.size == table.output.size &&
-          query.output.zip(table.output).forall {
-            case (inAttr, outAttr) =>
-              // names and types must match, nullability must be compatible
-              inAttr.name == outAttr.name &&
-                DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
-                (outAttr.nullable || !inAttr.nullable)
-          }
-      }
+    // If the table doesn't require schema match, we don't need to resolve the output columns.
+    table.skipSchemaResolution || {
+      table.resolved && query.resolved && query.output.size == table.output.size &&
+        query.output.zip(table.output).forall {
+          case (inAttr, outAttr) =>
+            // names and types must match, nullability must be compatible
+            inAttr.name == outAttr.name &&
+              DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+              (outAttr.nullable || !inAttr.nullable)
+        }
     }
   }
 }

@@ -44,27 +44,35 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
-        // A map from translated data source filters to original catalyst filter expressions.
+        // A map from translated data source leaf node filters to original catalyst filter
+        // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
+        // pushed down. This map can be used to construct a catalyst filter expression from the
+        // input filter, or a superset(partial push down filter) of the input filter.
         val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
+        val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
         for (filterExpr <- filters) {
-          val translated = DataSourceStrategy.translateFilter(filterExpr)
-          if (translated.isDefined) {
-            translatedFilterToExpr(translated.get) = filterExpr
-          } else {
+          val translated =
+            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr))
+          if (translated.isEmpty) {
             untranslatableExprs += filterExpr
+          } else {
+            translatedFilters += translated.get
           }
         }
 
         // Data source filters that need to be evaluated again after scanning. which means
         // the data source cannot guarantee the rows returned can pass these filters.
         // As a result we must return it so Spark can plan an extra filter operator.
-        val postScanFilters = r.pushFilters(translatedFilterToExpr.keys.toArray)
-          .map(translatedFilterToExpr)
+        val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
+          DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
+        }
         // The filters which are marked as pushed to this data source
-        val pushedFilters = r.pushedFilters().map(translatedFilterToExpr)
+        val pushedFilters = r.pushedFilters().map { filter =>
+          DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
+        }
         (pushedFilters, untranslatableExprs ++ postScanFilters)
 
       case _ => (Nil, filters)

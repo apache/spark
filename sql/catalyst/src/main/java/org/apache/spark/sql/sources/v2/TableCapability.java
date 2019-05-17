@@ -84,5 +84,10 @@ public enum TableCapability {
    * <p>
    * See {@code org.apache.spark.sql.sources.v2.writer.SupportsDynamicOverwrite}.
    */
-  OVERWRITE_DYNAMIC
+  OVERWRITE_DYNAMIC,
+
+  /**
+   * Signals that the table accepts input of any schema in a write operation.
+   */
+  ACCEPT_ANY_SCHEMA
 }

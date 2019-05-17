@@ -399,17 +399,6 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       )).get.toString
     }
 
-    // Can not remove unsupported `StringContains` predicate since it is under `Or` operator.
-    assert(OrcFilters.createFilter(schema, Array(
-      Or(
-        LessThan("a", 10),
-        And(
-          StringContains("b", "prefix"),
-          GreaterThan("a", 1)
-        )
-      )
-    )).isEmpty)
-
     // Safely remove unsupported `StringContains` predicate and push down `LessThan`
     assertResultWithDiffHiveVersion(
       """leaf-0 = (LESS_THAN a 10)
@@ -441,5 +430,54 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
         )
       )).get.toString
     }
+  }
+
+  test("SPARK-27699 Converting disjunctions into ORC SearchArguments") {
+    import org.apache.spark.sql.sources._
+    // The `LessThan` should be converted while the `StringContains` shouldn't
+    val schema = new StructType(
+      Array(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", StringType, nullable = true)))
+
+    // The predicate `StringContains` predicate is not able to be pushed down.
+    assertResult("leaf-0 = (LESS_THAN_EQUALS a 10)\nleaf-1 = (LESS_THAN a 1)\n" +
+      "expr = (or (not leaf-0) leaf-1)") {
+      OrcFilters.createFilter(schema, Array(
+        Or(
+          GreaterThan("a", 10),
+          And(
+            StringContains("b", "prefix"),
+            LessThan("a", 1)
+          )
+        )
+      )).get.toString
+    }
+
+    assertResult("leaf-0 = (LESS_THAN_EQUALS a 10)\nleaf-1 = (LESS_THAN a 1)\n" +
+      "expr = (or (not leaf-0) leaf-1)") {
+      OrcFilters.createFilter(schema, Array(
+        Or(
+          And(
+            GreaterThan("a", 10),
+            StringContains("b", "foobar")
+          ),
+          And(
+            StringContains("b", "prefix"),
+            LessThan("a", 1)
+          )
+        )
+      )).get.toString
+    }
+
+    assert(OrcFilters.createFilter(schema, Array(
+      Or(
+        StringContains("b", "foobar"),
+        And(
+          StringContains("b", "prefix"),
+          LessThan("a", 1)
+        )
+      )
+    )).isEmpty)
   }
 }
