@@ -517,7 +517,7 @@ private[spark] class SparkSubmit extends Logging {
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.submit.deployMode"),
+        confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
@@ -747,8 +747,8 @@ private[spark] class SparkSubmit extends Logging {
 
     // Resolve paths in certain spark properties
     val pathConfigs = Seq(
-      "spark.jars",
-      "spark.files",
+      JARS.key,
+      FILES.key,
       "spark.yarn.dist.files",
       "spark.yarn.dist.archives",
       "spark.yarn.dist.jars")
