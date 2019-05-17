@@ -828,34 +828,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
 
     // Testing
-    // case sources.Or(lhs, rhs) =>
-    //   ...
-    //     lhsFilter <- createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd = false)
-    assertResult(None) {
-      parquetFilters.createFilter(
-        parquetSchema,
-        sources.Or(
-          sources.And(
-            sources.GreaterThan("a", 1),
-            sources.StringContains("b", "prefix")),
-          sources.GreaterThan("a", 2)))
-    }
-
-    // Testing
-    // case sources.Or(lhs, rhs) =>
-    //   ...
-    //     rhsFilter <- createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd = false)
-    assertResult(None) {
-      parquetFilters.createFilter(
-        parquetSchema,
-        sources.Or(
-          sources.GreaterThan("a", 2),
-          sources.And(
-            sources.GreaterThan("a", 1),
-            sources.StringContains("b", "prefix"))))
-    }
-
-    // Testing
     // case sources.Not(pred) =>
     //   createFilterHelper(nameToParquetField, pred, canRemoveOneSideInAnd = false)
     //     .map(FilterApi.not)
@@ -935,6 +907,63 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             sources.And(
               sources.GreaterThan("a", 1),
               sources.StringContains("b", "prefix")))))
+    }
+  }
+
+  test("SPARK-27699 Converting disjunctions into Parquet filter predicates") {
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = false),
+      StructField("b", StringType, nullable = true),
+      StructField("c", DoubleType, nullable = true)
+    ))
+
+    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+    // Testing
+    // case sources.Or(lhs, rhs) =>
+    //   ...
+    //     lhsFilter <- createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd = true)
+    assertResult(Some(
+      FilterApi.or(gt(intColumn("a"), 1: Integer), gt(intColumn("a"), 2: Integer)))) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Or(
+          sources.And(
+            sources.GreaterThan("a", 1),
+            sources.StringContains("b", "prefix")),
+          sources.GreaterThan("a", 2)))
+    }
+
+    // Testing
+    // case sources.Or(lhs, rhs) =>
+    //   ...
+    //     rhsFilter <- createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd = true)
+    assertResult(Some(
+      FilterApi.or(gt(intColumn("a"), 2: Integer), gt(intColumn("a"), 1: Integer)))) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Or(
+          sources.GreaterThan("a", 2),
+          sources.And(
+            sources.GreaterThan("a", 1),
+            sources.StringContains("b", "prefix"))))
+    }
+
+    // Testing
+    // case sources.Or(lhs, rhs) =>
+    //   ...
+    //     lhsFilter <- createFilterHelper(nameToParquetField, lhs, canRemoveOneSideInAnd = true)
+    //     rhsFilter <- createFilterHelper(nameToParquetField, rhs, canRemoveOneSideInAnd = true)
+    assertResult(Some(
+      FilterApi.or(gt(intColumn("a"), 1: Integer), lt(intColumn("a"), 0: Integer)))) {
+      parquetFilters.createFilter(
+        parquetSchema,
+        sources.Or(
+          sources.And(
+            sources.GreaterThan("a", 1),
+            sources.StringContains("b", "prefix")),
+          sources.And(
+            sources.LessThan("a", 0),
+            sources.StringContains("b", "foobar"))))
     }
   }
 
