@@ -441,7 +441,7 @@ Apache Kafka only supports at least once write semantics. Consequently, when wri
 or Batch Queries---to Kafka, some records may be duplicated; this can happen, for example, if Kafka needs
 to retry a message that was not acknowledged by a Broker, even though that Broker received and wrote the message record.
 Structured Streaming cannot prevent such duplicates from occurring due to these Kafka write semantics. However,
-if writing the query is successful, then you can assume that the query output was written at least once. A possible
+if writing the query is successful, then you can assume that the query output was written exactly once. A possible
 solution to remove duplicates when reading the written data could be to introduce a primary (unique) key
 that can be used to perform de-duplication when reading.
 
