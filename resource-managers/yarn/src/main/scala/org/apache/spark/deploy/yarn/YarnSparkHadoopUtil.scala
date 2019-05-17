@@ -53,16 +53,11 @@ object YarnSparkHadoopUtil {
       confPrefix: String,
       sparkConf: SparkConf
       ): Map[String, String] = {
-    val sparkToYarnResources = new HashMap[String, String]()
-    Map("gpu" -> YARN_GPU_RESOURCE_CONFIG, "fpga" -> YARN_FPGA_RESOURCE_CONFIG).foreach {
+    Map("gpu" -> YARN_GPU_RESOURCE_CONFIG, "fpga" -> YARN_FPGA_RESOURCE_CONFIG).map {
       case (rName, yarnName) =>
-        val count = sparkConf.getOption(confPrefix + rName + SPARK_RESOURCE_COUNT_POSTFIX).
-          getOrElse("0")
-        if (count.toLong > 0) {
-          sparkToYarnResources(yarnName) = count
-        }
-    }
-    sparkToYarnResources.toMap
+        (yarnName ->
+          sparkConf.getOption(confPrefix + rName + SPARK_RESOURCE_COUNT_POSTFIX). getOrElse("0"))
+    }.filter { case (_, count) => count.toLong > 0 }
   }
 
   // All RM requests are issued with same priority : we do not (yet) have any distinction between

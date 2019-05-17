@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn
 import java.util.Collections
 
 import scala.collection.JavaConverters._
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -28,15 +27,15 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.ResourceRequestHelper.RESOURCE_INFO_CLASS
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
-import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
@@ -181,20 +180,28 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(containerRequest.getCapability === expectedResources)
   }
 
-  test("custom yarn resource mapped from spark resource configs") {
+  test("custom spark resource mapped to yarn resource configs") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-    ResourceRequestTestHelper.initializeResourceTypes(List("yarn.io/gpu"))
-
+    val yarnMadeupResource = "yarn.io/madeup"
+    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG, yarnMadeupResource)
+    ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
-    val handler = createAllocator(1, mockAmClient,
-      Map(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX -> "3"))
+
+    val sparkResources =
+      Map(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_POSTFIX -> "3",
+        SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_COUNT_POSTFIX -> "2",
+        YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + yarnMadeupResource -> "5")
+    val handler = createAllocator(1, mockAmClient, sparkResources)
 
     handler.updateResourceRequests()
     val yarnRInfo = ResourceRequestTestHelper.getResources(handler.resource)
     val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.getName() -> rInfo.getValue()) ).toMap
-    assert(allResourceInfo.get("yarn.io/gpu").nonEmpty)
-    assert(allResourceInfo.get("yarn.io/gpu").get === 3)
-    assert(allResourceInfo.get("gpu").isEmpty)
+    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
+    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
+    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
+    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 2)
+    assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
+    assert(allResourceInfo.get(yarnMadeupResource).get === 5)
   }
 
   test("container should not be created if requested number if met") {
