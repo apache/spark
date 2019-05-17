@@ -20,19 +20,39 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, Identifier, TableCatalog, TestTableCatalog}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LogicalPlan}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceResolution}
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
 
+  private val orc2 = classOf[OrcDataSourceV2].getName
+
+  private val testCat: TableCatalog = {
+    val newCatalog = new TestTableCatalog
+    newCatalog.initialize("testcat", CaseInsensitiveStringMap.empty())
+    newCatalog
+  }
+
+  private val lookupCatalog: String => CatalogPlugin = {
+    case "testcat" =>
+      testCat
+    case name =>
+      throw new CatalogNotFoundException(s"No such catalog: $name")
+  }
+
   def parseAndResolve(query: String): LogicalPlan = {
-    DataSourceResolution(conf).apply(parsePlan(query))
+    val newConf = conf.copy()
+    newConf.setConfString("spark.sql.default.catalog", "testcat")
+    DataSourceResolution(newConf, lookupCatalog).apply(parsePlan(query))
   }
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
@@ -272,6 +292,74 @@ class PlanResolutionSuite extends AnalysisTest {
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.provider.contains("parquet"))
       assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
+    }
+  }
+
+  test("Test v2 CTAS with known catalog in identifier") {
+    val sql =
+      s"""
+         |CREATE TABLE IF NOT EXISTS testcat.mydb.table_name
+         |USING parquet
+         |COMMENT 'table comment'
+         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+         |OPTIONS (path 's3://bucket/path/to/data', other 20)
+         |AS SELECT * FROM src
+      """.stripMargin
+
+    val expectedProperties = Map(
+      "p1" -> "v1",
+      "p2" -> "v2",
+      "other" -> "20",
+      "provider" -> "parquet",
+      "location" -> "s3://bucket/path/to/data",
+      "comment" -> "table comment")
+
+    parseAndResolve(sql) match {
+      case ctas: CreateTableAsSelect =>
+        assert(ctas.catalog.name == "testcat")
+        assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
+        assert(ctas.properties == expectedProperties)
+        assert(ctas.writeOptions == Map("other" -> "20"))
+        assert(ctas.partitioning.isEmpty)
+        assert(ctas.ignoreIfExists)
+
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
+            s"got ${other.getClass.getName}: $sql")
+    }
+  }
+
+  // TODO(rblue): enable this test after the default catalog is available
+  ignore("Test v2 CTAS with data source v2 provider") {
+    val sql =
+      s"""
+        |CREATE TABLE IF NOT EXISTS mydb.page_view
+        |USING $orc2
+        |COMMENT 'This is the staging page view table'
+        |LOCATION '/user/external/page_view'
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |AS SELECT * FROM src
+      """.stripMargin
+
+    val expectedProperties = Map(
+      "p1" -> "v1",
+      "p2" -> "v2",
+      "provider" -> orc2,
+      "location" -> "/user/external/page_view",
+      "comment" -> "This is the staging page view table")
+
+    parseAndResolve(sql) match {
+      case ctas: CreateTableAsSelect =>
+        assert(ctas.catalog.name == "testcat")
+        assert(ctas.tableName == Identifier.of(Array("mydb"), "page_view"))
+        assert(ctas.properties == expectedProperties)
+        assert(ctas.writeOptions.isEmpty)
+        assert(ctas.partitioning.isEmpty)
+        assert(ctas.ignoreIfExists)
+
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
+            s"got ${other.getClass.getName}: $sql")
     }
   }
 }

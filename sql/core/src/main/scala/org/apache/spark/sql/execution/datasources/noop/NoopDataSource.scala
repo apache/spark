@@ -39,11 +39,16 @@ class NoopDataSource extends TableProvider with DataSourceRegister {
   override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
 }
 
-private[noop] object NoopTable extends Table with SupportsWrite with SupportsStreamingWrite {
+private[noop] object NoopTable extends Table with SupportsWrite {
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = NoopWriteBuilder
   override def name(): String = "noop-table"
   override def schema(): StructType = new StructType()
-  override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_WRITE).asJava
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(
+      TableCapability.BATCH_WRITE,
+      TableCapability.STREAMING_WRITE,
+      TableCapability.ACCEPT_ANY_SCHEMA).asJava
+  }
 }
 
 private[noop] object NoopWriteBuilder extends WriteBuilder

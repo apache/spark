@@ -98,6 +98,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -135,6 +138,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -151,6 +157,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -195,7 +204,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val useV1Sources =
-      sparkSession.sessionState.conf.userV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
+      sparkSession.sessionState.conf.useV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
     val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     val cls = lookupCls.newInstance() match {
       case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||

@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.spark.CleanerListener
 import org.apache.spark.executor.DataReadMethod._
@@ -27,7 +26,7 @@ import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -251,7 +250,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("UNCACHE TABLE testData")
     assert(!spark.catalog.isCached("testData"), "Table 'testData' should not be cached")
 
-    eventually(timeout(10 seconds)) {
+    eventually(timeout(10.seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
   }
@@ -267,7 +266,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         "Eagerly cached in-memory table should have already been materialized")
 
       uncacheTable("testCacheTable")
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
     }
@@ -284,7 +283,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         "Eagerly cached in-memory table should have already been materialized")
 
       uncacheTable("testCacheTable")
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
     }
@@ -305,7 +304,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       "Lazily cached in-memory table should have been materialized")
 
     uncacheTable("testData")
-    eventually(timeout(10 seconds)) {
+    eventually(timeout(10.seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
   }
@@ -446,7 +445,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
     System.gc()
 
-    eventually(timeout(10 seconds)) {
+    eventually(timeout(10.seconds)) {
       assert(toBeCleanedAccIds.synchronized { toBeCleanedAccIds.isEmpty },
         "batchStats accumulators should be cleared after GC when uncacheTable")
     }
@@ -939,23 +938,49 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  test("Cache should respect the broadcast hint") {
-    val df = broadcast(spark.range(1000)).cache()
-    val df2 = spark.range(1000).cache()
-    df.count()
-    df2.count()
+  test("Cache should respect the hint") {
+    def testHint(df: Dataset[_], expectedHint: JoinStrategyHint): Unit = {
+      val df2 = spark.range(2000).cache()
+      df2.count()
 
-    // Test the broadcast hint.
-    val joinPlan = df.join(df2, "id").queryExecution.optimizedPlan
-    val hint = joinPlan.collect {
-      case Join(_, _, _, _, hint) => hint
+      def checkHintExists(): Unit = {
+        // Test the broadcast hint.
+        val joinPlan = df.join(df2, "id").queryExecution.optimizedPlan
+        val joinHints = joinPlan.collect {
+          case Join(_, _, _, _, hint) => hint
+        }
+        assert(joinHints.size == 1)
+        assert(joinHints(0).leftHint.get.strategy.contains(expectedHint))
+        assert(joinHints(0).rightHint.isEmpty)
+      }
+
+      // Make sure the hint does exist when `df` is not cached.
+      checkHintExists()
+
+      df.cache()
+      try {
+        df.count()
+        // Make sure the hint still exists when `df` is cached.
+        checkHintExists()
+      } finally {
+        // Clean-up
+        df.unpersist()
+      }
     }
-    assert(hint.size == 1)
-    assert(hint(0).leftHint.get.broadcast)
-    assert(hint(0).rightHint.isEmpty)
 
-    // Clean-up
-    df.unpersist()
+    // The hint is the root node
+    testHint(broadcast(spark.range(1000)), BROADCAST)
+    // The hint is under subquery alias
+    testHint(broadcast(spark.range(1000)).as("df"), BROADCAST)
+    // The hint is under filter
+    testHint(broadcast(spark.range(1000)).filter($"id" > 100), BROADCAST)
+    // If there are 2 adjacent hints, the top one takes effect.
+    testHint(
+      spark.range(1000)
+        .hint("SHUFFLE_MERGE")
+        .hint("SHUFFLE_HASH")
+        .as("df"),
+      SHUFFLE_HASH)
   }
 
   test("analyzes column statistics in cached query") {

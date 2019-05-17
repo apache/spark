@@ -510,8 +510,7 @@ returned by `SparkSession.readStream()`. In [R](api/R/read.stream.html), with th
 #### Input Sources
 There are a few built-in sources.
 
-  - **File source** - Reads files written in a directory as a stream of data. Supported file formats are text, csv, json, orc, parquet. See the docs of the DataStreamReader interface for a more up-to-date list, and supported options for each file format. Note that the files must be atomically placed in the given directory, which in most file systems, can be achieved by file move operations.
-
+  - **File source** - Reads files written in a directory as a stream of data. Files will be processed in the order of file modification time. If `latestFirst` is set, order will be reversed. Supported file formats are text, CSV, JSON, ORC, Parquet. See the docs of the DataStreamReader interface for a more up-to-date list, and supported options for each file format. Note that the files must be atomically placed in the given directory, which in most file systems, can be achieved by file move operations.
   - **Kafka source** - Reads data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-0-10-integration.html) for more details.
 
   - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees. 
@@ -540,6 +539,8 @@ Here are the details of all the sources in Spark.
         <code>latestFirst</code>: whether to process the latest new files first, useful when there is a large backlog of files (default: false)
         <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
+        <br/>
+        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
         <br/>
         "file:///dataset.txt"<br/>
         "s3://a/dataset.txt"<br/>
@@ -2554,11 +2555,11 @@ spark.streams().awaitAnyTermination();   // block until any one of them terminat
 {% highlight python %}
 spark = ...  # spark session
 
-spark.streams().active  # get the list of currently active streaming queries
+spark.streams.active  # get the list of currently active streaming queries
 
-spark.streams().get(id)  # get a query object by its unique id
+spark.streams.get(id)  # get a query object by its unique id
 
-spark.streams().awaitAnyTermination()  # block until any one of them terminates
+spark.streams.awaitAnyTermination()  # block until any one of them terminates
 {% endhighlight %}
 
 </div>
@@ -2995,7 +2996,7 @@ the effect of the change is not well-defined. For all of them:
 
   - Changes to the user-defined foreach sink (that is, the `ForeachWriter` code) are allowed, but the semantics of the change depends on the code.
 
-- *Changes in projection / filter / map-like operations**: Some cases are allowed. For example:
+- *Changes in projection / filter / map-like operations*: Some cases are allowed. For example:
 
   - Addition / deletion of filters is allowed: `sdf.selectExpr("a")` to `sdf.where(...).selectExpr("a").filter(...)`.
 

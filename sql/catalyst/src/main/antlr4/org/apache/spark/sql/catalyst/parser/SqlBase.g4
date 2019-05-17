@@ -81,8 +81,7 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
-    | insertStatement                                                  #insertStatementDefault
-    | multiSelectStatement                                             #multiSelectStatementDefault
+    | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE db=identifier                                                #use
     | CREATE database (IF NOT EXISTS)? identifier
         (COMMENT comment=STRING)? locationSpec?
@@ -239,7 +238,7 @@ unsupportedHiveNativeCommands
     ;
 
 createTableHeader
-    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? tableIdentifier
+    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? multipartIdentifier
     ;
 
 bucketSpec
@@ -356,14 +355,14 @@ resource
     : identifier STRING
     ;
 
-insertStatement
-    : (ctes)? insertInto queryTerm queryOrganization                                       #singleInsertQuery
-    | (ctes)? fromClause multiInsertQueryBody+                                             #multiInsertQuery
+dmlStatementNoWith
+    : insertInto queryTerm queryOrganization                                       #singleInsertQuery
+    | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     ;
 
 queryNoWith
     : queryTerm queryOrganization                                               #noWithQuery
-    | fromClause selectStatement                                                #queryWithFrom
+    | fromClause selectStatement+                                               #queryWithFrom
     ;
 
 queryOrganization
@@ -377,10 +376,6 @@ queryOrganization
 
 multiInsertQueryBody
     : insertInto selectStatement
-    ;
-
-multiSelectStatement
-    : (ctes)? fromClause selectStatement+                                                #multiSelect
     ;
 
 selectStatement

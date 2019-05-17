@@ -21,7 +21,6 @@ import sys
 
 from collections import OrderedDict
 from decimal import Decimal
-from distutils.version import LooseVersion
 
 from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
@@ -65,19 +64,16 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             1, 2, 3,
             4, 5, 1.1,
             2.2, Decimal(1.123),
-            [1, 2, 2], True, 'hello'
+            [1, 2, 2], True, 'hello',
+            bytearray([0x01, 0x02])
         ]
         output_fields = [
             ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
             ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
             ('double', DoubleType()), ('decim', DecimalType(10, 3)),
-            ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType())
+            ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType()),
+            ('bin', BinaryType())
         ]
-
-        # TODO: Add BinaryType to variables above once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) >= LooseVersion("0.10.0"):
-            values.append(bytearray([0x01, 0x02]))
-            output_fields.append(('bin', BinaryType()))
 
         output_schema = StructType([StructField(*x) for x in output_fields])
         df = self.spark.createDataFrame([values], schema=output_schema)
@@ -95,6 +91,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
+                bin=pdf.bin
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -112,6 +109,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
+                bin=pdf.bin
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -130,6 +128,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
+                bin=pdf.bin
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -290,10 +289,6 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             StructField('null', NullType()),
             StructField('struct', StructType([StructField('l', LongType())])),
         ]
-
-        # TODO: Remove this if-statement once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            unsupported_types.append(StructField('bin', BinaryType()))
 
         for unsupported_type in unsupported_types:
             schema = StructType([StructField('id', LongType(), True), unsupported_type])
@@ -466,13 +461,8 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
                 grouped_df.apply(column_name_typo).collect()
-            if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
-                # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
-                with self.assertRaisesRegexp(Exception, "No cast implemented"):
-                    grouped_df.apply(invalid_positional_types).collect()
-            else:
-                with self.assertRaisesRegexp(Exception, "an integer is required"):
-                    grouped_df.apply(invalid_positional_types).collect()
+            with self.assertRaisesRegexp(Exception, "an integer is required"):
+                grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
         with self.sql_conf({

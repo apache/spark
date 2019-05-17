@@ -50,6 +50,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.streaming.DataStreamWriter
@@ -497,7 +498,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended)
+    val explain = ExplainCommand(queryExecution, extended = extended)
     sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       // scalastyle:off println
       r => println(r.getString(0))
@@ -694,8 +695,14 @@ class Dataset[T] private[sql](
   // defined on a derived column cannot referenced elsewhere in the plan.
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
     val parsedDelay =
-      Option(CalendarInterval.fromString("interval " + delayThreshold))
-        .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
+      try {
+        CalendarInterval.fromCaseInsensitiveString(delayThreshold)
+      } catch {
+        case e: IllegalArgumentException =>
+          throw new AnalysisException(
+            s"Unable to parse time delay '$delayThreshold'",
+            cause = Some(e))
+      }
     require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
@@ -3175,6 +3182,8 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
+      case DataSourceV2Relation(table: FileTable, _, _) =>
+        table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray
   }

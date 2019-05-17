@@ -65,7 +65,7 @@ class AppClientSuite
     master = makeMaster()
     workers = makeWorkers(10, 2048)
     // Wait until all workers register with master successfully
-    eventually(timeout(60.seconds), interval(10.millis)) {
+    eventually(timeout(1.minute), interval(10.milliseconds)) {
       assert(getMasterState.workers.size === numWorkers)
     }
   }

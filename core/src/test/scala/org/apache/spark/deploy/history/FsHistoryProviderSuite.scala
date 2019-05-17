@@ -25,7 +25,6 @@ import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.FileUtils
@@ -35,7 +34,6 @@ import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
-import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
@@ -53,16 +51,21 @@ import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
 
-class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
+class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
   private var testDir: File = null
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
   }
 
-  after {
-    Utils.deleteRecursively(testDir)
+  override def afterEach(): Unit = {
+    try {
+      Utils.deleteRecursively(testDir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   /** Create a fake log file using the new log format used in Spark 1.3+ */
@@ -142,7 +145,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
         clock.getTimeMillis(), "test", false))
 
       // Make sure the UI can be rendered.
-      list.foreach { case info =>
+      list.foreach { info =>
         val appUi = provider.getAppUI(info.id, None)
         appUi should not be null
         appUi should not be None
@@ -281,7 +284,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       list.last.attempts.size should be (3)
       list.head.attempts.head.attemptId should be (Some("attempt1"))
 
-      list.foreach { case app =>
+      list.foreach { app =>
         app.attempts.foreach { attempt =>
           val appUi = provider.getAppUI(app.id, attempt.attemptId)
           appUi should not be null
@@ -734,7 +737,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1 second), interval(10 millis)) {
+      eventually(timeout(3.second), interval(10.milliseconds)) {
         provider.getConfig().keys should not contain ("HDFS State")
       }
     } finally {
@@ -742,17 +745,17 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
-  test("provider reports error after FS leaves safe mode") {
+  testRetry("provider reports error after FS leaves safe mode") {
     testDir.delete()
     val clock = new ManualClock()
     val provider = new SafeModeTestProvider(createTestConf(), clock)
     val errorHandler = mock(classOf[Thread.UncaughtExceptionHandler])
-    val initThread = provider.startSafeModeCheckThread(Some(errorHandler))
+    provider.startSafeModeCheckThread(Some(errorHandler))
     try {
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1 second), interval(10 millis)) {
+      eventually(timeout(3.second), interval(10.milliseconds)) {
         verify(errorHandler).uncaughtException(any(), any())
       }
     } finally {

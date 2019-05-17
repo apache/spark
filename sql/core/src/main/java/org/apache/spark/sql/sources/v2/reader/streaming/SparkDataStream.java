@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 
 /**
  * The base interface representing a readable data stream in a Spark streaming query. It's
@@ -28,7 +27,7 @@ import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
  * {@link MicroBatchStream} and {@link ContinuousStream}.
  */
 @Evolving
-public interface SparkDataStream extends BaseStreamingSource {
+public interface SparkDataStream {
 
   /**
    * Returns the initial offset for a streaming query to start reading from. Note that the
@@ -50,4 +49,9 @@ public interface SparkDataStream extends BaseStreamingSource {
    * equal to `end` and will only request offsets greater than `end` in the future.
    */
   void commit(Offset end);
+
+  /**
+   * Stop this source and free any resources it has allocated.
+   */
+  void stop();
 }

@@ -186,7 +186,7 @@ class StreamingQuery(object):
             je = self._jsq.exception().get()
             msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
             stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
-            return StreamingQueryException(msg, stackTrace)
+            return StreamingQueryException(msg, stackTrace, je.getCause())
         else:
             return None
 
@@ -341,6 +341,9 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
 
@@ -357,6 +360,9 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
 

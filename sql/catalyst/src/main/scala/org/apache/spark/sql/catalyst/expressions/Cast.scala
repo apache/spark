@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
-import java.time.{LocalDate, LocalDateTime, LocalTime}
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkException
@@ -621,6 +621,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     // We can return what the children return. Same thing should happen in the codegen path.
     if (DataType.equalsStructurally(from, to)) {
       identity
+    } else if (from == NullType) {
+      // According to `canCast`, NullType can be casted to any type.
+      // For primitive types, we don't reach here because the guard of `nullSafeEval`.
+      // But for nested types like struct, we might reach here for nested null type field.
+      // We won't call the returned function actually, but returns a placeholder.
+      _ => throw new SparkException(s"should not directly cast from NullType to $to.")
     } else {
       to match {
         case dt if dt == from => identity[Any]
@@ -937,9 +943,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
        """
     case TimestampType =>
+      val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId"),
-        zoneId.getClass)
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
       (c, evPrim, evNull) =>
         code"""$evPrim =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToEpochDays($c, $zid);"""
@@ -1029,7 +1036,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val zid = ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId")
+      val zoneIdClass = classOf[ZoneId]
+      val zid = JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         code"""
@@ -1046,9 +1056,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case _: IntegralType =>
       (c, evPrim, evNull) => code"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
+      val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId"),
-        zoneId.getClass)
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
       (c, evPrim, evNull) =>
         code"""$evPrim =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.epochDaysToMicros($c, $zid);"""

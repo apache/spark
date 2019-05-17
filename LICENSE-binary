@@ -302,7 +302,6 @@ com.google.code.gson:gson
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
 com.twitter:parquet-hadoop-bundle
-commons-beanutils:commons-beanutils-core
 commons-cli:commons-cli
 commons-dbcp:commons-dbcp
 commons-io:commons-io
@@ -490,7 +489,6 @@ Eclipse Distribution License (EDL) 1.0
 org.glassfish.jaxb:jaxb-runtime
 jakarta.xml.bind:jakarta.xml.bind-api
 com.sun.istack:istack-commons-runtime
-jakarta.activation:jakarta.activation-api
 
 
 Mozilla Public License (MPL) 1.1

@@ -30,6 +30,13 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_
 
 package object config {
 
+  private[spark] val SPARK_DRIVER_RESOURCE_PREFIX = "spark.driver.resource."
+  private[spark] val SPARK_EXECUTOR_RESOURCE_PREFIX = "spark.executor.resource."
+  private[spark] val SPARK_TASK_RESOURCE_PREFIX = "spark.task.resource."
+
+  private[spark] val SPARK_RESOURCE_COUNT_POSTFIX = ".count"
+  private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX = ".discoveryScript"
+
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -1303,4 +1310,10 @@ package object config {
     .doc("Staging directory used while submitting applications.")
     .stringConf
     .createOptional
+
+  private[spark] val BUFFER_PAGESIZE = ConfigBuilder("spark.buffer.pageSize")
+    .doc("The amount of memory used per page in bytes")
+    .bytesConf(ByteUnit.BYTE)
+    .createOptional
+
 }

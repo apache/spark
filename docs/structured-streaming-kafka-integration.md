@@ -416,6 +416,24 @@ The following configurations are optional:
 </tr>
 </table>
 
+### Consumer Caching
+
+It's time-consuming to initialize Kafka consumers, especially in streaming scenarios where processing time is a key factor.
+Because of this, Spark caches Kafka consumers on executors. The caching key is built up from the following information:
+* Topic name
+* Topic partition
+* Group ID
+
+The size of the cache is limited by <code>spark.kafka.consumer.cache.capacity</code> (default: 64).
+If this threshold is reached, it tries to remove the least-used entry that is currently not in use.
+If it cannot be removed, then the cache will keep growing. In the worst case, the cache will grow to
+the max number of concurrent tasks that can run in the executor (that is, number of tasks slots),
+after which it will never reduce.
+
+If a task fails for any reason the new task is executed with a newly created Kafka consumer for safety reasons.
+At the same time the cached Kafka consumer which was used in the failed execution will be invalidated. Here it has to
+be emphasized it will not be closed if any other task is using it.
+
 ## Writing Data to Kafka
 
 Here, we describe the support for writing Streaming Queries and Batch Queries to Apache Kafka. Take note that
@@ -676,7 +694,7 @@ This way the application can be configured via Spark parameters and may not need
 configuration (Spark can use Kafka's dynamic JAAS configuration feature). For further information
 about delegation tokens, see [Kafka delegation token docs](http://kafka.apache.org/documentation/#security_delegation_token).
 
-The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.bootstrap.servers` is set,
+The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.clusters.${cluster}.auth.bootstrap.servers` is set,
 Spark considers the following log in options, in order of preference:
 - **JAAS login configuration**, please see example below.
 - **Keytab file**, such as,
@@ -684,13 +702,13 @@ Spark considers the following log in options, in order of preference:
       ./bin/spark-submit \
           --keytab <KEYTAB_FILE> \
           --principal <PRINCIPAL> \
-          --conf spark.kafka.bootstrap.servers=<KAFKA_SERVERS> \
+          --conf spark.kafka.clusters.${cluster}.auth.bootstrap.servers=<KAFKA_SERVERS> \
           ...
 
 - **Kerberos credential cache**, such as,
 
       ./bin/spark-submit \
-          --conf spark.kafka.bootstrap.servers=<KAFKA_SERVERS> \
+          --conf spark.kafka.clusters.${cluster}.auth.bootstrap.servers=<KAFKA_SERVERS> \
           ...
 
 The Kafka delegation token provider can be turned off by setting `spark.security.credentials.kafka.enabled` to `false` (default: `true`).
@@ -703,10 +721,103 @@ Kafka broker configuration):
 
 After obtaining delegation token successfully, Spark distributes it across nodes and renews it accordingly.
 Delegation token uses `SCRAM` login module for authentication and because of that the appropriate
-`spark.kafka.sasl.token.mechanism` (default: `SCRAM-SHA-512`) has to be configured. Also, this parameter
+`spark.kafka.clusters.${cluster}.sasl.token.mechanism` (default: `SCRAM-SHA-512`) has to be configured. Also, this parameter
 must match with Kafka broker configuration.
 
-When delegation token is available on an executor it can be overridden with JAAS login configuration.
+When delegation token is available on an executor Spark considers the following log in options, in order of preference:
+- **JAAS login configuration**, please see example below.
+- **Delegation token**, please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code> parameter for further details.
+
+When none of the above applies then unsecure connection assumed.
+
+
+#### Configuration
+
+Delegation tokens can be obtained from multiple clusters and <code>${cluster}</code> is an arbitrary unique identifier which helps to group different configurations.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.auth.bootstrap.servers</code></td>
+    <td>None</td>
+    <td>
+      A list of coma separated host/port pairs to use for establishing the initial connection
+      to the Kafka cluster. For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code></td>
+    <td>.*</td>
+    <td>
+      Regular expression to match against the <code>bootstrap.servers</code> config for sources and sinks in the application.
+      If a server address matches this regex, the delegation token obtained from the respective bootstrap servers will be used when connecting.
+      If multiple clusters match the address, an exception will be thrown and the query won't be started.
+      Kafka's secure and unsecure listeners are bound to different ports. When both used the secure listener port has to be part of the regular expression.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.security.protocol</code></td>
+    <td>SASL_SSL</td>
+    <td>
+      Protocol used to communicate with brokers. For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.sasl.kerberos.service.name</code></td>
+    <td>kafka</td>
+    <td>
+      The Kerberos principal name that Kafka runs as. This can be defined either in Kafka's JAAS config or in Kafka's config.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code></td>
+    <td>None</td>
+    <td>
+      The location of the trust store file. For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.password</code></td>
+    <td>None</td>
+    <td>
+      The store password for the trust store file. This is optional and only needed if <code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code> is configured.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code></td>
+    <td>None</td>
+    <td>
+      The location of the key store file. This is optional for client and can be used for two-way authentication for client.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.password</code></td>
+    <td>None</td>
+    <td>
+      The store password for the key store file. This is optional and only needed if <code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code> is configured.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.key.password</code></td>
+    <td>None</td>
+    <td>
+      The password of the private key in the key store file. This is optional for client.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.sasl.token.mechanism</code></td>
+    <td>SCRAM-SHA-512</td>
+    <td>
+      SASL mechanism used for client connections with delegation token. Because SCRAM login module used for authentication a compatible mechanism has to be set here.
+      For further details please see Kafka documentation (<code>sasl.mechanism</code>). Only used to authenticate against Kafka broker with delegation token.
+    </td>
+  </tr>
+</table>
 
 #### Caveats
 

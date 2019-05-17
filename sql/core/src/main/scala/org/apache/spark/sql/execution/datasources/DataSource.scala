@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
-import scala.language.{existentials, implicitConversions}
+import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -31,7 +31,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
@@ -349,7 +348,8 @@ case class DataSource(
             sparkSession.sessionState.newHadoopConf(),
             sparkSession.sessionState.conf) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath, userSpecifiedSchema)
+        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
+          caseInsensitiveOptions, userSpecifiedSchema)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,

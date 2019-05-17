@@ -33,6 +33,8 @@ import org.apache.spark.sql.types._
  */
 trait CheckAnalysis extends PredicateHelper {
 
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
   /**
    * Override to provide additional checks for correct analysis.
    * These rules will be evaluated after our built-in check rules.
@@ -294,6 +296,21 @@ trait CheckAnalysis extends PredicateHelper {
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
+            }
+
+          case CreateTableAsSelect(_, _, partitioning, query, _, _, _) =>
+            val references = partitioning.flatMap(_.references).toSet
+            val badReferences = references.map(_.fieldNames).flatMap { column =>
+              query.schema.findNestedField(column) match {
+                case Some(_) =>
+                  None
+                case _ =>
+                  Some(s"${column.quoted} is missing or is in a map or array")
+              }
+            }
+
+            if (badReferences.nonEmpty) {
+              failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
             }
 
           case _ => // Fallbacks to the following checks

@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalog.v2.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -34,38 +32,6 @@ private[sql] object LogicalExpressions {
   // a generic parser that is only used for parsing multi-part field names.
   // because this is only used for field names, the SQL conf passed in does not matter.
   private lazy val parser = new CatalystSqlParser(SQLConf.get)
-
-  def fromPartitionColumns(columns: String*): Array[IdentityTransform] =
-    columns.map(identity).toArray
-
-  def fromBucketSpec(spec: BucketSpec): BucketTransform = {
-    if (spec.sortColumnNames.nonEmpty) {
-      throw new AnalysisException(
-        s"Cannot convert bucketing with sort columns to a transform: $spec")
-    }
-
-    bucket(spec.numBuckets, spec.bucketColumnNames: _*)
-  }
-
-  implicit class TransformHelper(transforms: Seq[Transform]) {
-    def asPartitionColumns: Seq[String] = {
-      val (idTransforms, nonIdTransforms) = transforms.partition(_.isInstanceOf[IdentityTransform])
-
-      if (nonIdTransforms.nonEmpty) {
-        throw new AnalysisException("Transforms cannot be converted to partition columns: " +
-            nonIdTransforms.map(_.describe).mkString(", "))
-      }
-
-      idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference).map { ref =>
-        val parts = ref.fieldNames
-        if (parts.size > 1) {
-          throw new AnalysisException(s"Cannot partition by nested column: $ref")
-        } else {
-          parts(0)
-        }
-      }
-    }
-  }
 
   def literal[T](value: T): LiteralValue[T] = {
     val internalLit = catalyst.expressions.Literal(value)
@@ -183,17 +149,10 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
 }
 
 private[sql] final case class FieldReference(parts: Seq[String]) extends NamedReference {
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.MultipartIdentifierHelper
   override def fieldNames: Array[String] = parts.toArray
-  override def describe: String = parts.map(quote).mkString(".")
+  override def describe: String = parts.quoted
   override def toString: String = describe
-
-  private def quote(part: String): String = {
-    if (part.contains(".") || part.contains("`")) {
-      s"`${part.replace("`", "``")}`"
-    } else {
-      part
-    }
-  }
 }
 
 private[sql] object FieldReference {

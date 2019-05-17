@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.text.SimpleDateFormat
 import java.util
-import java.util.{Collections, Locale}
+import java.util.Locale
 
+import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
@@ -67,7 +68,7 @@ class TextSocketSourceProvider extends TableProvider with DataSourceRegister wit
 }
 
 class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimestamp: Boolean)
-  extends Table with SupportsMicroBatchRead with SupportsContinuousRead {
+  extends Table with SupportsRead {
 
   override def name(): String = s"Socket[$host:$port]"
 
@@ -79,7 +80,9 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
     }
   }
 
-  override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
     override def readSchema(): StructType = schema()
