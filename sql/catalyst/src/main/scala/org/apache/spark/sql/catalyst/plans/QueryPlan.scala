@@ -271,6 +271,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 }
 
 object QueryPlan extends PredicateHelper {
+  // a TreeNode tag in SparkPlan, to carry its original logical plan. The planner will add this tag
+  // when converting a logical plan to a physical plan.
   val LOGICAL_PLAN_TAG_NAME = TreeNodeTagName("logical_plan")
 
   /**

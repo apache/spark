@@ -87,8 +87,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /**
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
-   * when this node is copied via `makeCopy`. If a user copies the tree node via other ways like the
-   * `copy` method, it's his responsibility to carry over the tags.
+   * when this node is copied via `makeCopy`. The tags will be kept after transforming, if
+   * the node is transformed to the same type. Otherwise, tags will be dropped.
    */
   val tags: mutable.Map[TreeNodeTagName, Any] = mutable.Map.empty
 
@@ -292,21 +292,21 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRuleOnChildren = mapChildren(_.transformUp(rule))
-    if (this fastEquals afterRuleOnChildren) {
+    val newNode = if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
       }
     } else {
-      val newNode = CurrentOrigin.withOrigin(origin) {
+      CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
       }
-      // If the transform function replaces this node with a new one of the same type, carry over
-      // the tags.
-      if (newNode.getClass == this.getClass) {
-        newNode.tags ++= this.tags
-      }
-      newNode
     }
+    // If the transform function replaces this node with a new one of the same type, carry over
+    // the tags.
+    if (newNode.getClass == this.getClass) {
+      newNode.tags ++= this.tags
+    }
+    newNode
   }
 
   /**

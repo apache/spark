@@ -83,6 +83,11 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite {
       case _: ShuffleExchangeExec | _: BroadcastExchangeExec | _: ReusedExchangeExec =>
         assert(!plan.tags.contains(QueryPlan.LOGICAL_PLAN_TAG_NAME))
 
+      // The subquery exec nodes are just wrappers of the actual nodes, they don't have
+      // corresponding logical plan.
+      case _: SubqueryExec | _: ReusedSubqueryExec =>
+        assert(!plan.tags.contains(QueryPlan.LOGICAL_PLAN_TAG_NAME))
+
       case _ if isScanPlanTree(plan) =>
         // The strategies for planning scan can remove or add FilterExec/ProjectExec nodes,
         // so it's not simple to check. Instead, we only check that the origin LogicalPlan
