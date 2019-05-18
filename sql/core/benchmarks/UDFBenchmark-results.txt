@@ -1,0 +1,52 @@
+================================================================================================
+UDF with mixed input types
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int/string to string:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int/string to string wholestage off            250            285          50          0,4        2500,0       1,0X
+long/nullable int/string to string wholestage on            148            174          34          0,7        1479,1       1,7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int/string to option:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int/string to option wholestage off            95            97           3          1,0        952,8       1,0X
+long/nullable int/string to option wholestage on             71             76          4          1,4         708,2       1,3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int to primitive:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int to primitive wholestage off             73             75           4          1,4         725,2       1,0X
+long/nullable int to primitive wholestage on             52             62           7          1,9         523,8       1,4X
+
+
+================================================================================================
+UDF with primitive types
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int to string:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int to string wholestage off             65             68           5          1,5         649,0       1,0X
+long/nullable int to string wholestage on             49             62          16          2,0         488,6       1,3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int to option:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int to option wholestage off             27             31           6          3,8         266,5       1,0X
+long/nullable int to option wholestage on             28             40          10          3,6         278,5       1,0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int/string to primitive:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int/string to primitive wholestage off             28             31           4          3,6         280,3       1,0X
+long/nullable int/string to primitive wholestage on             29             31           3          3,5         285,7       1,0X
+
+
