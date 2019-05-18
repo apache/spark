@@ -155,7 +155,7 @@ object JavaTypeInference {
       if (getterName == setterName) {
         getterName
       } else {
-        if (getterName.indexOf("get") == 0 && setterName.indexOf("set") == 0 &&
+        if (getterName.startsWith("get") && setterName.startsWith("set") &&
           getterName.substring(3) == setterName.substring(3)) {
           getterName.substring(3)
         } else {
