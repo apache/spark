@@ -43,8 +43,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
   // CPU settings
-  private val driverCpuCores = conf.get(DRIVER_CORES.key, "1")
-  private val driverCoresRequest = conf.get(KUBERNETES_DRIVER_REQUEST_CORES.key, driverCpuCores)
+  private val driverCpuCores = conf.get(DRIVER_CORES)
+  private val driverCoresRequest = conf
+    .get(KUBERNETES_DRIVER_REQUEST_CORES)
+    .getOrElse(driverCpuCores.toString)
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
