@@ -201,7 +201,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     }
   }
 
-  private static Set<String> collectFilenames(File[] files) {
+  private static Set<String> collectFilenames(File[] files) throws IOException {
     Set<String> result = new HashSet<>();
     for (File file : files) {
       if (file.exists()) {
@@ -210,8 +210,6 @@ public class CleanupNonShuffleServiceServedFilesSuite {
             .filter(Files::isRegularFile)
             .map(x -> x.toFile().getName())
             .collect(Collectors.toSet()));
-        } catch (IOException e) {
-          throw new AssertionError(e);
         }
       }
     }
@@ -220,7 +218,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
 
   private static void assertContainedFilenames(
       TestShuffleDataContext dataContext,
-      Set<String> expectedFilenames) {
+      Set<String> expectedFilenames) throws IOException {
     Set<String> collectedFilenames = new HashSet<>();
     for (String localDir : dataContext.localDirs) {
       File[] dirs = new File[] {new File(localDir)};
