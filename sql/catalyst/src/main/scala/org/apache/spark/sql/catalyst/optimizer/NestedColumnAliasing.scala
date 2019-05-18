@@ -32,9 +32,7 @@ object NestedColumnAliasing {
 
   def unapply(plan: LogicalPlan)
     : Option[(Map[GetStructField, Alias], Map[ExprId, Seq[Alias]])] = plan match {
-    case Project(projectList, child)
-        if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
-      getAliasSubMap(projectList)
+    case Project(projectList, child) => getAliasSubMap(projectList)
     case _ => None
   }
 
@@ -54,7 +52,7 @@ object NestedColumnAliasing {
   /**
    * Return a replaced project list.
    */
-  private def getNewProjectList(
+  def getNewProjectList(
       projectList: Seq[NamedExpression],
       nestedFieldToAlias: Map[GetStructField, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
@@ -77,7 +75,7 @@ object NestedColumnAliasing {
   /**
    * Returns true for those operators that project can be pushed through.
    */
-  private def canProjectPushThrough(plan: LogicalPlan) = plan match {
+  def canProjectPushThrough(plan: LogicalPlan): Boolean = plan match {
     case _: GlobalLimit => true
     case _: LocalLimit => true
     case _: Repartition => true
