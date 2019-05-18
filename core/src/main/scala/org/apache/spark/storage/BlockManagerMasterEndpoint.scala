@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
@@ -171,10 +170,8 @@ class BlockManagerMasterEndpoint(
 
     // Find all blocks for the given RDD, remove the block from both blockLocations and
     // the blockManagerInfo that is tracking the blocks and create the futures which asynchronously
-    // remove the blocks from those slaves which contains the blocks and gives back the number of
-    // removed blocks
+    // remove the blocks from slaves and gives back the number of removed blocks
     val blocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
-    val removeRddFromExecutorsFutures = new ListBuffer[Future[Int]]()
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[RDDBlockId]]
 
@@ -196,11 +193,14 @@ class BlockManagerMasterEndpoint(
         bmIdExecutor.foreach { bm =>
           blockManagerInfo.get(bm).foreach { bmInfo =>
             bmInfo.removeBlock(blockId)
-            removeRddFromExecutorsFutures += askRemoveRddFromExecutor(removeMsg, bmInfo)
           }
         }
       }
     }
+    val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
+      askRemoveRddFromExecutor(removeMsg, bmInfo)
+    }.toSeq
+
     val removeRddBlockViaExtShuffleServiceFutures = externalShuffleClient.map { shuffleClient =>
       blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
         Future[Int] {

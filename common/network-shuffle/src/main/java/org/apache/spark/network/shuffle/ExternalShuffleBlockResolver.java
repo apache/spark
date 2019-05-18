@@ -383,7 +383,7 @@ public class ExternalShuffleBlockResolver {
       if (file.delete()) {
         numRemovedBlocks++;
       } else {
-        logger.warn("Failed to delete existing block: " + file.getAbsolutePath());
+        logger.warn("Failed to delete block: " + file.getAbsolutePath());
       }
     }
     return numRemovedBlocks;
