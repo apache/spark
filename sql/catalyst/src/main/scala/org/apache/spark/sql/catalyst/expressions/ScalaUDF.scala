@@ -1006,7 +1006,7 @@ case class ScalaUDF(
     val (funcArgs, initArgs) = evals.zipWithIndex.zip(children.map(_.dataType)).map {
       case ((eval, i), dt) =>
         val argTerm = ctx.freshName("arg")
-        val initArg = if (CatalystTypeConverters.isPrimitive(dt)) {
+        val initArg = if (CodeGenerator.isPrimitiveType(dt)) {
           val convertedTerm = ctx.freshName("conv")
           s"""
              |${CodeGenerator.boxedType(dt)} $convertedTerm = ${eval.value};
@@ -1023,7 +1023,7 @@ case class ScalaUDF(
     val resultConverter = s"$convertersTerm[${children.length}]"
     val boxedType = CodeGenerator.boxedType(dataType)
 
-    val funcInvokation = if (CatalystTypeConverters.isPrimitive(dataType)
+    val funcInvokation = if (CodeGenerator.isPrimitiveType(dataType)
         // If the output is nullable, the returned value must be unwrapped from the Option
         && !nullable) {
       s"$resultTerm = ($boxedType)$getFuncResult"
