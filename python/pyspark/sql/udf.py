@@ -49,7 +49,7 @@ def _create_udf(f, returnType, evalType):
 
         argspec = _get_argspec(f)
 
-        if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or \
+        if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
                 evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) and \
                 len(argspec.args) == 0 and \
                 argspec.varargs is None:
