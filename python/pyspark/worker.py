@@ -86,21 +86,29 @@ def wrap_udf(f, return_type):
         return lambda *a: f(*a)
 
 
-def wrap_scalar_pandas_udf(f, return_type):
+def verify_scalar_pandas_udf_result_length(result, length):
+    if len(result) != length:
+        raise RuntimeError("Result vector from pandas_udf was not the required length: "
+                           "expected %d, got %d" % (length, len(result)))
+    return result
+
+
+def wrap_scalar_pandas_udf(f, return_type, eval_type):
     arrow_return_type = to_arrow_type(return_type)
 
-    def verify_result_length(*a):
-        result = f(*a)
+    def verify_result_type(result):
         if not hasattr(result, "__len__"):
             pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
             raise TypeError("Return type of the user-defined function should be "
                             "{}, but is {}".format(pd_type, type(result)))
-        if len(result) != len(a[0]):
-            raise RuntimeError("Result vector from pandas_udf was not the required length: "
-                               "expected %d, got %d" % (len(a[0]), len(result)))
         return result
 
-    return lambda *a: (verify_result_length(*a), arrow_return_type)
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+        return lambda *a: (verify_scalar_pandas_udf_result_length(
+            verify_result_type(f(*a)), len(a[0])), arrow_return_type)
+    else:
+        return lambda *iterator: map(lambda res: (res, arrow_return_type),
+                                     map(verify_result_type, f(*iterator)))
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec):
@@ -201,23 +209,28 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
-    row_func = None
+    chained_func = None
     for i in range(read_int(infile)):
         f, return_type = read_command(pickleSer, infile)
-        if row_func is None:
-            row_func = f
+        if chained_func is None:
+            chained_func = f
         else:
-            row_func = chain(row_func, f)
+            chained_func = chain(chained_func, f)
 
-    # make sure StopIteration's raised in the user code are not ignored
-    # when they are processed in a for loop, raise them as RuntimeError's instead
-    func = fail_on_stopiteration(row_func)
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+        func = chained_func
+    else:
+        # make sure StopIteration's raised in the user code are not ignored
+        # when they are processed in a for loop, raise them as RuntimeError's instead
+        func = fail_on_stopiteration(chained_func)
 
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
+        return arg_offsets, wrap_scalar_pandas_udf(func, return_type, eval_type)
+    elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+        return arg_offsets, wrap_scalar_pandas_udf(func, return_type, eval_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        argspec = _get_argspec(row_func)  # signature was lost when wrapping it
+        argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
@@ -229,10 +242,39 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
+class PandasIterUDFInputIter(object):
+    def __init__(self):
+        self.nextValue = None
+        self.isEnd = False
+
+    def __iter__(self):
+        return self
+
+    def feedNext(self, v):
+        assert not self.isEnd
+        assert self.nextValue is None, \
+            "should call feedNext after previous element being consumed."
+        self.nextValue = v
+
+    def setEnd(self):
+        self.isEnd = True
+
+    def __next__(self):
+        if self.isEnd:
+            raise StopIteration
+        assert self.nextValue is not None,\
+            "The iterator returned by UDF should immediately generate " \
+            "one result row after consuming each row"
+        v = self.nextValue
+        self.nextValue = None
+        return v
+
+
 def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
@@ -255,13 +297,67 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
         # pandas Series. See SPARK-27240.
-        df_for_struct = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        df_for_struct = (eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
+                         eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)
         ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name,
                                              df_for_struct)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 
     num_udfs = read_int(infile)
+
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+        input_iter_list = [None] * num_udfs
+        udf_result_iter_list = [None] * num_udfs
+        arg_offsets_list = [None] * num_udfs
+        for i in range(num_udfs):
+            arg_offsets, udf = read_single_udf(
+                pickleSer, infile, eval_type, runner_conf, udf_index=i)
+            arg_offsets_list[i] = arg_offsets
+            input_iter = PandasIterUDFInputIter()
+            input_iter_list[i] = input_iter
+            udf_result_iter_list[i] = udf(input_iter)
+
+        get_iter_next = fail_on_stopiteration(lambda iterator: iterator.__next__())
+
+        def mapper(row):
+            result_row = [None] * num_udfs
+            for i in range(num_udfs):
+                input_batches = list(map(lambda offset: row[offset], arg_offsets_list[i]))
+                batch_size = len(input_batches[0])
+                if len(input_batches) == 1:
+                    input_batches = input_batches[0]
+                else:
+                    input_batches = tuple(input_batches)
+                input_iter_list[i].feedNext(input_batches)
+                result_batch, result_type = get_iter_next(udf_result_iter_list[i])
+                result_batch = verify_scalar_pandas_udf_result_length(result_batch, batch_size)
+                result_row[i] = (result_batch, result_type)
+            if num_udfs > 1:
+                return tuple(result_row)
+            else:
+                # In the special case of a single UDF this will return a single result rather
+                # than a tuple of results; this is the format that the JVM side expects.
+                return result_row[0]
+
+        def func_generator(iterator):
+            for row in iterator:
+                yield mapper(row)
+            # call last __next__ on each iter_udf
+            # in order to trigger close stuff inside each udf_generator
+            for i in range(num_udfs):
+                try:
+                    input_iter_list[i].setEnd()
+                    udf_result_iter_list[i].__next__()
+                    assert False, "udf generate too much rows"
+                except StopIteration:
+                    # Now close stuff inside the udf_generator has run.
+                    pass
+
+        func = lambda _, iterator: func_generator(iterator)
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
     udfs = {}
     call_udf = []
     mapper_str = ""

@@ -187,16 +187,20 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 
-          val evaluation = validUdfs.partition(
-            _.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-          ) match {
-            case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
-              ArrowEvalPython(vectorizedUdfs, child.output ++ resultAttrs, child)
-            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
-              BatchEvalPython(plainUdfs, child.output ++ resultAttrs, child)
-            case _ =>
+          val evalType = validUdfs.head.evalType
+          validUdfs.foreach { udf =>
+            if (udf.evalType != evalType) {
               throw new AnalysisException(
-                "Expected either Scalar Pandas UDFs or Batched UDFs but got both")
+                "Expected udfs have the same evalType but got different")
+            }
+          }
+          val evaluation = evalType match {
+            case PythonEvalType.SQL_BATCHED_UDF =>
+              BatchEvalPython(validUdfs, child.output ++ resultAttrs, child)
+            case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
+              ArrowEvalPython(validUdfs, child.output ++ resultAttrs, child, evalType)
+            case _ =>
+              throw new AnalysisException("Unexcepted UDF evalType")
           }
 
           attributeMap ++= validUdfs.zip(resultAttrs)
