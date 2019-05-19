@@ -308,33 +308,6 @@ private[sql] trait SQLTestUtilsBase
     }
   }
 
-  /**
-   * Executes the given tryBlock and then the given finallyBlock no matter whether tryBlock throws
-   * an exception. If both tryBlock and finallyBlock throw exceptions, the exception thrown
-   * from the finallyBlock with be added to the exception thrown from tryBlock as a
-   * suppress exception. It helps to avoid masking the exception from tryBlock with exception
-   * from finallyBlock
-   */
-  private def withFinallyBlock(tryBlock: => Unit)(finallyBlock: => Unit): Unit = {
-    var fromTryBlock : Throwable = null
-    try tryBlock catch {
-      case cause : Throwable =>
-        fromTryBlock = cause
-        throw cause
-    } finally {
-      if (fromTryBlock != null) {
-        try finallyBlock catch {
-          case fromFinallyBlock : Throwable =>
-            fromTryBlock.addSuppressed(fromFinallyBlock)
-            throw fromTryBlock
-        }
-      } else {
-        finallyBlock
-      }
-    }
-  }
-
-
 
   // Blocking uncache table for tests
   protected def uncacheTable(tableName: String): Unit = {
