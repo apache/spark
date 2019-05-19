@@ -234,11 +234,7 @@ private[sql] trait SQLTestUtilsBase
    * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
    */
   protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
-    try {
-      f
-    } catch {
-      case cause: Throwable => throw cause
-    } finally {
+    tryWithFinally(f)(
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
       functions.foreach { case (functionName, isTemporary) =>
@@ -248,65 +244,78 @@ private[sql] trait SQLTestUtilsBase
           !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
           s"Function $functionName should have been dropped. But, it still exists.")
       }
-    }
+    )
   }
 
   /**
    * Drops temporary view `viewNames` after calling `f`.
    */
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      // If the test failed part way, we don't want to mask the failure by failing to remove
-      // temp views that never got created.
-      try viewNames.foreach(spark.catalog.dropTempView) catch {
-        case _: NoSuchTableException =>
-      }
-    }
+    tryWithFinally(f)(viewNames.foreach(spark.catalog.dropTempView))
   }
 
   /**
    * Drops global temporary view `viewNames` after calling `f`.
    */
   protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      // If the test failed part way, we don't want to mask the failure by failing to remove
-      // global temp views that never got created.
-      try viewNames.foreach(spark.catalog.dropGlobalTempView) catch {
-        case _: NoSuchTableException =>
-      }
-    }
+    tryWithFinally(f)(viewNames.foreach(spark.catalog.dropGlobalTempView))
   }
 
   /**
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    tryWithFinally(f)(
       tableNames.foreach { name =>
         spark.sql(s"DROP TABLE IF EXISTS $name")
       }
-    }
+    )
   }
 
   /**
    * Drops view `viewName` after calling `f`.
    */
   protected def withView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    tryWithFinally(f)(
       viewNames.foreach { name =>
         spark.sql(s"DROP VIEW IF EXISTS $name")
       }
-    }
+    )
   }
 
   /**
    * Drops cache `cacheName` after calling `f`.
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      cacheNames.foreach(uncacheTable)
-    }
+    tryWithFinally(f)(cacheNames.foreach(uncacheTable))
   }
+
+  /**
+   * Executes the given tryBlock and then the given finallyBlock no matter whether tryBlock throws
+   * an exception. If both tryBlock and finallyBlock throw exceptions, the exception thrown
+   * from the finallyBlock with be added to the exception thrown from tryBlock as a
+   * suppress exception. It helps to avoid masking the exception from tryBlock with exception
+   * from finallyBlock
+   */
+  private def tryWithFinally(tryBlock: => Unit)(finallyBlock: => Unit): Unit = {
+    var fromTryBlock : Throwable = null
+    try tryBlock catch {
+      case cause : Throwable =>
+        fromTryBlock = cause
+        throw cause
+    } finally {
+      if (fromTryBlock != null) {
+        try finallyBlock catch {
+          case fromFinallyBlock : Throwable =>
+            fromTryBlock.addSuppressed(fromFinallyBlock)
+            throw fromTryBlock
+    }
+      } else {
+        finallyBlock
+      }
+  }
+  }
+
 
 
   // Blocking uncache table for tests
