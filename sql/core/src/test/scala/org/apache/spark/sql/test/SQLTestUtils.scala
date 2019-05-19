@@ -303,7 +303,9 @@ private[sql] trait SQLTestUtilsBase
    * Drops cache `cacheName` after calling `f`.
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
-    withFinallyBlock(f)(cacheNames.foreach(uncacheTable))
+    try f finally {
+      cacheNames.foreach(uncacheTable)
+    }
   }
 
   /**
