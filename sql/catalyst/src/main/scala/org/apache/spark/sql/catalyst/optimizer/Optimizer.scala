@@ -1722,20 +1722,3 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
       empty(ll)
   }
 }
-
-/**
- * If the UDF is deterministic and if the children are all literal, we can replace the udf
- * with the output of the udf serialized
- */
-object DeterministicLiteralUDF extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan =
-    if (!SQLConf.get.deterministicUdfFoldEnabled) {
-      plan
-    } else plan transformAllExpressions {
-      case udf @ ScalaUDF(_, dataType, children, _, _, _, _, udfDeterministic)
-        if udf.deterministic && children.forall(_.isInstanceOf[Literal]) => {
-        val res = udf.eval(null)
-        Literal(res, dataType)
-      }
-    }
-}
