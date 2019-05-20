@@ -47,6 +47,7 @@ case class BroadcastExchangeExec(
   private val runId: UUID = UUID.randomUUID
 
   override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
@@ -98,6 +99,7 @@ case class BroadcastExchangeExec(
                   s"type: ${relation.getClass.getName}")
             }
 
+            longMetric("numOutputRows") += numRows
             longMetric("dataSize") += dataSize
             if (dataSize >= (8L << 30)) {
               throw new SparkException(
