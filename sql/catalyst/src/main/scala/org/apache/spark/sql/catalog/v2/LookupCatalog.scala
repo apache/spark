@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalog.v2
 
+import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 
@@ -26,7 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 @Experimental
 trait LookupCatalog {
 
-  def lookupCatalog: Option[(String) => CatalogPlugin] = None
+  def lookupCatalog: Option[String => CatalogPlugin] = None
 
   type CatalogObjectIdentifier = (Option[CatalogPlugin], Identifier)
 
@@ -34,19 +36,23 @@ trait LookupCatalog {
    * Extract catalog plugin and identifier from a multi-part identifier.
    */
   object CatalogObjectIdentifier {
-    def unapply(parts: Seq[String]): Option[CatalogObjectIdentifier] = lookupCatalog.map { lookup =>
-      parts match {
-        case Seq(name) =>
-          (None, Identifier.of(Array.empty, name))
-        case Seq(catalogName, tail @ _*) =>
-          try {
-            val catalog = lookup(catalogName)
-            (Some(catalog), Identifier.of(tail.init.toArray, tail.last))
-          } catch {
-            case _: CatalogNotFoundException =>
-              (None, Identifier.of(parts.init.toArray, parts.last))
-          }
-      }
+    def unapply(parts: Seq[String]): Option[CatalogObjectIdentifier] = parts match {
+      case Seq(name) =>
+        Some((None, Identifier.of(Array.empty, name)))
+      case Seq(catalogName, tail @ _*) =>
+        lookupCatalog match {
+          case Some(lookup) =>
+            Try(lookup(catalogName)) match {
+              case Success(catalog) =>
+                Some((Some(catalog), Identifier.of(tail.init.toArray, tail.last)))
+              case Failure(_: CatalogNotFoundException) =>
+                Some((None, Identifier.of(parts.init.toArray, parts.last)))
+              case Failure(ex) =>
+                throw ex
+            }
+          case None =>
+            Some((None, Identifier.of(parts.init.toArray, parts.last)))
+        }
     }
   }
 
