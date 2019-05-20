@@ -93,6 +93,7 @@ case class DataSource(
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
   lazy val providingClass: Class[_] = {
+    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
     // `providingClass` is used for resolving data source relation for catalog tables.
     // As now catalog for data source V2 is under development, here we fall back all the
     // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
