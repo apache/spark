@@ -32,7 +32,9 @@ object NestedColumnAliasing {
 
   def unapply(plan: LogicalPlan)
     : Option[(Map[GetStructField, Alias], Map[ExprId, Seq[Alias]])] = plan match {
-    case Project(projectList, child) => getAliasSubMap(projectList)
+    case Project(projectList, child)
+        if SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
+      getAliasSubMap(projectList)
     case _ => None
   }
 
@@ -98,7 +100,7 @@ object NestedColumnAliasing {
    * 1. GetStructField -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
-  private def getAliasSubMap(projectList: Seq[NamedExpression])
+  def getAliasSubMap(projectList: Seq[NamedExpression])
     : Option[(Map[GetStructField, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
       projectList.flatMap(collectRootReferenceAndGetStructField).partition {

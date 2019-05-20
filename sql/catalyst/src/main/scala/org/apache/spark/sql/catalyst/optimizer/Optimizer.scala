@@ -589,15 +589,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // prune unrequired nested fields
-    case p @ NestedColumnAliasing(nestedFieldToAlias, attrToAliases)
-        if p.children(0).isInstanceOf[Generate] =>
-      p match {
-        case Project(projectList, g: Generate) =>
+    case p @ Project(projectList, g: Generate) =>
+      NestedColumnAliasing.getAliasSubMap(projectList).map {
+        case (nestedFieldToAlias, attrToAliases) =>
           val newChild = g.withNewChildren(g.children.map { child =>
             Project(child.output ++ attrToAliases.values.flatten, child)
           })
           Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
-      }
+      }.getOrElse(p)
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
@@ -631,9 +630,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
-    case p @ NestedColumnAliasing(nestedFieldToAlias, attrToAliases)
-        if SQLConf.get.nestedSchemaPruningEnabled &&
-          NestedColumnAliasing.canProjectPushThrough(p.children(0)) =>
+    case p @ NestedColumnAliasing(nestedFieldToAlias, attrToAliases) =>
       NestedColumnAliasing.replaceToAliases(p, nestedFieldToAlias, attrToAliases)
 
     // for all other logical plans that inherits the output from it's children
