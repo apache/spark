@@ -279,3 +279,14 @@ HAVING   max(t1b) <= (SELECT   max(t2b)
                       FROM     t2
                       WHERE    t2c = t1c
                       GROUP BY t2c);
+
+-- TC 03.01
+-- explain a simple uncorelated scalar subquery
+SET spark.sql.codegen.wholeStage = true;
+
+EXPLAIN
+  SELECT pk
+  FROM   p
+  WHERE  p.pk = (SELECT avg(c1.cv)
+                 FROM   c c1
+                 WHERE  c1.ck = 1);
