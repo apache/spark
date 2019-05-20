@@ -441,7 +441,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
         StructField("b", StringType, nullable = true)))
 
     // The predicate `StringContains` predicate is not able to be pushed down.
-    assertResult("leaf-0 = (LESS_THAN_EQUALS a 10)\nleaf-1 = (LESS_THAN a 1)\n" +
+    assertResultWithDiffHiveVersion("leaf-0 = (LESS_THAN_EQUALS a 10)\nleaf-1 = (LESS_THAN a 1)\n" +
       "expr = (or (not leaf-0) leaf-1)") {
       OrcFilters.createFilter(schema, Array(
         Or(
@@ -454,7 +454,7 @@ class HiveOrcFilterSuite extends OrcTest with TestHiveSingleton {
       )).get.toString
     }
 
-    assertResult("leaf-0 = (LESS_THAN_EQUALS a 10)\nleaf-1 = (LESS_THAN a 1)\n" +
+    assertResultWithDiffHiveVersion("leaf-0 = (LESS_THAN_EQUALS a 10)\nleaf-1 = (LESS_THAN a 1)\n" +
       "expr = (or (not leaf-0) leaf-1)") {
       OrcFilters.createFilter(schema, Array(
         Or(
