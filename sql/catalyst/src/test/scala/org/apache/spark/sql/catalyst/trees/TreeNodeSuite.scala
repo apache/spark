@@ -617,4 +617,55 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Coalesce(Stream(Literal(1), Literal(3)))
     assert(result === expected)
   }
+
+  test("tags will be carried over after copy & transform") {
+    withClue("makeCopy") {
+      val node = Dummy(None)
+      node.tags += TreeNodeTagName("test") -> "a"
+      val copied = node.makeCopy(Array(Some(Literal(1))))
+      assert(copied.tags(TreeNodeTagName("test")) == "a")
+    }
+
+    def checkTransform(
+        sameTypeTransform: Expression => Expression,
+        differentTypeTransform: Expression => Expression): Unit = {
+      val child = Dummy(None)
+      child.tags += TreeNodeTagName("test") -> "child"
+      val node = Dummy(Some(child))
+      node.tags += TreeNodeTagName("test") -> "parent"
+
+      val transformed = sameTypeTransform(node)
+      // Both the child and parent keep the tags
+      assert(transformed.tags(TreeNodeTagName("test")) == "parent")
+      assert(transformed.children.head.tags(TreeNodeTagName("test")) == "child")
+
+      val transformed2 = differentTypeTransform(node)
+      // Both the child and parent keep the tags, even if we transform the node to a new one of
+      // different type.
+      assert(transformed2.tags(TreeNodeTagName("test")) == "parent")
+      assert(transformed2.children.head.tags.contains(TreeNodeTagName("test")))
+    }
+
+    withClue("transformDown") {
+      checkTransform(
+        sameTypeTransform = _ transformDown {
+          case Dummy(None) => Dummy(Some(Literal(1)))
+        },
+        differentTypeTransform = _ transformDown {
+          case Dummy(None) => Literal(1)
+
+        })
+    }
+
+    withClue("transformUp") {
+      checkTransform(
+        sameTypeTransform = _ transformUp {
+          case Dummy(None) => Dummy(Some(Literal(1)))
+        },
+        differentTypeTransform = _ transformUp {
+          case Dummy(None) => Literal(1)
+
+        })
+    }
+  }
 }

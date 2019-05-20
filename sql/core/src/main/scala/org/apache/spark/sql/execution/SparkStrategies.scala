@@ -62,6 +62,17 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
 
+  override def plan(plan: LogicalPlan): Iterator[SparkPlan] = {
+    super.plan(plan).map { p =>
+      val logicalPlan = plan match {
+        case ReturnAnswer(rootPlan) => rootPlan
+        case _ => plan
+      }
+      p.tags += SparkPlan.LOGICAL_PLAN_TAG_NAME -> logicalPlan
+      p
+    }
+  }
+
   /**
    * Plans special cases of limit operators.
    */
