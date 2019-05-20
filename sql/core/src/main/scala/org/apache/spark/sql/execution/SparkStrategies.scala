@@ -69,7 +69,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case ReturnAnswer(rootPlan) => rootPlan
         case _ => plan
       }
-      p.tags += QueryPlan.LOGICAL_PLAN_TAG_NAME -> logicalPlan
+      p.tags += SparkPlan.LOGICAL_PLAN_TAG_NAME -> logicalPlan
       p
     }
   }

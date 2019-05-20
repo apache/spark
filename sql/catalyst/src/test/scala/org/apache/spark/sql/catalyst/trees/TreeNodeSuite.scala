@@ -643,8 +643,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       assert(transformed.children.head.tags(TreeNodeTagName("test")) == "child")
 
       val transformed2 = differentTypeTransform(node)
-      // The parent keeps the tag, but the child loses the tag because it's transformed to a
-      // different type of node.
+      // Both the child and parent keep the tags, even if we transform the node to a new one of
+      // different type.
       assert(transformed2.tags(TreeNodeTagName("test")) == "parent")
       assert(transformed2.children.head.tags.contains(TreeNodeTagName("test")))
     }

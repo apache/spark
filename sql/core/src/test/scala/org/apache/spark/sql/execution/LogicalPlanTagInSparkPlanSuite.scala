@@ -81,12 +81,12 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite {
       // The exchange related nodes are created after the planning, they don't have corresponding
       // logical plan.
       case _: ShuffleExchangeExec | _: BroadcastExchangeExec | _: ReusedExchangeExec =>
-        assert(!plan.tags.contains(QueryPlan.LOGICAL_PLAN_TAG_NAME))
+        assert(!plan.tags.contains(SparkPlan.LOGICAL_PLAN_TAG_NAME))
 
       // The subquery exec nodes are just wrappers of the actual nodes, they don't have
       // corresponding logical plan.
       case _: SubqueryExec | _: ReusedSubqueryExec =>
-        assert(!plan.tags.contains(QueryPlan.LOGICAL_PLAN_TAG_NAME))
+        assert(!plan.tags.contains(SparkPlan.LOGICAL_PLAN_TAG_NAME))
 
       case _ if isScanPlanTree(plan) =>
         // The strategies for planning scan can remove or add FilterExec/ProjectExec nodes,
@@ -120,9 +120,9 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite {
   }
 
   private def getLogicalPlan(node: SparkPlan): LogicalPlan = {
-    assert(node.tags.contains(QueryPlan.LOGICAL_PLAN_TAG_NAME),
+    assert(node.tags.contains(SparkPlan.LOGICAL_PLAN_TAG_NAME),
       node.getClass.getSimpleName + " does not have a logical plan link")
-    node.tags(QueryPlan.LOGICAL_PLAN_TAG_NAME).asInstanceOf[LogicalPlan]
+    node.tags(SparkPlan.LOGICAL_PLAN_TAG_NAME).asInstanceOf[LogicalPlan]
   }
 
   private def assertLogicalPlanType[T <: LogicalPlan : ClassTag](node: SparkPlan): Unit = {
