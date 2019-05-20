@@ -527,11 +527,22 @@ private[parquet] class ParquetFilters(
         }
 
       case sources.Or(lhs, rhs) =>
+        // The Or predicate is convertible when both of its children can be pushed down.
+        // That is to say, if one/both of the children can be partially pushed down, the Or
+        // predicate can be partially pushed down as well.
+        //
+        // Here is an example used to explain the reason.
+        // Let's say we have
+        // (a1 AND a2) OR (b1 AND b2),
+        // a1 and b1 is convertible, while a2 and b2 is not.
+        // The predicate can be converted as
+        // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+        // As per the logical in And predicate, we can push down (a1 OR b1).
         for {
           lhsFilter <-
-            createFilterHelper(nameToParquetField, lhs, canPartialPushDownConjuncts = false)
+            createFilterHelper(nameToParquetField, lhs, canPartialPushDownConjuncts)
           rhsFilter <-
-            createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts = false)
+            createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>

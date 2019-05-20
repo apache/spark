@@ -23,7 +23,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
+import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -212,17 +213,18 @@ class CacheManager extends Logging {
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: IgnoreCachedData => command
-      // Do not lookup the cache by hint node. Hint node is special, we should ignore it when
-      // canonicalizing plans, so that plans which are same except hint can hit the same cache.
-      // However, we also want to keep the hint info after cache lookup. Here we skip the hint
-      // node, so that the returned caching plan won't replace the hint node and drop the hint info
-      // from the original plan.
-      case hint: ResolvedHint => hint
 
       case currentFragment =>
-        lookupCachedData(currentFragment)
-          .map(_.cachedRepresentation.withOutput(currentFragment.output))
-          .getOrElse(currentFragment)
+        lookupCachedData(currentFragment).map { cached =>
+          // After cache lookup, we should still keep the hints from the input plan.
+          val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
+          val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
+          // The returned hint list is in top-down order, we should create the hint nodes from
+          // right to left.
+          hints.foldRight[LogicalPlan](cachedPlan) { case (hint, p) =>
+            ResolvedHint(p, hint)
+          }
+        }.getOrElse(currentFragment)
     }
 
     newPlan transformAllExpressions {

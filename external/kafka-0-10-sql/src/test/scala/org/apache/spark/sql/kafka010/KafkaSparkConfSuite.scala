@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution;
+package org.apache.spark.sql.kafka010
 
-import java.io.IOException;
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
+import org.apache.spark.util.ResetSystemProperties
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.unsafe.KVIterator;
+class KafkaSparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
+  test("deprecated configs") {
+    val conf = new SparkConf()
 
-public abstract class UnsafeKeyValueSorter {
-
-  public abstract void insert(UnsafeRow key, UnsafeRow value);
-
-  public abstract KVIterator<UnsafeRow, UnsafeRow> sort() throws IOException;
+    conf.set("spark.sql.kafkaConsumerCache.capacity", "32")
+    assert(conf.get(CONSUMER_CACHE_CAPACITY) === 32)
+  }
 }
