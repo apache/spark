@@ -296,11 +296,13 @@ public class InMemoryStore implements KVStore {
       Stream<T> stream = sorted.stream();
 
       if (first != null) {
-        stream = stream.filter(e -> modifier * compare(e, getter, first) >= 0);
+        Comparable<?> firstKey = asKey(first);
+        stream = stream.filter(e -> modifier * compare(e, getter, firstKey) >= 0);
       }
 
       if (last != null) {
-        stream = stream.filter(e -> modifier * compare(e, getter, last) <= 0);
+        Comparable<?> lastKey = asKey(last);
+        stream = stream.filter(e -> modifier * compare(e, getter, lastKey) <= 0);
       }
 
       if (skip > 0) {
@@ -321,9 +323,10 @@ public class InMemoryStore implements KVStore {
       if (parent != null) {
         KVTypeInfo.Accessor parentGetter = ti.getParentAccessor(index);
         Preconditions.checkArgument(parentGetter != null, "Parent filter for non-child index.");
+        Comparable<?> parentKey = asKey(parent);
 
         return elements.stream()
-          .filter(e -> compare(e, parentGetter, parent) == 0)
+          .filter(e -> compare(e, parentGetter, parentKey) == 0)
           .collect(Collectors.toList());
       } else {
         return new ArrayList<>(elements);
@@ -332,9 +335,9 @@ public class InMemoryStore implements KVStore {
 
     private int compare(T e1, T e2, KVTypeInfo.Accessor getter) {
       try {
-        int diff = compare(e1, getter, getter.get(e2));
+        int diff = compare(e1, getter, asKey(getter.get(e2)));
         if (diff == 0 && getter != natural) {
-          diff = compare(e1, natural, natural.get(e2));
+          diff = compare(e1, natural, asKey(natural.get(e2)));
         }
         return diff;
       } catch (ReflectiveOperationException e) {
@@ -342,14 +345,13 @@ public class InMemoryStore implements KVStore {
       }
     }
 
-    private int compare(T e1, KVTypeInfo.Accessor getter, Object v2) {
+    private int compare(T e1, KVTypeInfo.Accessor getter, Comparable<?> v2) {
       try {
-        return asKey(getter.get(e1)).compareTo(asKey(v2));
+        return asKey(getter.get(e1)).compareTo(v2);
       } catch (ReflectiveOperationException e) {
         throw new RuntimeException(e);
       }
     }
-
   }
 
   private static class InMemoryIterator<T> implements KVStoreIterator<T> {

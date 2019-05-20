@@ -19,12 +19,12 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import com.google.common.collect.ImmutableSet;
 import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.After;
@@ -222,20 +222,22 @@ public class LevelDBSuite {
 
     assertEquals(9, db.count(ArrayKeyIndexType.class));
 
-    HashSet set = new HashSet();
-    set.add(new int[] {0, 0, 0});
-    set.add(new int[] { 2, 2, 2 });
-    db.removeAllByIndexValues(ArrayKeyIndexType.class, KVIndex.NATURAL_INDEX_NAME, set);
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      KVIndex.NATURAL_INDEX_NAME,
+      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
     assertEquals(7, db.count(ArrayKeyIndexType.class));
 
-    set.clear();
-    set.add(new String[] { "things" });
-    db.removeAllByIndexValues(ArrayKeyIndexType.class, "id", set);
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      "id",
+      ImmutableSet.of(new String[] { "things" }));
     assertEquals(4, db.count(ArrayKeyIndexType.class));
 
-    set.clear();
-    set.add(new String[] { "more things" });
-    db.removeAllByIndexValues(ArrayKeyIndexType.class, "id", set);
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      "id",
+      ImmutableSet.of(new String[] { "more things" }));
     assertEquals(0, db.count(ArrayKeyIndexType.class));
   }
 

@@ -17,9 +17,9 @@
 
 package org.apache.spark.util.kvstore;
 
-import java.util.HashSet;
 import java.util.NoSuchElementException;
 
+import com.google.common.collect.ImmutableSet;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -158,20 +158,23 @@ public class InMemoryStoreSuite {
 
     assertEquals(9, store.count(ArrayKeyIndexType.class));
 
-    HashSet set = new HashSet();
-    set.add(new int[] {0, 0, 0});
-    set.add(new int[] { 2, 2, 2 });
-    store.removeAllByIndexValues(ArrayKeyIndexType.class, KVIndex.NATURAL_INDEX_NAME, set);
+
+    store.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      KVIndex.NATURAL_INDEX_NAME,
+      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
     assertEquals(7, store.count(ArrayKeyIndexType.class));
 
-    set.clear();
-    set.add(new String[] { "things" });
-    store.removeAllByIndexValues(ArrayKeyIndexType.class, "id", set);
+    store.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      "id",
+      ImmutableSet.of(new String [] { "things" }));
     assertEquals(4, store.count(ArrayKeyIndexType.class));
 
-    set.clear();
-    set.add(new String[] { "more things" });
-    store.removeAllByIndexValues(ArrayKeyIndexType.class, "id", set);
+    store.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      "id",
+        ImmutableSet.of(new String [] { "more things" }));
     assertEquals(0, store.count(ArrayKeyIndexType.class));
   }
 
