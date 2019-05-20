@@ -196,6 +196,8 @@ public class YarnShuffleService extends AuxiliaryService {
       // register metrics on the block handler into the Node Manager's metrics system.
       blockHandler.getAllMetrics().getMetrics().put("numRegisteredConnections",
           shuffleServer.getRegisteredConnections());
+      blockHandler.getAllMetrics().getMetrics().put("numCaughtExceptions",
+              shuffleServer.getCaughtExceptions());
       YarnShuffleServiceMetrics serviceMetrics =
           new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
 
