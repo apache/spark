@@ -54,8 +54,7 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
     private val pending = new AtomicBoolean(false)
 
     def fireOnce(f: Seq[Trigger[_]] => Unit): WriteQueueResult = {
-      val shouldEnqueue = pending.compareAndSet(false, true)
-      if (shouldEnqueue) {
+      if (pending.compareAndSet(false, true)) {
         doAsync {
           pending.set(false)
           f(triggers)

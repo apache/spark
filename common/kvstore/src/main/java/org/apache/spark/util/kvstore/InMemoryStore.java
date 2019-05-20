@@ -245,14 +245,14 @@ public class InMemoryStore implements KVStore {
 
     private static <T> Predicate<? super T> getPredicate(
         KVTypeInfo.Accessor getter,
-        Collection<?> keys) {
+        Collection<?> values) {
       if (Comparable.class.isAssignableFrom(getter.getType())) {
-        HashSet<?> set = new HashSet<>(keys);
+        HashSet<?> set = new HashSet<>(values);
 
         return (value) -> set.contains(indexValueForEntity(getter, value));
       } else {
-        HashSet<Comparable> set = new HashSet<>(keys.size());
-        for (Object key : keys) {
+        HashSet<Comparable> set = new HashSet<>(values.size());
+        for (Object key : values) {
           set.add(asKey(key));
         }
         return (value) -> set.contains(asKey(indexValueForEntity(getter, value)));
@@ -269,7 +269,7 @@ public class InMemoryStore implements KVStore {
   }
 
   private static class InMemoryView<T> extends KVStoreView<T> {
-    private static final InMemoryView EMPTY_VIEW =
+    private static final InMemoryView<?> EMPTY_VIEW =
       new InMemoryView<>(Collections.emptyList(), null);
 
     private final Collection<T> elements;
