@@ -541,7 +541,7 @@ private[spark] class MesosClusterScheduler(
     // --conf
     val replicatedOptionsBlacklist = Set(
       JARS.key, // Avoids duplicate classes in classpath
-      "spark.submit.deployMode", // this would be set to `cluster`, but we need client
+      SUBMIT_DEPLOY_MODE.key, // this would be set to `cluster`, but we need client
       "spark.master" // this contains the address of the dispatcher, not master
     )
     val defaultConf = conf.getAllWithPrefix(config.DISPATCHER_DRIVER_DEFAULT_PREFIX).toMap
