@@ -49,8 +49,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     maybeBlock.nonEmpty
   }
 
-
-
   test("cache table") {
     val preCacheResults = sql("SELECT * FROM src").collect().toSeq
 
@@ -354,13 +352,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("SPARK-27248 refreshTable should recreate cache with same cache name and storage level") {
-
     // This section tests when a table is cached with its qualified name but its is refreshed with
     // its unqualified name.
     withTempDatabase { db =>
       withTable(s"$db.cachedTable") {
         withCache(s"$db.cachedTable") {
-
           // Create table 'cachedTable' in default db for testing purpose.
           sql(s"CREATE TABLE $db.cachedTable AS SELECT 1 AS key")
 
@@ -400,7 +396,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTempDatabase { db =>
       withTable("cachedTable") {
         withCache("cachedTable") {
-
           // Create table 'cachedTable' in default db for testing purpose.
           sql("CREATE TABLE cachedTable AS SELECT 1 AS key")
 

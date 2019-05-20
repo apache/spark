@@ -304,10 +304,13 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
     try f finally {
-      cacheNames.foreach(uncacheTable)
+      cacheNames.foreach { cacheName =>
+        try uncacheTable(cacheName) catch {
+          case _: AnalysisException =>
+        }
+      }
     }
   }
-
 
   // Blocking uncache table for tests
   protected def uncacheTable(tableName: String): Unit = {

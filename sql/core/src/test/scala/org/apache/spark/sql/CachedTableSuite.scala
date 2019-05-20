@@ -978,7 +978,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("SPARK-27248 refreshTable should recreate cache with same cache name and storage level") {
-
     // This section tests when a table is cached with its qualified name but it is refreshed with
     // its unqualified name.
     withTempDatabase { db =>
@@ -992,7 +991,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
             Map("LOCATION" -> path.toURI.toString))
 
           withCache(s"$db.cachedTable") {
-
             // Cache the table 'cachedTable' in temp db with qualified table name with storage level
             // MEMORY_ONLY, and then check whether the table is cached with expected name and
             // storage level.
@@ -1037,7 +1035,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
             StructType(Array(StructField("key", StringType))),
             Map("LOCATION" -> path.toURI.toString))
           withCache("cachedTable") {
-
             // Cache the table 'cachedTable' in default db without qualified table name with storage
             // level 'MEMORY_AND_DISK2', and then check whether the table is cached with expected
             // name and storage level.
