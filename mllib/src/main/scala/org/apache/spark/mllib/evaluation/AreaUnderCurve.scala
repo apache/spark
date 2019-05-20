@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -42,10 +41,40 @@ private[evaluation] object AreaUnderCurve {
    * @param curve an RDD of ordered 2D points stored in pairs representing a curve
    */
   def of(curve: RDD[(Double, Double)]): Double = {
-    curve.sliding(2).aggregate(0.0)(
-      seqOp = (auc: Double, points: Array[(Double, Double)]) => auc + trapezoid(points),
-      combOp = _ + _
-    )
+    val localAreas = curve.mapPartitions { iter =>
+      var localArea = 0.0
+      var firstPoint = Option.empty[(Double, Double)]
+      var lastPoint = Option.empty[(Double, Double)]
+
+      iter.sliding(2).foreach { points =>
+        if (firstPoint.isEmpty) {
+          firstPoint = Some(points.head)
+        }
+        lastPoint = Some(points.last)
+
+        if (points.length == 2) {
+          localArea += trapezoid(points)
+        }
+      }
+
+      if (firstPoint.nonEmpty) {
+        require(lastPoint.nonEmpty)
+        Iterator.single((localArea, (firstPoint.get, lastPoint.get)))
+      } else {
+        require(lastPoint.isEmpty)
+        Iterator.empty
+      }
+    }.collect()
+
+    var area = localAreas.map(_._1).sum
+    localAreas.iterator.map(_._2)
+      .sliding(2).withPartial(false)
+      .foreach { pointPairs =>
+        require(pointPairs.length == 2)
+        area += trapezoid(Seq(pointPairs.head._2, pointPairs.last._1))
+      }
+
+    area
   }
 
   /**
