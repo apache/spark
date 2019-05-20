@@ -621,7 +621,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("tags will be carried over after copy") {
+  test("tags will be carried over after copy & transform") {
     withClue("makeCopy") {
       val node = Dummy(None)
       node.tags += TreeNodeTagName("test") -> "a"
@@ -646,7 +646,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       // The parent keeps the tag, but the child loses the tag because it's transformed to a
       // different type of node.
       assert(transformed2.tags(TreeNodeTagName("test")) == "parent")
-      assert(!transformed2.children.head.tags.contains(TreeNodeTagName("test")))
+      assert(transformed2.children.head.tags.contains(TreeNodeTagName("test")))
     }
 
     withClue("transformDown") {
