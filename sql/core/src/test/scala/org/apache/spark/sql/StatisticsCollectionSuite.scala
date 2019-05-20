@@ -596,4 +596,22 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(stats4.rowCount === Some(1))
     }
   }
+
+  test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
+    val tableName = "spark_27694"
+    Seq(false, true).foreach { updateEnabled =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString) {
+        withTable(tableName) {
+          // Create a data source table using the result of a query.
+          sql(s"CREATE TABLE $tableName USING parquet AS SELECT 'a', 'b'")
+          val catalogTable = getCatalogTable(tableName)
+          if (updateEnabled) {
+            assert(catalogTable.stats.nonEmpty)
+          } else {
+            assert(catalogTable.stats.isEmpty)
+          }
+        }
+      }
+    }
+  }
 }
