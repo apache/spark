@@ -513,7 +513,8 @@ class BlockManagerMasterEndpoint(
   }
 
   private def getLocationsAndStatus(
-      blockId: BlockId, requesterHost: String): Option[BlockLocationsAndStatus] = {
+      blockId: BlockId,
+      requesterHost: String): Option[BlockLocationsAndStatus] = {
     val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val status = locations.headOption.flatMap { bmId =>
       if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
@@ -524,21 +525,12 @@ class BlockManagerMasterEndpoint(
     }
 
     if (locations.nonEmpty && status.isDefined) {
-      val bmIdToLocalDirs = if (status.get.storageLevel.useDisk) {
-        locations
-          .find(_.host == requesterHost)
-          .map { sameHostBlockId =>
-            val bmInfo = blockManagerInfo(sameHostBlockId)
-            bmInfo.blockManagerId -> bmInfo.localDirs
-          }
+      val localDirs = if (status.get.storageLevel.useDisk) {
+        locations.find(_.host == requesterHost).map(blockManagerInfo(_).localDirs)
       } else {
         None
       }
-      bmIdToLocalDirs.map { case (bmId, localDirs) =>
-        BlockLocationsAndStatus(locations.filter(_ != bmId), status.get, Some(localDirs))
-      }.orElse(
-        Some(BlockLocationsAndStatus(locations, status.get, None))
-      )
+      Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {
       None
     }

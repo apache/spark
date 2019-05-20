@@ -121,7 +121,7 @@ public class TestShuffleDataContext {
 
   private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
-    File file = ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename);
+    File file = ExecutorDiskReader.getFile(localDirs, subDirsPerLocalDir, filename);
     assert(!file.exists()) : "this test file has been already generated";
     try {
       dataStream = new FileOutputStream(

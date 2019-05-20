@@ -17,12 +17,13 @@
 
 package org.apache.spark.network.shuffle;
 
-import com.google.common.annotations.VisibleForTesting;
-import org.apache.spark.network.util.JavaUtils;
-
 import java.io.File;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.google.common.annotations.VisibleForTesting;
+
+import org.apache.spark.network.util.JavaUtils;
 
 public class ExecutorDiskReader {
 
