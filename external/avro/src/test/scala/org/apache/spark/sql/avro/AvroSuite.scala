@@ -694,7 +694,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           |  "fields" : [{
           |    "name": "Suit",
           |    "type": [{ "type": "enum",
-          |              "name": "Suit",
+          |              "name": "SuitEnumType",
           |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
           |            }, "null"]
           |  }]
@@ -736,7 +736,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           |  "fields" : [{
           |    "name": "Suit",
           |    "type": { "type": "enum",
-          |              "name": "Suit",
+          |              "name": "SuitEnumType",
           |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
           |            }
           |  }]
