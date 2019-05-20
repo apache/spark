@@ -24,6 +24,7 @@ import java.util.{HashMap => JHashMap, Map => JMap}
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
+import scala.util.{Success, Try}
 
 import com.codahale.metrics.{Metric, MetricSet}
 
@@ -123,11 +124,13 @@ private[spark] class NettyBlockTransferService(
           } catch {
             case e: IOException =>
               assert(driverEndPointRef != null)
-              if (driverEndPointRef.askSync[Boolean](IsExecutorAlive(execId))) {
-                throw e
-              } else {
-                throw new ExecutorDeadException(s"The relative remote executor(Id: $execId), " +
-                  "which maintains the block data to fetch is dead.")
+              Try {
+                driverEndPointRef.askSync[Boolean](IsExecutorAlive(execId))
+              } match {
+                case Success(v) if v == false =>
+                  throw new ExecutorDeadException(s"The relative remote executor(Id: $execId), " +
+                    "which maintains the block data to fetch is dead.")
+                case _ => throw e
               }
           }
         }
