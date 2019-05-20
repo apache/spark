@@ -263,7 +263,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
 
     // Verify that running a speculative task doesn't affect the target
-    post(sc.listenerBus, SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-2", true)))
+    post(sc.listenerBus, SparkListenerTaskStart(1, 0, createTaskInfo(1, 0, "executor-2", true)))
     assert(numExecutorsTarget(manager) === 5)
     assert(addExecutors(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
