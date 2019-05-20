@@ -183,6 +183,13 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf.columns[0], "i")
         self.assertTrue(pdf.empty)
 
+    def test_no_partition_frame(self):
+        schema = StructType([StructField("field1", StringType(), True)])
+        df = self.spark.createDataFrame(self.sc.emptyRDD(), schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf.columns), 1)
+        self.assertTrue(pdf.empty)
+
     def _createDataFrame_toggle(self, pdf, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.enabled": False}):
             df_no_arrow = self.spark.createDataFrame(pdf, schema=schema)
