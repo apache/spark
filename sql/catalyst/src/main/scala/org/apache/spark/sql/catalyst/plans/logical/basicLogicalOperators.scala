@@ -1081,7 +1081,11 @@ case class OneRowRelation() extends LeafNode {
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
-  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = OneRowRelation()
+  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = {
+    val newCopy = OneRowRelation()
+    newCopy.tags ++= this.tags
+    newCopy
+  }
 }
 
 /** A logical plan for `dropDuplicates`. */
