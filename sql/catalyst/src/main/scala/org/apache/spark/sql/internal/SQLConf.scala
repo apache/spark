@@ -1767,6 +1767,11 @@ object SQLConf {
         "with String")
     .booleanConf
     .createWithDefault(false)
+
+  val DEFAULT_V2_CATALOG = buildConf("spark.sql.default.catalog")
+      .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+      .stringConf
+      .createOptional
 }
 
 /**
@@ -2222,6 +2227,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
+
+  def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   /** ********************** SQLConf functionality methods ************ */
 
