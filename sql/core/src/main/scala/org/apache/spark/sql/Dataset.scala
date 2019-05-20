@@ -3310,16 +3310,20 @@ class Dataset[T] private[sql](
 
           // After last batch, end the stream and write batch order indices
           if (partitionCount == numPartitions) {
-            batchWriter.end()
-            out.writeInt(batchOrder.length)
-            // Sort by (index of partition, batch index in that partition) tuple to get the
-            // overall_batch_index from 0 to N-1 batches, which can be used to put the
-            // transferred batches in the correct order
-            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
-              out.writeInt(overallBatchIndex)
-            }
-            out.flush()
+            doAfterLastPartition()
           }
+        }
+
+        def doAfterLastPartition(): Unit = {
+          batchWriter.end()
+          out.writeInt(batchOrder.length)
+          // Sort by (index of partition, batch index in that partition) tuple to get the
+          // overall_batch_index from 0 to N-1 batches, which can be used to put the
+          // transferred batches in the correct order
+          batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+            out.writeInt(overallBatchIndex)
+          }
+          out.flush()
         }
 
         sparkSession.sparkContext.runJob(
@@ -3327,6 +3331,10 @@ class Dataset[T] private[sql](
           (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
           0 until numPartitions,
           handlePartitionBatches)
+
+        if (numPartitions == 0) {
+          doAfterLastPartition()
+        }
       }
     }
   }
