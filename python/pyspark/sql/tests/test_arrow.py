@@ -188,6 +188,7 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(self.sc.emptyRDD(), schema)
         pdf = df.toPandas()
         self.assertEqual(len(pdf.columns), 1)
+        self.assertEqual(pdf.columns[0], "field1")
         self.assertTrue(pdf.empty)
 
     def _createDataFrame_toggle(self, pdf, schema=None):
