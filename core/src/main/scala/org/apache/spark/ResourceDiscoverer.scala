@@ -52,8 +52,8 @@ private[spark] object ResourceDiscoverer extends Logging {
    *
    * @param sparkConf SparkConf
    * @param confPrefix Driver or Executor resource prefix
-   * @param resources Optionally specify resource names. If not set uses the resource configs based
-    *                  on confPrefix passed in to get resource names.
+   * @param resourceNamesOpt Optionally specify resource names. If not set uses the resource
+    *                  configs based on confPrefix passed in to get the resource names.
    * @return Map of resource name to ResourceInformation
    */
   def discoverResourcesInformation(
