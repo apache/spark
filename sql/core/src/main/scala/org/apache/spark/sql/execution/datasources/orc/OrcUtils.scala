@@ -101,8 +101,6 @@ object OrcUtils extends Logging {
 
   /**
    * Figures out a merged ORC schema with a distributed Spark job.
-   * This function is used by both `org.apache.spark.sql.hive.orc.OrcFileFormat`
-   * and `org.apache.spark.sql.execution.datasources.orc.OrcFileFormat`.
    */
   def mergeSchemasInParallel(
       sparkSession: SparkSession,

@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
@@ -31,10 +31,11 @@ import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SPARK_VERSION_SHORT
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
@@ -186,6 +187,49 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         }
       }
     }
+  }
+
+  protected def testMergeSchemasInParallel(
+      ignoreCorruptFiles: Boolean,
+      singleFileSchemaReader: (String, Configuration, Boolean) => Option[StructType]): Unit = {
+    withSQLConf(
+      SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles.toString,
+      SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
+      withTempDir { dir =>
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val basePath = dir.getCanonicalPath
+
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        val path3 = new Path(basePath, "third")
+
+        spark.range(1).toDF("a").coalesce(1).write.orc(path1.toString)
+        spark.range(1, 2).toDF("b").coalesce(1).write.orc(path2.toString)
+        spark.range(2, 3).toDF("a").coalesce(1).write.json(path3.toString)
+
+        val fileStatuses =
+          Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
+
+        val schema = OrcUtils.mergeSchemasInParallel(
+          spark,
+          fileStatuses,
+          singleFileSchemaReader)
+
+        assert(schema.isDefined == true)
+        assert(schema.get == StructType(Seq(
+          StructField("a", LongType, true),
+          StructField("b", LongType, true))))
+      }
+    }
+  }
+
+  protected def testMergeSchemasInParallel(
+      singleFileSchemaReader: (String, Configuration, Boolean) => Option[StructType]): Unit = {
+    testMergeSchemasInParallel(true, singleFileSchemaReader)
+    val exception = intercept[SparkException] {
+      testMergeSchemasInParallel(false, singleFileSchemaReader)
+    }.getCause
+    assert(exception.getCause.getMessage.contains("Could not read footer for file"))
   }
 
   test("create temporary orc table") {
@@ -376,5 +420,9 @@ class OrcSourceSuite extends OrcSuite with SharedSQLContext {
 
   test("Enforce direct encoding column-wise selectively") {
     testSelectiveDictionaryEncoding(isSelective = true)
+  }
+
+  test("SPARK-11412 read and merge orc schemas in parallel") {
+    testMergeSchemasInParallel(OrcUtils.singleFileSchemaReader)
   }
 }
