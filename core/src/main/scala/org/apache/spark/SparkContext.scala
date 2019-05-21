@@ -398,6 +398,11 @@ class SparkContext(config: SparkConf) extends Logging {
     val driverReqResourcesAndCounts =
       SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_COUNT_SUFFIX).toMap
     ResourceDiscoverer.checkActualResourcesMeetRequirements(driverReqResourcesAndCounts, _resources)
+
+    logInfo("===============================================================================")
+    logInfo(s"Driver Resources:")
+    _resources.foreach { case (k, v) => logInfo(s"$k -> $v") }
+    logInfo("===============================================================================")
   }
 
   try {
