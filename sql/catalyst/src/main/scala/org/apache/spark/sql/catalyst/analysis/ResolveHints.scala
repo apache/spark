@@ -22,7 +22,8 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
+import org.apache.spark.sql.catalyst.expressions.{In, IntegerLiteral, Literal, Not}
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -52,6 +53,7 @@ object ResolveHints {
    */
   class ResolveJoinStrategyHints(conf: SQLConf) extends Rule[LogicalPlan] {
     private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
+    private val SKEWED_JOIN = "SKEWED_JOIN"
 
     def resolver: Resolver = conf.resolver
 
@@ -139,6 +141,71 @@ object ResolveHints {
     }
   }
 
+  private def getTableAlias(plan: LogicalPlan, tableName: String): String = {
+    plan.map(lp => lp)
+      .filter(_.isInstanceOf[SubqueryAlias])
+      .map(_.asInstanceOf[SubqueryAlias])
+      .filter(_.child.isInstanceOf[UnresolvedRelation])
+      .filter(_.child.asInstanceOf[UnresolvedRelation].tableName == tableName)
+      .map(s => s"${s.alias}.")
+      .headOption
+      .getOrElse("")
+  }
+
+  private def applySkewedJoinHint(plan: LogicalPlan, skewJoin: SkewedJoin): LogicalPlan = {
+    var recurse = true
+    val newNode = CurrentOrigin.withOrigin(plan.origin) {
+      plan match {
+        case Join(left, right, joinType, condition, _) if condition.isDefined =>
+          val joinKey = skewJoin.joinKey
+          val hasLeftTable = left.find { lp =>
+            lp.isInstanceOf[UnresolvedRelation] &&
+              lp.asInstanceOf[UnresolvedRelation].tableName == joinKey.leftTable
+          }.isDefined
+
+          val hasRightTable = right.find { lp =>
+            lp.isInstanceOf[UnresolvedRelation] &&
+              lp.asInstanceOf[UnresolvedRelation].tableName == joinKey.rightTable
+          }.isDefined
+
+          val leftField = getTableAlias(left, joinKey.leftTable) + joinKey.leftField
+          val rightField = getTableAlias(right, joinKey.rightTable) + joinKey.rightField
+          val joinKeys = condition.get.map(expr => expr)
+            .filter(_.isInstanceOf[UnresolvedAttribute])
+            .map(_.asInstanceOf[UnresolvedAttribute].name)
+            .filter(n => n.endsWith(joinKey.leftField) || n.endsWith(joinKey.rightField))
+
+          val newPlan = if (hasLeftTable && hasRightTable && joinKeys.length >= 2) {
+            val inList = skewJoin.skewedValues.map(Literal(_))
+            val leftNonSkewed = Filter(Not(In(UnresolvedAttribute(leftField), inList)), left)
+            val rightNonSkewed = Filter(Not(In(UnresolvedAttribute(rightField), inList)), right)
+            val leftSkewed = Filter(In(UnresolvedAttribute(leftField), inList), left)
+            val rightSkewed = Filter(In(UnresolvedAttribute(rightField), inList), right)
+
+            val nonSkewedJoin = Join(leftNonSkewed, rightNonSkewed, joinType, condition,
+              JoinHint(None, None))
+            // Join skewed keys with broadcast join
+            val skewedJoin = Join(ResolvedHint(leftSkewed, HintInfo(Some(BROADCAST))),
+              ResolvedHint(rightSkewed, HintInfo(Some(BROADCAST))),
+              Inner, condition, JoinHint(None, None))
+            Union(Seq(nonSkewedJoin, skewedJoin))
+          } else plan
+          ResolvedHint(newPlan)
+        case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
+          recurse = false
+          plan
+
+        case _ =>
+          plan
+      }
+    }
+    if ((plan fastEquals newNode) && recurse) {
+      newNode.mapChildren(child => applySkewedJoinHint(child, skewedJoin))
+    } else {
+      newNode
+    }
+  }
+
   /**
    * COALESCE Hint accepts name "COALESCE" and "REPARTITION".
    * Its parameter includes a partition number.
@@ -176,5 +243,13 @@ object ResolveHints {
         h.child
     }
   }
+
+  case class JoinKey(leftTbField: String, rightTbField: String) {
+    val leftTable: String = leftTbField.split("\\.")(0)
+    val leftField: String = leftTbField.split("\\.")(1)
+    val rightTable: String = rightTbField.split("\\.")(0)
+    val rightField: String = rightTbField.split("\\.")(1)
+  }
+  case class SkewedJoin(joinKey: JoinKey, skewedValues: Seq[String])
 
 }
