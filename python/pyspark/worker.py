@@ -30,8 +30,6 @@ except ImportError:
     has_resource_module = False
 import traceback
 
-from queue import Queue
-
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
@@ -47,8 +45,10 @@ from pyspark import shuffle
 
 if sys.version >= '3':
     basestring = str
+    from queue import Queue
 else:
     from itertools import imap as map  # use iterator map by default
+    from Queue import Queue
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
