@@ -139,7 +139,40 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
-    return str == null ? null : fromBytes(str.getBytes(StandardCharsets.UTF_8));
+    if (str == null) {
+      return null;
+    }
+    byte[] bytes;
+    // Optimization for ASCII strings: construct an exactly-right-sized
+    // array ourselves. CharsetEncoder ends up over-allocating for ASCII
+    // strings, leading to extra memory copies and garbage creation.
+    if (isAscii(str)) {
+      bytes = new byte[str.length()];
+      for (int i = 0; i < str.length(); i++) {
+        bytes[i] = (byte) (str.charAt(i) & 0xFF);
+      }
+    } else {
+      bytes = str.getBytes(StandardCharsets.UTF_8);
+    }
+    return fromBytes(bytes);
+  }
+
+  private static boolean isAscii(String str) {
+    for (int i = 0; i < str.length(); i++) {
+      if (str.charAt(i) >= 128) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static boolean isAscii(byte[] bytes) {
+    for (int i = 0; i < bytes.length; i++) {
+      if (bytes[i] < 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -1218,7 +1251,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public String toString() {
-    return new String(getBytes(), StandardCharsets.UTF_8);
+    byte[] bytes = getBytes();
+    // Optimization for ASCII characters: use deprecated string API which
+    // skips charset encoder and simply casts each byte into a char.
+    if (isAscii(bytes)) {
+      return new String(bytes, 0);
+    } else {
+      return new String(bytes, StandardCharsets.UTF_8);
+    }
   }
 
   @Override
