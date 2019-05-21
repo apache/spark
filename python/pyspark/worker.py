@@ -30,6 +30,8 @@ except ImportError:
     has_resource_module = False
 import traceback
 
+from queue import Queue
+
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
@@ -285,11 +287,10 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=i)
 
         def func(_, iterator):
-            current_batch_size = None
+            batch_size_queue = Queue()
 
             def map_row(row):
-                nonlocal current_batch_size
-                current_batch_size = len(row[0])
+                batch_size_queue.put(len(row[0]))
                 udf_args = [row[offset] for offset in arg_offsets]
                 if len(udf_args) == 1:
                     return udf_args[0]
@@ -299,11 +300,14 @@ def read_udfs(pickleSer, infile, eval_type):
             iterator = map(map_row, iterator)
             result_iter = udf(iterator)
 
-            def verify_result_length(udf_result):
-                verify_scalar_pandas_udf_result_length(udf_result[0], current_batch_size)
-                return udf_result
+            for result_batch, result_type in result_iter:
+                result_batch = verify_scalar_pandas_udf_result_length(
+                    result_batch, batch_size_queue.get())
+                yield (result_batch, result_type)
 
-            return map(verify_result_length, result_iter)
+            if not batch_size_queue.empty():
+                raise Exception("SQL_SCALAR_PANDAS_ITER_UDF should consume all input batches"
+                                "and generate the same number batches.")
 
         # profiling is not supported for UDF
         return func, None, ser, ser
