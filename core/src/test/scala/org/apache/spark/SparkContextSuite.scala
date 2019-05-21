@@ -855,6 +855,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val discoveryScript = resourceFile.getPath()
 
       val conf = new SparkConf()
+        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${SPARK_RESOURCE_COUNT_POSTFIX}", "3")
         .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX}",
           discoveryScript)
         .setMaster("local-cluster[3, 3, 1024]")
