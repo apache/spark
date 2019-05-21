@@ -27,6 +27,7 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 trait LeaderElectionAgent {
   val masterInstance: LeaderElectable
+  def hasLeadership: Boolean
   def stop() {} // to avoid noops in implementations.
 }
 
@@ -40,4 +41,6 @@ trait LeaderElectable {
 private[spark] class MonarchyLeaderAgent(val masterInstance: LeaderElectable)
   extends LeaderElectionAgent {
   masterInstance.electedLeader()
+
+  override def hasLeadership: Boolean = true
 }

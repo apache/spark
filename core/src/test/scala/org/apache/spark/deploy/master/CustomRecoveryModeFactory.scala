@@ -101,5 +101,7 @@ object CustomPersistenceEngine {
 
 class CustomLeaderElectionAgent(val masterInstance: LeaderElectable) extends LeaderElectionAgent {
   masterInstance.electedLeader()
+
+  override def hasLeadership: Boolean = true
 }
 

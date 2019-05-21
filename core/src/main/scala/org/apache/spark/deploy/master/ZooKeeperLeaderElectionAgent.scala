@@ -83,6 +83,8 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderEle
     }
   }
 
+  override def hasLeadership: Boolean = leaderLatch.hasLeadership
+
   private object LeadershipStatus extends Enumeration {
     type LeadershipStatus = Value
     val LEADER, NOT_LEADER = Value

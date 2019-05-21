@@ -108,6 +108,8 @@ private[deploy] object DeployMessages {
 
   case object MasterInStandby extends DeployMessage with RegisterWorkerResponse
 
+  case class MasterInRevoking(masterUrl: String) extends DeployMessage
+
   case class ReconnectWorker(masterUrl: String) extends DeployMessage
 
   case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
