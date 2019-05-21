@@ -2556,7 +2556,7 @@ object SparkContext extends Logging {
   private[spark] val DRIVER_IDENTIFIER = "driver"
 
 
-  private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Traversable[T])
+  private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Iterable[T])
     : ArrayWritable = {
     def anyToWritable[U <: Writable](u: U): Writable = u
 

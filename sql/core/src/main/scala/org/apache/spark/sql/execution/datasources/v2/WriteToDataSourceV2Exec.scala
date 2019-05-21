@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.UUID
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
@@ -26,7 +27,10 @@ import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -45,6 +49,60 @@ case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
   extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * Physical plan node for v2 create table as select.
+ *
+ * A new table will be created using the schema of the query, and rows from the query are appended.
+ * If either table creation or the append fails, the table will be deleted. This implementation does
+ * not provide an atomic CTAS.
+ */
+case class CreateTableAsSelectExec(
+    catalog: TableCatalog,
+    ident: Identifier,
+    partitioning: Seq[Transform],
+    query: SparkPlan,
+    properties: Map[String, String],
+    writeOptions: CaseInsensitiveStringMap,
+    ifNotExists: Boolean) extends V2TableWriteExec {
+
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (catalog.tableExists(ident)) {
+      if (ifNotExists) {
+        return sparkContext.parallelize(Seq.empty, 1)
+      }
+
+      throw new TableAlreadyExistsException(ident)
+    }
+
+    Utils.tryWithSafeFinallyAndFailureCallbacks({
+      catalog.createTable(ident, query.schema, partitioning.toArray, properties.asJava) match {
+        case table: SupportsWrite =>
+          val builder = table.newWriteBuilder(writeOptions)
+              .withInputDataSchema(query.schema)
+              .withQueryId(UUID.randomUUID().toString)
+          val batchWrite = builder match {
+            case supportsSaveMode: SupportsSaveMode =>
+              supportsSaveMode.mode(SaveMode.Append).buildForBatch()
+
+            case _ =>
+              builder.buildForBatch()
+          }
+
+          doWrite(batchWrite)
+
+        case _ =>
+          // table does not support writes
+          throw new SparkException(s"Table implementation does not support writes: ${ident.quoted}")
+      }
+
+    })(catchBlock = {
+      catalog.dropTable(ident)
+    })
+  }
 }
 
 /**

@@ -24,14 +24,13 @@ import org.apache.spark._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.graphx.lib._
-import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 
 
 /**
  * Driver program for running graph algorithms.
  */
-object Analytics extends Logging {
+object Analytics {
 
   def main(args: Array[String]): Unit = {
     if (args.length < 2) {
@@ -101,7 +100,7 @@ object Analytics extends Logging {
         println(s"GRAPHX: Total rank: ${pr.map(_._2).reduce(_ + _)}")
 
         if (!outFname.isEmpty) {
-          logWarning(s"Saving pageranks of pages to $outFname")
+          println(s"Saving pageranks of pages to $outFname")
           pr.map { case (id, r) => id + "\t" + r }.saveAsTextFile(outFname)
         }
 

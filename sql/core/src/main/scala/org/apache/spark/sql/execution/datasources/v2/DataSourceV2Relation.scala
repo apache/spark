@@ -44,6 +44,8 @@ case class DataSourceV2Relation(
 
   override def name: String = table.name()
 
+  override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
+
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }

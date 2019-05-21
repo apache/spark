@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.Locale
+import java.util.{Locale, OptionalLong}
 
 import org.apache.hadoop.fs.Path
 
@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, Scan}
+import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -34,7 +34,7 @@ abstract class FileScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     readDataSchema: StructType,
-    readPartitionSchema: StructType) extends Scan with Batch {
+    readPartitionSchema: StructType) extends Scan with Batch with SupportsReportStatistics {
   /**
    * Returns whether a file with `path` could be split or not.
    */
@@ -79,6 +79,18 @@ abstract class FileScan(
 
   override def planInputPartitions(): Array[InputPartition] = {
     partitions.toArray
+  }
+
+  override def estimateStatistics(): Statistics = {
+    new Statistics {
+      override def sizeInBytes(): OptionalLong = {
+        val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
+        val size = (compressionFactor * fileIndex.sizeInBytes).toLong
+        OptionalLong.of(size)
+      }
+
+      override def numRows(): OptionalLong = OptionalLong.empty()
+    }
   }
 
   override def toBatch: Batch = this
