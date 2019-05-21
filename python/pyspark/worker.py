@@ -302,12 +302,18 @@ def read_udfs(pickleSer, infile, eval_type):
 
             for result_batch, result_type in result_iter:
                 result_batch = verify_scalar_pandas_udf_result_length(
-                    result_batch, batch_size_queue.get())
+                    result_batch, batch_size_queue.get(block=False))
                 yield (result_batch, result_type)
 
             if not batch_size_queue.empty():
                 raise Exception("SQL_SCALAR_PANDAS_ITER_UDF should consume all input batches"
                                 "and generate the same number batches.")
+
+            try:
+                iterator.__next__()
+                raise Exception("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator.")
+            except StopIteration:
+                pass
 
         # profiling is not supported for UDF
         return func, None, ser, ser
