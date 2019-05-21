@@ -33,8 +33,10 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTagName
+import org.apache.spark.sql.execution.SparkPlan.LOGICAL_PLAN_TAG_NAME
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
 
@@ -122,6 +124,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
+
+  def logicalPlan: LogicalPlan = {
+    assert(
+      tags.contains(LOGICAL_PLAN_TAG_NAME),
+      getClass.getSimpleName + " does not have a logical plan link")
+    tags(SparkPlan.LOGICAL_PLAN_TAG_NAME).asInstanceOf[LogicalPlan]
+  }
 
   /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to `doExecute` after

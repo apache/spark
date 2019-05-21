@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.TaskContext
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -46,8 +47,13 @@ case class BroadcastHashJoinExec(
     right: SparkPlan)
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  override lazy val metrics = {
+      Map("numOutputRows" ->
+        SQLMetrics.createMetric(
+          sparkContext,
+          "number of output rows",
+          logicalPlan.stats.rowCount.map(_.toLong).getOrElse(-1L)))
+  }
 
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = HashedRelationBroadcastMode(buildKeys)

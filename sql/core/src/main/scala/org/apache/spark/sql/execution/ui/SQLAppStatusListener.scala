@@ -180,17 +180,20 @@ class SQLAppStatusListener(
   }
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
-    val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
+    val metricMap = exec.metrics.map { m => (m.accumulatorId, m) }.toMap
     val metrics = exec.stages.toSeq
       .flatMap { stageId => Option(stageMetrics.get(stageId)) }
       .flatMap(_.taskMetrics.values().asScala)
       .flatMap { metrics => metrics.ids.zip(metrics.values) }
 
     val aggregatedMetrics = (metrics ++ exec.driverAccumUpdates.toSeq)
-      .filter { case (id, _) => metricTypes.contains(id) }
+      .filter { case (id, _) => metricMap.contains(id) }
       .groupBy(_._1)
       .map { case (id, values) =>
-        id -> SQLMetrics.stringValue(metricTypes(id), values.map(_._2))
+        val metric = metricMap(id)
+        val value = SQLMetrics.stringValue(metric.metricType, values.map(_._2))
+        val stats = SQLMetrics.stringStats(metric.stats)
+        id -> (value + stats)
       }
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
