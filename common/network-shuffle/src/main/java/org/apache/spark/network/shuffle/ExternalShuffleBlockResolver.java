@@ -86,7 +86,7 @@ public class ExternalShuffleBlockResolver {
 
   private final TransportConf conf;
 
-  private final boolean extShuffleServiceRddFetchEnabled;
+  private final boolean rddFetchEnabled;
 
   @VisibleForTesting
   final File registeredExecutorFile;
@@ -111,8 +111,8 @@ public class ExternalShuffleBlockResolver {
       File registeredExecutorFile,
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
-    this.extShuffleServiceRddFetchEnabled =
-      Boolean.valueOf(conf.get("spark.shuffle.service.fetch.rdd.enabled", "true"));
+    this.rddFetchEnabled =
+      Boolean.valueOf(conf.get(Constant.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
@@ -276,7 +276,7 @@ public class ExternalShuffleBlockResolver {
     FilenameFilter filter = (dir, name) -> {
       // Don't delete shuffle data, shuffle index files or cached RDD files.
       return !name.endsWith(".index") && !name.endsWith(".data")
-        && (!extShuffleServiceRddFetchEnabled || !name.startsWith("rdd_"));
+        && (!rddFetchEnabled || !name.startsWith("rdd_"));
     };
 
     for (String localDir : dirs) {

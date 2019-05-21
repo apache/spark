@@ -56,7 +56,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     return new TransportConf(
       "shuffle",
       new MapConfigProvider(ImmutableMap.of(
-        "spark.shuffle.service.fetch.rdd.enabled",
+        Constant.SHUFFLE_SERVICE_FETCH_RDD_ENABLED,
         Boolean.toString(isFetchRddEnabled))));
   }
 
@@ -104,11 +104,11 @@ public class CleanupNonShuffleServiceServedFilesSuite {
 
     AtomicBoolean cleanupCalled = new AtomicBoolean(false);
 
-    // Executor which does nothing to ensure we're actually using it.
-    Executor noThreadExecutor = runnable -> cleanupCalled.set(true);
+    // Executor which only captures whether it's being used, without executing anything.
+    Executor dummyExecutor = runnable -> cleanupCalled.set(true);
 
     ExternalShuffleBlockResolver manager =
-      new ExternalShuffleBlockResolver(getConf(true), null, noThreadExecutor);
+      new ExternalShuffleBlockResolver(getConf(true), null, dummyExecutor);
 
     manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
     manager.executorRemoved("exec0", "app");

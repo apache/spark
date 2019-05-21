@@ -114,15 +114,17 @@ public class TestShuffleDataContext {
     String blockId = "rdd_" + rddId + "_" + splitId;
     insertFile(blockId, block);
   }
+
   private void insertFile(String filename) throws IOException {
     insertFile(filename, new byte[] { 42 });
   }
 
   private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
+    File file = ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename);
+    assert(!file.exists()) : "this test file has been already generated";
     try {
-      dataStream = new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename));
+      dataStream = new FileOutputStream(file);
       dataStream.write(block);
     } finally {
       Closeables.close(dataStream, false);

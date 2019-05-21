@@ -178,10 +178,12 @@ class BlockManagerMasterEndpoint(
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
 
-      val (bmIdExtShuffle, bmIdExecutor) = bms.partition(_.port == externalShuffleServicePort)
-      if (bmIdExecutor.isEmpty && bmIdExtShuffle.nonEmpty) {
-        // when original executor is already removed use the shuffle service to remove the blocks
-        bmIdExtShuffle.foreach { bmIdForShuffleService =>
+      val (bmIdsExtShuffle, bmIdsExecutor) = bms.partition(_.port == externalShuffleServicePort)
+      val liveExecutorsForBlock = bmIdsExecutor.map(_.executorId).toSet
+      bmIdsExtShuffle.foreach { bmIdForShuffleService =>
+        // if the original executor is already released then delete this disk block via
+        // the external shuffle service
+        if (!liveExecutorsForBlock.contains(bmIdForShuffleService.executorId)) {
           val blockIdsToDel = blocksToDeleteByShuffleService.getOrElseUpdate(bmIdForShuffleService,
             new mutable.HashSet[RDDBlockId]())
           blockIdsToDel += blockId
@@ -189,16 +191,20 @@ class BlockManagerMasterEndpoint(
             blockStatus.remove(blockId)
           }
         }
-      } else {
-        bmIdExecutor.foreach { bm =>
-          blockManagerInfo.get(bm).foreach { bmInfo =>
-            bmInfo.removeBlock(blockId)
-          }
+      }
+      bmIdsExecutor.foreach { bmId =>
+        blockManagerInfo.get(bmId).foreach { bmInfo =>
+          bmInfo.removeBlock(blockId)
         }
       }
     }
     val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
-      askRemoveRddFromExecutor(removeMsg, bmInfo)
+      bmInfo.slaveEndpoint.ask[Int](removeMsg).recover {
+        case e: IOException =>
+          logWarning(s"Error trying to remove RDD ${removeMsg.rddId} " +
+            s"from block manager ${bmInfo.blockManagerId}", e)
+          0 // zero blocks were removed
+      }
     }.toSeq
 
     val removeRddBlockViaExtShuffleServiceFutures = externalShuffleClient.map { shuffleClient =>
@@ -215,20 +221,6 @@ class BlockManagerMasterEndpoint(
     }.getOrElse(Seq.empty)
 
     Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
-  }
-
-  /**
-   * Ask the slaves to remove the RDD.
-   */
-  private def askRemoveRddFromExecutor(
-      removeMsg: RemoveRdd,
-      bmInfo: BlockManagerInfo): Future[Int] = {
-    bmInfo.slaveEndpoint.ask[Int](removeMsg).recover {
-      case e: IOException =>
-        logWarning(s"Error trying to remove RDD ${removeMsg.rddId} " +
-          s"from block manager ${bmInfo.blockManagerId}", e)
-        0 // zero blocks were removed
-    }
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
@@ -577,8 +569,6 @@ case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long
 object BlockStatus {
   def empty: BlockStatus = BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
 }
-
-
 
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
