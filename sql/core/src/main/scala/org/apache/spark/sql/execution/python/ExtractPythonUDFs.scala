@@ -111,19 +111,27 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def collectEvaluableUDFsFromExpressions(expressions: Seq[Expression]): Seq[PythonUDF] = {
-    // Eval type checker is set once when we find the first evaluable UDF and its value
-    // shouldn't change later.
-    // Used to check if subsequent UDFs are of the same type as the first UDF. (since we can only
+    // If fisrt UDF is SQL_SCALAR_PANDAS_ITER_UDF, then only return this UDF,
+    // otherwise check if subsequent UDFs are of the same type as the first UDF. (since we can only
     // extract UDFs of the same eval type)
-    var evalTypeChecker: Option[EvalTypeChecker] = None
+
+    var firstVisitedUDFEvalType: Option[Int] = None
+
+    def checkEvalType(evalType: Int): Boolean = {
+      if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) {
+        false
+      } else {
+        evalType == firstVisitedUDFEvalType.get
+      }
+    }
 
     def collectEvaluableUDFs(expr: Expression): Seq[PythonUDF] = expr match {
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
-        && evalTypeChecker.isEmpty =>
-        evalTypeChecker = Some((otherEvalType: EvalType) => otherEvalType == udf.evalType)
+        && firstVisitedUDFEvalType.isEmpty =>
+        firstVisitedUDFEvalType = Some(udf.evalType)
         Seq(udf)
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
-        && evalTypeChecker.get(udf.evalType) =>
+        && checkEvalType(udf.evalType) =>
         Seq(udf)
       case e => e.children.flatMap(collectEvaluableUDFs)
     }

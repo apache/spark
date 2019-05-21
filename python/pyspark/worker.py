@@ -242,34 +242,6 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
-class PandasIterUDFInputIter(object):
-    def __init__(self):
-        self.nextValue = None
-        self.isEnd = False
-
-    def __iter__(self):
-        return self
-
-    def feedNext(self, v):
-        assert not self.isEnd
-        assert self.nextValue is None, \
-            "should call feedNext after previous element being consumed."
-        self.nextValue = v
-
-    def setEnd(self):
-        self.isEnd = True
-
-    def __next__(self):
-        if self.isEnd:
-            raise StopIteration
-        assert self.nextValue is not None,\
-            "The iterator returned by UDF should immediately generate " \
-            "one result row after consuming each row"
-        v = self.nextValue
-        self.nextValue = None
-        return v
-
-
 def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
@@ -307,54 +279,32 @@ def read_udfs(pickleSer, infile, eval_type):
     num_udfs = read_int(infile)
 
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        input_iter_list = [None] * num_udfs
-        udf_result_iter_list = [None] * num_udfs
-        arg_offsets_list = [None] * num_udfs
-        for i in range(num_udfs):
-            arg_offsets, udf = read_single_udf(
-                pickleSer, infile, eval_type, runner_conf, udf_index=i)
-            arg_offsets_list[i] = arg_offsets
-            input_iter = PandasIterUDFInputIter()
-            input_iter_list[i] = input_iter
-            udf_result_iter_list[i] = udf(input_iter)
+        assert num_udfs == 1, "One SQL_SCALAR_PANDAS_ITER_UDF expected here."
 
-        get_iter_next = fail_on_stopiteration(lambda iterator: iterator.__next__())
+        arg_offsets, udf = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=i)
 
-        def mapper(row):
-            result_row = [None] * num_udfs
-            for i in range(num_udfs):
-                input_batches = list(map(lambda offset: row[offset], arg_offsets_list[i]))
-                batch_size = len(input_batches[0])
-                if len(input_batches) == 1:
-                    input_batches = input_batches[0]
+        def func(_, iterator):
+            current_batch_size = None
+
+            def map_row(row):
+                nonlocal current_batch_size
+                current_batch_size = len(row[0])
+                udf_args = [row[offset] for offset in arg_offsets]
+                if len(udf_args) == 1:
+                    return udf_args[0]
                 else:
-                    input_batches = tuple(input_batches)
-                input_iter_list[i].feedNext(input_batches)
-                result_batch, result_type = get_iter_next(udf_result_iter_list[i])
-                result_batch = verify_scalar_pandas_udf_result_length(result_batch, batch_size)
-                result_row[i] = (result_batch, result_type)
-            if num_udfs > 1:
-                return tuple(result_row)
-            else:
-                # In the special case of a single UDF this will return a single result rather
-                # than a tuple of results; this is the format that the JVM side expects.
-                return result_row[0]
+                    return tuple(udf_args)
 
-        def func_generator(iterator):
-            for row in iterator:
-                yield mapper(row)
-            # call last __next__ on each iter_udf
-            # in order to trigger close stuff inside each udf_generator
-            for i in range(num_udfs):
-                try:
-                    input_iter_list[i].setEnd()
-                    udf_result_iter_list[i].__next__()
-                    assert False, "udf generate too much rows"
-                except StopIteration:
-                    # Now close stuff inside the udf_generator has run.
-                    pass
+            iterator = map(map_row, iterator)
+            result_iter = udf(iterator)
 
-        func = lambda _, iterator: func_generator(iterator)
+            def verify_result_length(udf_result):
+                verify_scalar_pandas_udf_result_length(udf_result[0], current_batch_size)
+                return udf_result
+
+            return map(verify_result_length, result_iter)
+
         # profiling is not supported for UDF
         return func, None, ser, ser
 
