@@ -18,15 +18,14 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.StringUtils
-
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -40,7 +39,7 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -3313,20 +3312,35 @@ class Dataset[T] private[sql](
             }
           }
 
-        val arrowBatchRdd = toArrowBatchRdd(plan)
-        sparkSession.sparkContext.runJob(
-          arrowBatchRdd,
-          (it: Iterator[Array[Byte]]) => it.toArray,
-          handlePartitionBatches)
+        var sparkException: Option[SparkException] = Option.empty
+        try {
+          val arrowBatchRdd = toArrowBatchRdd(plan)
+          sparkSession.sparkContext.runJob(
+            arrowBatchRdd,
+            (it: Iterator[Array[Byte]]) => it.toArray,
+            handlePartitionBatches)
+        } catch {
+          case e: SparkException =>
+            sparkException = Option.apply(e)
+        }
 
-        // After processing all partitions, end the stream and write batch order indices
+        // After processing all partitions, end the batch stream
         batchWriter.end()
-        out.writeInt(batchOrder.length)
-        // Sort by (index of partition, batch index in that partition) tuple to get the
-        // overall_batch_index from 0 to N-1 batches, which can be used to put the
-        // transferred batches in the correct order
-        batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
-          out.writeInt(overallBatchIndex)
+        sparkException match {
+          case Some(exception) =>
+            // Signal failure and write error message
+            out.writeBoolean(false)
+            PythonRDD.writeUTF(exception.getMessage, out)
+          case None =>
+            // Signal success and write batch order indices
+            out.writeBoolean(true)
+            out.writeInt(batchOrder.length)
+            // Sort by (index of partition, batch index in that partition) tuple to get the
+            // overall_batch_index from 0 to N-1 batches, which can be used to put the
+            // transferred batches in the correct order
+            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+              out.writeInt(overallBatchIndex)
+            }
         }
       }
     }

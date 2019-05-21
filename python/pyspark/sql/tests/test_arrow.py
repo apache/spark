@@ -200,7 +200,7 @@ class ArrowTests(ReusedSQLTestCase):
         exception_udf = udf(raise_exception, IntegerType())
         df = df.withColumn("error", exception_udf())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'My error'):
+            with self.assertRaisesRegexp(RuntimeError, 'My error'):
                 df.toPandas()
 
     def _createDataFrame_toggle(self, pdf, schema=None):
