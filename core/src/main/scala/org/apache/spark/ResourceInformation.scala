@@ -39,4 +39,5 @@ class ResourceInformation(
 object ResourceInformation {
   // known types of resources
   final val GPU: String = "gpu"
+  final val UNKNOWN: String = "unknown"
 }

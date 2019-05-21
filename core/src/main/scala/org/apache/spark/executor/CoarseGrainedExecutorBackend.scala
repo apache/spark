@@ -75,7 +75,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
 
-      val resourceInfo = env.conf.getResources(false)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
         extractAttributes, resources))
     }(ThreadUtils.sameThread).onComplete {

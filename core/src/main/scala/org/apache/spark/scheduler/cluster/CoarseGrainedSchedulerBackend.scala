@@ -148,7 +148,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               for ((k, v) <- resources) {
                 executorInfo.availableResources.get(k).foreach { r =>
-                  r.addAddresses(v.addresses)
+                  r.releaseAddresses(v.addresses)
                 }
               }
               makeOffers(executorId)
@@ -330,16 +330,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               case e: Exception => logError("Exception in error callback", e)
             }
           }
-        }
-        else {
+        } else {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
-
-          for ((k, v) <- task.resources) {
-            executorData.availableResources.get(k).foreach { r =>
-              r.removeAddresses(v.addresses)
-            }
-          }
 
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
             s"${executorData.executorHost}.")

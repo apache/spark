@@ -24,6 +24,7 @@ import java.util.Properties
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.ResourceInformation
+import org.apache.spark.ResourceInformation.GPU
 import org.apache.spark.SparkFunSuite
 
 class TaskDescriptionSuite extends SparkFunSuite {
@@ -55,7 +56,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
     }
 
     val originalResources =
-      Map("gpu" -> new ResourceInformation("gpu", Array("1", "2", "3")))
+      Map(GPU -> new ResourceInformation(GPU, Array("1", "2", "3")))
 
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))

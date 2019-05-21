@@ -19,38 +19,44 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.ResourceInformation
+import org.apache.spark.ResourceInformation.UNKNOWN
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.internal.Logging
 
 /**
- * Class to hold information about a type of Resource used by the scheduler. This
- * is a separate class from the ResourceInformation because here its mutable because the
- * scheduler has to update the count and addresses based on what its assigned and
- * what is available.
+ * Class to hold information about a type of Resource used by the scheduler. This is a separate
+ * class from the ResourceInformation because here its mutable because the scheduler has to update
+ * the addresses based on what its assigned and what is available.
  */
 @Evolving
 private[spark] class SchedulerResourceInformation(
     private val name: String,
-    private val addresses: ArrayBuffer[String] = ArrayBuffer.empty) extends Logging {
+    private val availableAddresses: ArrayBuffer[String] = ArrayBuffer.empty) extends Serializable {
+
+  private val allocatedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
 
   def getName(): String = name
 
-  def getAddresses(): ArrayBuffer[String] = addresses
+  def getAvailableAddresses(): ArrayBuffer[String] = availableAddresses
 
-  def addAddresses(addrs: Array[String]): Unit = {
-    addresses ++= addrs
+  def acquireAddresses(num: Int): Seq[String] = {
+    assert(num <= availableAddresses.size, s"Required to take $num $name addresses but only " +
+      s"${availableAddresses.size} available.")
+    val addrs = availableAddresses.take(num)
+    allocatedAddresses ++= addrs
+    addrs
   }
 
-  def takeAddresses(count: Int): ArrayBuffer[String] = {
-    addresses.take(count)
-  }
-
-  def removeAddresses(addrs: Array[String]): Unit = {
-    addresses --= addrs
+  def releaseAddresses(addrs: Array[String]): Unit = {
+    addrs.foreach { address =>
+      assert(allocatedAddresses.contains(address), s"Try to release $name address $address, but " +
+        "it is not allocated.")
+      availableAddresses += address
+      allocatedAddresses -= address
+    }
   }
 }
+
 private[spark] object SchedulerResourceInformation {
-  def empty: SchedulerResourceInformation = new SchedulerResourceInformation("gpu",
-    ArrayBuffer.empty[String])
+  def empty: SchedulerResourceInformation =
+    new SchedulerResourceInformation(UNKNOWN, ArrayBuffer.empty[String])
 }

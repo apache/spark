@@ -21,7 +21,7 @@ import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap, LinkedHashSet}
+import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
@@ -508,98 +508,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-   * Set available resources on the driver/executor.
-   */
-  private[spark] def setResources(
-      resourceName: String,
-      resourceCount: Int,
-      resourceAddresses: Option[Seq[String]],
-      isDriver: Boolean): SparkConf = {
-    if (resourceAddresses.isDefined && resourceAddresses.get.size != resourceCount) {
-      val nodeType = if (isDriver) {
-        "driver"
-      } else {
-        "executor"
-      }
-      throw new SparkException(s"Specified $resourceCount $resourceName(s) on $nodeType, while " +
-        s"the size of device addresses is ${resourceAddresses.size}.")
-    }
-    val prefix = if (isDriver) {
-      s"$SPARK_DRIVER_RESOURCE_PREFIX$resourceName"
-    } else {
-      s"$SPARK_EXECUTOR_RESOURCE_PREFIX$resourceName"
-    }
-    set(s"$prefix$SPARK_RESOURCE_COUNT_POSTFIX", resourceCount.toString)
-    if (resourceAddresses.isDefined) {
-      set(s"$prefix$SPARK_RESOURCE_ADDRESSES_POSTFIX", resourceAddresses.get.mkString(","))
-    }
-    this
-  }
-
-  /**
-   * Set task resource requirement.
-   */
-  private[spark] def setResourceRequirement(
-      resourceName: String, resourceCount: Int): SparkConf = {
-    val key = s"$SPARK_TASK_RESOURCE_PREFIX$resourceName$SPARK_RESOURCE_COUNT_POSTFIX"
-    set(key, resourceCount.toString)
-    this
-  }
-
-  /**
-   * Get available resources on the driver/executor.
-   */
-  private[spark] def getResources(isDriver: Boolean): Map[String, ResourceInformation] = {
-    val prefix = if (isDriver) {
-      s"$SPARK_DRIVER_RESOURCE_PREFIX."
-    } else {
-      s"$SPARK_EXECUTOR_RESOURCE_PREFIX."
-    }
-
-    val resourceCountMap = new HashMap[String, Int]
-    val resourceAddressMap = new HashMap[String, Array[String]]
-    getAllWithPrefix(prefix).foreach { tuple =>
-      val keys = tuple._1.split("\\.")
-      if (keys.size == 2) {
-        val resourceName = keys.head
-        if (keys.last.equals(SPARK_RESOURCE_COUNT_POSTFIX)) {
-          val resourceCount = tuple._2.toInt
-          resourceCountMap.put(resourceName, resourceCount)
-        } else if (keys.last.equals(SPARK_RESOURCE_ADDRESSES_POSTFIX)) {
-          val resourceAddresses = tuple._2.split(",").map(_.trim())
-          resourceAddressMap.put(resourceName, resourceAddresses)
-        }
-      }
-    }
-
-    resourceCountMap.map { case (resourceName, resourceCount) =>
-      if (resourceAddressMap.contains(resourceName)) {
-        val resourceAddresses = resourceAddressMap.get(resourceName).get
-        (resourceName, new ResourceInformation(resourceName, resourceAddresses))
-      } else {
-        (resourceName, new ResourceInformation(resourceName, Array.empty))
-      }
-    }.toMap
-  }
-
-  /**
    * Get task resource requirements.
    */
-  private[spark] def getResourceRequirements(): Map[String, Int] = {
-    getAllWithPrefix(s"$SPARK_TASK_RESOURCE_PREFIX.").map { tuple =>
-      val keys = tuple._1.split("\\.")
-      val resourceName = keys.head
-      if (keys.size == 2) {
-        if (keys.last.equals(SPARK_RESOURCE_COUNT_POSTFIX)) {
-          val resourceCount = tuple._2.toInt
-          (resourceName, resourceCount)
-        } else {
-          (resourceName, 0)
-        }
-      } else {
-        (resourceName, 0)
-      }
-    }.filter(_._2 > 0).toMap
+  private[spark] def getTaskResourceRequirements(): Map[String, Int] = {
+    getAllWithPrefix(SPARK_TASK_RESOURCE_PREFIX)
+      .withFilter { case (k, v) => k.endsWith(SPARK_RESOURCE_COUNT_POSTFIX)}
+      .map { case (k, v) => (k.dropRight(SPARK_RESOURCE_COUNT_POSTFIX.length), v.toInt)}.toMap
   }
 
   /**
@@ -683,32 +597,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         logWarning(s"Total executor cores: ${totalCores} is not " +
           s"divisible by cores per executor: ${executorCores}, " +
           s"the left cores: ${leftCores} will not be allocated")
-      }
-    }
-
-    val resources = getResources(false)
-    val resourceRequirements = getResourceRequirements()
-    val executorCores = get(EXECUTOR_CORES)
-    val taskCpus = get(CPUS_PER_TASK)
-    resourceRequirements.foreach { case (resourceName, resourceCount) =>
-      if (!resources.contains(resourceName)) {
-        throw new SparkException(s"Task requires resource type $resourceName, which is not " +
-          s"available on executors.")
-      } else {
-        val resourceInformation = resources.get(resourceName).get
-        val executorResourceCount = resourceInformation.addresses.size
-        if (executorResourceCount < resourceCount) {
-          throw new SparkException(s"Available $resourceName resource count on executors is " +
-            s"$executorResourceCount, which is less than the task requirement $resourceCount.")
-        }
-
-        if (contains(CPUS_PER_TASK) && contains(EXECUTOR_CORES)) {
-          if (executorCores > 0 && taskCpus > 0 &&
-            executorCores * resourceCount != executorResourceCount * taskCpus) {
-            throw new SparkException("Can't make full use of the resources allocated to each " +
-              "executor with current task resource requirements")
-          }
-        }
       }
     }
 

@@ -843,34 +843,40 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     file.getPath()
   }
 
+  test("test resource scheduling under local-cluster mode") {
+    import org.apache.spark.TestUtils._
 
-  test("test gpu support under local-cluster mode") {
-    val conf = new SparkConf()
-      .setResources("gpu", 3, Some(Seq("0", "1", "2")), false)
-      .setResources("gpu", 3, Some(Seq("0", "1", "8")), true)
-      .setResourceRequirement("gpu", 1)
-      .setMaster("local-cluster[3, 3, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    withTempDir { dir =>
+      val resourceFile = new File(dir, "resourceDiscoverScript")
+      val resources = """'{"name": "gpu", "addresses": ["0", "1", "2"]}'"""
+      Files.write(s"echo $resources", resourceFile, StandardCharsets.UTF_8)
+      JavaFiles.setPosixFilePermissions(resourceFile.toPath(),
+        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+      val discoveryScript = resourceFile.getPath()
 
-    // Ensure all executors has started
-    eventually(timeout(10.seconds)) {
-      assert(sc.statusTracker.getExecutorInfos.size == 3)
-    }
+      val conf = new SparkConf()
+        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX}",
+          discoveryScript)
+        .setMaster("local-cluster[3, 3, 1024]")
+        .setAppName("test-cluster")
+      setTaskResourceRequirement(conf, "gpu", 1)
+      sc = new SparkContext(conf)
 
-    val resources = sc.getResources()
-    assert(resources.get("gpu").get.addresses === Array("0", "1", "8"))
-    assert(resources.get("gpu").get.name === "gpu")
+      // Ensure all executors has started
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.size == 3)
+      }
 
-    val rdd = sc.makeRDD(1 to 10, 9).mapPartitions { it =>
-      val context = TaskContext.get()
-      context.resources().get(ResourceInformation.GPU).get.addresses.iterator
-    }
-    val gpus = rdd.collect()
-    assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
+      val rdd = sc.makeRDD(1 to 10, 9).mapPartitions { it =>
+        val context = TaskContext.get()
+        context.resources().get(ResourceInformation.GPU).get.addresses.iterator
+      }
+      val gpus = rdd.collect()
+      assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
 
-    eventually(timeout(10.seconds)) {
-      assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+      }
     }
   }
 }

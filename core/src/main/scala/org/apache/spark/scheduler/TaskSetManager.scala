@@ -469,8 +469,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      hostGpuIndices: ArrayBuffer[String],
-      gpuResources: SchedulerResourceInformation)
+      availableResources: Map[String, SchedulerResourceInformation])
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -535,12 +534,9 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
-        val extraResources = if (sched.GPUS_PER_TASK > 0) {
-          // doing minimal checking here to keep things fast
-          val indices = hostGpuIndices.take(sched.GPUS_PER_TASK).toArray
-          Map(ResourceInformation.GPU -> new ResourceInformation(gpuResources.getName(), indices))
-        } else {
-          Map.empty[String, ResourceInformation]
+        val extraResources = sched.RESOURCES_PER_TASK.map { case (rName, rNum) =>
+          val allocatedAddresses = availableResources.get(rName).get.acquireAddresses(rNum)
+          (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
         }
 
         sched.dagScheduler.taskStarted(task, info)

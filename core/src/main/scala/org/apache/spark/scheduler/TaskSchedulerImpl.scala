@@ -92,8 +92,8 @@ private[spark] class TaskSchedulerImpl(
   // CPUs to request per task
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
-  // GPUs to request per task
-  val GPUS_PER_TASK = conf.getResourceRequirements().getOrElse("gpu", 0)
+  // Resources to request per task
+  val RESOURCES_PER_TASK = conf.getTaskResourceRequirements()
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
@@ -330,7 +330,7 @@ private[spark] class TaskSchedulerImpl(
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
-      availableGpuIndices: Array[ArrayBuffer[String]],
+      availableResources: Array[Map[String, SchedulerResourceInformation]],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
       addressesWithDescs: ArrayBuffer[(String, TaskDescription)]) : Boolean = {
     var launchedTask = false
@@ -339,22 +339,17 @@ private[spark] class TaskSchedulerImpl(
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
-      if (availableCpus(i) >= CPUS_PER_TASK && availableGpuIndices(i).size >= GPUS_PER_TASK) {
+      if (availableCpus(i) >= CPUS_PER_TASK &&
+        resourceMeetTaskRequirements(availableResources(i))) {
         try {
-          val gpuResources = shuffledOffers(i).resources.
-            getOrElse("gpu", SchedulerResourceInformation.empty)
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality,
-              availableGpuIndices(i), gpuResources)) {
+          for (task <- taskSet.resourceOffer(execId, host, maxLocality, availableResources(i))) {
             tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetManager.put(tid, taskSet)
             taskIdToExecutorId(tid) = execId
             executorIdToRunningTaskIds(execId).add(tid)
             availableCpus(i) -= CPUS_PER_TASK
-            task.resources.get("gpu").foreach { addrs =>
-              availableGpuIndices(i) --= addrs.addresses
-            }
-            assert(availableCpus(i) >= 0 && availableGpuIndices(i).size >= 0)
+            assert(availableCpus(i) >= 0)
             // Only update hosts for a barrier task.
             if (taskSet.isBarrier) {
               // The executor address is expected to be non empty.
@@ -372,6 +367,16 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     launchedTask
+  }
+
+  /**
+   * Check whether the resources from the WorkerOffer are enough to run at least one task.
+   */
+  private def resourceMeetTaskRequirements(
+      resources: Map[String, SchedulerResourceInformation]): Boolean = {
+    RESOURCES_PER_TASK.forall { case (rName, rNum) =>
+        resources.contains(rName) && resources(rName).getAvailableAddresses().size >= rNum
+    }
   }
 
   /**
@@ -416,9 +421,6 @@ private[spark] class TaskSchedulerImpl(
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableResources = shuffledOffers.map(_.resources).toArray
-    val gpuResources = availableResources.map(_.getOrElse(ResourceInformation.GPU,
-      SchedulerResourceInformation.empty))
-    val availableGpuIndices = gpuResources.map(_.getAddresses())
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val availableSlots = shuffledOffers.map(o => o.cores / CPUS_PER_TASK).sum
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
@@ -451,7 +453,7 @@ private[spark] class TaskSchedulerImpl(
           do {
             launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
               currentMaxLocality, shuffledOffers, availableCpus,
-              availableGpuIndices, tasks, addressesWithDescs)
+              availableResources, tasks, addressesWithDescs)
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
           } while (launchedTaskAtCurrentMaxLocality)
         }
