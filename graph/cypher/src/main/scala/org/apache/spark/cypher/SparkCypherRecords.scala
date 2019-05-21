@@ -27,7 +27,7 @@ import org.apache.spark.cypher.conversions.TypeConversions._
 import org.apache.spark.sql._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
-import org.opencypher.okapi.relational.api.io.EntityTable
+import org.opencypher.okapi.relational.api.io.ElementTable
 import org.opencypher.okapi.relational.api.table.{RelationalCypherRecords, RelationalCypherRecordsFactory}
 import org.opencypher.okapi.relational.impl.table._
 
@@ -48,7 +48,7 @@ case class SparkCypherRecordsFactory()(implicit caps: SparkCypherSession) extend
     SparkCypherRecords(initialHeader, initialDataFrame)
   }
 
-  override def fromEntityTable(entityTable: EntityTable[DataFrameTable]): SparkCypherRecords = {
+  override def fromElementTable(entityTable: ElementTable[DataFrameTable]): SparkCypherRecords = {
     SparkCypherRecords(entityTable.header, entityTable.table.df)
   }
 

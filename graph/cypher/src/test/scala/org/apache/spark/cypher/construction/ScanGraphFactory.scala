@@ -27,7 +27,7 @@ import org.apache.spark.cypher.{SparkCypherSession, SparkEntityTable}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.opencypher.okapi.api.graph.Pattern
-import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMappingBuilder, RelationshipMappingBuilder}
+import org.opencypher.okapi.api.io.conversion.{ElementMapping, NodeMappingBuilder, RelationshipMappingBuilder}
 import org.opencypher.okapi.api.schema.PropertyKeys.PropertyKeys
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.impl.temporal.Duration
@@ -39,7 +39,7 @@ import scala.collection.JavaConverters._
 
 object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
 
-  def encodeIdColumns(df: DataFrame, mapping: EntityMapping): DataFrame = {
+  def encodeIdColumns(df: DataFrame, mapping: ElementMapping): DataFrame = {
     val idCols = mapping.allSourceIdKeys.map { columnName =>
       val dataType = df.schema.fields(df.schema.fieldIndex(columnName)).dataType
       dataType match {

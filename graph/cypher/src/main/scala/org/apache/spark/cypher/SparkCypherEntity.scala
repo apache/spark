@@ -19,7 +19,7 @@
 package org.apache.spark.cypher
 
 import org.apache.spark.cypher.SparkCypherEntity._
-import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherNode, CypherRelationship}
+import org.opencypher.okapi.api.value.CypherValue.{CypherMap, Node, Relationship}
 
 object SparkCypherEntity {
 
@@ -34,7 +34,7 @@ case class SparkCypherNode(
   override val id: Seq[Byte],
   override val labels: Set[String] = Set.empty,
   override val properties: CypherMap = CypherMap.empty
-) extends CypherNode[Seq[Byte]] {
+) extends Node[Seq[Byte]] {
 
   override type I = SparkCypherNode
 
@@ -55,7 +55,7 @@ case class SparkCypherRelationship(
   override val endId: Seq[Byte],
   override val relType: String,
   override val properties: CypherMap = CypherMap.empty
-) extends CypherRelationship[Seq[Byte]] {
+) extends Relationship[Seq[Byte]] {
 
   override type I = SparkCypherRelationship
 

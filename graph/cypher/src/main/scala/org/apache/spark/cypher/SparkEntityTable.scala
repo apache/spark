@@ -19,17 +19,17 @@
 package org.apache.spark.cypher
 
 import org.apache.spark.cypher.SparkTable.DataFrameTable
-import org.opencypher.okapi.api.io.conversion.EntityMapping
-import org.opencypher.okapi.relational.api.io.EntityTable
+import org.opencypher.okapi.api.io.conversion.ElementMapping
+import org.opencypher.okapi.relational.api.io.ElementTable
 
 case class SparkEntityTable(
-  override val mapping: EntityMapping,
+  override val mapping: ElementMapping,
   override val table: DataFrameTable
-) extends EntityTable[DataFrameTable] with RecordBehaviour {
+) extends ElementTable[DataFrameTable] with RecordBehaviour {
 
   override type Records = SparkEntityTable
 
-  private[spark] def records(implicit cypherEngine: SparkCypherSession): SparkCypherRecords = cypherEngine.records.fromEntityTable(entityTable = this)
+  private[spark] def records(implicit cypherEngine: SparkCypherSession): SparkCypherRecords = cypherEngine.records.fromElementTable(entityTable = this)
 
   override def cache(): SparkEntityTable = {
     table.cache()

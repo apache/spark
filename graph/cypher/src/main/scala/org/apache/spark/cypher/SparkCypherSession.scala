@@ -27,7 +27,7 @@ import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, UnsupportedOperationException}
 import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherGraphFactory, RelationalCypherSession}
 import org.opencypher.okapi.relational.api.planning.RelationalCypherResult
-import org.opencypher.okapi.relational.api.table.RelationalEntityTableFactory
+import org.opencypher.okapi.relational.api.table.RelationalElementTableFactory
 
 object SparkCypherSession {
   def create(implicit sparkSession: SparkSession): CypherSession = new SparkCypherSession(sparkSession)
@@ -56,7 +56,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     }
   }
 
-  override def entityTables: RelationalEntityTableFactory[DataFrameTable] = {
+  override def elementTables: RelationalElementTableFactory[DataFrameTable] = {
     throw UnsupportedOperationException("Graph construction with `CONSTRUCT` is not supported in Cypher 9")
   }
 
