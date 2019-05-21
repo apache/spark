@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import scala.collection.mutable
@@ -167,14 +167,25 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("InMemoryFileIndex: folders that don't exist don't throw exceptions") {
+  test("InMemoryFileIndex: respects ignoreMissingFiles config") {
     withTempDir { dir =>
       val deletedFolder = new File(dir, "deleted")
       assert(!deletedFolder.exists())
-      val catalog1 = new InMemoryFileIndex(
+
+      def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
         spark, Seq(new Path(deletedFolder.getCanonicalPath)), Map.empty, None)
-      // doesn't throw an exception
-      assert(catalog1.listLeafFiles(catalog1.rootPaths).isEmpty)
+
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+        intercept[FileNotFoundException] {
+          makeCatalog()
+        }
+      }
+
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+        val catalog = makeCatalog()
+        // doesn't throw an exception
+        assert(catalog.listLeafFiles(catalog.rootPaths).isEmpty)
+      }
     }
   }
 
