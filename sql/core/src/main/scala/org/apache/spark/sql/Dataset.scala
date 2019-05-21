@@ -498,12 +498,21 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended)
-    sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
-      // scalastyle:off println
-      r => println(r.getString(0))
-      // scalastyle:on println
-    }
+    // Because temporary views are resolved during analysis when we create a Dataset, and
+    // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
+    // `ExplainCommand` here will probably output different query plans, compared to the results
+    // of evaluation of the Dataset. So just output QueryExecution's query plans here.
+    val qe = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan, queryExecution)
+
+    val outputString =
+      if (extended) {
+        qe.toString
+      } else {
+        qe.simpleString
+      }
+    // scalastyle:off println
+    println(outputString)
+    // scalastyle:on println
   }
 
   /**
