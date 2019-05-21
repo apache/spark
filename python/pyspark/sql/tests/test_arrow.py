@@ -191,6 +191,18 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf.columns[0], "field1")
         self.assertTrue(pdf.empty)
 
+    def test_propagates_spark_exception(self):
+        df = self.spark.range(3).toDF("i")
+        from pyspark.sql.functions import udf
+
+        def raise_exception():
+            raise Exception("My error")
+        exception_udf = udf(raise_exception, IntegerType())
+        df = df.withColumn("error", exception_udf())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, 'My error'):
+                df.toPandas()
+
     def _createDataFrame_toggle(self, pdf, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.enabled": False}):
             df_no_arrow = self.spark.createDataFrame(pdf, schema=schema)
