@@ -45,22 +45,23 @@ private[spark] object ResourceDiscoverer extends Logging {
   /**
    * This function will discover information about a set of resources by using the
    * user specified script (spark.{driver/executor}.resource.{resourceName}.discoveryScript).
-   * It either takes a set of resource names or if that isn't specified
-   * it uses the config prefix to look at the executor or driver configs
+   * It optionally takes a set of resource names or if that isn't specified
+   * it uses the config prefix passed in to look at the executor or driver configs
    * to get the resource names. Then for each resource it will run the discovery script
    * and get the ResourceInformation about it.
    *
    * @param sparkConf SparkConf
    * @param confPrefix Driver or Executor resource prefix
-   * @param resources Optional set of resource names
+   * @param resources Optionally specify resource names. If not set uses the resource configs based
+    *                  on confPrefix passed in to get resource names.
    * @return Map of resource name to ResourceInformation
    */
   def discoverResourcesInformation(
       sparkConf: SparkConf,
       confPrefix: String,
-      resources: Option[Set[String]] = None
+      resourceNamesOpt: Option[Set[String]] = None
       ): Map[String, ResourceInformation] = {
-    val resourceNames = resources.getOrElse(
+    val resourceNames = resourceNamesOpt.getOrElse(
       // get unique resource names by grabbing first part config with multiple periods,
       // ie resourceName.count, grab resourceName part
       SparkConf.getBaseOfConfigs(sparkConf.getAllWithPrefix(confPrefix))
@@ -108,10 +109,15 @@ private[spark] object ResourceDiscoverer extends Logging {
     result
   }
 
-  // Make sure the actual resources we have on startup is at least the number the user
-  // requested. Note that there is other code in SparkConf that makes sure we have executor configs
-  // for each task resource requirement and that they are large enough. This function
-  // is used by both driver and executors.
+  /**
+   * Make sure the actual resources we have on startup are at least the number the user
+   * requested. Note that there is other code in SparkConf that makes sure we have executor configs
+   * for each task resource requirement and that they are large enough. This function
+   * is used by both driver and executors.
+   *
+   * @param requiredResources The resources that are required for us to run.
+   * @param actualResources The actual resources discovered.
+   */
   def checkActualResourcesMeetRequirements(
       requiredResources: Map[String, String],
       actualResources: Map[String, ResourceInformation]): Unit = {
