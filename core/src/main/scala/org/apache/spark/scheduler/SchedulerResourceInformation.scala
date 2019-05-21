@@ -42,6 +42,7 @@ private[spark] class SchedulerResourceInformation(
     assert(num <= availableAddresses.size, s"Required to take $num $name addresses but only " +
       s"${availableAddresses.size} available.")
     val addrs = availableAddresses.take(num)
+    availableAddresses --= addrs
     allocatedAddresses ++= addrs
     addrs
   }

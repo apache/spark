@@ -863,7 +863,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      eventually(timeout(10.seconds)) {
+      eventually(timeout(60.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.size == 3)
       }
 
