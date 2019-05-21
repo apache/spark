@@ -2359,9 +2359,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postApplicationStart() {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
-    listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls,
-      schedulerBackend.getDriverAttributes))
+    listenerBus.post(getSparkListenerApplicationStart())
     _driverLogger.foreach(_.startSync(_hadoopConfiguration))
   }
 
@@ -2373,14 +2371,22 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Post the environment update event once the task scheduler is ready */
   private def postEnvironmentUpdate() {
     if (taskScheduler != null) {
-      val schedulingMode = getSchedulingMode.toString
-      val addedJarPaths = addedJars.keys.toSeq
-      val addedFilePaths = addedFiles.keys.toSeq
-      val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
-        schedulingMode, addedJarPaths, addedFilePaths)
-      val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
-      listenerBus.post(environmentUpdate)
+      listenerBus.post(getSparkListenerEnvironmentUpdate())
     }
+  }
+
+  private[spark] def getSparkListenerApplicationStart(): SparkListenerApplicationStart = {
+    SparkListenerApplicationStart(appName, Some(applicationId),
+      startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls)
+  }
+
+  private[spark] def getSparkListenerEnvironmentUpdate(): SparkListenerEnvironmentUpdate = {
+    val schedulingMode = getSchedulingMode.toString
+    val addedJarPaths = addedJars.keys.toSeq
+    val addedFilePaths = addedFiles.keys.toSeq
+    val environmentDetails = SparkEnv.environmentDetails(conf, hadoopConfiguration,
+      schedulingMode, addedJarPaths, addedFilePaths)
+    SparkListenerEnvironmentUpdate(environmentDetails)
   }
 
   /** Reports heartbeat metrics for the driver. */

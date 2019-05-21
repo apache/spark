@@ -749,6 +749,8 @@ class SQLContext private[sql](val sparkSession: SparkSession)
  */
 object SQLContext {
 
+  val SESSION_ID_KEY = "spark.sql.session.id"
+
   /**
    * Converts an iterator of Java Beans to InternalRow using the provided
    * bean info & schema. This is not related to the singleton, but is a static

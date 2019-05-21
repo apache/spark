@@ -34,7 +34,8 @@ case class SparkListenerSQLExecutionStart(
     details: String,
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
-    time: Long)
+    time: Long,
+    sessionId: Option[String] = None)
   extends SparkListenerEvent
 
 @DeveloperApi
@@ -98,3 +99,11 @@ private class LongLongTupleConverter extends Converter[(Object, Object), (Long, 
     typeFactory.constructSimpleType(classOf[(_, _)], Array(longType, longType))
   }
 }
+
+case class SparkListenerSQLSessionStart(
+    sessionId: String,
+    time: Long) extends SparkListenerEvent
+
+case class SparkListenerSQLSessionEnd(
+    sessionId: String,
+    time: Long) extends SparkListenerEvent

@@ -47,6 +47,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
 object HiveThriftServer2 extends Logging {
   var uiTab: Option[ThriftServerTab] = None
   var listener: HiveThriftServer2Listener = _
+  var sessionAwareEventLoggingListener: SessionAwareEventLoggingListener = _
 
   /**
    * :: DeveloperApi ::
@@ -89,6 +90,9 @@ object HiveThriftServer2 extends Logging {
     ShutdownHookManager.addShutdownHook { () =>
       SparkSQLEnv.stop()
       uiTab.foreach(_.detach())
+      if (sessionAwareEventLoggingListener != null) {
+        sessionAwareEventLoggingListener.stop()
+      }
     }
 
     val executionHive = HiveUtils.newClientForExecution(
@@ -102,6 +106,26 @@ object HiveThriftServer2 extends Logging {
       logInfo("HiveThriftServer2 started")
       listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
       SparkSQLEnv.sparkContext.addSparkListener(listener)
+
+      if (SparkSQLEnv.sqlContext.conf.hiveThriftServerEventLogEnabled) {
+        val eventLogDir = Utils.resolveURI(
+          SparkSQLEnv.sqlContext.conf.hiveThriftServerEventLogDir.stripSuffix("/"))
+        val ctx = SparkSQLEnv.sqlContext.sparkContext
+        sessionAwareEventLoggingListener =
+          new SessionAwareEventLoggingListener(
+            ctx.applicationId,
+            ctx.applicationAttemptId,
+            eventLogDir,
+            ctx.getConf,
+            SparkSQLEnv.sqlContext.conf,
+            ctx.hadoopConfiguration)
+        sessionAwareEventLoggingListener
+          .onApplicationStart(ctx.getSparkListenerApplicationStart())
+        sessionAwareEventLoggingListener
+          .onEnvironmentUpdate(ctx.getSparkListenerEnvironmentUpdate())
+        ctx.addSparkListener(sessionAwareEventLoggingListener)
+      }
+
       uiTab = if (SparkSQLEnv.sparkContext.getConf.get(UI_ENABLED)) {
         Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
       } else {

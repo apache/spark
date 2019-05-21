@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.concurrent.Executors
-
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLSessionEnd, SparkListenerSQLSessionStart}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
@@ -63,16 +60,22 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     } else {
       sqlContext.newSession()
     }
+    sqlContext.sparkContext.setLocalProperty(
+      SQLContext.SESSION_ID_KEY, sessionHandle.getSessionId.toString)
     ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
       ctx.sql(s"use ${sessionConf.get("use:database")}")
     }
     sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
+    sqlContext.sparkContext.listenerBus.post(
+      SparkListenerSQLSessionStart(sessionHandle.getSessionId.toString, System.currentTimeMillis()))
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
+    sqlContext.sparkContext.listenerBus.post(
+      SparkListenerSQLSessionEnd(sessionHandle.getSessionId.toString, System.currentTimeMillis()))
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)

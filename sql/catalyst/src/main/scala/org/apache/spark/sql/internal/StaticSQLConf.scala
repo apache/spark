@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.internal
 
+import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.util.Utils
 
 
@@ -97,6 +98,39 @@ object StaticSQLConf {
         "SQL configuration and the current database.")
       .booleanConf
       .createWithDefault(false)
+
+  val HIVE_THRIFT_SERVER_EVENTLOG_ENABLED =
+    buildStaticConf("spark.sql.hive.thriftServer.eventLog.enabled")
+      .doc("When set to true, Hive Thrift server event log will be enabled. " +
+        "Each session's event log will logged into standalone file.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HIVE_THRIFT_SERVER_EVENTLOG_DIR =
+    buildStaticConf("spark.sql.hive.thriftServer.eventLog.dir")
+      .doc("Path to the directory in which devents are logged.")
+      .stringConf
+      .createWithDefault(EventLoggingListener.DEFAULT_LOG_DIR)
+
+  val HIVE_THRIFT_SERVER_EVENTLOG_COMPRESS =
+    buildStaticConf("spark.sql.hive.thriftServer.eventLog.compress")
+      .fallbackConf(org.apache.spark.internal.config.EVENT_LOG_OVERWRITE)
+
+  val HIVE_THRIFT_SERVER_EVENTLOG_OVERWRITE =
+    buildStaticConf("spark.sql.hive.thriftServer.eventLog.overwrite")
+      .fallbackConf(org.apache.spark.internal.config.EVENT_LOG_COMPRESS)
+
+  val HIVE_THRIFT_SERVER_EVENTLOG_TESTING =
+    buildStaticConf("spark.sql.hive.thriftServer.eventLog.testing")
+      .fallbackConf(org.apache.spark.internal.config.EVENT_LOG_TESTING)
+
+  val HIVE_THRIFT_SERVER_EVENTLOG_OUTPUT_BUFFER_SIZE =
+    buildStaticConf("spark.sql.hive.thriftServer.eventLog.buffer.kb")
+      .fallbackConf(org.apache.spark.internal.config.EVENT_LOG_OUTPUT_BUFFER_SIZE)
+
+  val HIVE_THRIFT_SERVER_EVENTLOG_STAGE_EXECUTOR_METRICS =
+    buildStaticConf("spark.sql.hive.thriftServer.eventLog.logStageExecutorMetrics.enabled")
+      .fallbackConf(org.apache.spark.internal.config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
 
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("A comma-separated list of classes that implement " +

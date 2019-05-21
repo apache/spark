@@ -2074,6 +2074,12 @@ class SQLConf extends Serializable with Logging {
   def hiveThriftServerSingleSession: Boolean =
     getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
 
+  def hiveThriftServerEventLogEnabled: Boolean =
+    getConf(StaticSQLConf.HIVE_THRIFT_SERVER_EVENTLOG_ENABLED)
+
+  def hiveThriftServerEventLogDir: String =
+    getConf(StaticSQLConf.HIVE_THRIFT_SERVER_EVENTLOG_DIR)
+
   def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
