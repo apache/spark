@@ -37,6 +37,7 @@ import org.apache.spark.unsafe.types.UTF8String
 object UTF8StringBenchmark extends BenchmarkBase {
 
   private val numStringsPerIteration = 1000
+  private val numIters = 10000
 
   // Data generation -----------------------------------------------------------------------------
 
@@ -57,20 +58,16 @@ object UTF8StringBenchmark extends BenchmarkBase {
 
   private def generateStrings(
       charset: String,
-      length: String): Array[String] = {
+      length: Int): Array[String] = {
     val gen = charset match {
       case "ASCII" => newAsciiGen()
       case "UTF8" => newUTF8Gen()
-    }
-    val (minSize, maxSize) = length match {
-      case "short" => (0, 32)
-      case "long" => (33, 1000)
     }
     val rand = new Random(42)
     new RandomStringGenerator.Builder()
       .usingRandom((i: Int) => rand.nextInt(i))
       .build()
-    Array.fill(numStringsPerIteration)(gen.generate(minSize, maxSize))
+    Array.fill(numStringsPerIteration)(gen.generate(length, length))
   }
 
   private def test(strings: Array[UTF8String], f: UTF8String => Unit): Unit = {
@@ -88,11 +85,11 @@ object UTF8StringBenchmark extends BenchmarkBase {
     runBenchmark("numChars") {
       val benchmark = new Benchmark("numChars", numStringsPerIteration, output = output)
       for (
-        charset <- Seq("ASCII", "UTF8");
-        length <- Seq("short", "long")
+        length <- Seq(16, 32, 256);
+        charset <- Seq("ASCII", "UTF8")
       ) {
         val utf8Strings = generateStrings(charset, length).map(UTF8String.fromString)
-        benchmark.addCase(s"$length $charset") { _ => test(utf8Strings, _.numChars) }
+        benchmark.addCase(s"$length-char $charset", numIters) { _ => test(utf8Strings, _.numChars) }
       }
       benchmark.run()
     }
