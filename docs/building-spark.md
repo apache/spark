@@ -51,7 +51,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 
 ### build/mvn
 
-Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
+Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](https://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
 
     ./build/mvn -DskipTests clean package
 
@@ -125,7 +125,7 @@ should run continuous compilation (i.e. wait for changes). However, this has not
 extensively. A couple of gotchas to note:
 
 * it only scans the paths `src/main` and `src/test` (see
-[docs](http://davidb.github.io/scala-maven-plugin/example_cc.html)), so it will only work
+[docs](https://davidb.github.io/scala-maven-plugin/example_cc.html)), so it will only work
 from within certain submodules that have that structure.
 
 * you'll typically need to run `mvn install` from the project root for compilation within
@@ -159,7 +159,7 @@ Configure the JVM options for SBT in `.jvmopts` at the project root, for example
     -Xmx2g
     -XX:ReservedCodeCacheSize=512m
 
-For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](http://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
+For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](https://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
 
 ## Speeding up Compilation
 
@@ -238,8 +238,8 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
 
-    R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
-    R -e "devtools::install_version('testthat', version = '1.0.2', repos='http://cran.us.r-project.org')"
+    R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
+    R -e "devtools::install_version('testthat', version = '1.0.2', repos='https://cloud.r-project.org/')"
 
 You can run just the SparkR tests using the command:
 
