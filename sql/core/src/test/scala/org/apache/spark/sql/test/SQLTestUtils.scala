@@ -300,6 +300,30 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
+   * Drops cache `cacheName` after calling `f`.
+   */
+  protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      cacheNames.foreach { cacheName =>
+        try uncacheTable(cacheName) catch {
+          case _: AnalysisException =>
+        }
+      }
+    }
+  }
+
+  // Blocking uncache table for tests
+  protected def uncacheTable(tableName: String): Unit = {
+    val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
+    spark.sharedState.cacheManager.uncacheQuery(
+      spark,
+      spark.table(tableName).logicalPlan,
+      cascade = cascade,
+      blocking = true)
+  }
+
+  /**
    * Creates a temporary database and switches current database to it before executing `f`.  This
    * database is dropped after `f` returns.
    *
