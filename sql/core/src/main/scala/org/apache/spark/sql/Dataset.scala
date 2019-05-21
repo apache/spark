@@ -1114,7 +1114,7 @@ class Dataset[T] private[sql](
       ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
 
     val leftResultExpr = {
-      if (this.exprEnc.isSerializedAsStructForTopLevel) {
+      if (!this.exprEnc.isSerializedAsStructForTopLevel) {
         assert(joined.left.output.length == 1)
         Alias(joined.left.output.head, "_1")()
       } else {
@@ -1123,7 +1123,7 @@ class Dataset[T] private[sql](
     }
 
     val rightResultExpr = {
-      if (other.exprEnc.isSerializedAsStructForTopLevel) {
+      if (!other.exprEnc.isSerializedAsStructForTopLevel) {
         assert(joined.right.output.length == 1)
         Alias(joined.right.output.head, "_2")()
       } else {
@@ -1148,14 +1148,14 @@ class Dataset[T] private[sql](
       // combine the outputs of each join side.
       val conditionExpr = joined.condition.get transformUp {
         case a: Attribute if joined.left.outputSet.contains(a) =>
-          if (this.exprEnc.isSerializedAsStructForTopLevel) {
+          if (!this.exprEnc.isSerializedAsStructForTopLevel) {
             left.output.head
           } else {
             val index = joined.left.output.indexWhere(_.exprId == a.exprId)
             GetStructField(left.output.head, index)
           }
         case a: Attribute if joined.right.outputSet.contains(a) =>
-          if (other.exprEnc.isSerializedAsStructForTopLevel) {
+          if (!other.exprEnc.isSerializedAsStructForTopLevel) {
             right.output.head
           } else {
             val index = joined.right.output.indexWhere(_.exprId == a.exprId)
