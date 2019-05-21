@@ -3290,12 +3290,9 @@ class Dataset[T] private[sql](
       PythonRDD.serveToStream("serve-Arrow") { outputStream =>
         val out = new DataOutputStream(outputStream)
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
-        val arrowBatchRdd = toArrowBatchRdd(plan)
-        val numPartitions = arrowBatchRdd.partitions.length
 
         // Batches ordered by (index of partition, batch index in that partition) tuple
         val batchOrder = ArrayBuffer.empty[(Int, Int)]
-        var partitionCount = 0
 
         // Handler to eagerly write batches to Python as they arrive, un-ordered
         def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
@@ -3306,35 +3303,24 @@ class Dataset[T] private[sql](
               partitionBatchIndex => batchOrder.append((index, partitionBatchIndex))
             }
           }
-          partitionCount += 1
-
-          // After last batch, end the stream and write batch order indices
-          if (partitionCount == numPartitions) {
-            doAfterLastPartition()
-          }
         }
 
-        def doAfterLastPartition(): Unit = {
-          batchWriter.end()
-          out.writeInt(batchOrder.length)
-          // Sort by (index of partition, batch index in that partition) tuple to get the
-          // overall_batch_index from 0 to N-1 batches, which can be used to put the
-          // transferred batches in the correct order
-          batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
-            out.writeInt(overallBatchIndex)
-          }
-          out.flush()
-        }
-
+        val arrowBatchRdd = toArrowBatchRdd(plan)
         sparkSession.sparkContext.runJob(
           arrowBatchRdd,
-          (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
-          0 until numPartitions,
-          handlePartitionBatches)
+          (it: Iterator[Array[Byte]]) => it.toArray,
+          handlePartitionBatches _)
 
-        if (numPartitions == 0) {
-          doAfterLastPartition()
+        // After processing all partitions, end the stream and write batch order indices
+        batchWriter.end()
+        out.writeInt(batchOrder.length)
+        // Sort by (index of partition, batch index in that partition) tuple to get the
+        // overall_batch_index from 0 to N-1 batches, which can be used to put the
+        // transferred batches in the correct order
+        batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+          out.writeInt(overallBatchIndex)
         }
+        out.flush()
       }
     }
   }
