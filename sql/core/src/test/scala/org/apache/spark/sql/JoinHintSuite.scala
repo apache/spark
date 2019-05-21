@@ -281,7 +281,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
           JoinHint(
             Some(HintInfo(strategy = Some(SHUFFLE_HASH))),
             Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil,
-        msgNoHintRelationFound("d", "merge(b, d)") ::
+        msgNoHintRelationFound("d", "merge('b, 'd)") ::
           msgJoinHintOverridden("broadcast") ::
           msgJoinHintOverridden("merge") :: Nil
       )
@@ -301,7 +301,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
           JoinHint(
             Some(HintInfo(strategy = Some(SHUFFLE_REPLICATE_NL))),
             Some(HintInfo(strategy = Some(SHUFFLE_HASH)))) :: Nil,
-        msgNoHintRelationFound("c", "broadcast(a, c)") ::
+        msgNoHintRelationFound("c", "broadcast('a, 'c)") ::
           msgJoinHintOverridden("merge") ::
           msgJoinHintOverridden("shuffle_replicate_nl") :: Nil
       )
