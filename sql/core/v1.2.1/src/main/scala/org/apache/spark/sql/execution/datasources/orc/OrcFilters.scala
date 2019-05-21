@@ -177,15 +177,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     filterAndBuild(dataTypeMap, expression, builder)
   }
 
-  sealed trait ActionType {
-    type T
-  }
-  case object FilterAction extends ActionType {
-    override type T = Option[Filter]
-  }
-  case object BuildAction extends ActionType {
-    override type T = Unit
-  }
+  sealed trait ActionType
+  case object FilterAction extends ActionType
+  case object BuildAction extends ActionType
 
   private def filterAndBuild(
       dataTypeMap: Map[String, DataType],
