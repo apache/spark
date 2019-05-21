@@ -105,7 +105,7 @@ case class DataSource(
       case _ => cls
     }
   }
-  lazy val providingInstance = providingClass.getConstructor().newInstance()
+  private lazy val providingInstance = providingClass.getConstructor().newInstance()
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
