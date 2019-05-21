@@ -692,9 +692,9 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           |  "type" : "record",
           |  "name" : "test_schema",
           |  "fields" : [{
-          |    "name": "enum",
+          |    "name": "Suit",
           |    "type": [{ "type": "enum",
-          |              "name": "Suit",
+          |              "name": "SuitEnumType",
           |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
           |            }, "null"]
           |  }]
@@ -734,9 +734,9 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           |  "type" : "record",
           |  "name" : "test_schema",
           |  "fields" : [{
-          |    "name": "enum",
+          |    "name": "Suit",
           |    "type": { "type": "enum",
-          |              "name": "Suit",
+          |              "name": "SuitEnumType",
           |              "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
           |            }
           |  }]
@@ -880,6 +880,53 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getCause.getMessage
       assert(message2.contains("org.apache.spark.sql.avro.IncompatibleSchemaException: " +
         "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes"))
+    }
+  }
+
+  test("support user provided avro schema for writing / reading fields with different ordering") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "Age", "type": "int"},
+          |    {"name": "Name", "type": "string"}
+          |  ]
+          |}
+        """.stripMargin
+
+      val avroSchemaReversed =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "Name", "type": "string"},
+          |    {"name": "Age", "type": "int"}
+          |  ]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))),
+        StructType(Seq(
+          StructField("Age", IntegerType, false),
+          StructField("Name", StringType, false))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      // Writing avro file with reversed field ordering
+      df.write.format("avro").option("avroSchema", avroSchemaReversed).save(tempSaveDir)
+
+      // Reading reversed avro file
+      checkAnswer(df.select("Name", "Age"), spark.read.format("avro").load(tempSaveDir))
+      checkAvroSchemaEquals(avroSchemaReversed, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      // Reading reversed avro file with provided original schema
+      val avroDf = spark.read.format("avro").option("avroSchema", avroSchema).load(tempSaveDir)
+      checkAnswer(df, avroDf)
+      assert(avroDf.schema.fieldNames.sameElements(Array("Age", "Name")))
     }
   }
 
