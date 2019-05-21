@@ -63,7 +63,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+      s"UTF8String.fromString(${classOf[DigestUtils].getName}.md5Hex($c))")
   }
 }
 
@@ -170,7 +170,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
+      s"UTF8String.fromString(${classOf[DigestUtils].getName}.sha1Hex($c))"
     )
   }
 }
