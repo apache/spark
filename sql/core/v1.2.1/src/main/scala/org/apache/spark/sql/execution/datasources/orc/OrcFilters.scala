@@ -20,21 +20,11 @@ package org.apache.spark.sql.execution.datasources.orc
 import org.apache.orc.storage.common.`type`.HiveDecimal
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
-import org.apache.orc.storage.ql.io.sarg.SearchArgument.TruthValue
 import org.apache.orc.storage.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.sql.sources.And
-import org.apache.spark.sql.sources.EqualNullSafe
-import org.apache.spark.sql.sources.EqualTo
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.GreaterThan
-import org.apache.spark.sql.sources.LessThan
-import org.apache.spark.sql.sources.LessThanOrEqual
-import org.apache.spark.sql.sources.Not
-import org.apache.spark.sql.sources.Or
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DecimalType.Expression
 
 /**
  * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
