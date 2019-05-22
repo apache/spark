@@ -60,8 +60,12 @@ package object config {
     .createWithDefaultString("1g")
 
   private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.memoryOverhead")
-    .doc("Amount of memory to be allocated outside the driver process in cluster mode, " +
-      "in MiB unless otherwise specified.")
+    .doc("Amount of non-heap memory to be allocated per driver process in cluster mode" +
+      " (e.g YARN and Kubernetes), in MiB unless otherwise specified." +
+      "Note: These non-heap memory including off-heap memory (when spark.memory.offHeap.enabled=true)" +
+      " and memory used by other non-driver processes running in the same container." +
+      "The maximum memory size of container to running driver is determined by the sum of" +
+      " spark.driver.memoryOverhead and spark.driver.memory.")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
@@ -185,8 +189,12 @@ package object config {
     .createWithDefaultString("1g")
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
-    .doc("Amount of memory to be allocated outside per executor process in cluster mode, " +
-      "in MiB unless otherwise specified.")
+    .doc("Amount of non-heap memory to be allocated per executor process in cluster mode " +
+      "(e.g YARN and Kubernetes), in MiB unless otherwise specified." +
+      "Note: These non-heap memory including off-heap memory (when spark.memory.offHeap.enabled=true)" +
+      " and memory used by other non-executor processes running in the same container."
+      "The maximum memory size of container to running executor is determined by the sum of " +
+      "spark.executor.memoryOverhead and spark.executor.memory.")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
@@ -201,7 +209,10 @@ package object config {
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
-      "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")
+      "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive." +
+      "Note: If off-heap memory use is enabled or off-heap memory size is increased, " +
+      "recommend raising the non-heap memory size (e.g increase spark.driver.memoryOverhead " +
+      "or spark.executor.memoryOverhead).")
     .withAlternative("spark.unsafe.offHeap")
     .booleanConf
     .createWithDefault(false)
