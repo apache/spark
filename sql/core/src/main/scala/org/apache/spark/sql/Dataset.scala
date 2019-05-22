@@ -1133,8 +1133,8 @@ class Dataset[T] private[sql](
 
     if (joined.joinType.isInstanceOf[InnerLike]) {
       // For inner joins, we can directly perform the join and then can project the join
-      // results into structs. This ensures that data remains as flat as possible during
-      // shuffles / exchanges.
+      // results into structs. This ensures that data remains flat during shuffles /
+      // exchanges (unlike the outer join path, which nests the data before shuffling).
       withTypedPlan(Project(Seq(leftResultExpr, rightResultExpr), joined))
     } else { // outer joins
       // For both join side, combine all outputs into a single column and alias it with "_1
