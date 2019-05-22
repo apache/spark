@@ -1769,9 +1769,14 @@ object SQLConf {
     .createWithDefault(false)
 
   val DEFAULT_V2_CATALOG = buildConf("spark.sql.default.catalog")
-      .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
-      .stringConf
-      .createOptional
+    .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+    .stringConf
+    .createOptional
+
+  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
+    .doc("When true, the upcast will be loose and allows string to atomic types.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
