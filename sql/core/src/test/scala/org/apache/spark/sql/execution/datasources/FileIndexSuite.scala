@@ -198,7 +198,7 @@ class FileIndexSuite extends SharedSQLContext {
 
     withClue("test missing subdirectories") {
       withSQLConf(
-          "fs.mockFs.impl" -> classOf[SubdirectoryDeletionRaceFileSystem].getName,
+         "fs.mockFs.impl" -> classOf[SubdirectoryDeletionRaceFileSystem].getName,
          "fs.mockFs.impl.disable.cache" -> "true") {
         doTest()
       }
@@ -206,7 +206,7 @@ class FileIndexSuite extends SharedSQLContext {
 
     withClue("test missing leaf files") {
       withSQLConf(
-          "fs.mockFs.impl" -> classOf[FileDeletionRaceFileSystem].getName,
+         "fs.mockFs.impl" -> classOf[FileDeletionRaceFileSystem].getName,
          "fs.mockFs.impl.disable.cache" -> "true") {
         doTest()
       }
