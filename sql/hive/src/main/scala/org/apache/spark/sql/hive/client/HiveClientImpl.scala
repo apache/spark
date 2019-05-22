@@ -107,6 +107,7 @@ private[hive] class HiveClientImpl(
     case hive.v2_1 => new Shim_v2_1()
     case hive.v2_2 => new Shim_v2_2()
     case hive.v2_3 => new Shim_v2_3()
+    case hive.v3_0 => new Shim_v3_0()
     case hive.v3_1 => new Shim_v3_1()
   }
 

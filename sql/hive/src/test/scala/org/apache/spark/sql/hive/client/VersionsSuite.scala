@@ -103,7 +103,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   }
 
   private val versions =
-    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.1")
+    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.0", "3.1")
 
   private var client: HiveClient = null
 
@@ -124,7 +124,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         hadoopConf.set("hive.metastore.schema.verification", "false")
       }
       // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
-      if (version == "3.1") {
+      if (version == "3.0" || version == "3.1") {
         hadoopConf.set("hive.in.test", "true")
       }
       client = buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
