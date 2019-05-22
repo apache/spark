@@ -181,7 +181,7 @@ of the most common options to set are:
   <td><code>spark.driver.memoryOverhead</code></td>
   <td>driverMemory * 0.10, with minimum of 384 </td>
   <td>
-    The amount of off-heap memory to be allocated per driver in cluster mode, in MiB unless
+    Amount of memory to be allocated outside the driver process in cluster mode, in MiB unless
     otherwise specified. This is memory that accounts for things like VM overheads, interned strings, 
     other native overheads, etc. This tends to grow with the container size (typically 6-10%). 
     This option is currently supported on YARN, Mesos and Kubernetes.
@@ -215,10 +215,10 @@ of the most common options to set are:
  <td><code>spark.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
-    The amount of off-heap memory to be allocated per executor, in MiB unless otherwise specified.
-    This is memory that accounts for things like VM overheads, interned strings, other native 
-    overheads, etc. This tends to grow with the executor size (typically 6-10%).
-    This option is currently supported on YARN and Kubernetes.
+    Amount of memory to be allocated outside per executor process in cluster mode, in MiB
+    unless otherwise specified.This is memory that accounts for things like VM overheads,
+    interned strings, other native overheads, etc. This tends to grow with the executor
+    size (typically 6-10%).This option is currently supported on YARN and Kubernetes.
   </td>
 </tr>
 <tr>
