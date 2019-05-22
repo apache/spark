@@ -42,8 +42,8 @@ ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
 #
 # This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
 # the most current package versions (instead of potentially using old versions cached by docker).
-RUN apt-get clean && apt-get update && $APT_INSTALL gnupg && $APT_INSTALL ca-certificates \
-  echo 'deb [trusted=yes] https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' >> /etc/apt/sources.list && \
+RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
+  echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' >> /etc/apt/sources.list && \
   gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
