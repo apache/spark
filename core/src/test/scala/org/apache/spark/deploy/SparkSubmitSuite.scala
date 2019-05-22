@@ -1325,12 +1325,12 @@ class SparkSubmitSuite
       "--class", "Foo",
       "app.jar")
     val conf = new SparkSubmitArguments(clArgs).toSparkConf()
-     Seq(
-       testConf,
-       masterConf
-     ).foreach { case (k, v) =>
-       conf.get(k) should be (v)
-     }
+    Seq(
+      testConf,
+      masterConf
+    ).foreach { case (k, v) =>
+      conf.get(k) should be (v)
+    }
   }
 }
 
