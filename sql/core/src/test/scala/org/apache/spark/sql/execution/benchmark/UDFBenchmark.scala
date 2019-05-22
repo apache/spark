@@ -70,7 +70,7 @@ object UDFBenchmark extends SqlBasedBenchmark {
         doRunBenchmarkWithMixedTypes(sampleUDF, cardinality)
       }
 
-      codegenBenchmark("long/nullable int to primitive", cardinality) {
+      codegenBenchmark("long/nullable int/string to primitive", cardinality) {
         val sampleUDF = udf {(a: Long, b: java.lang.Integer, _: String) =>
           Option(b).map(_.longValue()).getOrElse(a)
         }
@@ -93,7 +93,7 @@ object UDFBenchmark extends SqlBasedBenchmark {
         doRunBenchmarkWithPrimitiveTypes(sampleUDF, cardinality)
       }
 
-      codegenBenchmark("long/nullable int/string to primitive", cardinality) {
+      codegenBenchmark("long/nullable int to primitive", cardinality) {
         val sampleUDF = udf {(a: Long, b: java.lang.Integer) =>
           Option(b).map(_.longValue()).getOrElse(a)
         }
