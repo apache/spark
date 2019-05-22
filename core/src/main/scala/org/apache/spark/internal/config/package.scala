@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.GarbageCollectionMetrics
-import org.apache.spark.network.shuffle.Constant
+import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
@@ -369,7 +369,7 @@ package object config {
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
 
   private[spark] val SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
-    ConfigBuilder(Constant.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
+    ConfigBuilder(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
       .doc("Whether to use the ExternalShuffleService for fetching disk persisted RDD blocks. " +
         "In case of dynamic allocation if this feature is enabled executors having only disk " +
         "persisted blocks are considered idle after " +

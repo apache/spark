@@ -56,7 +56,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     return new TransportConf(
       "shuffle",
       new MapConfigProvider(ImmutableMap.of(
-        Constant.SHUFFLE_SERVICE_FETCH_RDD_ENABLED,
+        Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED,
         Boolean.toString(isFetchRddEnabled))));
   }
 
@@ -248,7 +248,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
   }
 
   private static void createRemovableTestFiles(TestShuffleDataContext dataContext)
-    throws IOException {
+      throws IOException {
     dataContext.insertSpillData();
     dataContext.insertBroadcastData();
     dataContext.insertTempShuffleData();

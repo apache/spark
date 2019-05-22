@@ -1379,8 +1379,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         new FileSegmentManagedBuffer(transConf, new File("missing.file"), 0, 0)
       }
     }
-    val store2 =
-      makeBlockManager(8000, "executor2", this.master, Some(emptyBlockFetcher))
+    val store2 = makeBlockManager(8000, "executor2", this.master, Some(emptyBlockFetcher))
     store.putSingle("item", "value", StorageLevel.DISK_ONLY, tellMaster = true)
     assert(master.getLocations("item").nonEmpty)
     assert(store2.getRemoteBytes("item").isEmpty)

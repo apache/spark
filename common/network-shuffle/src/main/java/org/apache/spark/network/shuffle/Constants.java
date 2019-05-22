@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
-public class Constant {
+public class Constants {
 
   public static final String SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
     "spark.shuffle.service.fetch.rdd.enabled";
