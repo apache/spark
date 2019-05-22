@@ -83,7 +83,6 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
     logger.warn("Exception in connection from " + getRemoteAddress(ctx.channel()),
       cause);
-    transportContext.getCaughtExceptions().inc();
     requestHandler.exceptionCaught(cause);
     responseHandler.exceptionCaught(cause);
     ctx.close();

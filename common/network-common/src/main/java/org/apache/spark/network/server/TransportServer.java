@@ -174,7 +174,4 @@ public class TransportServer implements Closeable {
     return context.getRegisteredConnections();
   }
 
-  public Counter getCaughtExceptions() {
-    return context.getCaughtExceptions();
-  }
 }

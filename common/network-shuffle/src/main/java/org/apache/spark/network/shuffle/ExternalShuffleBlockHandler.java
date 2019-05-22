@@ -127,6 +127,11 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     }
   }
 
+  @Override
+  public void exceptionCaught(Throwable cause, TransportClient client) {
+    metrics.caughtExceptions.inc();
+  }
+
   public MetricSet getAllMetrics() {
     return metrics;
   }

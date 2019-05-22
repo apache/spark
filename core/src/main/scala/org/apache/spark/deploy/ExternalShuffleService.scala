@@ -110,8 +110,6 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     shuffleServiceSource.registerMetricSet(server.getAllMetrics)
     blockHandler.getAllMetrics.getMetrics.put("numRegisteredConnections",
         server.getRegisteredConnections)
-    blockHandler.getAllMetrics.getMetrics.put("numCaughtExceptions",
-      server.getCaughtExceptions)
     shuffleServiceSource.registerMetricSet(blockHandler.getAllMetrics)
     masterMetricsSystem.registerSource(shuffleServiceSource)
     masterMetricsSystem.start()

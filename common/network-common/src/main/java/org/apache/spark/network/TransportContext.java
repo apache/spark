@@ -69,8 +69,6 @@ public class TransportContext implements Closeable {
   private final boolean closeIdleConnections;
   // Number of registered connections to the shuffle service
   private Counter registeredConnections = new Counter();
-  // Number of exceptions caught in connections to the shuffle service
-  private Counter caughtExceptions = new Counter();
 
   /**
    * Force to create MessageEncoder and MessageDecoder so that we can make sure they will be created
@@ -238,10 +236,6 @@ public class TransportContext implements Closeable {
 
   public Counter getRegisteredConnections() {
     return registeredConnections;
-  }
-
-  public Counter getCaughtExceptions() {
-    return caughtExceptions;
   }
 
   public void close() {
