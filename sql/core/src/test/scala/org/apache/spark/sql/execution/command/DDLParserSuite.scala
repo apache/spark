@@ -40,7 +40,6 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-
 class DDLParserSuite extends PlanTest with SharedSQLContext {
   private lazy val parser = new SparkSqlParser(new SQLConf)
 

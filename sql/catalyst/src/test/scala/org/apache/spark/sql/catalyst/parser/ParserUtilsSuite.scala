@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -177,10 +178,10 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("withOrigin") {
-    val ctx = createDbContext.locationSpec
+    val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
-    val (location, origin) = withOrigin(ctx.get(0)) {
-      (string(ctx.get(0).STRING), CurrentOrigin.get)
+    val (location, origin) = withOrigin(ctx) {
+      (string(ctx.STRING), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))
