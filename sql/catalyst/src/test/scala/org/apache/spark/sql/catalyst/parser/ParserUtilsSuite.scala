@@ -152,14 +152,14 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
     assert(string(createDbContext.comment) == "database_comment")
 
-    assert(string(createDbContext.locationSpec.STRING) == "/home/user/db")
+    assert(string(createDbContext.locationSpec.get(0).STRING) == "/home/user/db")
   }
 
   test("position") {
     assert(position(setConfContext.start) == Origin(Some(1), Some(0)))
     assert(position(showFuncContext.stop) == Origin(Some(1), Some(19)))
     assert(position(descFuncContext.describeFuncName.start) == Origin(Some(1), Some(27)))
-    assert(position(createDbContext.locationSpec.start) == Origin(Some(3), Some(27)))
+    assert(position(createDbContext.locationSpec.get(0).start) == Origin(Some(3), Some(27)))
     assert(position(emptyContext.stop) == Origin(None, None))
   }
 
@@ -179,8 +179,8 @@ class ParserUtilsSuite extends SparkFunSuite {
   test("withOrigin") {
     val ctx = createDbContext.locationSpec
     val current = CurrentOrigin.get
-    val (location, origin) = withOrigin(ctx) {
-      (string(ctx.STRING), CurrentOrigin.get)
+    val (location, origin) = withOrigin(ctx.get(0)) {
+      (string(ctx.get(0).STRING), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))

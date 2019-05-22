@@ -85,8 +85,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     val sql =
       """
        |CREATE DATABASE IF NOT EXISTS database_name
-       |COMMENT 'database_comment' LOCATION '/home/user/db'
        |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+       |COMMENT 'database_comment' LOCATION '/home/user/db'
       """.stripMargin
     val parsed = parser.parsePlan(sql)
     val expected = CreateDatabaseCommand(
@@ -96,6 +96,23 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       Some("database_comment"),
       Map("a" -> "a", "b" -> "b", "c" -> "c"))
     comparePlans(parsed, expected)
+  }
+
+  test("create database -- check duplicates") {
+    def createDatabase(duplicateClause: String): String = {
+      s"""
+        |CREATE DATABASE IF NOT EXISTS database_name
+        |$duplicateClause
+        |$duplicateClause
+      """.stripMargin
+    }
+    val sql1 = createDatabase("COMMENT 'database_comment'")
+    val sql2 = createDatabase("LOCATION '/home/user/db'")
+    val sql3 = createDatabase("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: LOCATION")
+    intercept(sql3, "Found duplicate clauses: WITH DBPROPERTIES")
   }
 
   test("create database - property values must be set") {
@@ -1517,8 +1534,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       """
         |CREATE OR REPLACE VIEW view1
         |(col1, col3 COMMENT 'hello')
-        |COMMENT 'BLABLA'
         |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
         |AS SELECT * FROM tab1
       """.stripMargin
     val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
@@ -1535,6 +1552,22 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     intercept[ParseException] {
       parser.parsePlan(v1)
     }
+  }
+
+  test("create view - duplicate clauses") {
+    def createViewStatement(duplicateClause: String): String = {
+      s"""
+        |CREATE OR REPLACE VIEW view1
+        |(col1, col3 COMMENT 'hello')
+        |$duplicateClause
+        |$duplicateClause
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    }
+    val sql1 = createViewStatement("COMMENT 'BLABLA'")
+    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
   test("MSCK REPAIR table") {

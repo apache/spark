@@ -84,8 +84,9 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE db=identifier                                                #use
     | CREATE database (IF NOT EXISTS)? identifier
-        (COMMENT comment=STRING)? locationSpec?
-        (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
+        ((COMMENT comment=STRING) |
+         locationSpec |
+         (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
     | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
