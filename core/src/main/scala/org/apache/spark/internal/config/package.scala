@@ -193,8 +193,8 @@ package object config {
       "(e.g YARN and Kubernetes), in MiB unless otherwise specified." +
       "Note: These non-heap memory including off-heap memory (when spark.memory.offHeap.enabled=true)" +
       " and memory used by other non-executor processes running in the same container."
-      "The maximum memory size of container to running executor is determined by the sum of " +
-      "spark.executor.memoryOverhead and spark.executor.memory.")
+      "The maximum memory size of container to running executor is determined by the sum of" +
+      " spark.executor.memoryOverhead and spark.executor.memory.")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
