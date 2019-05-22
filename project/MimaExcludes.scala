@@ -438,6 +438,9 @@ object MimaExcludes {
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasRawPredictionCol.org$apache$spark$ml$param$shared$HasRawPredictionCol$_setter_$rawPredictionCol_="),
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasRawPredictionCol.getRawPredictionCol"),
 
+    // [SPARK-23191][STANDALONE] add hasLeadership to LeaderElectionAgent
+    ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.deploy.master.LeaderElectionAgent.hasLeadership"),
+
     // [SPARK-15526][ML][FOLLOWUP] Make JPMML provided scope to avoid including unshaded JARs
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>
