@@ -410,11 +410,8 @@ class SubdirectoryDeletionRaceFileSystem extends RawLocalFileSystem {
 
   override def listStatus(path: Path): Array[FileStatus] = {
     if (path == rootFolderPath) {
-      println("LISTED ROOT")
       rootListing
     } else if (path == subFolderPath) {
-      println("LISTED SUBFOLDER")
-      Thread.dumpStack()
       throw new FileNotFoundException()
     } else {
       throw new IllegalArgumentException()
