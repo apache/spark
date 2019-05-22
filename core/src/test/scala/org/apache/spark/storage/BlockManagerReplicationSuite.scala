@@ -416,12 +416,12 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
 class BlockManagerReplicationSuite extends BlockManagerReplicationBehavior {
   val conf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
 }
 
 class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehavior {
   val conf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
   conf.set(STORAGE_REPLICATION_PROACTIVE, true)
   conf.set(STORAGE_EXCEPTION_PIN_LEAK, true)
 
@@ -496,7 +496,7 @@ class DummyTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with Log
 
 class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationBehavior {
   val conf: SparkConf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
   conf.set(
     STORAGE_REPLICATION_POLICY,
     classOf[BasicBlockReplicationPolicy].getName)
