@@ -42,7 +42,7 @@ import org.apache.spark.sql.types._
  *    be pulled out as join conditions, value = selected column will also be used as join
  *    condition.
  */
-object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
+object RewriteCorrelatedPredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
   private def buildJoin(
       outerPlan: LogicalPlan,
@@ -92,11 +92,26 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  /**
+    * Returns true when an expression contains a correlated IN or correlated EXISTS and
+    * false otherwise. An IN is non-correlated only if the left values are foldable
+    * and the subquery has no outer references.
+    */
+  def hasCorrelatedInOrExists(e: Expression): Boolean = {
+    e.find {
+      case InSubquery(values, ListQuery(_, children, _, _)) =>
+        values.exists(!_.foldable) || children.nonEmpty
+      case Exists(_, children, _) =>
+        children.nonEmpty
+      case _ => false
+    }.isDefined
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(condition, child) =>
       val (withSubquery, withoutSubquery) =
         splitConjunctivePredicates(condition)
-          .partition(SubqueryExpression.hasCorrelatedInOrExists)
+          .partition(hasCorrelatedInOrExists)
 
       // Construct the pruned filter condition.
       val newFilter: LogicalPlan = withoutSubquery match {

@@ -87,7 +87,7 @@ class OptimizerRuleExclusionSuite extends PlanTest {
         ReplaceIntersectWithSemiJoin.ruleName,
         PullupCorrelatedPredicates.ruleName,
         RewriteCorrelatedScalarSubquery.ruleName,
-        RewritePredicateSubquery.ruleName,
+        RewriteCorrelatedPredicateSubquery.ruleName,
         RewriteExceptAll.ruleName,
         RewriteIntersectAll.ruleName))
   }

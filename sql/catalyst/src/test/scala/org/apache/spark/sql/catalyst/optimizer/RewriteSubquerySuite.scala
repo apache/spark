@@ -31,7 +31,7 @@ class RewriteSubquerySuite extends PlanTest {
     val batches =
       Batch("Column Pruning", FixedPoint(100), ColumnPruning) ::
       Batch("Rewrite Subquery", FixedPoint(1),
-        RewritePredicateSubquery,
+        RewriteCorrelatedPredicateSubquery,
         ColumnPruning,
         CollapseProject,
         RemoveNoopOperators) :: Nil

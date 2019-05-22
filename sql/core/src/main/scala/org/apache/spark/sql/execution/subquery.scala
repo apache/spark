@@ -109,35 +109,44 @@ case class InSubquery(
   override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(plan: BaseSubqueryExec): InSubquery = copy(plan = plan)
 
-  @volatile private var result: Boolean = _
+  @volatile private var result: Boolean = false
   @volatile private var isNull: Boolean = false
   @volatile private var updated: Boolean = false
 
   def updateResult(): Unit = {
-    val rows = plan.executeCollect()
     // The semantic of '(a,b) in ((x1, y1), (x2, y2), ...)' is
     // '(a = x1 and b = y1) or (a = x2 and b = y2) or ...'
-    val expression = rows.map(row => {
-      values.zipWithIndex.map {
-        case (left, idx) =>
-          val rightType = plan.schema.fields(idx).dataType
-          val right = Literal.create(row.get(idx, rightType), rightType)
-          expressions.EqualTo(left, right)
-      }.reduceLeft(expressions.And)
-    }).reduceLeftOption(expressions.Or)
-
-    expression match {
-      case None =>
-        result = false
-        isNull = false
-      case Some(expr) =>
-        val value = expr.eval()
-        if (value == null) {
-          isNull = true
-        } else {
-          isNull = false
-          result = value.asInstanceOf[Boolean]
+    val rows = plan.executeCollect()
+    var hasNullInDisjunction = false
+    val leftValues = values.map(_.value)
+    result = rows.exists(row => {
+      var hasNullInConjunction = false
+      val rowValues = row.toSeq(plan.schema)
+      val allTrueInConjunction = leftValues.zip(rowValues).forall({
+        case (left, right) =>
+          if (left == null) {
+            hasNullInConjunction = true
+            true
+          } else {
+            if (right == null) {
+              hasNullInConjunction = true
+              true
+            } else {
+              left == right
+            }
+          }
+      })
+      if (allTrueInConjunction && !hasNullInConjunction) {
+        true
+      } else {
+        if (allTrueInConjunction && hasNullInConjunction) {
+          hasNullInDisjunction = true
         }
+        false
+      }
+    })
+    if (!result && hasNullInDisjunction) {
+      isNull = true
     }
     updated = true
   }

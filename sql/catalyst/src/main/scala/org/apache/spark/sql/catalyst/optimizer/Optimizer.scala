@@ -182,7 +182,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
-      RewritePredicateSubquery,
+      RewriteCorrelatedPredicateSubquery,
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :+
@@ -216,7 +216,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ReplaceDistinctWithAggregate.ruleName ::
       PullupCorrelatedPredicates.ruleName ::
       RewriteCorrelatedScalarSubquery.ruleName ::
-      RewritePredicateSubquery.ruleName ::
+      RewriteCorrelatedPredicateSubquery.ruleName ::
       PullOutPythonUDFInJoinCondition.ruleName ::
       NormalizeFloatingNumbers.ruleName :: Nil
 
