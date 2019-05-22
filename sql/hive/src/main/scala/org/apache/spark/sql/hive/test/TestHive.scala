@@ -124,9 +124,9 @@ class TestHiveContext(
   extends SQLContext(sparkSession) {
 
   val HIVE_CONTRIB_JAR: String =
-    if (HiveUtils.isHive23) "hive-contrib-2.3.4.jar" else "hive-contrib-0.13.1.jar"
+    if (HiveUtils.isHive23) "hive-contrib-2.3.5.jar" else "hive-contrib-0.13.1.jar"
   val HIVE_HCATALOG_CORE_JAR: String =
-    if (HiveUtils.isHive23) "hive-hcatalog-core-2.3.4.jar" else "hive-hcatalog-core-0.13.1.jar"
+    if (HiveUtils.isHive23) "hive-hcatalog-core-2.3.5.jar" else "hive-hcatalog-core-0.13.1.jar"
 
   /**
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
