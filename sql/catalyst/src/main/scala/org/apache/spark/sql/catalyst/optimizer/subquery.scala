@@ -93,10 +93,10 @@ object RewriteCorrelatedPredicateSubquery extends Rule[LogicalPlan] with Predica
   }
 
   /**
-    * Returns true when an expression contains a correlated IN or correlated EXISTS and
-    * false otherwise. An IN is non-correlated only if the left values are foldable
-    * and the subquery has no outer references.
-    */
+   * Returns true when an expression contains a correlated IN or correlated EXISTS and
+   * false otherwise. An IN is non-correlated only if the left values are foldable
+   * and the subquery has no outer references.
+   */
   def hasCorrelatedInOrExists(e: Expression): Boolean = {
     e.find {
       case InSubquery(values, ListQuery(_, children, _, _)) =>
