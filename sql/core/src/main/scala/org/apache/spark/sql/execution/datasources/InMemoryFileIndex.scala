@@ -124,7 +124,7 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch, hadoopConf, filter, sparkSession)
+      pathsToFetch, hadoopConf, filter, sparkSession, areRootPaths = true)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -166,7 +166,8 @@ object InMemoryFileIndex extends Logging {
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
-      sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
+      sparkSession: SparkSession,
+      areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
@@ -174,7 +175,12 @@ object InMemoryFileIndex extends Logging {
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       return paths.map { path =>
         val leafFiles = listLeafFiles(
-          path, hadoopConf, filter, Some(sparkSession), ignoreMissingFiles = ignoreMissingFiles)
+          path,
+          hadoopConf,
+          filter,
+          Some(sparkSession),
+          ignoreMissingFiles = ignoreMissingFiles,
+          isRootPath = areRootPaths)
         (path, leafFiles)
       }
     }
@@ -209,7 +215,12 @@ object InMemoryFileIndex extends Logging {
           val hadoopConf = serializableConfiguration.value
           pathStrings.map(new Path(_)).toSeq.map { path =>
             val leafFiles = listLeafFiles(
-              path, hadoopConf, filter, None, ignoreMissingFiles = ignoreMissingFiles)
+              path,
+              hadoopConf,
+              filter,
+              None,
+              ignoreMissingFiles = ignoreMissingFiles,
+              isRootPath = areRootPaths)
             (path, leafFiles)
           }.iterator
         }.map { case (path, statuses) =>
@@ -274,14 +285,23 @@ object InMemoryFileIndex extends Logging {
       hadoopConf: Configuration,
       filter: PathFilter,
       sessionOpt: Option[SparkSession],
-      ignoreMissingFiles: Boolean): Seq[FileStatus] = {
+      ignoreMissingFiles: Boolean,
+      isRootPath: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
     val statuses = try fs.listStatus(path) catch {
-      case _: FileNotFoundException if ignoreMissingFiles =>
+      // If we are listing a root path (e.g. the top level directory of a table), ignore
+      // missing files. This is necessary in order to be able to drop SessionCatalog tables
+      // when the table's root directory has been deleted (see discussion at SPARK-27676).
+
+      // If we are NOT listing a root path then a FileNotFoundException here means that the
+      // directory was present in a previous round of file listing but is absent in this
+      // listing, likely indicating a race condition (e.g. concurrent table overwrite or S3
+      // list inconsistency).
+      case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
         logWarning(s"The directory $path was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
@@ -292,7 +312,13 @@ object InMemoryFileIndex extends Logging {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = sessionOpt match {
         case Some(session) =>
-          bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session).flatMap(_._2)
+          bulkListLeafFiles(
+            dirs.map(_.getPath),
+            hadoopConf,
+            filter,
+            session,
+            areRootPaths = false
+          ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
             listLeafFiles(
@@ -300,7 +326,8 @@ object InMemoryFileIndex extends Logging {
               hadoopConf,
               filter,
               sessionOpt,
-              ignoreMissingFiles = ignoreMissingFiles)
+              ignoreMissingFiles = ignoreMissingFiles,
+              isRootPath = false)
           }
       }
       val allFiles = topLevelFiles ++ nestedFiles
