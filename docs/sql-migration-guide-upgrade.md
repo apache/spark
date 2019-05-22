@@ -130,6 +130,8 @@ license: |
 
   - Since Spark 3.0, Spark will cast `String` to `Date/TimeStamp` in binary comparisons with dates/timestamps. The previous behaviour of casting `Date/Timestamp` to `String` can be restored by setting `spark.sql.legacy.typeCoercion.datetimeToString` to `true`.
 
+  - Since Spark 3.0, if files or subdirectories disappear during recursive directory listing (i.e. they appear in an intermediate listing but then cannot be read or listed further, due to either concurrent deletions or object store consistency issues) then the listing will fail with a `FileNotFoundException` unless `spark.sql.files.ignoreMissingFiles` is `true` (default `false`). In previous versions, these `FileNotFoundException`s would be logged as warnings and the missing files or subdirectories would be ignored.
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was
