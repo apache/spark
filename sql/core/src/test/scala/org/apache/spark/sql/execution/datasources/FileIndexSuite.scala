@@ -180,6 +180,7 @@ class FileIndexSuite extends SharedSQLContext {
   }
 
   test("SPARK-27676: InMemoryFileIndex respects ignoreMissingFiles config for non-root paths") {
+    import DeletionRaceFileSystem._
     for (
       raceCondition <- Seq(
         classOf[SubdirectoryDeletionRaceFileSystem],
@@ -194,16 +195,24 @@ class FileIndexSuite extends SharedSQLContext {
         withSQLConf(
           SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissingFiles.toString,
           SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> parDiscoveryThreshold.toString,
-          "fs.mockFs.impl" -> classOf[SubdirectoryDeletionRaceFileSystem].getName,
+          "fs.mockFs.impl" -> raceCondition.getName,
           "fs.mockFs.impl.disable.cache" -> "true"
         ) {
           def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
-            spark, Seq(DeletionRaceFileSystem.rootFolderPath), Map.empty, None)
+            spark, Seq(rootDirPath), Map.empty, None)
           if (ignoreMissingFiles) {
             // We're ignoring missing files, so catalog construction should succeed
             val catalog = makeCatalog()
-            // The catalog should list no files because the only file or subdirectory was missing
-            assert(catalog.listLeafFiles(catalog.rootPaths).isEmpty)
+            val leafFiles = catalog.listLeafFiles(catalog.rootPaths)
+            if (raceCondition == classOf[SubdirectoryDeletionRaceFileSystem]) {
+              // The only subdirectory was missing, so there should be no leaf files:
+              assert(leafFiles.isEmpty)
+            } else {
+              assert(raceCondition == classOf[FileDeletionRaceFileSystem])
+              // One of the two leaf files was missing, but we should still list the other:
+              assert(leafFiles.size == 1)
+              assert(leafFiles.head.getPath == nonDeletedLeafFilePath)
+            }
           } else {
             // We're NOT ignoring missing files, so catalog construction should fail
             val e = intercept[Exception] {
@@ -217,6 +226,13 @@ class FileIndexSuite extends SharedSQLContext {
             } else {
               // The FileNotFoundException occurs directly on the driver
               assert(e.isInstanceOf[FileNotFoundException])
+              // Test that the FileNotFoundException is triggered for the expected reason:
+              if (raceCondition == classOf[SubdirectoryDeletionRaceFileSystem]) {
+                assert(e.getMessage.contains(subDirPath.toString))
+              } else {
+                assert(raceCondition == classOf[FileDeletionRaceFileSystem])
+                assert(e.getMessage.contains(leafFilePath.toString))
+              }
             }
           }
         }
@@ -403,13 +419,16 @@ class FileIndexSuite extends SharedSQLContext {
 }
 
 object DeletionRaceFileSystem {
-  val rootFolderPath: Path = new Path("mockFs:///rootFolder/")
-  val subFolderPath: Path = new Path(rootFolderPath, "subFolder")
-  val leafFilePath: Path = new Path(subFolderPath, "leafFile")
+  val rootDirPath: Path = new Path("mockFs:///rootDir/")
+  val subDirPath: Path = new Path(rootDirPath, "subDir")
+  val leafFilePath: Path = new Path(subDirPath, "leafFile")
+  val nonDeletedLeafFilePath: Path = new Path(subDirPath, "nonDeletedLeafFile")
   val rootListing: Array[FileStatus] =
-    Array(new FileStatus(0, true, 0, 0, 0, subFolderPath))
+    Array(new FileStatus(0, true, 0, 0, 0, subDirPath))
   val subFolderListing: Array[FileStatus] =
-    Array(new FileStatus(0, false, 0, 100, 0, leafFilePath))
+    Array(
+      new FileStatus(0, false, 0, 100, 0, leafFilePath),
+      new FileStatus(0, false, 0, 100, 0, nonDeletedLeafFilePath))
 }
 
 // Used in SPARK-27676 test to simulate a race where a subdirectory is deleted
@@ -420,10 +439,10 @@ class SubdirectoryDeletionRaceFileSystem extends RawLocalFileSystem {
   override def getScheme: String = "mockFs"
 
   override def listStatus(path: Path): Array[FileStatus] = {
-    if (path == rootFolderPath) {
+    if (path == rootDirPath) {
       rootListing
-    } else if (path == subFolderPath) {
-      throw new FileNotFoundException()
+    } else if (path == subDirPath) {
+      throw new FileNotFoundException(subDirPath.toString)
     } else {
       throw new IllegalArgumentException()
     }
@@ -438,9 +457,9 @@ class FileDeletionRaceFileSystem extends RawLocalFileSystem {
   override def getScheme: String = "mockFs"
 
   override def listStatus(path: Path): Array[FileStatus] = {
-    if (path == rootFolderPath) {
+    if (path == rootDirPath) {
       rootListing
-    } else if (path == subFolderPath) {
+    } else if (path == subDirPath) {
       subFolderListing
     } else {
       throw new IllegalArgumentException()
@@ -451,7 +470,11 @@ class FileDeletionRaceFileSystem extends RawLocalFileSystem {
       file: FileStatus,
       start: Long,
       len: Long): Array[BlockLocation] = {
-    throw new FileNotFoundException()
+    if (file.getPath == leafFilePath) {
+      throw new FileNotFoundException(leafFilePath.toString)
+    } else {
+      Array.empty
+    }
   }
 }
 
