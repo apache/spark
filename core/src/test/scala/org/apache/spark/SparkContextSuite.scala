@@ -671,7 +671,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // task metrics via heartbeat to driver.
       .set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key, "false")
       // Set a short heartbeat interval to send SparkListenerExecutorMetricsUpdate fast
-      .set("spark.executor.heartbeatInterval", "1s")
+      .set(EXECUTOR_HEARTBEAT_INTERVAL.key, "1s")
     sc = new SparkContext(conf)
     sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
     @volatile var runningTaskIds: Seq[Long] = null

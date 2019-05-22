@@ -248,7 +248,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.getTimeAsSeconds("spark.yarn.am.waitTime") === 420)
 
     conf.set("spark.kryoserializer.buffer.mb", "1.1")
-    assert(conf.getSizeAsKb("spark.kryoserializer.buffer") === 1100)
+    assert(conf.getSizeAsKb(KRYO_SERIALIZER_BUFFER_SIZE.key) === 1100)
 
     conf.set("spark.history.fs.cleaner.maxAge.seconds", "42")
     assert(conf.get(MAX_LOG_AGE_S) === 42L)
