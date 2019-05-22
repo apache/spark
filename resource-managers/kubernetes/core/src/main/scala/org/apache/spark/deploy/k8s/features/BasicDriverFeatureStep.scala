@@ -27,7 +27,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -156,6 +155,15 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.resourceNamePrefix,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
+    // try upload local, resolvable files to a hadoop compatible file system
+    Seq(JARS, FILES).foreach { key =>
+      val value = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
+      val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
+      if (resolved.nonEmpty) {
+        additionalProps.put(key.key, resolved.mkString(","))
+      }
+    }
     additionalProps.toMap
   }
 }
+
