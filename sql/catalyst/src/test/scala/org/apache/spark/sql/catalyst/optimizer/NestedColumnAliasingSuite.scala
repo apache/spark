@@ -226,12 +226,11 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       'd.struct('f.int, 'g.int), 'e.int)))
 
     // `a.b`
-    val first = GetStructField('a, 0, Some("b"))
+    val first = 'a.getField("b")
     // `a.b.c` + 1
-    val second = GetStructField(GetStructField('a, 0, Some("b")), 0, Some("c")) + Literal(1)
+    val second = 'a.getField("b").getField("c") + Literal(1)
     // `a.b.d.f`
-    val last = GetStructField(GetStructField(
-      GetStructField('a, 0, Some("b")), 1, Some("d")), 0, Some("f"))
+    val last = 'a.getField("b").getField("d").getField("f")
 
     val query = nestedRelation
       .limit(5)
@@ -246,8 +245,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .select(first.as(aliases(0)))
       .limit(5)
       .select($"${aliases(0)}".as("a.b"),
-        (GetStructField($"${aliases(0)}", 0, Some("c")) + Literal(1)).as("(a.b.c + 1)"),
-        GetStructField(GetStructField($"${aliases(0)}", 1, Some("d")), 0, Some("f")).as("a.b.d.f"))
+        ($"${aliases(0)}".getField("c") + Literal(1)).as("(a.b.c + 1)"),
+        $"${aliases(0)}".getField("d").getField("f").as("a.b.d.f"))
       .analyze
 
     comparePlans(optimized, expected)
