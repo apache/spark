@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
 
+import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
@@ -179,36 +180,46 @@ class FileIndexSuite extends SharedSQLContext {
   }
 
   test("SPARK-27676: InMemoryFileIndex respects ignoreMissingFiles config for non-root paths") {
-    def doTest(): Unit = {
-      def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
-        spark, Seq(DeletionRaceFileSystem.rootFolderPath), Map.empty, None)
-
-      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        intercept[FileNotFoundException] {
-          makeCatalog()
+    for (
+      raceCondition <- Seq(
+        classOf[SubdirectoryDeletionRaceFileSystem],
+        classOf[FileDeletionRaceFileSystem]
+      );
+      ignoreMissingFiles <- Seq(true, false);
+      parDiscoveryThreshold <- Seq(0, 100)
+    ) {
+      withClue(s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
+        s"parDiscoveryThreshold=$parDiscoveryThreshold"
+      ) {
+        withSQLConf(
+          SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissingFiles.toString,
+          SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> parDiscoveryThreshold.toString,
+          "fs.mockFs.impl" -> classOf[SubdirectoryDeletionRaceFileSystem].getName,
+          "fs.mockFs.impl.disable.cache" -> "true"
+        ) {
+          def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
+            spark, Seq(DeletionRaceFileSystem.rootFolderPath), Map.empty, None)
+          if (ignoreMissingFiles) {
+            // We're ignoring missing files, so catalog construction should succeed
+            val catalog = makeCatalog()
+            // The catalog should list no files because the only file or subdirectory was missing
+            assert(catalog.listLeafFiles(catalog.rootPaths).isEmpty)
+          } else {
+            // We're NOT ignoring missing files, so catalog construction should fail
+            val e = intercept[Exception] {
+              makeCatalog()
+            }
+            // The exact exception depends on whether we're using parallel listing
+            if (parDiscoveryThreshold == 0) {
+              // The FileNotFoundException occurs in a Spark executor (as part of a job)
+              assert(e.isInstanceOf[SparkException])
+              assert(e.getMessage.contains("FileNotFoundException"))
+            } else {
+              // The FileNotFoundException occurs directly on the driver
+              assert(e.isInstanceOf[FileNotFoundException])
+            }
+          }
         }
-      }
-
-      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
-        val catalog = makeCatalog()
-        // doesn't throw an exception
-        assert(catalog.listLeafFiles(catalog.rootPaths).isEmpty)
-      }
-    }
-
-    withClue("test missing subdirectories") {
-      withSQLConf(
-         "fs.mockFs.impl" -> classOf[SubdirectoryDeletionRaceFileSystem].getName,
-         "fs.mockFs.impl.disable.cache" -> "true") {
-        doTest()
-      }
-    }
-
-    withClue("test missing leaf files") {
-      withSQLConf(
-         "fs.mockFs.impl" -> classOf[FileDeletionRaceFileSystem].getName,
-         "fs.mockFs.impl.disable.cache" -> "true") {
-        doTest()
       }
     }
   }
