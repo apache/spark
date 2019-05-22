@@ -62,7 +62,7 @@ package object config {
   private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.memoryOverhead")
     .doc("Amount of non-heap memory to be allocated per driver process in cluster mode" +
       " (e.g YARN and Kubernetes), in MiB unless otherwise specified." +
-      "Note: These non-heap memory including off-heap memory (when spark.memory.offHeap.enabled=true)" +
+      "Note: Non-heap memory including off-heap memory (when spark.memory.offHeap.enabled=true)" +
       " and memory used by other non-driver processes running in the same container." +
       "The maximum memory size of container to running driver is determined by the sum of " +
       "spark.driver.memoryOverhead and spark.driver.memory.")
@@ -191,7 +191,7 @@ package object config {
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
     .doc("Amount of non-heap memory to be allocated per executor process in cluster mode " +
       "(e.g YARN and Kubernetes), in MiB unless otherwise specified." +
-      "Note: These non-heap memory including off-heap memory (when spark.memory.offHeap.enabled=true)" +
+      "Note: Non-heap memory including off-heap memory (when spark.memory.offHeap.enabled=true)" +
       " and memory used by other non-executor processes running in the same container." +
       "The maximum memory size of container to running executor is determined by the sum of " +
       "spark.executor.memoryOverhead and spark.executor.memory.")
