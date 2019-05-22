@@ -19,7 +19,7 @@ import datetime
 import sys
 
 from pyspark.sql import Row
-from pyspark.sql.types import *
+from pyspark.sql.functions import udf, input_file_name
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -280,20 +280,19 @@ class FunctionsTests(ReusedSQLTestCase):
             [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
 
     def test_input_file_name_reset_for_rdd(self):
-        from pyspark.sql.functions import udf, input_file_name
         rdd = self.sc.textFile('python/test_support/hello/hello.txt').map(lambda x: {'data': x})
-        df = self.spark.createDataFrame(rdd, StructType([StructField('data', StringType(), True)]))
+        df = self.spark.createDataFrame(rdd, "data STRING")
         df.select(input_file_name().alias('file')).collect()
 
-        non_file_df = self.spark.range(0, 100, 1, 100).select(input_file_name().alias('file'))
+        non_file_df = self.spark.range(100).select(input_file_name())
 
         results = non_file_df.collect()
         self.assertTrue(len(results) == 100)
 
-        # [SC-12160]: if everything was properly reset after the last job, this should return
+        # [SPARK-24605]: if everything was properly reset after the last job, this should return
         # empty string rather than the file read in the last job.
         for result in results:
-            assert(result[0] == '')
+            self.assertEqual(result[0], '')
 
 
 if __name__ == "__main__":
