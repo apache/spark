@@ -105,7 +105,7 @@ case class DataSource(
       case _ => cls
     }
   }
-  private lazy val providingInstance = providingClass.getConstructor().newInstance()
+  private def providingInstance = providingClass.getConstructor().newInstance()
 
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
