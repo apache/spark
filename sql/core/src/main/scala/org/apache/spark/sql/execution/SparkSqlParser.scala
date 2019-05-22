@@ -1268,32 +1268,37 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.identifierList != null) {
       operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
-    } else {
-      val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
-        icl.identifierComment.asScala.map { ic =>
-          ic.identifier.getText -> Option(ic.STRING).map(string)
-        }
-      }
-
-      val viewType = if (ctx.TEMPORARY == null) {
-        PersistedView
-      } else if (ctx.GLOBAL != null) {
-        GlobalTempView
-      } else {
-        LocalTempView
-      }
-
-      CreateViewCommand(
-        name = visitTableIdentifier(ctx.tableIdentifier),
-        userSpecifiedColumns = userSpecifiedColumns,
-        comment = Option(ctx.STRING).map(string),
-        properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
-        originalText = Option(source(ctx.query)),
-        child = plan(ctx.query),
-        allowExisting = ctx.EXISTS != null,
-        replace = ctx.REPLACE != null,
-        viewType = viewType)
     }
+
+    checkDuplicateClauses(ctx.COMMENT, "COMMMENT", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED ON", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.STRING).map(string)
+      }
+    }
+
+    val viewType = if (ctx.TEMPORARY == null) {
+      PersistedView
+    } else if (ctx.GLOBAL != null) {
+      GlobalTempView
+    } else {
+      LocalTempView
+    }
+
+    CreateViewCommand(
+      name = visitTableIdentifier(ctx.tableIdentifier),
+      userSpecifiedColumns = userSpecifiedColumns,
+      comment = ctx.STRING.asScala.headOption.map(string),
+      properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+        .getOrElse(Map.empty),
+      originalText = Option(source(ctx.query)),
+      child = plan(ctx.query),
+      allowExisting = ctx.EXISTS != null,
+      replace = ctx.REPLACE != null,
+      viewType = viewType)
   }
 
   /**

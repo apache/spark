@@ -142,9 +142,11 @@ statement
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF NOT EXISTS)? tableIdentifier
-        identifierCommentList? (COMMENT STRING)?
-        (PARTITIONED ON identifierList)?
-        (TBLPROPERTIES tablePropertyList)? AS query                    #createView
+        identifierCommentList?
+        ((COMMENT STRING) |
+         (PARTITIONED ON identifierList) |
+         (TBLPROPERTIES tablePropertyList))*
+        AS query                                                       #createView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
