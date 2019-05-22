@@ -764,7 +764,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
-      assert(message1.contains("org.apache.avro.AvroRuntimeException: Not a union:"))
+      assert(message1.contains("org.apache.avro.AvroTypeException: Not an enum: null"))
 
       // Writing df containing data not in the enum will throw an exception
       val message2 = intercept[SparkException] {

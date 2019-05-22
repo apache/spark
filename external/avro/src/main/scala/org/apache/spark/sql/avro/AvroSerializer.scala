@@ -234,7 +234,7 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
   }
 
   private def resolveNullableType(avroType: Schema, nullable: Boolean): Schema = {
-    if (nullable && avroType.getType != NULL) {
+    if (avroType.getType == Type.UNION && nullable) {
       // avro uses union to represent nullable type.
       val fields = avroType.getTypes.asScala
       assert(fields.length == 2)
