@@ -107,8 +107,8 @@ class ColumnPruningSuite extends PlanTest {
 
     val query =
       input
-        .generate(Explode(GetStructField('c, 1, Some("e"))), outputNames = "explode" :: Nil)
-        .select('a, GetStructField('c, 0, Some("d")), 'explode)
+        .generate(Explode('c.getField("e")), outputNames = "explode" :: Nil)
+        .select('a, 'c.getField("d"), 'explode)
         .analyze
 
     val optimized = Optimize.execute(query)
@@ -117,8 +117,8 @@ class ColumnPruningSuite extends PlanTest {
 
     val correctAnswer =
       input
-        .select('a, 'c, GetStructField('c, 0, Some("d")).as(aliases(0)))
-        .generate(Explode(GetStructField('c, 1, Some("e"))),
+        .select('a, 'c, 'c.getField("d").as(aliases(0)))
+        .generate(Explode('c.getField("e")),
           unrequiredChildIndex = Seq(1),
           outputNames = "explode" :: Nil)
         .select('a, $"${aliases(0)}".as("c.d"), 'explode)
