@@ -3295,7 +3295,7 @@ class Dataset[T] private[sql](
         val batchOrder = ArrayBuffer.empty[(Int, Int)]
 
         // Handler to eagerly write batches to Python as they arrive, un-ordered
-        def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
+        val handlePartitionBatches = (index: Int, arrowBatches: Array[Array[Byte]]) =>
           if (arrowBatches.nonEmpty) {
             // Write all batches (can be more than 1) in the partition, store the batch order tuple
             batchWriter.writeBatches(arrowBatches.iterator)
@@ -3303,13 +3303,12 @@ class Dataset[T] private[sql](
               partitionBatchIndex => batchOrder.append((index, partitionBatchIndex))
             }
           }
-        }
 
         val arrowBatchRdd = toArrowBatchRdd(plan)
         sparkSession.sparkContext.runJob(
           arrowBatchRdd,
           (it: Iterator[Array[Byte]]) => it.toArray,
-          handlePartitionBatches _)
+          handlePartitionBatches)
 
         // After processing all partitions, end the stream and write batch order indices
         batchWriter.end()
@@ -3320,7 +3319,6 @@ class Dataset[T] private[sql](
         batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
           out.writeInt(overallBatchIndex)
         }
-        out.flush()
       }
     }
   }
