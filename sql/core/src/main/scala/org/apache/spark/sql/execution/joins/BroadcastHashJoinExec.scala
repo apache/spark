@@ -51,7 +51,7 @@ case class BroadcastHashJoinExec(
         SQLMetrics.createMetric(
           sparkContext,
           "number of output rows",
-          logicalPlan.stats.rowCount.map(_.toLong).getOrElse(-1L)))
+          logicalPlan.map(_.stats.rowCount.map(_.toLong).getOrElse(-1L)).getOrElse(-1L)))
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {

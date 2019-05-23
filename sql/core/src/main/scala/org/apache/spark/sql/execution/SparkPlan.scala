@@ -125,11 +125,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
-  def logicalPlan: LogicalPlan = {
-    assert(
-      tags.contains(LOGICAL_PLAN_TAG_NAME),
-      getClass.getSimpleName + " does not have a logical plan link")
-    tags(SparkPlan.LOGICAL_PLAN_TAG_NAME).asInstanceOf[LogicalPlan]
+  def logicalPlan: Option[LogicalPlan] = {
+    if (tags.contains(LOGICAL_PLAN_TAG_NAME)) {
+      Some(tags(SparkPlan.LOGICAL_PLAN_TAG_NAME).asInstanceOf[LogicalPlan])
+    } else {
+      None
+    }
   }
 
   /**
