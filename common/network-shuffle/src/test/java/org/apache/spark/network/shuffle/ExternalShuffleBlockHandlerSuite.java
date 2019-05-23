@@ -49,6 +49,10 @@ public class ExternalShuffleBlockHandlerSuite {
   OneForOneStreamManager streamManager;
   ExternalShuffleBlockResolver blockResolver;
   RpcHandler handler;
+  ManagedBuffer[] blockMarkers = {
+    new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
+    new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
+  };
 
   @Before
   public void beforeEach() {
@@ -76,20 +80,52 @@ public class ExternalShuffleBlockHandlerSuite {
     assertEquals(1, registerExecutorRequestLatencyMillis.getCount());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testOpenShuffleBlocks() {
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
+
+    checkOpenBlocksReceive(new String[] { "shuffle_0_0_0", "shuffle_0_0_1" }, blockMarkers);
+
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+    verifyOpenBlockLatencyMetrics();
+  }
+
+  @Test
+  public void testOpenDiskPersistedRDDBlocks() {
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 0)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 1)).thenReturn(blockMarkers[1]);
+
+    checkOpenBlocksReceive(new String[] { "rdd_0_0", "rdd_0_1" }, blockMarkers);
+
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
+    verifyOpenBlockLatencyMetrics();
+  }
+
+  @Test
+  public void testOpenDiskPersistedRDDBlocksWithMissingBlock() {
+    ManagedBuffer[] blockMarkersWithMissingBlock = {
+      new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
+      null
+    };
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 0))
+      .thenReturn(blockMarkersWithMissingBlock[0]);
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 1))
+      .thenReturn(null);
+
+    checkOpenBlocksReceive(new String[] { "rdd_0_0", "rdd_0_1" }, blockMarkersWithMissingBlock);
+
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
+  }
+
+  private void checkOpenBlocksReceive(String[] blockIds, ManagedBuffer[] blockMarkers) {
     when(client.getClientId()).thenReturn("app0");
 
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
-
-    ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
-    ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(block0Marker);
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(block1Marker);
-    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1",
-      new String[] { "shuffle_0_0_0", "shuffle_0_0_1" })
-      .toByteBuffer();
+    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", blockIds).toByteBuffer();
     handler.receive(client, openBlocks, callback);
 
     ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
@@ -106,13 +142,12 @@ public class ExternalShuffleBlockHandlerSuite {
     verify(streamManager, times(1)).registerStream(anyString(), stream.capture(),
       any());
     Iterator<ManagedBuffer> buffers = stream.getValue();
-    assertEquals(block0Marker, buffers.next());
-    assertEquals(block1Marker, buffers.next());
+    assertEquals(blockMarkers[0], buffers.next());
+    assertEquals(blockMarkers[1], buffers.next());
     assertFalse(buffers.hasNext());
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+  }
 
-    // Verify open block request latency metrics
+  private void verifyOpenBlockLatencyMetrics() {
     Timer openBlockRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()
