@@ -933,6 +933,11 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("support user provided non-nullable avro schema " +
     "for nullable catalyst schema without any null record") {
     withTempPath { tempDir =>
+      val catalystSchema =
+        StructType(Seq(
+          StructField("Age", IntegerType, true),
+          StructField("Name", StringType, true)))
+
       val avroSchema =
         """
           |{
@@ -945,15 +950,21 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           |}
         """.stripMargin
 
-      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))),
-        StructType(Seq(
-          StructField("Age", IntegerType, true),
-          StructField("Name", StringType, true))))
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
 
       val tempSaveDir = s"$tempDir/save/"
 
       df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
       checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      val message = intercept[Exception] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, null))), catalystSchema)
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message.contains("Caused by: java.lang.NullPointerException: " +
+        "in test_schema in string null of string in field Name"))
     }
   }
 
