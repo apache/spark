@@ -619,31 +619,33 @@ class TreeNodeSuite extends SparkFunSuite {
   }
 
   test("tags will be carried over after copy & transform") {
+    val tag = TreeNodeTag[String]("test")
+
     withClue("makeCopy") {
       val node = Dummy(None)
-      node.tags += TreeNodeTagName("test") -> "a"
+      node.setTagValue(tag, "a")
       val copied = node.makeCopy(Array(Some(Literal(1))))
-      assert(copied.tags(TreeNodeTagName("test")) == "a")
+      assert(copied.getTagValue(tag) == Some("a"))
     }
 
     def checkTransform(
         sameTypeTransform: Expression => Expression,
         differentTypeTransform: Expression => Expression): Unit = {
       val child = Dummy(None)
-      child.tags += TreeNodeTagName("test") -> "child"
+      child.setTagValue(tag, "child")
       val node = Dummy(Some(child))
-      node.tags += TreeNodeTagName("test") -> "parent"
+      node.setTagValue(tag, "parent")
 
       val transformed = sameTypeTransform(node)
       // Both the child and parent keep the tags
-      assert(transformed.tags(TreeNodeTagName("test")) == "parent")
-      assert(transformed.children.head.tags(TreeNodeTagName("test")) == "child")
+      assert(transformed.getTagValue(tag) == Some("parent"))
+      assert(transformed.children.head.getTagValue(tag) == Some("child"))
 
       val transformed2 = differentTypeTransform(node)
       // Both the child and parent keep the tags, even if we transform the node to a new one of
       // different type.
-      assert(transformed2.tags(TreeNodeTagName("test")) == "parent")
-      assert(transformed2.children.head.tags.contains(TreeNodeTagName("test")))
+      assert(transformed2.getTagValue(tag) == Some("parent"))
+      assert(transformed2.children.head.getTagValue(tag) == Some("child"))
     }
 
     withClue("transformDown") {
