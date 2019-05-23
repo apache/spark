@@ -35,22 +35,15 @@ case class CreateTableExec(
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
     ignoreIfExists: Boolean) extends LeafExecNode {
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   override protected def doExecute(): RDD[InternalRow] = {
-    def create(): Unit = {
-      catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
-    }
-
     if (!catalog.tableExists(identifier)) {
-      if (ignoreIfExists) {
-        try {
-          create()
-        } catch {
-          case _: TableAlreadyExistsException =>
-            // ignore the table that was created after checking existence
-        }
-      } else {
-        create()
+      try {
+        catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+      } catch {
+        case _: TableAlreadyExistsException if ignoreIfExists =>
+          logWarning(s"Table ${identifier.quoted} was created concurrently. Ignoring.")
       }
     } else if (!ignoreIfExists) {
       throw new TableAlreadyExistsException(identifier)
