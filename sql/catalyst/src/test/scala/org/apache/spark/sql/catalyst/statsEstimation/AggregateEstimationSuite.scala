@@ -40,7 +40,9 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
     attr("key31") -> ColumnStat(distinctCount = Some(0), min = None, max = None,
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
     attr("key32") -> ColumnStat(distinctCount = Some(0), min = None, max = None,
-      nullCount = Some(4), avgLen = Some(4), maxLen = Some(4))
+      nullCount = Some(4), avgLen = Some(4), maxLen = Some(4)),
+    attr("key33") -> ColumnStat(distinctCount = Some(2), min = None, max = None,
+      nullCount = Some(2), avgLen = Some(4), maxLen = Some(4))
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
@@ -100,6 +102,15 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
       tableRowCount = 6,
       groupByColumns = Seq("key22", "key32"),
       expectedOutputRowCount = nameToColInfo("key22")._2.distinctCount.get)
+  }
+
+  test("group-by column with null value") {
+    checkAggStats(
+      tableColumns = Seq("key21", "key33"),
+      tableRowCount = 6,
+      groupByColumns = Seq("key21", "key33"),
+      expectedOutputRowCount = nameToColInfo("key21")._2.distinctCount.get *
+        (nameToColInfo("key33")._2.distinctCount.get + 1))
   }
 
   test("non-cbo estimation") {
