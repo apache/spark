@@ -63,11 +63,14 @@ SHOW TABLES
 -- !query 7 schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query 7 output
+aggtest
 arraydata
 mapdata
+onek
 show_t1
 show_t2
 show_t3
+tenk1
 testdata
 
 
@@ -76,11 +79,14 @@ SHOW TABLES IN showdb
 -- !query 8 schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query 8 output
+aggtest
 arraydata
 mapdata
+onek
 show_t1
 show_t2
 show_t3
+tenk1
 testdata
 
 
