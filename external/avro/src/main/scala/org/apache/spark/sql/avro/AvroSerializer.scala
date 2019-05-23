@@ -205,18 +205,28 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystStruct to " +
         s"Avro type $avroStruct.")
     }
-    val fieldConverters = catalystStruct.zip(avroStruct.getFields.asScala).map {
-      case (f1, f2) => newConverter(f1.dataType, resolveNullableType(f2.schema(), f1.nullable))
-    }
+
+    val (avroIndices: Array[Int], fieldConverters: Array[Converter]) =
+      catalystStruct.map { catalystField =>
+        val avroField = avroStruct.getField(catalystField.name)
+        if (avroField == null) {
+          throw new IncompatibleSchemaException(
+            s"Cannot convert Catalyst type $catalystStruct to Avro type $avroStruct.")
+        }
+        val converter = newConverter(catalystField.dataType, resolveNullableType(
+          avroField.schema(), catalystField.nullable))
+        (avroField.pos(), converter)
+      }.toArray.unzip
+
     val numFields = catalystStruct.length
-    (row: InternalRow) =>
+    row: InternalRow =>
       val result = new Record(avroStruct)
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
-          result.put(i, null)
+          result.put(avroIndices(i), null)
         } else {
-          result.put(i, fieldConverters(i).apply(row, i))
+          result.put(avroIndices(i), fieldConverters(i).apply(row, i))
         }
         i += 1
       }

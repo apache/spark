@@ -21,12 +21,6 @@ import itertools
 import re
 import os
 
-if os.environ.get("AMPLAB_JENKINS"):
-    hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
-else:
-    hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
-print("[info] Choosing supported modules with Hadoop profile", hadoop_version)
-
 all_modules = []
 
 
@@ -80,11 +74,7 @@ class Module(object):
         self.dependent_modules = set()
         for dep in dependencies:
             dep.dependent_modules.add(self)
-        # TODO: Skip hive-thriftserver module for hadoop-3.2. remove this once hadoop-3.2 support it
-        if name == "hive-thriftserver" and hadoop_version == "hadoop3.2":
-            print("[info] Skip unsupported module:", name)
-        else:
-            all_modules.append(self)
+        all_modules.append(self)
 
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
@@ -567,6 +557,15 @@ spark_ganglia_lgpl = Module(
         "external/spark-ganglia-lgpl",
     ]
 )
+
+# TODO: Skip hive-thriftserver module for hadoop-3.2. remove this once hadoop-3.2 support it
+if os.environ.get("AMPLAB_JENKINS"):
+    hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
+else:
+    hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
+if hadoop_version == "hadoop3.2":
+    print("[info] Skip unsupported module:", "hive-thriftserver")
+    all_modules = [m for m in all_modules if m.name != "hive-thriftserver"]
 
 # The root module is a dummy module which is used to run all of the tests.
 # No other modules should directly depend on this module.

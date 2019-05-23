@@ -120,35 +120,36 @@ object Cast {
   }
 
   /**
-   * Return true iff we may truncate during casting `from` type to `to` type. e.g. long -> int,
-   * timestamp -> date.
+   * Returns true iff we can safely up-cast the `from` type to `to` type without any truncating or
+   * precision lose or possible runtime failures. For example, long -> int, string -> int are not
+   * up-cast.
    */
-  def mayTruncate(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => true
-    case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => true
-    case (from, to) if illegalNumericPrecedence(from, to) => true
-    case (TimestampType, DateType) => true
-    case (StringType, to: NumericType) => true
-    case _ => false
-  }
-
-  private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-    val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
-    val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
-    toPrecedence >= 0 && fromPrecedence > toPrecedence
-  }
-
-  /**
-   * Returns true iff we can safely cast the `from` type to `to` type without any truncating or
-   * precision lose, e.g. int -> long, date -> timestamp.
-   */
-  def canSafeCast(from: AtomicType, to: AtomicType): Boolean = (from, to) match {
+  def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
-    case (from, to) if legalNumericPrecedence(from, to) => true
+    case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
     case (_, StringType) => true
+
+    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
+    // `timestampToLong` for details.
+    case (TimestampType, LongType) => true
+    case (LongType, TimestampType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      resolvableNullability(fn, tn) && canUpCast(fromType, toType)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      resolvableNullability(fn, tn) && canUpCast(fromKey, toKey) && canUpCast(fromValue, toValue)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (f1, f2) =>
+            resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
+        }
+
     case _ => false
   }
 

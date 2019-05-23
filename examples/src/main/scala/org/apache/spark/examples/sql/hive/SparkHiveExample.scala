@@ -122,16 +122,16 @@ object SparkHiveExample {
     val dataDir = "/tmp/parquet_data"
     spark.range(10).write.parquet(dataDir)
     // Create a Hive external Parquet table
-    sql(s"CREATE EXTERNAL TABLE hive_ints(key int) STORED AS PARQUET LOCATION '$dataDir'")
+    sql(s"CREATE EXTERNAL TABLE hive_bigints(id bigint) STORED AS PARQUET LOCATION '$dataDir'")
     // The Hive external table should already have data
-    sql("SELECT * FROM hive_ints").show()
+    sql("SELECT * FROM hive_bigints").show()
     // +---+
-    // |key|
+    // | id|
     // +---+
     // |  0|
     // |  1|
     // |  2|
-    // ...
+    // ... Order may vary, as spark processes the partitions in parallel.
 
     // Turn on flag for Hive Dynamic Partitioning
     spark.sqlContext.setConf("hive.exec.dynamic.partition", "true")

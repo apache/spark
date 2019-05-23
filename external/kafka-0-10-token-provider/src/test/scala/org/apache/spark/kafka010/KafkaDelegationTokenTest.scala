@@ -83,7 +83,7 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
     UserGroupInformation.getCurrentUser.addCredentials(creds)
   }
 
-  protected def setSparkEnv(settings: Traversable[(String, String)]): Unit = {
+  protected def setSparkEnv(settings: Iterable[(String, String)]): Unit = {
     val conf = new SparkConf().setAll(settings)
     val env = mock(classOf[SparkEnv])
     doReturn(conf).when(env).conf

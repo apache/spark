@@ -7,4 +7,4 @@
 (Please explain how this patch was tested. E.g. unit tests, integration tests, manual tests)
 (If this patch involves UI changes, please attach a screenshot; otherwise, remove this)
 
-Please review http://spark.apache.org/contributing.html before opening a pull request.
+Please review https://spark.apache.org/contributing.html before opening a pull request.
