@@ -65,7 +65,7 @@ class BlockManagerInfoSuite extends SparkFunSuite {
 
   testWithShuffleServiceOnOff("RDD block with MEMORY_AND_DISK") { (svcEnabled, bmInfo) =>
     // This is the effective storage level, not the requested storage level, but MEMORY_AND_DISK
-    // is still possible if its first in memory, purged to disk, and later promoted back to memory.
+    // is still possible if it's first in memory, purged to disk, and later promoted back to memory.
     val rddId: BlockId = RDDBlockId(0, 0)
     bmInfo.updateBlockInfo(rddId, StorageLevel.MEMORY_AND_DISK, memSize = 200, diskSize = 400)
     assert(bmInfo.blocks.asScala ===

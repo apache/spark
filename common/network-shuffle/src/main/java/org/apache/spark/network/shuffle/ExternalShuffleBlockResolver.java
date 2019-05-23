@@ -319,9 +319,10 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executor, int rddId, int splitIndex) {
     File file = getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "rdd_" + rddId + "_" + splitIndex);
+    long fileLength = file.length();
     ManagedBuffer res = null;
     if (file.exists()) {
-      res = new FileSegmentManagedBuffer(conf, file, 0, file.length());
+      res = new FileSegmentManagedBuffer(conf, file, 0, fileLength);
     }
     return res;
   }

@@ -100,35 +100,37 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
+    try {
+      val rdd = sc.parallelize(0 until 100, 2)
+        .map { i => (i, 1) }
+        .persist(StorageLevel.DISK_ONLY)
 
-    val rdd = sc.parallelize(0 until 100, 2)
-      .map { i => (i, 1) }
-      .persist(StorageLevel.DISK_ONLY)
+      rdd.count()
 
-    rdd.count()
+      val blockId = RDDBlockId(rdd.id, 0)
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locations = sc.env.blockManager.master.getLocations(blockId)
+        assert(locations.size === 2)
+        assert(locations.map(_.port).contains(server.getPort),
+          "external shuffle service port should be contained")
+      }
 
-    val blockId = RDDBlockId(rdd.id, 0)
-    eventually(timeout(2.seconds), interval(100.milliseconds)) {
-      val locations = sc.env.blockManager.master.getLocations(blockId)
-      assert(locations.size === 2)
-      assert(locations.map(_.port).contains(server.getPort),
-        "external shuffle service port should be contained")
+      sc.killExecutors(sc.getExecutorIds())
+
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locations = sc.env.blockManager.master.getLocations(blockId)
+        assert(locations.size === 1)
+        assert(locations.map(_.port).contains(server.getPort),
+          "external shuffle service port should be contained")
+      }
+
+      assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
+
+      // test unpersist: as executors are killed the blocks will be removed via the shuffle service
+      rdd.unpersist(true)
+      assert(sc.env.blockManager.getRemoteValues(blockId).isEmpty)
+    } finally {
+      rpcHandler.applicationRemoved(sc.conf.getAppId, true)
     }
-
-    sc.killExecutors(sc.getExecutorIds())
-
-    eventually(timeout(2.seconds), interval(100.milliseconds)) {
-      val locations = sc.env.blockManager.master.getLocations(blockId)
-      assert(locations.size === 1)
-      assert(locations.map(_.port).contains(server.getPort),
-        "external shuffle service port should be contained")
-    }
-
-    assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
-
-    // test unpersist: as executors are killed the blocks will be removed via the shuffle service
-    rdd.unpersist(true)
-    assert(sc.env.blockManager.getRemoteValues(blockId).isEmpty)
-    rpcHandler.applicationRemoved(sc.conf.getAppId, true)
   }
 }

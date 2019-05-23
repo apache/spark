@@ -221,7 +221,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
       Set<String> expectedFilenames) throws IOException {
     Set<String> collectedFilenames = new HashSet<>();
     for (String localDir : dataContext.localDirs) {
-      File[] dirs = new File[] {new File(localDir)};
+      File[] dirs = new File[] { new File(localDir) };
       collectedFilenames.addAll(collectFilenames(dirs));
     }
     assertEquals(expectedFilenames, collectedFilenames);
