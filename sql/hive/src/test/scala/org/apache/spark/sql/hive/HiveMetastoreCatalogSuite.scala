@@ -290,11 +290,12 @@ class DataSourceWithHiveMetastoreCatalogSuite
     withTable("t") {
       spark.sql(
         s"""
-          |CREATE TABLE t (c1 INT, c2 INT)
+          |CREATE TABLE t
           |USING $provider
           |CLUSTERED BY (c1)
           |SORTED BY (c1)
           |INTO 2 BUCKETS
+          |AS SELECT 1 AS c1, 2 AS c2
         """.stripMargin)
 
       val metadata = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
@@ -308,15 +309,15 @@ class DataSourceWithHiveMetastoreCatalogSuite
       assert(sql("DESC FORMATTED t").collect().containsSlice(
         Seq(Row("Num Buckets", "2", ""), Row("Bucket Columns", "[`c1`]", ""))
       ))
+      checkAnswer(table("t"), Row(1, 2))
 
       // It's not a bucketed table at Hive side
-      val client =
-        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
-      val hiveSide = client.runSqlHive("DESC FORMATTED t")
+      val hiveSide = sparkSession.metadataHive.runSqlHive("DESC FORMATTED t")
       assert(hiveSide.contains("Num Buckets:        \t-1                  \t "))
       assert(hiveSide.contains("Bucket Columns:     \t[]                  \t "))
       assert(hiveSide.contains("\tspark.sql.sources.schema.numBuckets\t2                   "))
       assert(hiveSide.contains("\tspark.sql.sources.schema.bucketCol.0\tc1                  "))
+      assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1\t2"))
     }
   }
 }
