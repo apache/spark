@@ -930,6 +930,33 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("support user provided non-nullable avro schema " +
+    "for nullable catalyst schema without any null record") {
+    withTempPath { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "Age", "type": "int"},
+          |    {"name": "Name", "type": "string"}
+          |  ]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))),
+        StructType(Seq(
+          StructField("Age", IntegerType, true),
+          StructField("Name", StringType, true))))
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+    }
+  }
+
   test("error handling for unsupported Interval data types") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
