@@ -2384,4 +2384,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-27814: test cast operation for partition key") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(c1 INT, c2 STRING) PARTITIONED BY (p1 INT)")
+      sql("INSERT INTO TABLE t1 PARTITION (p1 = 5) values(1, 'str')")
+      checkAnswer(sql("SELECT c1 FROM t1 WHERE CAST(p1 as STRING) = '5'"), Row(1))
+      checkAnswer(sql("SELECT c1 FROM t1 WHERE CAST( CAST(p1 AS BIGINT) AS STRING) = '5'"), Row(1))
+    }
+  }
 }
