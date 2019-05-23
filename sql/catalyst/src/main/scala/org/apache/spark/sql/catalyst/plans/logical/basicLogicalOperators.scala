@@ -1083,7 +1083,7 @@ case class OneRowRelation() extends LeafNode {
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
   override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = {
     val newCopy = OneRowRelation()
-    newCopy.tags ++= this.tags
+    newCopy.copyTagsFrom(this)
     newCopy
   }
 }
