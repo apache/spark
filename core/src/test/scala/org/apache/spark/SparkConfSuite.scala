@@ -110,6 +110,49 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.getOption("k4") === None)
   }
 
+  test("basic getAllWithPrefixAndPostfix") {
+    val conf = new SparkConf(false)
+    conf.set("spark.prefix.main.suffix", "v1")
+    val prefix = "spark.prefix."
+    val suffix = ".suffix"
+    assert(conf.getAllWithPrefixAndSuffix(prefix, suffix).toSet ===
+      Set(("main", "v1")))
+
+    conf.set("spark.prefix.main2.suffix", "v2")
+    conf.set("spark.prefix.main3.extra1.suffix", "v3")
+    conf.set("spark.prefix.main4.extra2.nonmatchingsuffix", "v4")
+    conf.set("spark.notmatchingprefix.main4.suffix", "v5")
+
+    assert(conf.getAllWithPrefixAndSuffix(prefix, suffix).toSet ===
+      Set(("main", "v1"), ("main2", "v2"), ("main3.extra1", "v3")))
+  }
+
+  test("test prefix config parsing utilities") {
+    val conf = new SparkConf(false)
+    conf.set("spark.prefix.main.suffix", "v1")
+    val prefix = "spark.prefix."
+    val suffix = ".suffix"
+    val configsWithPrefix = conf.getAllWithPrefix(prefix)
+    assert(configsWithPrefix.toSet === Set(("main.suffix", "v1")))
+    assert(SparkConf.getBaseOfConfigs(configsWithPrefix) === Set("main"))
+    assert(SparkConf.getConfigsWithSuffix(configsWithPrefix, suffix).toSet === Set(("main", "v1")))
+  }
+
+  test("basic getAllWithPrefix") {
+    val prefix = "spark.prefix."
+    val conf = new SparkConf(false)
+    conf.set("spark.prefix.main.suffix", "v1")
+    assert(conf.getAllWithPrefix(prefix).toSet ===
+      Set(("main.suffix", "v1")))
+
+    conf.set("spark.prefix.main2.suffix", "v2")
+    conf.set("spark.prefix.main3.extra1.suffix", "v3")
+    conf.set("spark.notMatching.main4", "v4")
+
+    assert(conf.getAllWithPrefix(prefix).toSet ===
+      Set(("main.suffix", "v1"), ("main2.suffix", "v2"), ("main3.extra1.suffix", "v3")))
+  }
+
   test("creating SparkContext without master and app name") {
     val conf = new SparkConf(false)
     intercept[SparkException] { sc = new SparkContext(conf) }

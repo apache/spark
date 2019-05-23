@@ -415,6 +415,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
+  /**
+   * Get all parameters that start with `prefix` and end with 'suffix'
+   */
+  def getAllWithPrefixAndSuffix(prefix: String, suffix: String): Array[(String, String)] = {
+    getAll.filter { case (k, v) => k.startsWith(prefix) && k.endsWith(suffix) }
+      .map { case (k, v) => (k.substring(prefix.length, (k.length - suffix.length)), v) }
+  }
 
   /**
    * Get a parameter as an integer, falling back to a default if not set
@@ -596,6 +603,30 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
       s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be no less than the value of " +
       s"${EXECUTOR_HEARTBEAT_INTERVAL.key}=${executorHeartbeatIntervalMs}ms.")
+
+    // Make sure the executor resources were specified and are large enough if
+    // any task resources were specified.
+    val taskResourcesAndCount =
+    getAllWithPrefixAndSuffix(SPARK_TASK_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+    val executorResourcesAndCounts =
+      getAllWithPrefixAndSuffix(SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+
+    taskResourcesAndCount.foreach { case (rName, taskCount) =>
+      val execCount = executorResourcesAndCounts.get(rName).getOrElse(
+        throw new SparkException(
+          s"The executor resource config: " +
+            s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
+            "needs to be specified since a task requirement config: " +
+            s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} was specified")
+      )
+      if (execCount.toLong < taskCount.toLong) {
+        throw new SparkException(
+          s"The executor resource config: " +
+            s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
+            s"= $execCount has to be >= the task config: " +
+            s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} = $taskCount")
+      }
+    }
   }
 
   /**
@@ -786,6 +817,35 @@ private[spark] object SparkConf extends Logging {
         s"The configuration key $key is not supported anymore " +
           s"because Spark doesn't use Akka since 2.0")
     }
+  }
+
+  /**
+   * A function to help parsing configs with multiple parts where the base and
+   * suffix could be one of many options. For instance configs like:
+   * spark.executor.resource.{resourceName}.{count/addresses}
+   * This function takes an Array of configs you got from the
+   * getAllWithPrefix function, selects only those that end with the suffix
+   * passed in and returns just the base part of the config before the first
+   * '.' and its value.
+   */
+  def getConfigsWithSuffix(
+      configs: Array[(String, String)],
+      suffix: String
+      ): Array[(String, String)] = {
+    configs.filter { case (rConf, _) => rConf.endsWith(suffix)}.
+      map { case (k, v) => (k.split('.').head, v) }
+  }
+
+  /**
+   * A function to help parsing configs with multiple parts where the base and
+   * suffix could be one of many options. For instance configs like:
+   * spark.executor.resource.{resourceName}.{count/addresses}
+   * This function takes an Array of configs you got from the
+   * getAllWithPrefix function and returns the base part of the config
+   * before the first '.'.
+   */
+  def getBaseOfConfigs(configs: Array[(String, String)]): Set[String] = {
+    configs.map { case (k, _) => k.split('.').head }.toSet
   }
 
   /**

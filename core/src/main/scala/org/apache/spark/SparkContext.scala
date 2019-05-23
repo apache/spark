@@ -213,6 +213,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
+  private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -226,6 +227,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * changed at runtime.
    */
   def getConf: SparkConf = conf.clone()
+
+  def resources: Map[String, ResourceInformation] = _resources
 
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
@@ -360,6 +363,48 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
+  /**
+   * Checks to see if any resources (GPU/FPGA/etc) are available to the driver by looking
+   * at and processing the spark.driver.resource.resourceName.addresses and
+   * spark.driver.resource.resourceName.discoveryScript configs. The configs have to be
+   * present when the driver starts, setting them after startup does not work.
+   *
+   * If any resource addresses configs were specified then assume all resources will be specified
+   * in that way. Otherwise use the discovery scripts to find the resources. Users should
+   * not really be setting the addresses config directly and should not be mixing methods
+   * for different types of resources since the addresses config is meant for Standalone mode
+   * and other cluster managers should use the discovery scripts.
+   */
+  private def setupDriverResources(): Unit = {
+    // Only call getAllWithPrefix once and filter on those since there could be a lot of spark
+    // configs.
+    val allDriverResourceConfs = _conf.getAllWithPrefix(SPARK_DRIVER_RESOURCE_PREFIX)
+    val resourcesWithAddrsInConfs =
+      SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_ADDRESSES_SUFFIX)
+
+    _resources = if (resourcesWithAddrsInConfs.nonEmpty) {
+      resourcesWithAddrsInConfs.map { case (rName, addrString) =>
+        val addrsArray = addrString.split(",").map(_.trim())
+        (rName -> new ResourceInformation(rName, addrsArray))
+      }.toMap
+    } else {
+      // we already have the resources confs here so just pass in the unique resource names
+      // rather then having the resource discoverer reparse all the configs.
+      val uniqueResources = SparkConf.getBaseOfConfigs(allDriverResourceConfs)
+      ResourceDiscoverer.discoverResourcesInformation(_conf, SPARK_DRIVER_RESOURCE_PREFIX,
+        Some(uniqueResources))
+    }
+    // verify the resources we discovered are what the user requested
+    val driverReqResourcesAndCounts =
+      SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+    ResourceDiscoverer.checkActualResourcesMeetRequirements(driverReqResourcesAndCounts, _resources)
+
+    logInfo("===============================================================================")
+    logInfo(s"Driver Resources:")
+    _resources.foreach { case (k, v) => logInfo(s"$k -> $v") }
+    logInfo("===============================================================================")
+  }
+
   try {
     _conf = config.clone()
     _conf.validateSettings()
@@ -372,6 +417,8 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     _driverLogger = DriverLogger(_conf)
+
+    setupDriverResources()
 
     // log out spark.app.name in the Spark driver logs
     logInfo(s"Submitted application: $appName")
