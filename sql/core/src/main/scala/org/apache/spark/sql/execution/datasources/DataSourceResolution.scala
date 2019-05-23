@@ -59,7 +59,7 @@ case class DataSourceResolution(
     case create: CreateTableStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = create.tableName
-      val catalog = maybeCatalog
+      val catalog = maybeCatalog.orElse(defaultCatalog)
           .getOrElse(throw new AnalysisException(
             s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
           .asTableCatalog
