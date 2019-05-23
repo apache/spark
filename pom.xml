@@ -982,13 +982,11 @@
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-ipc</artifactId>
         <version>${avro.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
