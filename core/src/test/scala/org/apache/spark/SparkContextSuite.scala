@@ -20,6 +20,9 @@ package org.apache.spark
 import java.io.File
 import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files => JavaFiles}
+import java.nio.file.attribute.PosixFilePermission._
+import java.util.EnumSet
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
@@ -731,6 +734,101 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       resetSparkContext()
     }
   }
+
+  test("test gpu driver discovery under local-cluster mode") {
+    withTempDir { dir =>
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val scriptPath = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu","addresses":["5", "6"]}'""")
+
+      val conf = new SparkConf()
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
+          SPARK_RESOURCE_COUNT_SUFFIX, "1")
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
+        .setMaster("local-cluster[1, 1, 1024]")
+        .setAppName("test-cluster")
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.size == 1)
+      }
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get("gpu").get.addresses === Array("5", "6"))
+      assert(sc.resources.get("gpu").get.name === "gpu")
+    }
+  }
+
+  test("test gpu driver resource address and discovery under local-cluster mode") {
+    withTempDir { dir =>
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val scriptPath = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu","addresses":["5", "6"]}'""")
+
+      val conf = new SparkConf()
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
+          SPARK_RESOURCE_COUNT_SUFFIX, "1")
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
+          SPARK_RESOURCE_ADDRESSES_SUFFIX, "0, 1, 8")
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
+        .setMaster("local-cluster[1, 1, 1024]")
+        .setAppName("test-cluster")
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.size == 1)
+      }
+      // driver gpu addresses config should take precedence over the script
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get("gpu").get.addresses === Array("0", "1", "8"))
+      assert(sc.resources.get("gpu").get.name === "gpu")
+    }
+  }
+
+  test("Test parsing resources task configs with missing executor config") {
+    val conf = new SparkConf()
+      .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_COUNT_SUFFIX, "1")
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.count " +
+      "needs to be specified since a task requirement config: spark.task.resource.gpu.count " +
+      "was specified"))
+  }
+
+  test("Test parsing resources executor config < task requirements") {
+    val conf = new SparkConf()
+      .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_COUNT_SUFFIX, "2")
+      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_COUNT_SUFFIX, "1")
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The executor resource config: " +
+      "spark.executor.resource.gpu.count = 1 has to be >= the task config: " +
+      "spark.task.resource.gpu.count = 2"))
+  }
+
+  def mockDiscoveryScript(file: File, result: String): String = {
+    Files.write(s"echo $result", file, StandardCharsets.UTF_8)
+    JavaFiles.setPosixFilePermissions(file.toPath(),
+      EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+    file.getPath()
+  }
+
 }
 
 object SparkContextSuite {
