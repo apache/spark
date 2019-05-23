@@ -25,11 +25,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{HintErrorHandler, HintInfo}
  */
 object HintErrorLogger extends HintErrorHandler with Logging {
 
-  override def handleHintNotRecognized(name: String, parameters: Seq[Any]): Unit = {
+  override def hintNotRecognized(name: String, parameters: Seq[Any]): Unit = {
     logWarning(s"Unrecognized hint: $name${parameters.mkString("(", ", ", ")")}")
   }
 
-  override def handleHintRelationsNotFound(
+  override def hintRelationsNotFound(
       name: String, parameters: Seq[Any], invalidRelations: Set[String]): Unit = {
     invalidRelations.foreach { n =>
       logWarning(s"Count not find relation '$n' for join strategy hint " +
@@ -37,11 +37,11 @@ object HintErrorLogger extends HintErrorHandler with Logging {
     }
   }
 
-  override def handleJoinNotFoundForJoinHint(hint: HintInfo): Unit = {
+  override def joinNotFoundForJoinHint(hint: HintInfo): Unit = {
     logWarning(s"A join hint $hint is specified but it is not part of a join relation.")
   }
 
-  override def handleHintOverridden(hint: HintInfo): Unit = {
+  override def hintOverridden(hint: HintInfo): Unit = {
     logWarning(s"Join hint $hint is overridden by another hint and will not take effect.")
   }
 }

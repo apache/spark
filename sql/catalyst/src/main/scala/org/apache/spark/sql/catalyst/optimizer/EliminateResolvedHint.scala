@@ -41,7 +41,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
     }
     pulledUp.transformUp {
       case h: ResolvedHint =>
-        hintErrorHandler.handleJoinNotFoundForJoinHint(h.hints)
+        hintErrorHandler.joinNotFoundForJoinHint(h.hints)
         h.child
     }
   }
@@ -50,7 +50,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
    * Combine a list of [[HintInfo]]s into one [[HintInfo]].
    */
   private def mergeHints(hints: Seq[HintInfo]): Option[HintInfo] = {
-    hints.reduceOption((h1, h2) => h1.merge(h2, hintErrorHandler.handleHintOverridden))
+    hints.reduceOption((h1, h2) => h1.merge(h2, hintErrorHandler))
   }
 
   /**

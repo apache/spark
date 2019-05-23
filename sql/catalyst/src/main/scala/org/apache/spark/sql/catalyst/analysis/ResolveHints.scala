@@ -77,12 +77,12 @@ object ResolveHints {
               if relations.exists(resolver(_, u.tableIdentifier.table)) =>
             relations.remove(u.tableIdentifier.table)
             ResolvedHint(u,
-              createHintInfo(hintName).merge(hint, hintErrorHandler.handleHintOverridden))
+              createHintInfo(hintName).merge(hint, hintErrorHandler))
           case ResolvedHint(r: SubqueryAlias, hint)
               if relations.exists(resolver(_, r.alias)) =>
             relations.remove(r.alias)
             ResolvedHint(r,
-              createHintInfo(hintName).merge(hint, hintErrorHandler.handleHintOverridden))
+              createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case u: UnresolvedRelation if relations.exists(resolver(_, u.tableIdentifier.table)) =>
             relations.remove(u.tableIdentifier.table)
@@ -130,7 +130,7 @@ object ResolveHints {
           relationNames.foreach(relationNameSet.add)
 
           val applied = applyJoinStrategyHint(h.child, relationNameSet, h.name)
-          hintErrorHandler.handleHintRelationsNotFound(h.name, h.parameters, relationNameSet.toSet)
+          hintErrorHandler.hintRelationsNotFound(h.name, h.parameters, relationNameSet.toSet)
           applied
         }
     }
@@ -172,7 +172,7 @@ object ResolveHints {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint =>
-        hintErrorHandler.handleHintNotRecognized(h.name, h.parameters)
+        hintErrorHandler.hintNotRecognized(h.name, h.parameters)
         h.child
     }
   }

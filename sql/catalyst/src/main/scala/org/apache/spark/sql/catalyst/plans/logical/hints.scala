@@ -74,19 +74,19 @@ case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
   /**
    * Combine this [[HintInfo]] with another [[HintInfo]] and return the new [[HintInfo]].
    * @param other the other [[HintInfo]]
-   * @param hintOverriddenCallback a callback to notify if any [[HintInfo]] has been overridden
-   *                               in this merge.
+   * @param hintErrorHandler the error handler to notify if any [[HintInfo]] has been overridden
+   *                         in this merge.
    *
    * Currently, for join strategy hints, the new [[HintInfo]] will contain the strategy in this
    * [[HintInfo]] if defined, otherwise the strategy in the other [[HintInfo]]. The
    * `hintOverriddenCallback` will be called if this [[HintInfo]] and the other [[HintInfo]]
    * both have a strategy defined but the join strategies are different.
    */
-  def merge(other: HintInfo, hintOverriddenCallback: HintInfo => Unit): HintInfo = {
+  def merge(other: HintInfo, hintErrorHandler: HintErrorHandler): HintInfo = {
     if (this.strategy.isDefined &&
         other.strategy.isDefined &&
         this.strategy.get != other.strategy.get) {
-      hintOverriddenCallback(other)
+      hintErrorHandler.hintOverridden(other)
     }
     HintInfo(strategy = this.strategy.orElse(other.strategy))
   }
@@ -169,7 +169,7 @@ trait HintErrorHandler {
    * @param name the unrecognized hint name
    * @param parameters the hint parameters
    */
-  def handleHintNotRecognized(name: String, parameters: Seq[Any]): Unit
+  def hintNotRecognized(name: String, parameters: Seq[Any]): Unit
 
   /**
    * Callback for relation names specified in a hint that cannot be associated with any relation
@@ -178,18 +178,17 @@ trait HintErrorHandler {
    * @param parameters the hint parameters
    * @param invalidRelations the set of relation names that cannot be associated
    */
-  def handleHintRelationsNotFound(
-    name: String, parameters: Seq[Any], invalidRelations: Set[String]): Unit
+  def hintRelationsNotFound(name: String, parameters: Seq[Any], invalidRelations: Set[String]): Unit
 
   /**
    * Callback for a join hint specified on a relation that is not part of a join.
    * @param hint the [[HintInfo]]
    */
-  def handleJoinNotFoundForJoinHint(hint: HintInfo): Unit
+  def joinNotFoundForJoinHint(hint: HintInfo): Unit
 
   /**
    * Callback for a hint being overridden by another conflicting hint of the same kind.
    * @param hint the [[HintInfo]] being overridden
    */
-  def handleHintOverridden(hint: HintInfo): Unit
+  def hintOverridden(hint: HintInfo): Unit
 }
