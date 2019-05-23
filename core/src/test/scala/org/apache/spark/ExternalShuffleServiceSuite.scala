@@ -18,12 +18,15 @@
 package org.apache.spark
 
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.config
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleClient}
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 /**
@@ -32,7 +35,7 @@ import org.apache.spark.util.Utils
  * set up in `ExternalShuffleBlockHandler`, such as changing the format of shuffle files or how
  * we hash files into folders.
  */
-class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
+class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll with Eventually {
   var server: TransportServer = _
   var transportContext: TransportContext = _
   var rpcHandler: ExternalShuffleBlockHandler = _
@@ -91,5 +94,43 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
       rdd.count()
     }
     e.getMessage should include ("Fetch failure will not retry stage due to testing config")
+  }
+
+  test("SPARK-25888: using external shuffle service fetching disk persisted blocks") {
+    sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
+    sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
+    sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
+    try {
+      val rdd = sc.parallelize(0 until 100, 2)
+        .map { i => (i, 1) }
+        .persist(StorageLevel.DISK_ONLY)
+
+      rdd.count()
+
+      val blockId = RDDBlockId(rdd.id, 0)
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locations = sc.env.blockManager.master.getLocations(blockId)
+        assert(locations.size === 2)
+        assert(locations.map(_.port).contains(server.getPort),
+          "external shuffle service port should be contained")
+      }
+
+      sc.killExecutors(sc.getExecutorIds())
+
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locations = sc.env.blockManager.master.getLocations(blockId)
+        assert(locations.size === 1)
+        assert(locations.map(_.port).contains(server.getPort),
+          "external shuffle service port should be contained")
+      }
+
+      assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
+
+      // test unpersist: as executors are killed the blocks will be removed via the shuffle service
+      rdd.unpersist(true)
+      assert(sc.env.blockManager.getRemoteValues(blockId).isEmpty)
+    } finally {
+      rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+    }
   }
 }
