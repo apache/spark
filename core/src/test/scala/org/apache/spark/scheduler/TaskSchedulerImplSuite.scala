@@ -29,6 +29,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.ResourceInformation.GPU
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
@@ -1245,18 +1246,18 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val executorGpus = 4
     val executorCpus = 4
     val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString,
-      s"${config.SPARK_TASK_RESOURCE_PREFIX}gpu${config.SPARK_RESOURCE_COUNT_POSTFIX}" ->
+      s"${config.SPARK_TASK_RESOURCE_PREFIX}$GPU${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
         taskGpus.toString,
-      s"${config.SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${config.SPARK_RESOURCE_COUNT_POSTFIX}" ->
+      s"${config.SPARK_EXECUTOR_RESOURCE_PREFIX}$GPU${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
         executorGpus.toString,
       config.EXECUTOR_CORES.key -> executorCpus.toString)
     val taskSet = FakeTask.createTaskSet(3)
 
     val numFreeCores = 2
-    val gpuresources = Map("gpu" ->
-      new SchedulerResourceInformation("gpu", ArrayBuffer("0", "1", "2", "3")))
+    val resources = Map(GPU ->
+      new SchedulerResourceInformation(GPU, ArrayBuffer("0", "1", "2", "3")))
     val singleCoreWorkerOffers =
-      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, gpuresources))
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
     val zeroGpuWorkerOffers =
       IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, Map.empty))
     taskScheduler.submitTasks(taskSet)
@@ -1264,11 +1265,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     var taskDescriptions = taskScheduler.resourceOffers(zeroGpuWorkerOffers).flatten
     assert(0 === taskDescriptions.length)
     assert(!failedTaskSet)
-    // Launch tasks on executor that satisfies GPU resource requirements.
+    // Launch tasks on executor that satisfies resource requirements.
     taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
     assert(2 === taskDescriptions.length)
     assert(!failedTaskSet)
-    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get("gpu").get.addresses)
-    assert(ArrayBuffer("1") === taskDescriptions(1).resources.get("gpu").get.addresses)
+    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.addresses)
   }
 }

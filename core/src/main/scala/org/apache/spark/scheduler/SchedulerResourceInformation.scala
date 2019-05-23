@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.ResourceInformation.UNKNOWN
 import org.apache.spark.annotation.Evolving
 
 /**
@@ -55,9 +54,4 @@ private[spark] class SchedulerResourceInformation(
       allocatedAddresses -= address
     }
   }
-}
-
-private[spark] object SchedulerResourceInformation {
-  def empty: SchedulerResourceInformation =
-    new SchedulerResourceInformation(UNKNOWN, ArrayBuffer.empty[String])
 }

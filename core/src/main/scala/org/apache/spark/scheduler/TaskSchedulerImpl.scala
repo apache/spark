@@ -340,7 +340,7 @@ private[spark] class TaskSchedulerImpl(
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
       if (availableCpus(i) >= CPUS_PER_TASK &&
-        resourceMeetTaskRequirements(availableResources(i))) {
+        resourcesMeetTaskRequirements(availableResources(i))) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality, availableResources(i))) {
             tasks(i) += task
@@ -372,7 +372,7 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
    */
-  private def resourceMeetTaskRequirements(
+  private def resourcesMeetTaskRequirements(
       resources: Map[String, SchedulerResourceInformation]): Boolean = {
     RESOURCES_PER_TASK.forall { case (rName, rNum) =>
         resources.contains(rName) && resources(rName).getAvailableAddresses().size >= rNum
