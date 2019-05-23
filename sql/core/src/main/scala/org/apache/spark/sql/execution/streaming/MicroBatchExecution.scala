@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relat
 import org.apache.spark.sql.execution.streaming.sources.{RateControlMicroBatchStream, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
 
@@ -38,7 +38,7 @@ class MicroBatchExecution(
     name: String,
     checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    sink: BaseStreamingSink,
+    sink: Table,
     trigger: Trigger,
     triggerClock: Clock,
     outputMode: OutputMode,
@@ -48,7 +48,7 @@ class MicroBatchExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
-  @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
+  @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -268,10 +268,10 @@ class MicroBatchExecution(
         /* Initialize committed offsets to a committed batch, which at this
          * is the second latest batch id in the offset log. */
         if (latestBatchId != 0) {
-          val secondLatestBatchId = offsetLog.get(latestBatchId - 1).getOrElse {
+          val secondLatestOffsets = offsetLog.get(latestBatchId - 1).getOrElse {
             throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
           }
-          committedOffsets = secondLatestBatchId.toStreamProgress(sources)
+          committedOffsets = secondLatestOffsets.toStreamProgress(sources)
         }
 
         // update offset metadata
@@ -296,7 +296,7 @@ class MicroBatchExecution(
                * batch will be executed before getOffset is called again. */
               availableOffsets.foreach {
                 case (source: Source, end: Offset) =>
-                  val start = committedOffsets.get(source)
+                  val start = committedOffsets.get(source).map(_.asInstanceOf[Offset])
                   source.getBatch(start, end)
                 case nonV1Tuple =>
                   // The V2 API does not have the same edge case requiring getBatch to be called
@@ -354,7 +354,7 @@ class MicroBatchExecution(
     if (isCurrentBatchConstructed) return true
 
     // Generate a map from each unique source to the next available offset.
-    val latestOffsets: Map[BaseStreamingSource, Option[Offset]] = uniqueSources.map {
+    val latestOffsets: Map[SparkDataStream, Option[OffsetV2]] = uniqueSources.map {
       case s: Source =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("getOffset") {
@@ -411,7 +411,7 @@ class MicroBatchExecution(
           val prevBatchOff = offsetLog.get(currentBatchId - 1)
           if (prevBatchOff.isDefined) {
             prevBatchOff.get.toStreamProgress(sources).foreach {
-              case (src: Source, off) => src.commit(off)
+              case (src: Source, off: Offset) => src.commit(off)
               case (stream: MicroBatchStream, off) =>
                 stream.commit(stream.deserializeOffset(off.json))
               case (src, _) =>
@@ -448,9 +448,9 @@ class MicroBatchExecution(
     // Request unprocessed data from all sources.
     newData = reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
-        case (source: Source, available)
+        case (source: Source, available: Offset)
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
-          val current = committedOffsets.get(source)
+          val current = committedOffsets.get(source).map(_.asInstanceOf[Offset])
           val batch = source.getBatch(current, available)
           assert(batch.isStreaming,
             s"DataFrame returned by getBatch from $source did not have isStreaming=true\n" +

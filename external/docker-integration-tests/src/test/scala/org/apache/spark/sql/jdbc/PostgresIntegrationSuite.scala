@@ -21,6 +21,7 @@ import java.sql.Connection
 import java.util.Properties
 
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
 import org.apache.spark.tags.DockerTest
@@ -179,5 +180,30 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(7) == Seq("192.168.0.0/24", "10.1.0.0/16"))
     assert(rows(0).getSeq(8) == Seq("""{"a": "foo", "b": "bar"}""", """{"a": 1, "b": 2}"""))
     assert(rows(0).getSeq(9) == Seq("""{"a": 1, "b": 2, "c": 3}"""))
+  }
+
+  test("query JDBC option") {
+    val expectedResult = Set(
+      (42, 123456789012345L)
+    ).map { case (c1, c3) =>
+      Row(Integer.valueOf(c1), java.lang.Long.valueOf(c3))
+    }
+
+    val query = "SELECT c1, c3 FROM bar WHERE c1 IS NOT NULL"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl', query '$query')
+       """.stripMargin.replaceAll("\n", " "))
+    assert(sql("select c1, c3 from queryOption").collect.toSet == expectedResult)
   }
 }

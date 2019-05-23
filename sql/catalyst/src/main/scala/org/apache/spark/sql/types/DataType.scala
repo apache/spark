@@ -180,7 +180,7 @@ object DataType {
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
-      Utils.classForName(udtClass).getConstructor().newInstance().asInstanceOf[UserDefinedType[_]]
+      Utils.classForName[UserDefinedType[_]](udtClass).getConstructor().newInstance()
 
     // Python UDT
     case JSortedObject(
@@ -443,7 +443,7 @@ object DataType {
         fieldCompatible
 
       case (w: AtomicType, r: AtomicType) =>
-        if (!Cast.canSafeCast(w, r)) {
+        if (!Cast.canUpCast(w, r)) {
           addError(s"Cannot safely cast '$context': $w to $r")
           false
         } else {

@@ -254,16 +254,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
-      val (sink, resultDf) = trigger match {
-        case _: ContinuousTrigger =>
-          val s = new MemorySinkV2()
-          val r = Dataset.ofRows(df.sparkSession, new MemoryPlanV2(s, df.schema.toAttributes))
-          (s, r)
-        case _ =>
-          val s = new MemorySink(df.schema, outputMode)
-          val r = Dataset.ofRows(df.sparkSession, new MemoryPlan(s))
-          (s, r)
-      }
+      val sink = new MemorySink()
+      val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink, df.schema.toAttributes))
       val chkpointLoc = extraOptions.get("checkpointLocation")
       val recoverFromChkpoint = outputMode == OutputMode.Complete()
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
@@ -319,7 +311,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         provider.getTable(dsOptions) match {
           case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
-            table.asInstanceOf[BaseStreamingSink]
+            table
           case _ => createV1Sink()
         }
       } else {
@@ -339,7 +331,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def createV1Sink(): BaseStreamingSink = {
+  private def createV1Sink(): Sink = {
     val ds = DataSource(
       df.sparkSession,
       className = source,

@@ -132,10 +132,30 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
+  val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to fetch and broadcast the table. " +
+        "If we encounter memory issue like frequently full GC or OOM when broadcast table " +
+        "we can decrease this number in order to reduce memory usage. " +
+        "Notice the number should be carefully chosen since decreasing parallelism might " +
+        "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
+        "cause memory problem.")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in [0,128].")
+      .createWithDefault(128)
+
   val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
     .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
       "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")
     .intConf
     .checkValue(_ >= 0, "Must be set greater or equal to zero")
     .createWithDefault(Int.MaxValue)
+
+  val SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS =
+    buildStaticConf("spark.sql.legacy.sessionInitWithConfigDefaults")
+      .doc("Flag to revert to legacy behavior where a cloned SparkSession receives SparkConf " +
+        "defaults, dropping any overrides in its parent SparkSession.")
+      .booleanConf
+      .createWithDefault(false)
 }

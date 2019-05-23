@@ -30,6 +30,13 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_
 
 package object config {
 
+  private[spark] val SPARK_DRIVER_RESOURCE_PREFIX = "spark.driver.resource."
+  private[spark] val SPARK_EXECUTOR_RESOURCE_PREFIX = "spark.executor.resource."
+  private[spark] val SPARK_TASK_RESOURCE_PREFIX = "spark.task.resource."
+
+  private[spark] val SPARK_RESOURCE_COUNT_POSTFIX = ".count"
+  private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX = ".discoveryScript"
+
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional
 

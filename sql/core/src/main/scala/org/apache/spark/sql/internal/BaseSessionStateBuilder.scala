@@ -85,7 +85,13 @@ abstract class BaseSessionStateBuilder(
    * with its [[SparkConf]] only when there is no parent session.
    */
   protected lazy val conf: SQLConf = {
-    parentState.map(_.conf.clone()).getOrElse {
+    parentState.map { s =>
+      val cloned = s.conf.clone()
+      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
+        mergeSparkConf(cloned, session.sparkContext.conf)
+      }
+      cloned
+    }.getOrElse {
       val conf = new SQLConf
       mergeSparkConf(conf, session.sparkContext.conf)
       conf
@@ -163,7 +169,7 @@ abstract class BaseSessionStateBuilder(
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        DataSourceResolution(conf) +:
+        DataSourceResolution(conf, session.catalog(_)) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =

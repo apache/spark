@@ -26,7 +26,8 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.FilePartition
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2978,6 +2979,31 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-27699 Validate pushed down filters") {
+    def checkPushedFilters(df: DataFrame, filters: Array[sources.Filter]): Unit = {
+      val scan = df.queryExecution.sparkPlan
+        .find(_.isInstanceOf[BatchScanExec]).get.asInstanceOf[BatchScanExec]
+        .scan
+      assert(scan.isInstanceOf[OrcScan])
+      assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
+    }
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+      withTempPath { dir =>
+        spark.range(10).map(i => (i, i.toString)).toDF("id", "s").write.orc(dir.getCanonicalPath)
+        val df = spark.read.orc(dir.getCanonicalPath)
+        checkPushedFilters(
+          df.where(('id < 2 and 's.contains("foo")) or ('id > 10 and 's.contains("bar"))),
+          Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
+        checkPushedFilters(
+          df.where('s.contains("foo") or ('id > 10 and 's.contains("bar"))),
+          Array.empty)
+        checkPushedFilters(
+          df.where('id < 2 and not('id > 10 and 's.contains("bar"))),
+          Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
+      }
+    }
+  }
+
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
     Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
@@ -3022,6 +3048,84 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("reset")
       sql("cache table tbl")
       sql("reset")
+    }
+  }
+
+  test("string date comparison") {
+    spark.range(1).selectExpr("date '2000-01-01' as d").createOrReplaceTempView("t1")
+    val result = Date.valueOf("2000-01-01")
+    checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
+    checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
+    checkAnswer(sql("select * from t1 where d < '2000-01'"), Nil)
+    checkAnswer(sql("select * from t1 where d < '2000-01-01'"), Nil)
+    checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Nil)
+    checkAnswer(sql("select * from t1 where d <= '2000-1-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d <= '1999-12-30'"), Nil)
+    checkAnswer(sql("select * from t1 where d = '2000-1-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d = '2000-01-01'"), Row(result))
+    checkAnswer(sql("select * from t1 where d = '2000-1-02'"), Nil)
+    checkAnswer(sql("select * from t1 where d > '2000-01-01'"), Nil)
+    checkAnswer(sql("select * from t1 where d > '1999'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-1-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-1-01'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-01'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-02'"), Nil)
+    checkAnswer(sql("select * from t1 where '2000' >= d"), Row(result))
+    checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
+
+    withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+      checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
+      checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
+      checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Row(result))
+      checkAnswer(sql("select * from t1 where d <= '1999'"), Nil)
+      checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
+      checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
+      checkAnswer(sql("select to_date('2000-01-01') > '1'"), Row(true))
+    }
+  }
+
+  test("string timestamp comparison") {
+    spark.range(1)
+      .selectExpr("timestamp '2000-01-01 01:10:00.000' as d")
+      .createOrReplaceTempView("t1")
+    val result = Timestamp.valueOf("2000-01-01 01:10:00")
+    checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
+    checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
+    checkAnswer(sql("select * from t1 where d < '2000-01'"), Nil)
+    checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Nil)
+    checkAnswer(sql("select * from t1 where d < '2000-01-01 01:10:00.000'"), Nil)
+    checkAnswer(sql("select * from t1 where d < '2000-01-01 02:10:00.000'"), Row(result))
+    checkAnswer(sql("select * from t1 where d <= '2000-1-1 01:10:00'"), Row(result))
+    checkAnswer(sql("select * from t1 where d <= '2000-1-1 01:00:00'"), Nil)
+    checkAnswer(sql("select * from t1 where d = '2000-1-1 01:10:00.000'"), Row(result))
+    checkAnswer(sql("select * from t1 where d = '2000-01-01 01:10:00.000'"), Row(result))
+    checkAnswer(sql("select * from t1 where d = '2000-1-02 01:10:00.000'"), Nil)
+    checkAnswer(sql("select * from t1 where d > '2000'"), Row(result))
+    checkAnswer(sql("select * from t1 where d > '2000-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d > '2000-1-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d > '2000-1-1 01:00:00.000'"), Row(result))
+    checkAnswer(sql("select * from t1 where d > '2001'"), Nil)
+    checkAnswer(sql("select * from t1 where d > '2000-01-02'"), Nil)
+    checkAnswer(sql("select * from t1 where d >= '2000-1-01'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-1'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-01'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-01 01:10:00.000'"), Row(result))
+    checkAnswer(sql("select * from t1 where d >= '2000-01-02 01:10:00.000'"), Nil)
+    checkAnswer(sql("select * from t1 where '2000' >= d"), Nil)
+    checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
+
+    withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+      checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
+      checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
+      checkAnswer(sql("select * from t1 where d <= '2000-1-1'"), Row(result))
+      checkAnswer(sql("select * from t1 where d <= '2000-01-02'"), Row(result))
+      checkAnswer(sql("select * from t1 where d <= '1999'"), Nil)
+      checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
+      checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
+      checkAnswer(sql("select to_timestamp('2000-01-01 01:10:00') > '1'"), Row(true))
     }
   }
 }

@@ -155,6 +155,15 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     }
   }
 
+  // This method calls `TaskSchedulerImpl.handlePartitionCompleted` asynchronously. We do not want
+  // DAGScheduler to call `TaskSchedulerImpl.handlePartitionCompleted` directly, as it's
+  // synchronized and may hurt the throughput of the scheduler.
+  def enqueuePartitionCompletionNotification(stageId: Int, partitionId: Int): Unit = {
+    getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
+      scheduler.handlePartitionCompleted(stageId, partitionId)
+    })
+  }
+
   def stop() {
     getTaskResultExecutor.shutdownNow()
   }

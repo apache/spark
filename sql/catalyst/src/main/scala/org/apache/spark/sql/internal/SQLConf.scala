@@ -1326,12 +1326,20 @@ object SQLConf {
 
   val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
-      .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas, " +
-        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame, " +
-        "and createDataFrame when its input is an R DataFrame. " +
+      .doc("When true, make use of Apache Arrow for columnar data transfers." +
+        "In case of PySpark, " +
+        "1. pyspark.sql.DataFrame.toPandas " +
+        "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
-        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
+        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType." +
+
+        "In case of SparkR," +
+        "1. createDataFrame when its input is an R DataFrame " +
+        "2. collect " +
+        "3. dapply " +
+        "4. gapply " +
+        "The following data types are unsupported: " +
+        "FloatType, BinaryType, ArrayType, StructType and MapType.")
       .booleanConf
       .createWithDefault(false)
 
@@ -1744,6 +1752,31 @@ object SQLConf {
          "and from_utc_timestamp() functions.")
     .booleanConf
     .createWithDefault(false)
+
+  val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
+    .doc("The max length of a file that can be read by the binary file data source. " +
+      "Spark will fail fast and not attempt to read the file if its length exceeds this value. " +
+      "The theoretical max is Int.MaxValue, though VMs might implement a smaller max.")
+    .internal()
+    .intConf
+    .createWithDefault(Int.MaxValue)
+
+  val LEGACY_CAST_DATETIME_TO_STRING =
+    buildConf("spark.sql.legacy.typeCoercion.datetimeToString")
+      .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
+        "with String")
+    .booleanConf
+    .createWithDefault(false)
+
+  val DEFAULT_V2_CATALOG = buildConf("spark.sql.default.catalog")
+    .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+    .stringConf
+    .createOptional
+
+  val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
+    .doc("When true, the upcast will be loose and allows string to atomic types.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -2003,7 +2036,10 @@ class SQLConf extends Serializable with Logging {
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
-  def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
+  def broadcastTimeout: Long = {
+    val timeoutValue = getConf(BROADCAST_TIMEOUT)
+    if (timeoutValue < 0) Long.MaxValue else timeoutValue
+  }
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
@@ -2194,6 +2230,10 @@ class SQLConf extends Serializable with Logging {
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
+
+  def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
+
+  def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   /** ********************** SQLConf functionality methods ************ */
 

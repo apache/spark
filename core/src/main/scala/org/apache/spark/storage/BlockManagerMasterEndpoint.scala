@@ -105,6 +105,9 @@ class BlockManagerMasterEndpoint(
     case GetBlockStatus(blockId, askSlaves) =>
       context.reply(blockStatus(blockId, askSlaves))
 
+    case IsExecutorAlive(executorId) =>
+      context.reply(blockManagerIdByExecutor.contains(executorId))
+
     case GetMatchingBlockIds(filter, askSlaves) =>
       context.reply(getMatchingBlockIds(filter, askSlaves))
 
