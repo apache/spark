@@ -1944,11 +1944,23 @@
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-exec</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-serde</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1960,11 +1972,35 @@
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-exec</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-metastore</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-cli</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-mapper-asl</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
