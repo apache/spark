@@ -316,31 +316,4 @@ private[spark] object KubernetesUtils extends Logging {
         throw new SparkException(s"Error uploading file ${src.getName}", e)
     }
   }
-
-  /**
-   * This function builds the Quantity objects for each resource in the Spark resource
-   * configs. It assumes we can use the Kubernetes device plugin format: vendor-domain/resource.
-   * It returns a set with a tuple of vendor-domain/resource and Quantity for each resource.
-   */
-  def buildResourcesQuantities(prefix: String, sparkConf: SparkConf): Set[(String, Quantity)] = {
-    val allResources = sparkConf.getAllWithPrefix(prefix)
-    val resourcesVendors =
-      SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_VENDOR_SUFFIX).toMap
-    val resourcesAmounts =
-      SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_COUNT_POSTFIX).toMap
-    val uniqueResources = SparkConf.getBaseOfConfigs(allResources)
-
-    uniqueResources.map { rName =>
-      val vendor = resourcesVendors.get(rName).
-        getOrElse(throw
-          new SparkException(s"Resource: $rName was requested, but vendor was not specified."))
-      val amount = resourcesAmounts.get(rName).
-        getOrElse(throw
-          new SparkException(s"Resource: $rName was requested, but count was not specified."))
-      val quantity = new QuantityBuilder(false)
-        .withAmount(amount)
-        .build()
-      (KubernetesConf.buildKubernetesResourceName(vendor, rName), quantity)
-    }
-  }
 }
