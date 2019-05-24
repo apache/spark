@@ -293,14 +293,25 @@ object InMemoryFileIndex extends Logging {
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
     val statuses = try fs.listStatus(path) catch {
-      // If we are listing a root path (e.g. the top level directory of a table), ignore
-      // missing files. This is necessary in order to be able to drop SessionCatalog tables
-      // when the table's root directory has been deleted (see discussion at SPARK-27676).
-
+      // If we are listing a root path (e.g. a top level directory of a table), we need to
+      // ignore FileNotFoundExceptions during this root level of the listing because
+      //
+      //  (a) certain code paths might construct an InMemoryFileIndex with root paths that
+      //      might not exist (i.e. not all callers are guaranteed to have checked
+      //      path existence prior to constructing InMemoryFileIndex) and,
+      //  (b) we need to ignore deleted root paths during REFRESH TABLE, otherwise we break
+      //      existing behavior and break the ability drop SessionCatalog tables when tables'
+      //      root directories have been deleted (which breaks a number of Spark's own tests).
+      //
       // If we are NOT listing a root path then a FileNotFoundException here means that the
-      // directory was present in a previous round of file listing but is absent in this
+      // directory was present in a previous level of file listing but is absent in this
       // listing, likely indicating a race condition (e.g. concurrent table overwrite or S3
       // list inconsistency).
+      //
+      // The trade-off in supporting existing behaviors / use-cases is that we won't be
+      // able to detect race conditions involving root paths being deleted during
+      // InMemoryFileIndex construction. However, it's still a net improvement to detect and
+      // fail-fast on the non-root cases. For more info see the SPARK-27676 review discussion.
       case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
         logWarning(s"The directory $path was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
