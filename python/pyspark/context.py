@@ -1039,7 +1039,7 @@ class SparkContext(object):
         """
         Set a human readable description of the current job.
         """
-        self.local.description = value
+        self.setLocalProperty("spark.job.description", value)
 
     def sparkUser(self):
         """
