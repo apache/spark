@@ -50,7 +50,7 @@ class DummyReadOnlyFileTable extends Table with SupportsRead {
   }
 
   override def capabilities(): java.util.Set[TableCapability] =
-    Set(TableCapability.BATCH_READ).asJava
+    Set(TableCapability.BATCH_READ, TableCapability.ACCEPT_ANY_SCHEMA).asJava
 }
 
 class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
@@ -73,7 +73,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
     throw new AnalysisException("Dummy file writer")
 
   override def capabilities(): java.util.Set[TableCapability] =
-    Set(TableCapability.BATCH_WRITE).asJava
+    Set(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA).asJava
 }
 
 class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {

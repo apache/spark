@@ -393,16 +393,30 @@ trait V2WriteCommand extends Command {
   override lazy val resolved: Boolean = outputResolved
 
   def outputResolved: Boolean = {
-    table.resolved && query.resolved && query.output.size == table.output.size &&
+    // If the table doesn't require schema match, we don't need to resolve the output columns.
+    table.skipSchemaResolution || {
+      table.resolved && query.resolved && query.output.size == table.output.size &&
         query.output.zip(table.output).forall {
           case (inAttr, outAttr) =>
             // names and types must match, nullability must be compatible
             inAttr.name == outAttr.name &&
-                DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
-                (outAttr.nullable || !inAttr.nullable)
+              DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+              (outAttr.nullable || !inAttr.nullable)
         }
+    }
   }
 }
+
+/**
+ * Create a new table with a v2 catalog.
+ */
+case class CreateV2Table(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    properties: Map[String, String],
+    ignoreIfExists: Boolean) extends Command
 
 /**
  * Create a new table from a select query with a v2 catalog.
@@ -1078,7 +1092,11 @@ case class OneRowRelation() extends LeafNode {
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
-  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = OneRowRelation()
+  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = {
+    val newCopy = OneRowRelation()
+    newCopy.copyTagsFrom(this)
+    newCopy
+  }
 }
 
 /** A logical plan for `dropDuplicates`. */

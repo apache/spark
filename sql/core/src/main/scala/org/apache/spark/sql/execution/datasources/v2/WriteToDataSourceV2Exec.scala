@@ -26,7 +26,6 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
@@ -36,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.sources.v2.SupportsWrite
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsSaveMode, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
@@ -81,16 +80,10 @@ case class CreateTableAsSelectExec(
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       catalog.createTable(ident, query.schema, partitioning.toArray, properties.asJava) match {
         case table: SupportsWrite =>
-          val builder = table.newWriteBuilder(writeOptions)
-              .withInputDataSchema(query.schema)
-              .withQueryId(UUID.randomUUID().toString)
-          val batchWrite = builder match {
-            case supportsSaveMode: SupportsSaveMode =>
-              supportsSaveMode.mode(SaveMode.Append).buildForBatch()
-
-            case _ =>
-              builder.buildForBatch()
-          }
+          val batchWrite = table.newWriteBuilder(writeOptions)
+            .withInputDataSchema(query.schema)
+            .withQueryId(UUID.randomUUID().toString)
+            .buildForBatch()
 
           doWrite(batchWrite)
 
@@ -116,13 +109,7 @@ case class AppendDataExec(
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val batchWrite = newWriteBuilder() match {
-      case builder: SupportsSaveMode =>
-        builder.mode(SaveMode.Append).buildForBatch()
-
-      case builder =>
-        builder.buildForBatch()
-    }
+    val batchWrite = newWriteBuilder().buildForBatch()
     doWrite(batchWrite)
   }
 }
@@ -151,9 +138,6 @@ case class OverwriteByExpressionExec(
     val batchWrite = newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
         builder.truncate().buildForBatch()
-
-      case builder: SupportsSaveMode if isTruncate(deleteWhere) =>
-        builder.mode(SaveMode.Overwrite).buildForBatch()
 
       case builder: SupportsOverwrite =>
         builder.overwrite(deleteWhere).buildForBatch()
@@ -184,9 +168,6 @@ case class OverwritePartitionsDynamicExec(
     val batchWrite = newWriteBuilder() match {
       case builder: SupportsDynamicOverwrite =>
         builder.overwriteDynamicPartitions().buildForBatch()
-
-      case builder: SupportsSaveMode =>
-        builder.mode(SaveMode.Overwrite).buildForBatch()
 
       case _ =>
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
@@ -350,8 +331,8 @@ object DataWritingSparkTask extends Logging {
 }
 
 private[v2] case class DataWritingSparkTaskResult(
-                                                   numRows: Long,
-                                                   writerCommitMessage: WriterCommitMessage)
+    numRows: Long,
+    writerCommitMessage: WriterCommitMessage)
 
 /**
  * Sink progress information collected after commit.

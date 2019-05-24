@@ -29,10 +29,10 @@ import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
- * Discovers resources (GPUs/FPGAs/etc). It currently only supports resources that have
- * addresses.
+ * Discovers information about resources (GPUs/FPGAs/etc). It currently only supports
+ * resources that have addresses.
  * This class finds resources by running and parsing the output of the user specified script
- * from the config spark.{driver/executor}.resource.{resourceType}.discoveryScript.
+ * from the config spark.{driver/executor}.resource.{resourceName}.discoveryScript.
  * The output of the script it runs is expected to be JSON in the format of the
  * ResourceInformation class.
  *
@@ -42,28 +42,41 @@ private[spark] object ResourceDiscoverer extends Logging {
 
   private implicit val formats = DefaultFormats
 
-  def findResources(sparkConf: SparkConf, isDriver: Boolean): Map[String, ResourceInformation] = {
-    val prefix = if (isDriver) {
-      SPARK_DRIVER_RESOURCE_PREFIX
-    } else {
-      SPARK_EXECUTOR_RESOURCE_PREFIX
-    }
-    // get unique resource types by grabbing first part config with multiple periods,
-    // ie resourceType.count, grab resourceType part
-    val resourceNames = sparkConf.getAllWithPrefix(prefix).map { case (k, _) =>
-      k.split('.').head
-    }.toSet
+  /**
+   * This function will discover information about a set of resources by using the
+   * user specified script (spark.{driver/executor}.resource.{resourceName}.discoveryScript).
+   * It optionally takes a set of resource names or if that isn't specified
+   * it uses the config prefix passed in to look at the executor or driver configs
+   * to get the resource names. Then for each resource it will run the discovery script
+   * and get the ResourceInformation about it.
+   *
+   * @param sparkConf SparkConf
+   * @param confPrefix Driver or Executor resource prefix
+   * @param resourceNamesOpt Optionally specify resource names. If not set uses the resource
+   *                  configs based on confPrefix passed in to get the resource names.
+   * @return Map of resource name to ResourceInformation
+   */
+  def discoverResourcesInformation(
+      sparkConf: SparkConf,
+      confPrefix: String,
+      resourceNamesOpt: Option[Set[String]] = None
+      ): Map[String, ResourceInformation] = {
+    val resourceNames = resourceNamesOpt.getOrElse(
+      // get unique resource names by grabbing first part config with multiple periods,
+      // ie resourceName.count, grab resourceName part
+      SparkConf.getBaseOfConfigs(sparkConf.getAllWithPrefix(confPrefix))
+    )
     resourceNames.map { rName => {
-      val rInfo = getResourceInfoForType(sparkConf, prefix, rName)
+      val rInfo = getResourceInfo(sparkConf, confPrefix, rName)
       (rName -> rInfo)
     }}.toMap
   }
 
-  private def getResourceInfoForType(
+  private def getResourceInfo(
       sparkConf: SparkConf,
-      prefix: String,
-      resourceType: String): ResourceInformation = {
-    val discoveryConf = prefix + resourceType + SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX
+      confPrefix: String,
+      resourceName: String): ResourceInformation = {
+    val discoveryConf = confPrefix + resourceName + SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX
     val script = sparkConf.getOption(discoveryConf)
     val result = if (script.nonEmpty) {
       val scriptFile = new File(script.get)
@@ -73,21 +86,50 @@ private[spark] object ResourceDiscoverer extends Logging {
           val output = executeAndGetOutput(Seq(script.get), new File("."))
           val parsedJson = parse(output)
           val name = (parsedJson \ "name").extract[String]
-          val addresses = (parsedJson \ "addresses").extract[Array[String]].toArray
+          val addresses = (parsedJson \ "addresses").extract[Array[String]]
+          if (name != resourceName) {
+            throw new SparkException(s"Discovery script: ${script.get} specified via " +
+              s"$discoveryConf returned a resource name: $name that doesn't match the " +
+              s"config name: $resourceName")
+          }
           new ResourceInformation(name, addresses)
         } catch {
           case e @ (_: SparkException | _: MappingException | _: JsonParseException) =>
             throw new SparkException(s"Error running the resource discovery script: $scriptFile" +
-              s" for $resourceType", e)
+              s" for $resourceName", e)
         }
       } else {
-        throw new SparkException(s"Resource script: $scriptFile to discover $resourceType" +
+        throw new SparkException(s"Resource script: $scriptFile to discover $resourceName" +
           s" doesn't exist!")
       }
     } else {
-      throw new SparkException(s"User is expecting to use $resourceType resources but " +
+      throw new SparkException(s"User is expecting to use $resourceName resources but " +
         s"didn't specify a script via conf: $discoveryConf, to find them!")
     }
     result
+  }
+
+  /**
+   * Make sure the actual resources we have on startup are at least the number the user
+   * requested. Note that there is other code in SparkConf that makes sure we have executor configs
+   * for each task resource requirement and that they are large enough. This function
+   * is used by both driver and executors.
+   *
+   * @param requiredResources The resources that are required for us to run.
+   * @param actualResources The actual resources discovered.
+   */
+  def checkActualResourcesMeetRequirements(
+      requiredResources: Map[String, String],
+      actualResources: Map[String, ResourceInformation]): Unit = {
+    requiredResources.foreach { case (rName, reqCount) =>
+      val actualRInfo = actualResources.get(rName).getOrElse(
+        throw new SparkException(s"Resource: $rName required but wasn't discovered on startup"))
+
+      if (actualRInfo.addresses.size < reqCount.toLong) {
+        throw new SparkException(s"Resource: $rName, with addresses: " +
+          s"${actualRInfo.addresses.mkString(",")} " +
+          s"is less than what the user requested: $reqCount)")
+      }
+    }
   }
 }
