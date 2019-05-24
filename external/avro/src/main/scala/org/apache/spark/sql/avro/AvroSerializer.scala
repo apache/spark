@@ -245,8 +245,8 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       actualType.head
     } else {
       if (nullable) {
-        logWarning(s"Writing avro files with non-nullable avro schema with nullable catalyst " +
-          s"schema will throw runtime exception if there is a record with null value.")
+        logWarning("Writing avro files with non-nullable avro schema with nullable catalyst " +
+          "schema will throw runtime exception if there is a record with null value.")
       }
       avroType
     }
