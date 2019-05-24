@@ -267,6 +267,9 @@ class SparkContext(object):
         if isinstance(threading.current_thread(), threading._MainThread):
             signal.signal(signal.SIGINT, signal_handler)
 
+        # create an thread local object for local properties
+        self.local = threading.local()
+
     def __repr__(self):
         return "<SparkContext master={master} appName={appName}>".format(
             master=self.master,
@@ -1002,27 +1005,41 @@ class SparkContext(object):
         ensure that the tasks are actually stopped in a timely manner, but is off by default due
         to HDFS-1208, where HDFS may respond to Thread.interrupt() by marking nodes as dead.
         """
-        self._jsc.setJobGroup(groupId, description, interruptOnCancel)
+        self.setLocalProperty("spark.jobGroup.id", groupId)
+        self.setLocalProperty("spark.job.description", description)
+        self.setLocalProperty("spark.job.interruptOnCancel", str(interruptOnCancel))
+
+    def getLocalProperties(self):
+        if not hasattr(self.local, 'local_properties'):
+            return {}
+        return self.local.local_properties
 
     def setLocalProperty(self, key, value):
         """
         Set a local property that affects jobs submitted from this thread, such as the
         Spark fair scheduler pool.
         """
-        self._jsc.setLocalProperty(key, value)
+        if not hasattr(self.local, 'local_properties'):
+            self.local.local_properties = {}
+        self.local.local_properties[key] = value
 
     def getLocalProperty(self, key):
         """
         Get a local property set in this thread, or null if it is missing. See
         L{setLocalProperty}
         """
-        return self._jsc.getLocalProperty(key)
+        if not hasattr(self.local, 'local_properties'):
+            return ""
+        else:
+            if not key in self.local.local_properties:
+                return ""
+        return self.local.local_properties[key]
 
     def setJobDescription(self, value):
         """
         Set a human readable description of the current job.
         """
-        self._jsc.setJobDescription(value)
+        self.local.description = value
 
     def sparkUser(self):
         """

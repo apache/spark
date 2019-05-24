@@ -159,7 +159,12 @@ private[spark] object PythonRDD extends Logging {
    * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
    *         data collected from this job, and the secret for authentication.
    */
-  def collectAndServe[T](rdd: RDD[T]): Array[Any] = {
+  def collectAndServe[T](
+    rdd: RDD[T],
+    localProperties: JMap[String, String]): Array[Any] = {
+    val sc = rdd.sparkContext
+    localProperties.asScala.foreach(kv => sc.setLocalProperty(kv._1, kv._2))
+
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
   }
 

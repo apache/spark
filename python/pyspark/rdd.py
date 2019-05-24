@@ -33,6 +33,8 @@ from itertools import chain
 from functools import reduce
 from math import sqrt, log, isinf, isnan, pow, ceil
 
+from py4j.java_collections import MapConverter
+
 if sys.version > '3':
     basestring = unicode = str
 else:
@@ -869,7 +871,10 @@ class RDD(object):
             to be small, as all the data is loaded into the driver's memory.
         """
         with SCCallSiteSync(self.context) as css:
-            sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
+            java_map = MapConverter().convert(self.context.getLocalProperties(),
+                                              self.context._gateway._gateway_client)
+            sock_info = self.ctx._jvm.PythonRDD.collectAndServe(
+                self._jrdd.rdd() ,java_map)
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
     def reduce(self, f):
