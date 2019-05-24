@@ -64,7 +64,7 @@ class InMemoryFileIndex(
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
-  refresh0()
+  buildIndex(isRefresh = false)
 
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
@@ -84,11 +84,11 @@ class InMemoryFileIndex(
 
   override def refresh(): Unit = {
     fileStatusCache.invalidateAll()
-    refresh0()
+    buildIndex(isRefresh = true)
   }
 
-  private def refresh0(): Unit = {
-    val files = listLeafFiles(rootPaths)
+  private def buildIndex(isRefresh: Boolean): Unit = {
+    val files = listLeafFiles(rootPaths, isRefresh = isRefresh)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
     cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
@@ -108,8 +108,12 @@ class InMemoryFileIndex(
    * discovery threshold.
    *
    * This is publicly visible for testing.
+   *
+   * @param paths the root paths to list
+   * @param isRefresh true if we are listing due to an explicit refresh(),
+   *                  false if we are listing in the constructor.
    */
-  def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+  def listLeafFiles(paths: Seq[Path], isRefresh: Boolean): mutable.LinkedHashSet[FileStatus] = {
     val output = mutable.LinkedHashSet[FileStatus]()
     val pathsToFetch = mutable.ArrayBuffer[Path]()
     for (path <- paths) {
@@ -124,7 +128,12 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch, hadoopConf, filter, sparkSession, areRootPaths = true)
+      pathsToFetch,
+      hadoopConf,
+      filter,
+      sparkSession,
+      isRefresh = isRefresh,
+      isNestedListing = false) // since we are starting from a root path
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -167,7 +176,8 @@ object InMemoryFileIndex extends Logging {
       hadoopConf: Configuration,
       filter: PathFilter,
       sparkSession: SparkSession,
-      areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
+      isRefresh: Boolean,
+      isNestedListing: Boolean): Seq[(Path, Seq[FileStatus])] = {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
@@ -180,7 +190,8 @@ object InMemoryFileIndex extends Logging {
           filter,
           Some(sparkSession),
           ignoreMissingFiles = ignoreMissingFiles,
-          isRootPath = areRootPaths)
+          isRefresh = isRefresh,
+          isNestedListing = isNestedListing)
         (path, leafFiles)
       }
     }
@@ -220,7 +231,8 @@ object InMemoryFileIndex extends Logging {
               filter,
               None,
               ignoreMissingFiles = ignoreMissingFiles,
-              isRootPath = areRootPaths)
+              isRefresh = isRefresh,
+              isNestedListing = isNestedListing)
             (path, leafFiles)
           }.iterator
         }.map { case (path, statuses) =>
@@ -286,22 +298,27 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sessionOpt: Option[SparkSession],
       ignoreMissingFiles: Boolean,
-      isRootPath: Boolean): Seq[FileStatus] = {
+      isRefresh: Boolean,
+      isNestedListing: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
     val statuses = try fs.listStatus(path) catch {
-      // If we are listing a root path (e.g. the top level directory of a table), ignore
-      // missing files. This is necessary in order to be able to drop SessionCatalog tables
-      // when the table's root directory has been deleted (see discussion at SPARK-27676).
+      // If we are building this index for the first time (in the InMemoryFileIndex constructor,
+      // where isRefresh = false) then presumably every path passed to the constructor must
+      // have existed, so any FileNotFoundExceptions likely indicate a serious race condition.
 
-      // If we are NOT listing a root path then a FileNotFoundException here means that the
-      // directory was present in a previous round of file listing but is absent in this
-      // listing, likely indicating a race condition (e.g. concurrent table overwrite or S3
-      // list inconsistency).
-      case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
+      // However, if we're rebuilding the index due to an explicit refresh() then we need to
+      // ignore deleted root directories in order to preserve existing behavior and to allow
+      // SessionCatalog tables to be dropped when root directories have been deleted; see
+      // discussion on SPARK-27676's PR for more details.
+
+      // If we are NOT listing a root path (isNestedListing = true) then a FileNotFoundException
+      // here means that the directory was present in a previous round of file listing but is
+      // absent in this listing, indicating a race condition).
+      case _: FileNotFoundException if (isRefresh && !isNestedListing) || ignoreMissingFiles =>
         logWarning(s"The directory $path was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
@@ -317,7 +334,8 @@ object InMemoryFileIndex extends Logging {
             hadoopConf,
             filter,
             session,
-            areRootPaths = false
+            isRefresh = isRefresh,
+            isNestedListing = true
           ).flatMap(_._2)
         case _ =>
           dirs.flatMap { dir =>
@@ -327,7 +345,8 @@ object InMemoryFileIndex extends Logging {
               filter,
               sessionOpt,
               ignoreMissingFiles = ignoreMissingFiles,
-              isRootPath = false)
+              isRefresh = isRefresh,
+              isNestedListing = true)
           }
       }
       val allFiles = topLevelFiles ++ nestedFiles

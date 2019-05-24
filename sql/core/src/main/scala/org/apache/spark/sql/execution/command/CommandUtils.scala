@@ -69,7 +69,12 @@ object CommandUtils extends Logging {
           }
         }
         val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
-          paths, sessionState.newHadoopConf(), pathFilter, spark, areRootPaths = true)
+          paths,
+          sessionState.newHadoopConf(),
+          pathFilter,
+          spark,
+          isRefresh = true,
+          isNestedListing = false)
         fileStatusSeq.flatMap(_._2.map(_.getLen)).sum
       } else {
         partitions.map { p =>
