@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -55,6 +55,15 @@ case class DataSourceResolution(
       val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
 
       CreateTable(tableDesc, mode, None)
+
+    case create: CreateTableStatement =>
+      // the provider was not a v1 source, convert to a v2 plan
+      val CatalogObjectIdentifier(maybeCatalog, identifier) = create.tableName
+      val catalog = maybeCatalog.orElse(defaultCatalog)
+          .getOrElse(throw new AnalysisException(
+            s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
+          .asTableCatalog
+      convertCreateTable(catalog, identifier, create)
 
     case CreateTableAsSelectStatement(
         AsTableIdentifier(table), query, partitionCols, bucketSpec, properties,
@@ -137,49 +146,76 @@ case class DataSourceResolution(
       catalog: TableCatalog,
       identifier: Identifier,
       ctas: CreateTableAsSelectStatement): CreateTableAsSelect = {
-    if (ctas.options.contains("path") && ctas.location.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-            "you can only specify one of them.")
-    }
-
-    if ((ctas.options.contains("provider") || ctas.properties.contains("provider"))
-        && ctas.comment.isDefined) {
-      throw new AnalysisException(
-        "COMMENT and option/property 'comment' are both used to set the table comment, you can " +
-            "only specify one of them.")
-    }
-
-    if (ctas.options.contains("provider") || ctas.properties.contains("provider")) {
-      throw new AnalysisException(
-        "USING and option/property 'provider' are both used to set the provider implementation, " +
-            "you can only specify one of them.")
-    }
-
-    val options = ctas.options.filterKeys(_ != "path")
-
     // convert the bucket spec and add it as a transform
     val partitioning = ctas.partitioning ++ ctas.bucketSpec.map(_.asTransform)
-
-    // create table properties from TBLPROPERTIES and OPTIONS clauses
-    val properties = new mutable.HashMap[String, String]()
-    properties ++= ctas.properties
-    properties ++= options
-
-    // convert USING, LOCATION, and COMMENT clauses to table properties
-    properties += ("provider" -> ctas.provider)
-    ctas.comment.map(text => properties += ("comment" -> text))
-    ctas.location
-        .orElse(ctas.options.get("path"))
-        .map(loc => properties += ("location" -> loc))
+    val properties = convertTableProperties(
+      ctas.properties, ctas.options, ctas.location, ctas.comment, ctas.provider)
 
     CreateTableAsSelect(
       catalog,
       identifier,
       partitioning,
       ctas.asSelect,
-      properties.toMap,
-      writeOptions = options,
+      properties,
+      writeOptions = ctas.options.filterKeys(_ != "path"),
       ignoreIfExists = ctas.ifNotExists)
+  }
+
+  private def convertCreateTable(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      create: CreateTableStatement): CreateV2Table = {
+    // convert the bucket spec and add it as a transform
+    val partitioning = create.partitioning ++ create.bucketSpec.map(_.asTransform)
+    val properties = convertTableProperties(
+      create.properties, create.options, create.location, create.comment, create.provider)
+
+    CreateV2Table(
+      catalog,
+      identifier,
+      create.tableSchema,
+      partitioning,
+      properties,
+      ignoreIfExists = create.ifNotExists)
+  }
+
+  private def convertTableProperties(
+      properties: Map[String, String],
+      options: Map[String, String],
+      location: Option[String],
+      comment: Option[String],
+      provider: String): Map[String, String] = {
+    if (options.contains("path") && location.isDefined) {
+      throw new AnalysisException(
+        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
+            "you can only specify one of them.")
+    }
+
+    if ((options.contains("comment") || properties.contains("comment"))
+        && comment.isDefined) {
+      throw new AnalysisException(
+        "COMMENT and option/property 'comment' are both used to set the table comment, you can " +
+            "only specify one of them.")
+    }
+
+    if (options.contains("provider") || properties.contains("provider")) {
+      throw new AnalysisException(
+        "USING and option/property 'provider' are both used to set the provider implementation, " +
+            "you can only specify one of them.")
+    }
+
+    val filteredOptions = options.filterKeys(_ != "path")
+
+    // create table properties from TBLPROPERTIES and OPTIONS clauses
+    val tableProperties = new mutable.HashMap[String, String]()
+    tableProperties ++= properties
+    tableProperties ++= filteredOptions
+
+    // convert USING, LOCATION, and COMMENT clauses to table properties
+    tableProperties += ("provider" -> provider)
+    comment.map(text => tableProperties += ("comment" -> text))
+    location.orElse(options.get("path")).map(loc => tableProperties += ("location" -> loc))
+
+    tableProperties.toMap
   }
 }
