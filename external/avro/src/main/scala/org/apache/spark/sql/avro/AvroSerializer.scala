@@ -236,20 +236,19 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
   }
 
   private def resolveNullableType(avroType: Schema, nullable: Boolean): Schema = {
-    (avroType.getType, nullable) match {
-      case (Type.UNION, true) =>
-        // avro uses union to represent nullable type.
-        val fields = avroType.getTypes.asScala
-        assert(fields.length == 2)
-        val actualType = fields.filter(_.getType != Type.NULL)
-        assert(actualType.length == 1)
-        actualType.head
-      case (_, true) =>
+    if (avroType.getType == Type.UNION && nullable) {
+      // avro uses union to represent nullable type.
+      val fields = avroType.getTypes.asScala
+      assert(fields.length == 2)
+      val actualType = fields.filter(_.getType != Type.NULL)
+      assert(actualType.length == 1)
+      actualType.head
+    } else {
+      if (nullable) {
         logWarning(s"Writing avro files with non-nullable avro schema with nullable catalyst " +
           s"schema will throw runtime exception if there is a record with null value.")
-        avroType
-      case _ =>
-        avroType
+      }
+      avroType
     }
   }
 }
