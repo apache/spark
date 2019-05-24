@@ -1137,15 +1137,15 @@ class Dataset[T] private[sql](
       // exchanges (unlike the outer join path, which nests the data before shuffling).
       withTypedPlan(Project(Seq(leftResultExpr, rightResultExpr), joined))
     } else { // outer joins
-      // For both join side, combine all outputs into a single column and alias it with "_1
+      // For both join sides, combine all outputs into a single column and alias it with "_1
       // or "_2", to match the schema for the encoder of the join result.
       // Note that we do this before joining them, to enable the join operator to return null
       // for one side, in cases like outer-join.
       val left = Project(leftResultExpr :: Nil, joined.left)
       val right = Project(rightResultExpr :: Nil, joined.right)
 
-      // Rewrites the join condition to make the attribute point to correct column/field, after we
-      // combine the outputs of each join side.
+      // Rewrites the join condition to make the attribute point to correct column/field,
+      // after we combine the outputs of each join side.
       val conditionExpr = joined.condition.get transformUp {
         case a: Attribute if joined.left.outputSet.contains(a) =>
           if (!this.exprEnc.isSerializedAsStructForTopLevel) {
