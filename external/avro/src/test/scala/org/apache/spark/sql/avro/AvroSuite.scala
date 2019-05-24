@@ -764,7 +764,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
-      assert(message1.contains("org.apache.avro.AvroRuntimeException: Not a union:"))
+      assert(message1.contains("org.apache.avro.AvroTypeException: Not an enum: null"))
 
       // Writing df containing data not in the enum will throw an exception
       val message2 = intercept[SparkException] {
@@ -927,6 +927,44 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroDf = spark.read.format("avro").option("avroSchema", avroSchema).load(tempSaveDir)
       checkAnswer(df, avroDf)
       assert(avroDf.schema.fieldNames.sameElements(Array("Age", "Name")))
+    }
+  }
+
+  test("support user provided non-nullable avro schema " +
+    "for nullable catalyst schema without any null record") {
+    withTempPath { tempDir =>
+      val catalystSchema =
+        StructType(Seq(
+          StructField("Age", IntegerType, true),
+          StructField("Name", StringType, true)))
+
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "Age", "type": "int"},
+          |    {"name": "Name", "type": "string"}
+          |  ]
+          |}
+        """.stripMargin
+
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
+
+      val tempSaveDir = s"$tempDir/save/"
+
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempSaveDir)
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempSaveDir))
+
+      val message = intercept[Exception] {
+        spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(2, null))), catalystSchema)
+          .write.format("avro").option("avroSchema", avroSchema)
+          .save(s"$tempDir/${UUID.randomUUID()}")
+      }.getCause.getMessage
+      assert(message.contains("Caused by: java.lang.NullPointerException: " +
+        "in test_schema in string null of string in field Name"))
     }
   }
 
