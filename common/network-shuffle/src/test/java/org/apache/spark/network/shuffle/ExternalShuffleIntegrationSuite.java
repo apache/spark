@@ -107,6 +107,7 @@ public class ExternalShuffleIntegrationSuite {
 
     HashMap<String, String> config = new HashMap<>();
     config.put("spark.shuffle.io.maxRetries", "0");
+    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true");
     conf = new TransportConf("shuffle", new MapConfigProvider(config));
     handler = new ExternalShuffleBlockHandler(
       new OneForOneStreamManager(),
