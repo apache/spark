@@ -219,8 +219,8 @@ private[spark] object KubernetesUtils extends Logging {
 
   /**
    * This function builds the Quantity objects for each resource in the Spark resource
-   * configs based on the component name(driver or executor). It assumes we can use the
-   * Kubernetes device plugin format: vendor-domain/resource.
+   * configs based on the component name(spark.driver.resource or spark.executor.resource).
+   * It assumes we can use the Kubernetes device plugin format: vendor-domain/resource.
    * It returns a set with a tuple of vendor-domain/resource and Quantity for each resource.
    */
   def buildResourcesQuantities(
