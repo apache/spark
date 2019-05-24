@@ -42,39 +42,35 @@ private[evaluation] object AreaUnderCurve {
    */
   def of(curve: RDD[(Double, Double)]): Double = {
     val localAreas = curve.mapPartitions { iter =>
-      var localArea = 0.0
-      var firstPoint = Option.empty[(Double, Double)]
-      var lastPoint = Option.empty[(Double, Double)]
+      if (iter.nonEmpty) {
+        var localArea = 0.0
+        var cnt = 0L
+        var firstPoint = (Double.NaN, Double.NaN)
+        var lastPoint = (Double.NaN, Double.NaN)
 
-      iter.sliding(2).foreach { points =>
-        if (firstPoint.isEmpty) {
-          firstPoint = Some(points.head)
+        iter.sliding(2).foreach { points =>
+          if (cnt == 0) {
+            firstPoint = points.head
+          }
+          lastPoint = points.last
+
+          if (points.length == 2) {
+            localArea += trapezoid(points)
+          }
+          cnt += 1
         }
-        lastPoint = Some(points.last)
-
-        if (points.length == 2) {
-          localArea += trapezoid(points)
-        }
-      }
-
-      if (firstPoint.nonEmpty) {
-        require(lastPoint.nonEmpty)
-        Iterator.single((localArea, (firstPoint.get, lastPoint.get)))
+        Iterator.single((localArea, (firstPoint, lastPoint)))
       } else {
-        require(lastPoint.isEmpty)
         Iterator.empty
       }
     }.collect()
 
-    var area = localAreas.map(_._1).sum
-    localAreas.iterator.map(_._2)
-      .sliding(2).withPartial(false)
-      .foreach { pointPairs =>
-        require(pointPairs.length == 2)
-        area += trapezoid(Seq(pointPairs.head._2, pointPairs.last._1))
-      }
-
-    area
+    localAreas.map(_._1).sum +
+      localAreas.iterator.map(_._2)
+        .sliding(2).withPartial(false)
+        .map { case Seq((_, last1), (first2, _)) =>
+          trapezoid(Seq(last1, first2))
+        }.sum
   }
 
   /**
