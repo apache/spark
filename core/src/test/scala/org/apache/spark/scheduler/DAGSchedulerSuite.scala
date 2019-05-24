@@ -172,7 +172,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   /** Length of time to wait while draining listener events. */
-  val WAIT_TIMEOUT_MILLIS = 30000
+  val WAIT_TIMEOUT_MILLIS = 10000
 
   val submittedStageInfos = new HashSet[StageInfo]
   val successfulStages = new HashSet[Int]
