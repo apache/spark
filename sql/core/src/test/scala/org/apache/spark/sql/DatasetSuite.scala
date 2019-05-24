@@ -507,28 +507,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e4.contains("Invalid join type in joinWith: " + LeftAnti.sql))
   }
 
-  test("joinWith left_outer") {
-    val ds1 = Seq(1, 1, 2).toDS()
-    val ds2 = Seq(("a", 1), ("b", 3)).toDS()
-
-    val joined = ds1.joinWith(ds2, $"value" === $"_2", "left_outer")
-
-    val expectedSchema = StructType(Seq(
-      StructField("_1", IntegerType, nullable = false),
-      // This is a left join, so the right output is nullable:
-      StructField("_2",
-        StructType(Seq(
-          StructField("_1", StringType),
-          StructField("_2", IntegerType, nullable = false)
-        )))
-    ))
-    assert(joined.schema === expectedSchema)
-
-    checkDataset(
-      joined,
-      (1, ("a", 1)), (1, ("a", 1)), (2, null))
-  }
-
   test("groupBy function, keys") {
     val ds = Seq(("a", 1), ("b", 1)).toDS()
     val grouped = ds.groupByKey(v => (1, v._2))
@@ -1149,6 +1127,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
     val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
     val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+
+    val expectedSchema = StructType(Seq(
+      StructField("_1",
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", IntegerType, nullable = false)
+        )),
+        nullable = false),
+      // This is a left join, so the right output is nullable:
+      StructField("_2",
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", IntegerType, nullable = false)
+        )))
+    ))
+    assert(joined.schema === expectedSchema)
+
     val result = joined.collect().toSet
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
