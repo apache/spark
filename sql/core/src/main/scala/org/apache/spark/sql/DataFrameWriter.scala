@@ -58,7 +58,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`SaveMode.ErrorIfExists`: throw an exception at runtime.</li>
    * </ul>
    * <p>
-   * When writing to data source v1, the default option is `ErrorIfExist`. When writing to data
+   * When writing to data source v1, the default option is `ErrorIfExists`. When writing to data
    * source v2, the default option is `Append`.
    *
    * @since 1.4.0
@@ -80,14 +80,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def mode(saveMode: String): DataFrameWriter[T] = {
-    mode(saveMode.toLowerCase(Locale.ROOT) match {
-      case "overwrite" => SaveMode.Overwrite
-      case "append" => SaveMode.Append
-      case "ignore" => SaveMode.Ignore
-      case "error" | "errorifexists" | "default" => SaveMode.ErrorIfExists
+    saveMode.toLowerCase(Locale.ROOT) match {
+      case "overwrite" => mode(SaveMode.Overwrite)
+      case "append" => mode(SaveMode.Append)
+      case "ignore" => mode(SaveMode.Ignore)
+      case "error" | "errorifexists" => mode(SaveMode.ErrorIfExists)
+      case "default" => this
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
         "Accepted save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists'.")
-    })
+    }
   }
 
   /**
@@ -269,10 +270,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       provider.getTable(dsOptions) match {
-        // TODO: for backward compatibility reasons, the builtin file source needs to support all
-        // the save modes, which violates the semantic of `TableProvider`. Here we special-case
-        // file source and pass the save mode to file source directly. This hack can be removed
-        // after we figure out a general interface for path-based data sources.
+        // TODO (SPARK-27815): To not break existing tests, here we treat file source as a special
+        // case, and pass the save mode to file source directly. This hack should be removed.
         case table: FileTable =>
           val write = table.newWriteBuilder(dsOptions).asInstanceOf[FileWriteBuilder]
             .mode(modeForDSV1) // should not change default mode for file source.
@@ -300,9 +299,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
               }
 
-            case _ =>
+            case other =>
               throw new AnalysisException(s"TableProvider implementation $source cannot be " +
-                "written with ErrorIfExists or Ignore modes, please use Append or Overwrite " +
+                s"written with $other mode, please use Append or Overwrite " +
                 "modes instead.")
           }
 

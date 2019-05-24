@@ -46,6 +46,7 @@ private[noop] object NoopTable extends Table with SupportsWrite {
     Set(
       TableCapability.BATCH_WRITE,
       TableCapability.STREAMING_WRITE,
+      TableCapability.TRUNCATE,
       TableCapability.ACCEPT_ANY_SCHEMA).asJava
   }
 }
