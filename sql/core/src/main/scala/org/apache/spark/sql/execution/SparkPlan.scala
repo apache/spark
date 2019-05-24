@@ -35,15 +35,14 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredic
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTagName
-import org.apache.spark.sql.execution.SparkPlan.LOGICAL_PLAN_TAG_NAME
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
   // a TreeNode tag in SparkPlan, to carry its original logical plan. The planner will add this tag
   // when converting a logical plan to a physical plan.
-  val LOGICAL_PLAN_TAG_NAME = TreeNodeTagName("logical_plan")
+  val LOGICAL_PLAN_TAG = TreeNodeTag[LogicalPlan]("logical_plan")
 }
 
 /**
@@ -126,11 +125,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   def logicalPlan: Option[LogicalPlan] = {
-    if (tags.contains(LOGICAL_PLAN_TAG_NAME)) {
-      Some(tags(SparkPlan.LOGICAL_PLAN_TAG_NAME).asInstanceOf[LogicalPlan])
-    } else {
-      None
-    }
+    getTagValue(SparkPlan.LOGICAL_PLAN_TAG)
   }
 
   /**

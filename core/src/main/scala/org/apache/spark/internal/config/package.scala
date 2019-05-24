@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.GarbageCollectionMetrics
+import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
@@ -34,8 +35,9 @@ package object config {
   private[spark] val SPARK_EXECUTOR_RESOURCE_PREFIX = "spark.executor.resource."
   private[spark] val SPARK_TASK_RESOURCE_PREFIX = "spark.task.resource."
 
-  private[spark] val SPARK_RESOURCE_COUNT_POSTFIX = ".count"
-  private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX = ".discoveryScript"
+  private[spark] val SPARK_RESOURCE_COUNT_SUFFIX = ".count"
+  private[spark] val SPARK_RESOURCE_ADDRESSES_SUFFIX = ".addresses"
+  private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX = ".discoveryScript"
 
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional
@@ -299,7 +301,8 @@ package object config {
 
   private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
-      .doc("Whether or not cleanup the non-shuffle files on executor exits.")
+      .doc("Whether or not cleanup the files not served by the external shuffle service " +
+        "on executor exits.")
       .booleanConf
       .createWithDefault(true)
 
@@ -365,6 +368,15 @@ package object config {
 
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
+
+  private[spark] val SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
+    ConfigBuilder(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
+      .doc("Whether to use the ExternalShuffleService for fetching disk persisted RDD blocks. " +
+        "In case of dynamic allocation if this feature is enabled executors having only disk " +
+        "persisted blocks are considered idle after " +
+        "'spark.dynamicAllocation.executorIdleTimeout' and will be released accordingly.")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_DB_ENABLED =
     ConfigBuilder("spark.shuffle.service.db.enabled")
