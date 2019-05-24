@@ -19,7 +19,7 @@ package org.apache.spark.api.shuffle;
 
 import java.io.IOException;
 
-import org.apache.http.annotation.Experimental;
+import org.apache.spark.annotation.Experimental;
 
 /**
  * :: Experimental ::

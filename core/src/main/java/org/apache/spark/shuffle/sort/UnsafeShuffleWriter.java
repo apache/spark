@@ -17,14 +17,12 @@
 
 package org.apache.spark.shuffle.sort;
 
+import java.nio.channels.Channels;
 import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
-import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
 
-import org.apache.spark.api.java.Optional;
-import org.apache.spark.api.shuffle.MapShuffleLocations;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -39,14 +37,17 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.*;
 import org.apache.spark.annotation.Private;
+import org.apache.spark.api.java.Optional;
+import org.apache.spark.api.shuffle.MapShuffleLocations;
+import org.apache.spark.api.shuffle.TransferrableWritableByteChannel;
 import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
 import org.apache.spark.api.shuffle.ShufflePartitionWriter;
 import org.apache.spark.api.shuffle.ShuffleWriteSupport;
+import org.apache.spark.api.shuffle.SupportsTransferTo;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.NioBufferedFileInputStream;
-import org.apache.commons.io.output.CloseShieldOutputStream;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
@@ -54,11 +55,9 @@ import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
-import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.util.Utils;
 
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
@@ -71,7 +70,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   static final int DEFAULT_INITIAL_SER_BUFFER_SIZE = 1024 * 1024;
 
   private final BlockManager blockManager;
-  private final IndexShuffleBlockResolver shuffleBlockResolver;
   private final TaskMemoryManager memoryManager;
   private final SerializerInstance serializer;
   private final Partitioner partitioner;
@@ -107,7 +105,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   public UnsafeShuffleWriter(
       BlockManager blockManager,
-      IndexShuffleBlockResolver shuffleBlockResolver,
       TaskMemoryManager memoryManager,
       SerializedShuffleHandle<K, V> handle,
       int mapId,
@@ -123,7 +120,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         " reduce partitions");
     }
     this.blockManager = blockManager;
-    this.shuffleBlockResolver = shuffleBlockResolver;
     this.memoryManager = memoryManager;
     this.mapId = mapId;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
@@ -364,45 +360,37 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         boolean copyThrewExecption = true;
-        ShufflePartitionWriter writer = null;
+        ShufflePartitionWriter writer = mapWriter.getPartitionWriter(partition);
+        OutputStream partitionOutput = null;
         try {
-          writer = mapWriter.getPartitionWriter(partition);
-          OutputStream partitionOutput = null;
-          try {
-            // Shield the underlying output stream from close() calls, so that we can close the
-            // higher level streams to make sure all data is really flushed and internal state
-            // is cleaned
-            partitionOutput = new CloseShieldOutputStream(writer.toStream());
-            partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
-            if (compressionCodec != null) {
-              partitionOutput = compressionCodec.compressedOutputStream(partitionOutput);
-            }
-            for (int i = 0; i < spills.length; i++) {
-              final long partitionLengthInSpill = spills[i].partitionLengths[partition];
+          partitionOutput = writer.openStream();
+          partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
+          if (compressionCodec != null) {
+            partitionOutput = compressionCodec.compressedOutputStream(partitionOutput);
+          }
+          for (int i = 0; i < spills.length; i++) {
+            final long partitionLengthInSpill = spills[i].partitionLengths[partition];
 
-              if (partitionLengthInSpill > 0) {
-                InputStream partitionInputStream = null;
-                try {
-                  partitionInputStream = new LimitedInputStream(spillInputStreams[i],
-                      partitionLengthInSpill, false);
-                  partitionInputStream = blockManager.serializerManager().wrapForEncryption(
+            if (partitionLengthInSpill > 0) {
+              InputStream partitionInputStream = null;
+              try {
+                partitionInputStream = new LimitedInputStream(spillInputStreams[i],
+                    partitionLengthInSpill, false);
+                partitionInputStream = blockManager.serializerManager().wrapForEncryption(
+                    partitionInputStream);
+                if (compressionCodec != null) {
+                  partitionInputStream = compressionCodec.compressedInputStream(
                       partitionInputStream);
-                  if (compressionCodec != null) {
-                    partitionInputStream = compressionCodec.compressedInputStream(
-                        partitionInputStream);
-                  }
-                  ByteStreams.copy(partitionInputStream, partitionOutput);
-                } finally {
-                  partitionInputStream.close();
                 }
+                ByteStreams.copy(partitionInputStream, partitionOutput);
+              } finally {
+                partitionInputStream.close();
               }
-              copyThrewExecption = false;
             }
-          } finally {
-            Closeables.close(partitionOutput, copyThrewExecption);
+            copyThrewExecption = false;
           }
         } finally {
-          Closeables.close(writer, copyThrewExecption);
+          Closeables.close(partitionOutput, copyThrewExecption);
         }
         long numBytesWritten = writer.getNumBytesWritten();
         partitionLengths[partition] = numBytesWritten;
@@ -443,26 +431,34 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         boolean copyThrewExecption = true;
-        ShufflePartitionWriter writer = null;
+        ShufflePartitionWriter writer = mapWriter.getPartitionWriter(partition);
+        TransferrableWritableByteChannel partitionChannel = null;
         try {
+<<<<<<< HEAD
           writer = mapWriter.getPartitionWriter(partition);
           WritableByteChannel channel = writer.toChannel();
+||||||| parent of ca4448ec6d... [SPARK-25299] Propose a new NIO transfer API for partition writing. (#535)
+          writer = mapWriter.getNextPartitionWriter();
+          WritableByteChannel channel = writer.toChannel();
+=======
+          partitionChannel = writer instanceof SupportsTransferTo ?
+              ((SupportsTransferTo) writer).openTransferrableChannel()
+              : new DefaultTransferrableWritableByteChannel(
+                  Channels.newChannel(writer.openStream()));
+>>>>>>> ca4448ec6d... [SPARK-25299] Propose a new NIO transfer API for partition writing. (#535)
           for (int i = 0; i < spills.length; i++) {
             long partitionLengthInSpill = 0L;
             partitionLengthInSpill += spills[i].partitionLengths[partition];
             final FileChannel spillInputChannel = spillInputChannels[i];
             final long writeStartTime = System.nanoTime();
-            Utils.copyFileStreamNIO(
-                    spillInputChannel,
-                    channel,
-                    spillInputChannelPositions[i],
-                    partitionLengthInSpill);
-            copyThrewExecption = false;
+            partitionChannel.transferFrom(
+                spillInputChannel, spillInputChannelPositions[i], partitionLengthInSpill);
             spillInputChannelPositions[i] += partitionLengthInSpill;
             writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
           }
+          copyThrewExecption = false;
         } finally {
-          Closeables.close(writer, copyThrewExecption);
+          Closeables.close(partitionChannel, copyThrewExecption);
         }
         long numBytes = writer.getNumBytesWritten();
         partitionLengths[partition] = numBytes;

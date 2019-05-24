@@ -183,8 +183,7 @@ public class UnsafeShuffleWriterSuite {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<>(
       blockManager,
-      shuffleBlockResolver,
-      taskMemoryManager,
+        taskMemoryManager,
       new SerializedShuffleHandle<>(0, 1, shuffleDep),
       0, // map id
       taskContext,
@@ -544,8 +543,7 @@ public class UnsafeShuffleWriterSuite {
     final UnsafeShuffleWriter<Object, Object> writer =
       new UnsafeShuffleWriter<>(
         blockManager,
-        shuffleBlockResolver,
-        taskMemoryManager,
+          taskMemoryManager,
         new SerializedShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,

@@ -21,12 +21,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.channels.WritableByteChannel;
 import javax.annotation.Nullable;
 
-import org.apache.spark.api.java.Optional;
-import org.apache.spark.api.shuffle.MapShuffleLocations;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -38,19 +36,22 @@ import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
-import org.apache.spark.api.shuffle.ShufflePartitionWriter;
-import org.apache.spark.api.shuffle.ShuffleWriteSupport;
-import org.apache.spark.internal.config.package$;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.Optional;
+import org.apache.spark.api.shuffle.MapShuffleLocations;
+import org.apache.spark.api.shuffle.SupportsTransferTo;
+import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
+import org.apache.spark.api.shuffle.ShufflePartitionWriter;
+import org.apache.spark.api.shuffle.ShuffleWriteSupport;
+import org.apache.spark.api.shuffle.TransferrableWritableByteChannel;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
-import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
@@ -90,7 +91,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final int mapId;
   private final Serializer serializer;
   private final ShuffleWriteSupport shuffleWriteSupport;
-  private final IndexShuffleBlockResolver shuffleBlockResolver;
 
   /** Array of file writers, one for each partition */
   private DiskBlockObjectWriter[] partitionWriters;
@@ -107,7 +107,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   BypassMergeSortShuffleWriter(
       BlockManager blockManager,
-      IndexShuffleBlockResolver shuffleBlockResolver,
       BypassMergeSortShuffleHandle<K, V> handle,
       int mapId,
       SparkConf conf,
@@ -124,7 +123,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.numPartitions = partitioner.numPartitions();
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
-    this.shuffleBlockResolver = shuffleBlockResolver;
     this.shuffleWriteSupport = shuffleWriteSupport;
   }
 
@@ -209,40 +207,43 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       for (int i = 0; i < numPartitions; i++) {
         final File file = partitionWriterSegments[i].file();
-        boolean copyThrewException = true;
-        ShufflePartitionWriter writer = null;
-        try {
-          writer = mapOutputWriter.getPartitionWriter(i);
-          if (!file.exists()) {
-            copyThrewException = false;
-          } else {
-            if (transferToEnabled) {
-              WritableByteChannel outputChannel = writer.toChannel();
-              FileInputStream in = new FileInputStream(file);
-              try (FileChannel inputChannel = in.getChannel()) {
-                Utils.copyFileStreamNIO(inputChannel, outputChannel, 0, inputChannel.size());
-                copyThrewException = false;
-              } finally {
-                Closeables.close(in, copyThrewException);
+        ShufflePartitionWriter writer = mapOutputWriter.getPartitionWriter(i);
+        if (file.exists()) {
+          boolean copyThrewException = true;
+          if (transferToEnabled) {
+            FileInputStream in = new FileInputStream(file);
+            TransferrableWritableByteChannel outputChannel = null;
+            try (FileChannel inputChannel = in.getChannel()) {
+              if (writer instanceof SupportsTransferTo) {
+                outputChannel = ((SupportsTransferTo) writer).openTransferrableChannel();
+              } else {
+                // Use default transferrable writable channel anyways in order to have parity with
+                // UnsafeShuffleWriter.
+                outputChannel = new DefaultTransferrableWritableByteChannel(
+                    Channels.newChannel(writer.openStream()));
               }
-            } else {
-              OutputStream tempOutputStream = writer.toStream();
-              FileInputStream in = new FileInputStream(file);
-              try {
-                Utils.copyStream(in, tempOutputStream, false, false);
-                copyThrewException = false;
-              } finally {
-                Closeables.close(in, copyThrewException);
-              }
+              outputChannel.transferFrom(inputChannel, 0L, inputChannel.size());
+              copyThrewException = false;
+            } finally {
+              Closeables.close(in, copyThrewException);
+              Closeables.close(outputChannel, copyThrewException);
             }
-            if (!file.delete()) {
-              logger.error("Unable to delete file for partition {}", i);
+          } else {
+            FileInputStream in = new FileInputStream(file);
+            OutputStream outputStream = null;
+            try {
+              outputStream = writer.openStream();
+              Utils.copyStream(in, outputStream, false, false);
+              copyThrewException = false;
+            } finally {
+              Closeables.close(in, copyThrewException);
+              Closeables.close(outputStream, copyThrewException);
             }
           }
-        } finally {
-          Closeables.close(writer, copyThrewException);
+          if (!file.delete()) {
+            logger.error("Unable to delete file for partition {}", i);
+          }
         }
-
         lengths[i] = writer.getNumBytesWritten();
       }
     } finally {

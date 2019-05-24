@@ -54,25 +54,17 @@ private[spark] class ShufflePartitionPairsWriter(
   }
 
   private def open(): Unit = {
-    // The contract is that the partition writer is expected to close its own streams, but
-    // the compressor will only flush the stream when it is specifically closed. So we want to
-    // close objOut to flush the compressed bytes to the partition writer stream, but we don't want
-    // to close the partition output stream in the process.
-    partitionStream = new CloseShieldOutputStream(partitionWriter.toStream)
+    partitionStream = partitionWriter.openStream
     wrappedStream = serializerManager.wrapStream(blockId, partitionStream)
     objOut = serializerInstance.serializeStream(wrappedStream)
   }
 
   override def close(): Unit = {
     if (isOpen) {
-      // Closing objOut should propagate close to all inner layers
-      // We can't close wrappedStream explicitly because closing objOut and closing wrappedStream
-      // causes problems when closing compressed output streams twice.
       objOut.close()
       objOut = null
       wrappedStream = null
       partitionStream = null
-      partitionWriter.close()
       isOpen = false
       updateBytesWritten()
     }
@@ -95,11 +87,5 @@ private[spark] class ShufflePartitionPairsWriter(
     val bytesWrittenDiff = numBytesWritten - curNumBytesWritten
     writeMetrics.incBytesWritten(bytesWrittenDiff)
     curNumBytesWritten = numBytesWritten
-  }
-
-  private class CloseShieldOutputStream(delegate: OutputStream)
-    extends FilterOutputStream(delegate) {
-
-    override def close(): Unit = flush()
   }
 }
