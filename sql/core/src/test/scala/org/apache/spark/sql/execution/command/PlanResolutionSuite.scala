@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, LogicalPlan}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceResolution}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PlanResolutionSuite extends AnalysisTest {
@@ -292,6 +292,83 @@ class PlanResolutionSuite extends AnalysisTest {
       assert(desc.partitionColumnNames.isEmpty)
       assert(desc.provider.contains("parquet"))
       assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
+    }
+  }
+
+  test("Test v2 CreateTable with known catalog in identifier") {
+    val sql =
+      s"""
+         |CREATE TABLE IF NOT EXISTS testcat.mydb.table_name (
+         |    id bigint,
+         |    description string,
+         |    point struct<x: double, y: double>)
+         |USING parquet
+         |COMMENT 'table comment'
+         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+         |OPTIONS (path 's3://bucket/path/to/data', other 20)
+      """.stripMargin
+
+    val expectedProperties = Map(
+      "p1" -> "v1",
+      "p2" -> "v2",
+      "other" -> "20",
+      "provider" -> "parquet",
+      "location" -> "s3://bucket/path/to/data",
+      "comment" -> "table comment")
+
+    parseAndResolve(sql) match {
+      case create: CreateV2Table =>
+        assert(create.catalog.name == "testcat")
+        assert(create.tableName == Identifier.of(Array("mydb"), "table_name"))
+        assert(create.tableSchema == new StructType()
+            .add("id", LongType)
+            .add("description", StringType)
+            .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
+        assert(create.partitioning.isEmpty)
+        assert(create.properties == expectedProperties)
+        assert(create.ignoreIfExists)
+
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
+            s"got ${other.getClass.getName}: $sql")
+    }
+  }
+
+  test("Test v2 CreateTable with data source v2 provider") {
+    val sql =
+      s"""
+         |CREATE TABLE IF NOT EXISTS mydb.page_view (
+         |    id bigint,
+         |    description string,
+         |    point struct<x: double, y: double>)
+         |USING $orc2
+         |COMMENT 'This is the staging page view table'
+         |LOCATION '/user/external/page_view'
+         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+      """.stripMargin
+
+    val expectedProperties = Map(
+      "p1" -> "v1",
+      "p2" -> "v2",
+      "provider" -> orc2,
+      "location" -> "/user/external/page_view",
+      "comment" -> "This is the staging page view table")
+
+    parseAndResolve(sql) match {
+      case create: CreateV2Table =>
+        assert(create.catalog.name == "testcat")
+        assert(create.tableName == Identifier.of(Array("mydb"), "page_view"))
+        assert(create.tableSchema == new StructType()
+            .add("id", LongType)
+            .add("description", StringType)
+            .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
+        assert(create.partitioning.isEmpty)
+        assert(create.properties == expectedProperties)
+        assert(create.ignoreIfExists)
+
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
+            s"got ${other.getClass.getName}: $sql")
     }
   }
 
