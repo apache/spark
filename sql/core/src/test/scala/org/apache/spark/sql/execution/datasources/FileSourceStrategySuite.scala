@@ -403,7 +403,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           parameters = Map.empty[String, String],
           userSpecifiedSchema = None)
         // This should not fail.
-        fileCatalog.listLeafFiles(Seq(new Path(tempDir)), isRefresh = false)
+        fileCatalog.listLeafFiles(Seq(new Path(tempDir)))
 
         // Also have an integration test.
         checkAnswer(

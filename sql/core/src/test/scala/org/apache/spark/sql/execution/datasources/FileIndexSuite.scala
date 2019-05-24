@@ -168,23 +168,14 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("SPARK-27676: InMemoryFileIndex: root path that don't exist don't throw exceptions") {
+  test("InMemoryFileIndex: root folders that don't exist don't throw exceptions") {
     withTempDir { dir =>
       val deletedFolder = new File(dir, "deleted")
-      // If a root path doesn't exist when InMemoryFileIndex is being constructed then
-      // index construction should fail
-      intercept[FileNotFoundException] {
-        new InMemoryFileIndex(spark, Seq(new Path(deletedFolder.getCanonicalPath)), Map.empty, None)
-      }
-      // If a root folder exists at InMemoryFileIndex construction time and then is subsequently
-      // deleted then refresh() should still work
-      deletedFolder.mkdir()
-      val catalog = new InMemoryFileIndex(
+      assert(!deletedFolder.exists())
+      val catalog1 = new InMemoryFileIndex(
         spark, Seq(new Path(deletedFolder.getCanonicalPath)), Map.empty, None)
-      deletedFolder.delete()
-      catalog.refresh()
       // doesn't throw an exception
-      assert(catalog.listLeafFiles(catalog.rootPaths, isRefresh = true).isEmpty)
+      assert(catalog1.listLeafFiles(catalog1.rootPaths).isEmpty)
     }
   }
 
@@ -212,7 +203,7 @@ class FileIndexSuite extends SharedSQLContext {
           if (ignoreMissingFiles) {
             // We're ignoring missing files, so catalog construction should succeed
             val catalog = makeCatalog()
-            val leafFiles = catalog.listLeafFiles(catalog.rootPaths, isRefresh = false)
+            val leafFiles = catalog.listLeafFiles(catalog.rootPaths)
             if (raceCondition == classOf[SubdirectoryDeletionRaceFileSystem]) {
               // The only subdirectory was missing, so there should be no leaf files:
               assert(leafFiles.isEmpty)
