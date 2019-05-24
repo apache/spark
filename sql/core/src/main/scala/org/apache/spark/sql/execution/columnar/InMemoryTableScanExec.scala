@@ -87,7 +87,7 @@ case class InMemoryTableScanExec(
 
   private def createAndDecompressColumn(
       cachedColumnarBatch: CachedBatch,
-      offHeapColumnVectorEnabled: Boolean): ColumnarBatch = {
+      offHeapColumnVectorEnabled: Boolean): Option[ColumnarBatch] = {
     val rowCount = cachedColumnarBatch.numRows
     val taskContext = Option(TaskContext.get())
     val columnVectors = if (!offHeapColumnVectorEnabled || taskContext.isEmpty) {
@@ -98,14 +98,23 @@ case class InMemoryTableScanExec(
     val columnarBatch = new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]])
     columnarBatch.setNumRows(rowCount)
 
-    for (i <- attributes.indices) {
-      ColumnAccessor.decompress(
-        cachedColumnarBatch.buffers(columnIndices(i)),
-        columnarBatch.column(i).asInstanceOf[WritableColumnVector],
-        columnarBatchSchema.fields(i).dataType, rowCount)
+    // Decompress cached batch if the task is not completed, or there is no task context.
+    if (taskContext.isEmpty || !taskContext.get.isCompleted) {
+      for (i <- attributes.indices) {
+        ColumnAccessor.decompress(
+          cachedColumnarBatch.buffers(columnIndices(i)),
+          columnarBatch.column(i).asInstanceOf[WritableColumnVector],
+          columnarBatchSchema.fields(i).dataType, rowCount)
+      }
     }
-    taskContext.foreach(_.addTaskCompletionListener[Unit](_ => columnarBatch.close()))
-    columnarBatch
+    // When the task is already completed, it is not valid to access a closed batch.
+    if (taskContext.nonEmpty && taskContext.get.isCompleted) {
+      columnarBatch.close()
+      None
+    } else {
+      taskContext.foreach(_.addTaskCompletionListener[Unit](_ => columnarBatch.close()))
+      Some(columnarBatch)
+    }
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
@@ -115,7 +124,7 @@ case class InMemoryTableScanExec(
       // HACK ALERT: This is actually an RDD[ColumnarBatch].
       // We're taking advantage of Scala's type erasure here to pass these batches along.
       buffers
-        .map(createAndDecompressColumn(_, offHeapColumnVectorEnabled))
+        .flatMap(createAndDecompressColumn(_, offHeapColumnVectorEnabled))
         .asInstanceOf[RDD[InternalRow]]
     } else {
       val numOutputRows = longMetric("numOutputRows")
