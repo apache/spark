@@ -446,7 +446,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val joined = ds1.joinWith(ds2, $"value" === $"_2")
 
-    // This is an inner join, so both fields are non-nullable
+    // This is an inner join, so both outputs fields are non-nullable
     val expectedSchema = StructType(Seq(
       StructField("_1", IntegerType, nullable = false),
       StructField("_2",
