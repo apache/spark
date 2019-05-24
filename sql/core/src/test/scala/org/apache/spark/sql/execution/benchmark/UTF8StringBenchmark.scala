@@ -70,7 +70,15 @@ object UTF8StringBenchmark extends BenchmarkBase {
     Array.fill(numStringsPerIteration)(gen.generate(length, length))
   }
 
-  private def test(strings: Array[UTF8String], f: UTF8String => Unit): Unit = {
+  private def testUTF8(strings: Array[UTF8String], f: UTF8String => Unit): Unit = {
+    var i = 0
+    while (i < numStringsPerIteration) {
+      f(strings(i))
+      i += 1
+    }
+  }
+
+  private def testStr(strings: Array[String], f: String => Unit): Unit = {
     var i = 0
     while (i < numStringsPerIteration) {
       f(strings(i))
@@ -80,8 +88,7 @@ object UTF8StringBenchmark extends BenchmarkBase {
 
   // Benchmarks ----------------------------------------------------------------------------------
 
-
-  def numChars(): Unit = {
+  def benchmarkNumChars(): Unit = {
     runBenchmark("numChars") {
       val benchmark = new Benchmark("numChars", numStringsPerIteration, output = output)
       for (
@@ -89,15 +96,52 @@ object UTF8StringBenchmark extends BenchmarkBase {
         charset <- Seq("ASCII", "UTF8")
       ) {
         val utf8Strings = generateStrings(charset, length).map(UTF8String.fromString)
-        benchmark.addCase(s"$length-char $charset", numIters) { _ => test(utf8Strings, _.numChars) }
+        benchmark.addCase(s"$length-char $charset", numIters) {
+          _ => testUTF8(utf8Strings, _.numChars)
+        }
       }
       benchmark.run()
     }
   }
 
+  def benchmarkFromString(): Unit = {
+    runBenchmark("fromString") {
+      val benchmark = new Benchmark("fromString", numStringsPerIteration, output = output)
+      for (
+        length <- Seq(16, 32, 256);
+        charset <- Seq("ASCII", "UTF8")
+      ) {
+        val utf8Strings = generateStrings(charset, length).map(UTF8String.fromString)
+        benchmark.addCase(s"$length-char $charset", numIters) {
+          _ => testUTF8(utf8Strings, _.toString)
+        }
+      }
+      benchmark.run()
+    }
+  }
+
+  def benchmarkToString(): Unit = {
+    runBenchmark("toString") {
+      val benchmark = new Benchmark("toString", numStringsPerIteration, output = output)
+      for (
+        length <- Seq(16, 32, 256);
+        charset <- Seq("ASCII", "UTF8")
+      ) {
+        val strings = generateStrings(charset, length)
+        benchmark.addCase(s"$length-char $charset", numIters) {
+          _ => testStr(strings, UTF8String.fromString)
+        }
+      }
+      benchmark.run()
+    }
+  }
+
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("UTF8String") {
-      numChars()
+      benchmarkNumChars()
+      benchmarkFromString()
+      benchmarkToString()
     }
   }
 }
