@@ -60,10 +60,6 @@ public interface WriteBuilder {
    * exception, data sources must overwrite this method to provide an implementation, if the
    * {@link Table} that creates this write returns {@link TableCapability#BATCH_WRITE} support in
    * its {@link Table#capabilities()}.
-   *
-   * Note that, the returned {@link BatchWrite} can be null if the implementation supports SaveMode,
-   * to indicate that no writing is needed. We can clean it up after removing
-   * {@link SupportsSaveMode}.
    */
   default BatchWrite buildForBatch() {
     throw new UnsupportedOperationException(getClass().getName() +
