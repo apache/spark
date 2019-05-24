@@ -376,7 +376,7 @@ package object config {
         "persisted blocks are considered idle after " +
         "'spark.dynamicAllocation.executorIdleTimeout' and will be released accordingly.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val SHUFFLE_SERVICE_DB_ENABLED =
     ConfigBuilder("spark.shuffle.service.db.enabled")
