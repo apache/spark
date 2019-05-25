@@ -149,7 +149,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (isAscii(str)) {
       bytes = new byte[str.length()];
       for (int i = 0; i < str.length(); i++) {
-        bytes[i] = (byte) (str.charAt(i) & 0xFF);
+        bytes[i] = (byte) str.charAt(i);
       }
     } else {
       bytes = str.getBytes(StandardCharsets.UTF_8);
@@ -159,7 +159,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private static boolean isAscii(String str) {
     for (int i = 0; i < str.length(); i++) {
-      if (str.charAt(i) >= 128) {
+      if (str.charAt(i) > 127) {
         return false;
       }
     }
