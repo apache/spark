@@ -25,7 +25,6 @@ import java.util.regex.Pattern
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
-import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -458,18 +457,8 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
       } else {
         val searchStr: String = search.asInstanceOf[UTF8String].toString
         val replaceStr: String = replace.asInstanceOf[UTF8String].toString
-        val escapedSearchStr = StringEscapeUtils.escapeJava(searchStr)
-        val escapedReplaceStr = StringEscapeUtils.escapeJava(replaceStr)
-        val q: String = {
-          if (searchStr.length == 1 && replaceStr.length == 1) {
-            // Both strings are single characters, so embed them as character literals
-            // in order to use a single-character-replacement fast path.
-            "'"
-          } else {
-            // Use slower string literal replacement path (double quotes for string literal)
-            "\""
-          }
-        }
+        val searchStrRef = ctx.addReferenceObj("searchStr", searchStr, "String")
+        val replaceStrRef = ctx.addReferenceObj("searchStr", replaceStr, "String")
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate the search
         // and replace expressions.
         val eval = srcExpr.genCode(ctx)
@@ -478,7 +467,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
         boolean ${ev.isNull} = ${eval.isNull};
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         if (!${ev.isNull}) {
-          ${ev.value} = ${eval.value}.replace($q$escapedSearchStr$q, $q$escapedReplaceStr$q);
+          ${ev.value} = ${eval.value}.replace($searchStrRef, $replaceStrRef);
         }
       """)
       }

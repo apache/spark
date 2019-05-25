@@ -981,23 +981,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String replace(String search, String replace) {
-    // In Java 8, String.replace() is implemented using a regex and is therefore
-    // somewhat inefficient (see https://bugs.openjdk.java.net/browse/JDK-8058779).
-    // This is fixed in Java 9, but in Java 8 we can use Commons StringUtils instead:
     String before = toString();
-    String after = StringUtils.replace(before, search, replace);
-    // Use reference equality to cheaply detect whether the replacement had no effect,
-    // in which case we can simply return the original UTF8String and save some copying.
-    if (before == after) {
-      return this;
+    String after;
+    if (search.length() == 1 && replace.length() == 1) {
+      // Use single-character-replacement fast path
+      after = before.replace(search.charAt(0), replace.charAt(0));
     } else {
-      return fromString(after);
+      // In Java 8, String.replace() is implemented using a regex and is therefore
+      // somewhat inefficient (see https://bugs.openjdk.java.net/browse/JDK-8058779).
+      // This is fixed in Java 9, but in Java 8 we can use Commons StringUtils instead:
+      after = StringUtils.replace(before, search, replace);
     }
-  }
-
-  public UTF8String replace(char search, char replace) {
-    String before = toString();
-    String after = before.replace(search, replace);
     // Use reference equality to cheaply detect whether the replacement had no effect,
     // in which case we can simply return the original UTF8String and save some copying.
     if (before == after) {

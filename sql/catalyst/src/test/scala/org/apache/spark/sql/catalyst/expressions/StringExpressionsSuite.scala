@@ -425,6 +425,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     checkEvaluation(StringReplace(Literal("花花世界"), Literal("花世"), Literal("ab")), "花ab界")
+    checkEvaluation(StringReplace(Literal("火"), Literal("火"), Literal("水")), "水")
     // scalastyle:on
   }
 
