@@ -30,8 +30,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private val sqlStore = parent.sqlStore
 
   override def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterExecutionId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterExecutionId = request.getParameter("id")
     require(parameterExecutionId != null && parameterExecutionId.nonEmpty,
       "Missing execution id parameter")
 
@@ -84,7 +83,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     }
 
     UIUtils.headerSparkPage(
-      request, s"Details for Query $executionId", content, parent, Some(5000))
+      request, s"Details for Query $executionId", content, parent)
   }
 
 
@@ -122,7 +121,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   }
 
   private def jobURL(request: HttpServletRequest, jobId: Long): String =
-    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>

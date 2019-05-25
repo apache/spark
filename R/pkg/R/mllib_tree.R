@@ -157,7 +157,7 @@ print.summary.decisionTree <- function(x) {
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #'                           Note: this setting will be ignored if the checkpoint directory is not
 #'                           set.
-#' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
+#' @param maxMemoryInMB Maximum memory in MiB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
@@ -362,7 +362,18 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #'                 For regression, must be "variance". For classification, must be one of
 #'                 "entropy" and "gini", default is "gini".
 #' @param featureSubsetStrategy The number of features to consider for splits at each tree node.
-#'        Supported options: "auto", "all", "onethird", "sqrt", "log2", (0.0-1.0], [1-n].
+#'                              Supported options: "auto" (choose automatically for task: If
+#'                                                 numTrees == 1, set to "all." If numTrees > 1
+#'                                                 (forest), set to "sqrt" for classification and
+#'                                                 to "onethird" for regression),
+#'                                                 "all" (use all features),
+#'                                                 "onethird" (use 1/3 of the features),
+#'                                                 "sqrt" (use sqrt(number of features)),
+#'                                                 "log2" (use log2(number of features)),
+#'                                                 "n": (when n is in the range (0, 1.0], use
+#'                                                 n * number of features. When n is in the range
+#'                                                 (1, number of features), use n features).
+#'                                                 Default is "auto".
 #' @param seed integer seed for random number generation.
 #' @param subsamplingRate Fraction of the training data used for learning each decision tree, in
 #'                        range (0, 1].
@@ -371,7 +382,7 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #'                           Note: this setting will be ignored if the checkpoint directory is not
 #'                           set.
-#' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
+#' @param maxMemoryInMB Maximum memory in MiB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
@@ -577,7 +588,7 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #'                           Note: this setting will be ignored if the checkpoint directory is not
 #'                           set.
-#' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
+#' @param maxMemoryInMB Maximum memory in MiB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the

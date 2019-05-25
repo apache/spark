@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import java.io.Serializable;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Used for per-partition offsets in continuous processing. ContinuousReader implementations will
@@ -27,6 +27,6 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * These offsets must be serializable.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface PartitionOffset extends Serializable {
 }

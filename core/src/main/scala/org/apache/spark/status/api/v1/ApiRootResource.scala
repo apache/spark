@@ -28,7 +28,7 @@ import org.glassfish.jersey.server.ServerProperties
 import org.glassfish.jersey.servlet.ServletContainer
 
 import org.apache.spark.SecurityManager
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{SparkUI, UIUtils}
 
 /**
  * Main entry point for serving spark application metrics as json, using JAX-RS.
@@ -77,7 +77,7 @@ private[spark] trait UIRoot {
   /**
    * Runs some code with the current SparkUI instance for the app / attempt.
    *
-   * @throws NoSuchElementException If the app / attempt pair does not exist.
+   * @throws java.util.NoSuchElementException If the app / attempt pair does not exist.
    */
   def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T
 
@@ -85,8 +85,8 @@ private[spark] trait UIRoot {
   def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
   /**
-   * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
-   * [[None]], event logs for all attempts of this application will be written out.
+   * Write the event logs for the given app to the `ZipOutputStream` instance. If attemptId is
+   * `None`, event logs for all attempts of this application will be written out.
    */
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit = {
     Response.serverError()
@@ -148,38 +148,18 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
 }
 
 private[v1] class ForbiddenException(msg: String) extends WebApplicationException(
-  Response.status(Response.Status.FORBIDDEN).entity(msg).build())
+    UIUtils.buildErrorResponse(Response.Status.FORBIDDEN, msg))
 
 private[v1] class NotFoundException(msg: String) extends WebApplicationException(
-  new NoSuchElementException(msg),
-    Response
-      .status(Response.Status.NOT_FOUND)
-      .entity(ErrorWrapper(msg))
-      .build()
-)
+    UIUtils.buildErrorResponse(Response.Status.NOT_FOUND, msg))
 
 private[v1] class ServiceUnavailable(msg: String) extends WebApplicationException(
-  new ServiceUnavailableException(msg),
-  Response
-    .status(Response.Status.SERVICE_UNAVAILABLE)
-    .entity(ErrorWrapper(msg))
-    .build()
-)
+    UIUtils.buildErrorResponse(Response.Status.SERVICE_UNAVAILABLE, msg))
 
 private[v1] class BadParameterException(msg: String) extends WebApplicationException(
-  new IllegalArgumentException(msg),
-  Response
-    .status(Response.Status.BAD_REQUEST)
-    .entity(ErrorWrapper(msg))
-    .build()
-) {
+    UIUtils.buildErrorResponse(Response.Status.BAD_REQUEST, msg)) {
   def this(param: String, exp: String, actual: String) = {
     this(raw"""Bad value for parameter "$param".  Expected a $exp, got "$actual"""")
   }
 }
 
-/**
- * Signal to JacksonMessageWriter to not convert the message into json (which would result in an
- * extra set of quotes).
- */
-private[v1] case class ErrorWrapper(s: String)

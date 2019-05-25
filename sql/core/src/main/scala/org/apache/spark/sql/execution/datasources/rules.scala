@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expres
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -39,7 +40,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
         val dataSource = DataSource(
@@ -73,7 +74,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
   private def catalog = sparkSession.sessionState.catalog
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
     // bucketing information is specified, as we can't infer bucketing from data files currently.
     // Since the runtime inferred partition columns could be different from what user specified,
@@ -113,7 +114,9 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
-      if (existingProvider != specifiedProvider) {
+      // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
+      // [[FileFormat]], the two providers are considered compatible.
+      if (fallBackV2ToV1(existingProvider) != fallBackV2ToV1(specifiedProvider)) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
           s"`${specifiedProvider.getSimpleName}`.")
@@ -206,6 +209,8 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         val analyzedQuery = query.get
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
+        DDLUtils.checkDataColNames(tableDesc.copy(schema = analyzedQuery.schema))
+
         val output = analyzedQuery.output
         val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
           output.find(_.name == partCol).get
@@ -219,6 +224,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
+        DDLUtils.checkDataColNames(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
         val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
@@ -230,6 +236,11 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
+  }
+
+  private def fallBackV2ToV1(cls: Class[_]): Class[_] = cls.newInstance match {
+    case f: FileDataSourceV2 => f.fallbackFileFormat
+    case _ => cls
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
@@ -281,7 +292,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
       case _: AtomicType => // OK
-      case other => failAnalysis(s"Cannot use ${other.simpleString} for partition column")
+      case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
     }
 
     normalizedPartitionCols
@@ -307,7 +318,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
-          case other => failAnalysis(s"Cannot use ${other.simpleString} for sorting column")
+          case other => failAnalysis(s"Cannot use ${other.catalogString} for sorting column")
         }
 
         Some(normalizedBucketSpec)
@@ -365,7 +376,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>

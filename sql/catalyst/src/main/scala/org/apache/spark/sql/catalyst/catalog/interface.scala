@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.time.ZoneOffset
 import java.util.Date
 
 import scala.collection.mutable
@@ -30,8 +31,9 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -93,12 +95,16 @@ object CatalogStorageFormat {
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
  * @param parameters some parameters for the partition
+ * @param createTime creation time of the partition, in milliseconds
+ * @param lastAccessTime last access time, in milliseconds
  * @param stats optional statistics (number of rows, total size, etc.)
  */
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
     parameters: Map[String, String] = Map.empty,
+    createTime: Long = System.currentTimeMillis,
+    lastAccessTime: Long = -1,
     stats: Option[CatalogStatistics] = None) {
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
@@ -109,6 +115,11 @@ case class CatalogTablePartition(
     if (parameters.nonEmpty) {
       map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
     }
+    map.put("Created Time", new Date(createTime).toString)
+    val lastAccess = {
+      if (-1 == lastAccessTime) "UNKNOWN" else new Date(lastAccessTime).toString
+    }
+    map.put("Last Access", lastAccess)
     stats.foreach(s => map.put("Partition Statistics", s.simpleString))
     map
   }
@@ -164,9 +175,12 @@ case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
     sortColumnNames: Seq[String]) {
-  if (numBuckets <= 0 || numBuckets >= 100000) {
+  def conf: SQLConf = SQLConf.get
+
+  if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
     throw new AnalysisException(
-      s"Number of buckets should be greater than 0 but less than 100000. Got `$numBuckets`")
+      s"Number of buckets should be greater than 0 but less than or equal to " +
+        s"bucketing.maxBuckets (`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
   }
 
   override def toString: String = {
@@ -231,7 +245,8 @@ case class CatalogTable(
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
-    ignoredProperties: Map[String, String] = Map.empty) {
+    ignoredProperties: Map[String, String] = Map.empty,
+    viewOriginalText: Option[String] = None) {
 
   import CatalogTable._
 
@@ -318,6 +333,7 @@ case class CatalogTable(
     comment.foreach(map.put("Comment", _))
     if (tableType == CatalogTableType.VIEW) {
       viewText.foreach(map.put("View Text", _))
+      viewOriginalText.foreach(map.put("View Original Text", _))
       viewDefaultDatabase.foreach(map.put("View Default Database", _))
       if (viewQueryColumnNames.nonEmpty) {
         map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))
@@ -358,7 +374,7 @@ object CatalogTable {
 /**
  * This class of statistics is used in [[CatalogTable]] to interact with metastore.
  * We define this new class instead of directly using [[Statistics]] here because there are no
- * concepts of attributes or broadcast hint in catalog.
+ * concepts of attributes in catalog.
  */
 case class CatalogStatistics(
     sizeInBytes: BigInt,
@@ -400,7 +416,8 @@ case class CatalogColumnStat(
     nullCount: Option[BigInt] = None,
     avgLen: Option[Long] = None,
     maxLen: Option[Long] = None,
-    histogram: Option[Histogram] = None) {
+    histogram: Option[Histogram] = None,
+    version: Int = CatalogColumnStat.VERSION) {
 
   /**
    * Returns a map from string to string that can be used to serialize the column stats.
@@ -414,7 +431,7 @@ case class CatalogColumnStat(
    */
   def toMap(colName: String): Map[String, String] = {
     val map = new scala.collection.mutable.HashMap[String, String]
-    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", "1")
+    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", CatalogColumnStat.VERSION.toString)
     distinctCount.foreach { v =>
       map.put(s"${colName}.${CatalogColumnStat.KEY_DISTINCT_COUNT}", v.toString)
     }
@@ -437,12 +454,13 @@ case class CatalogColumnStat(
       dataType: DataType): ColumnStat =
     ColumnStat(
       distinctCount = distinctCount,
-      min = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType)),
-      max = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType)),
+      min = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version)),
+      max = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType, version)),
       nullCount = nullCount,
       avgLen = avgLen,
       maxLen = maxLen,
-      histogram = histogram)
+      histogram = histogram,
+      version = version)
 }
 
 object CatalogColumnStat extends Logging {
@@ -457,14 +475,23 @@ object CatalogColumnStat extends Logging {
   private val KEY_MAX_LEN = "maxLen"
   private val KEY_HISTOGRAM = "histogram"
 
+  val VERSION = 2
+
+  private def getTimestampFormatter(): TimestampFormatter = {
+    TimestampFormatter(format = "yyyy-MM-dd HH:mm:ss.SSSSSS", zoneId = ZoneOffset.UTC)
+  }
+
   /**
    * Converts from string representation of data type to the corresponding Catalyst data type.
    */
-  def fromExternalString(s: String, name: String, dataType: DataType): Any = {
+  def fromExternalString(s: String, name: String, dataType: DataType, version: Int): Any = {
     dataType match {
       case BooleanType => s.toBoolean
-      case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
-      case TimestampType => DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
+      case DateType if version == 1 => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
+      case DateType => DateFormatter().parse(s)
+      case TimestampType if version == 1 =>
+        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
+      case TimestampType => getTimestampFormatter().parse(s)
       case ByteType => s.toByte
       case ShortType => s.toShort
       case IntegerType => s.toInt
@@ -486,8 +513,8 @@ object CatalogColumnStat extends Logging {
    */
   def toExternalString(v: Any, colName: String, dataType: DataType): String = {
     val externalValue = dataType match {
-      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
-      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
+      case DateType => DateFormatter().format(v.asInstanceOf[Int])
+      case TimestampType => getTimestampFormatter().format(v.asInstanceOf[Long])
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
@@ -517,7 +544,8 @@ object CatalogColumnStat extends Logging {
         nullCount = map.get(s"${colName}.${KEY_NULL_COUNT}").map(v => BigInt(v.toLong)),
         avgLen = map.get(s"${colName}.${KEY_AVG_LEN}").map(_.toLong),
         maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
-        histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize)
+        histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize),
+        version = map(s"${colName}.${KEY_VERSION}").toInt
       ))
     } catch {
       case NonFatal(e) =>

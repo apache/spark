@@ -231,15 +231,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val s_notNull = 'a.string.notNull.at(0)
 
-    assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable
-      === true)
+    assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable)
     assert(
       Substring(s_notNull, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable
         === false)
     assert(Substring(s_notNull,
-      Literal.create(null, IntegerType), Literal.create(2, IntegerType)).nullable === true)
+      Literal.create(null, IntegerType), Literal.create(2, IntegerType)).nullable)
     assert(Substring(s_notNull,
-      Literal.create(0, IntegerType), Literal.create(null, IntegerType)).nullable === true)
+      Literal.create(0, IntegerType), Literal.create(null, IntegerType)).nullable)
 
     checkEvaluation(s.substr(0, 2), "ex", row)
     checkEvaluation(s.substr(0), "example", row)
@@ -744,16 +743,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ParseUrl") {
     def checkParseUrl(expected: String, urlStr: String, partToExtract: String): Unit = {
-      checkEvaluation(
-        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract))), expected)
+      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract)), expected)
     }
     def checkParseUrlWithKey(
         expected: String,
         urlStr: String,
         partToExtract: String,
         key: String): Unit = {
-      checkEvaluation(
-        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract), Literal(key))), expected)
+      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract, key)), expected)
     }
 
     checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
@@ -798,7 +795,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sentences(nullString, nullString, nullString), null)
     checkEvaluation(Sentences(nullString, nullString), null)
     checkEvaluation(Sentences(nullString), null)
-    checkEvaluation(Sentences(Literal.create(null, NullType)), null)
     checkEvaluation(Sentences("", nullString, nullString), Seq.empty)
     checkEvaluation(Sentences("", nullString), Seq.empty)
     checkEvaluation(Sentences(""), Seq.empty)

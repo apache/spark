@@ -62,6 +62,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
       executorId = "testExecutor",
       name = "task for test",
       index = 19,
+      partitionId = 1,
       originalFiles,
       originalJars,
       originalProperties,
@@ -77,6 +78,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.executorId === originalTaskDescription.executorId)
     assert(decodedTaskDescription.name === originalTaskDescription.name)
     assert(decodedTaskDescription.index === originalTaskDescription.index)
+    assert(decodedTaskDescription.partitionId === originalTaskDescription.partitionId)
     assert(decodedTaskDescription.addedFiles.equals(originalFiles))
     assert(decodedTaskDescription.addedJars.equals(originalJars))
     assert(decodedTaskDescription.properties.equals(originalTaskDescription.properties))

@@ -17,21 +17,17 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
- * An abstract representation of progress through a {@link MicroBatchReader} or
- * {@link ContinuousReader}.
+ * An abstract representation of progress through a {@link MicroBatchStream} or
+ * {@link ContinuousStream}.
  * During execution, offsets provided by the data source implementation will be logged and used as
  * restart checkpoints. Each source should provide an offset implementation which the source can use
  * to reconstruct a position in the stream up to which data has been seen/processed.
- *
- * Note: This class currently extends {@link org.apache.spark.sql.execution.streaming.Offset} to
- * maintain compatibility with DataSource V1 APIs. This extension will be removed once we
- * get rid of V1 completely.
  */
-@InterfaceStability.Evolving
-public abstract class Offset extends org.apache.spark.sql.execution.streaming.Offset {
+@Evolving
+public abstract class Offset {
     /**
      * A JSON-serialized representation of an Offset that is
      * used for saving offsets to the offset log.
@@ -49,9 +45,8 @@ public abstract class Offset extends org.apache.spark.sql.execution.streaming.Of
      */
     @Override
     public boolean equals(Object obj) {
-        if (obj instanceof org.apache.spark.sql.execution.streaming.Offset) {
-            return this.json()
-                .equals(((org.apache.spark.sql.execution.streaming.Offset) obj).json());
+        if (obj instanceof Offset) {
+            return this.json().equals(((Offset) obj).json());
         } else {
             return false;
         }

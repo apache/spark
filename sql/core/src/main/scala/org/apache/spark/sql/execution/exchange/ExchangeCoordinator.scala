@@ -73,17 +73,16 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  * greater than the target size.
  *
  * For example, we have two stages with the following pre-shuffle partition size statistics:
- * stage 1: [100 MB, 20 MB, 100 MB, 10MB, 30 MB]
- * stage 2: [10 MB,  10 MB, 70 MB,  5 MB, 5 MB]
- * assuming the target input size is 128 MB, we will have four post-shuffle partitions,
+ * stage 1: [100 MiB, 20 MiB, 100 MiB, 10MiB, 30 MiB]
+ * stage 2: [10 MiB,  10 MiB, 70 MiB,  5 MiB, 5 MiB]
+ * assuming the target input size is 128 MiB, we will have four post-shuffle partitions,
  * which are:
- *  - post-shuffle partition 0: pre-shuffle partition 0 (size 110 MB)
- *  - post-shuffle partition 1: pre-shuffle partition 1 (size 30 MB)
- *  - post-shuffle partition 2: pre-shuffle partition 2 (size 170 MB)
- *  - post-shuffle partition 3: pre-shuffle partition 3 and 4 (size 50 MB)
+ *  - post-shuffle partition 0: pre-shuffle partition 0 (size 110 MiB)
+ *  - post-shuffle partition 1: pre-shuffle partition 1 (size 30 MiB)
+ *  - post-shuffle partition 2: pre-shuffle partition 2 (size 170 MiB)
+ *  - post-shuffle partition 3: pre-shuffle partition 3 and 4 (size 50 MiB)
  */
 class ExchangeCoordinator(
-    numExchanges: Int,
     advisoryTargetPostShuffleInputSize: Long,
     minNumPostShufflePartitions: Option[Int] = None)
   extends Logging {
@@ -91,8 +90,14 @@ class ExchangeCoordinator(
   // The registered Exchange operators.
   private[this] val exchanges = ArrayBuffer[ShuffleExchangeExec]()
 
+  // `lazy val` is used here so that we could notice the wrong use of this class, e.g., all the
+  // exchanges should be registered before `postShuffleRDD` called first time. If a new exchange is
+  // registered after the `postShuffleRDD` call, `assert(exchanges.length == numExchanges)` fails
+  // in `doEstimationIfNecessary`.
+  private[this] lazy val numExchanges = exchanges.size
+
   // This map is used to lookup the post-shuffle ShuffledRowRDD for an Exchange operator.
-  private[this] val postShuffleRDDs: JMap[ShuffleExchangeExec, ShuffledRowRDD] =
+  private[this] lazy val postShuffleRDDs: JMap[ShuffleExchangeExec, ShuffledRowRDD] =
     new JHashMap[ShuffleExchangeExec, ShuffledRowRDD](numExchanges)
 
   // A boolean that indicates if this coordinator has made decision on how to shuffle data.
@@ -117,10 +122,6 @@ class ExchangeCoordinator(
    */
   def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
-    // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
-    // a stage when the number of partitions of this dependency is 0.
-    assert(mapOutputStatistics.length <= numExchanges)
-
     // If minNumPostShufflePartitions is defined, it is possible that we need to use a
     // value less than advisoryTargetPostShuffleInputSize as the target input size of
     // a post shuffle task.
@@ -227,6 +228,10 @@ class ExchangeCoordinator(
         mapOutputStatistics(j) = submittedStageFutures(j).get()
         j += 1
       }
+
+      // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
+      // a stage when the number of partitions of this dependency is 0.
+      assert(mapOutputStatistics.length <= numExchanges)
 
       // Now, we estimate partitionStartIndices. partitionStartIndices.length will be the
       // number of post-shuffle partitions.

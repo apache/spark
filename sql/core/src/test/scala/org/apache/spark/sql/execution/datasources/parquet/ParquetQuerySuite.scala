@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
-import java.sql.Timestamp
+import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.parquet.hadoop.ParquetOutputFormat
@@ -71,30 +71,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
-  test("SPARK-15678: not use cache on overwrite") {
-    withTempDir { dir =>
-      val path = dir.toString
-      spark.range(1000).write.mode("overwrite").parquet(path)
-      val df = spark.read.parquet(path).cache()
-      assert(df.count() == 1000)
-      spark.range(10).write.mode("overwrite").parquet(path)
-      assert(df.count() == 10)
-      assert(spark.read.parquet(path).count() == 10)
-    }
-  }
-
-  test("SPARK-15678: not use cache on append") {
-    withTempDir { dir =>
-      val path = dir.toString
-      spark.range(1000).write.mode("append").parquet(path)
-      val df = spark.read.parquet(path).cache()
-      assert(df.count() == 1000)
-      spark.range(10).write.mode("append").parquet(path)
-      assert(df.count() == 1010)
-      assert(spark.read.parquet(path).count() == 1010)
-    }
-  }
-
   test("self-join") {
     // 4 rows, cells of column 1 of row 2 and row 4 are null
     val data = (1 to 4).map { i =>
@@ -108,7 +84,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
       assertResult(4, "Field count mismatches")(queryOutput.size)
-      assertResult(2, "Duplicated expression ID in query plan:\n $selfJoin") {
+      assertResult(2, s"Duplicated expression ID in query plan:\n $selfJoin") {
         queryOutput.filter(_.name == "_1").map(_.exprId).size
       }
 
@@ -117,7 +93,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("nested data - struct with array field") {
-    val data = (1 to 10).map(i => Tuple1((i, Seq("val_$i"))))
+    val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withParquetTable(data, "t") {
       checkAnswer(sql("SELECT _1._2[0] FROM t"), data.map {
         case Tuple1((_, Seq(string))) => Row(string)
@@ -126,7 +102,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("nested data - array of struct") {
-    val data = (1 to 10).map(i => Tuple1(Seq(i -> "val_$i")))
+    val data = (1 to 10).map(i => Tuple1(Seq(i -> s"val_$i")))
     withParquetTable(data, "t") {
       checkAnswer(sql("SELECT _1[0]._2 FROM t"), data.map {
         case Tuple1(Seq((_, string))) => Row(string)
@@ -187,12 +163,12 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
       sql("insert into ts values (2, null)")
       sql("insert into ts values (3, '1965-01-01 10:11:12.123456')")
-      checkAnswer(
-        sql("select * from ts"),
-        Seq(
-          Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123456")),
-          Row(2, null),
-          Row(3, Timestamp.valueOf("1965-01-01 10:11:12.123456"))))
+      val expected = Seq(
+        (1, "2016-01-01 10:11:12.123456"),
+        (2, null),
+        (3, "1965-01-01 10:11:12.123456"))
+        .toDS().select('_1, $"_2".cast("timestamp"))
+      checkAnswer(sql("select * from ts"), expected)
     }
 
     // The microsecond portion is truncated when written as TIMESTAMP_MILLIS.
@@ -206,30 +182,30 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         sql("insert into ts values (5, '1965-01-01 10:11:12.1')")
         sql("insert into ts values (6, '1965-01-01 10:11:12.123456789')")
         sql("insert into ts values (7, '0001-01-01 00:00:00.000000')")
-        checkAnswer(
-          sql("select * from ts"),
-          Seq(
-            Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
-            Row(2, null),
-            Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
-            Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
-            Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
-            Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
-            Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+        val expected = Seq(
+          (1, "2016-01-01 10:11:12.123"),
+          (2, null),
+          (3, "1965-01-01 10:11:12.125"),
+          (4, "1965-01-01 10:11:12.125"),
+          (5, "1965-01-01 10:11:12.1"),
+          (6, "1965-01-01 10:11:12.123"),
+          (7, "0001-01-01 00:00:00.000"))
+          .toDS().select('_1, $"_2".cast("timestamp"))
+        checkAnswer(sql("select * from ts"), expected)
 
         // Read timestamps that were encoded as TIMESTAMP_MILLIS annotated as INT64
         // with PARQUET_INT64_AS_TIMESTAMP_MILLIS set to false.
         withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "false") {
-          checkAnswer(
-            sql("select * from ts"),
-            Seq(
-              Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
-              Row(2, null),
-              Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
-              Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
-              Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
-              Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
-              Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+          val expected = Seq(
+            (1, "2016-01-01 10:11:12.123"),
+            (2, null),
+            (3, "1965-01-01 10:11:12.125"),
+            (4, "1965-01-01 10:11:12.125"),
+            (5, "1965-01-01 10:11:12.1"),
+            (6, "1965-01-01 10:11:12.123"),
+            (7, "0001-01-01 00:00:00.000"))
+            .toDS().select('_1, $"_2".cast("timestamp"))
+          checkAnswer(sql("select * from ts"), expected)
         }
       }
     }
@@ -890,6 +866,63 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         checkAnswer(sql("SELECT _2 FROM t WHERE t._1 = 5"), Seq.empty)
       }
     }
+  }
+
+  test("SPARK-26677: negated null-safe equality comparison should not filter matched row groups") {
+    (true :: false :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withTempPath { path =>
+          // Repeated values for dictionary encoding.
+          Seq(Some("A"), Some("A"), None).toDF.repartition(1)
+            .write.parquet(path.getAbsolutePath)
+          val df = spark.read.parquet(path.getAbsolutePath)
+          checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
+        }
+      }
+    }
+  }
+
+  test("Migration from INT96 to TIMESTAMP_MICROS timestamp type") {
+    def testMigration(fromTsType: String, toTsType: String): Unit = {
+      def checkAppend(write: DataFrameWriter[_] => Unit, readback: => DataFrame): Unit = {
+        def data(start: Int, end: Int): Seq[Row] = (start to end).map { i =>
+          val ts = new java.sql.Timestamp(TimeUnit.SECONDS.toMillis(i))
+          ts.setNanos(123456000)
+          Row(ts)
+        }
+        val schema = new StructType().add("time", TimestampType)
+        val df1 = spark.createDataFrame(sparkContext.parallelize(data(0, 1)), schema)
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fromTsType) {
+          write(df1.write)
+        }
+        val df2 = spark.createDataFrame(sparkContext.parallelize(data(2, 10)), schema)
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> toTsType) {
+          write(df2.write.mode(SaveMode.Append))
+        }
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            checkAnswer(readback, df1.unionAll(df2))
+          }
+        }
+      }
+
+      Seq(false, true).foreach { mergeSchema =>
+        withTempPath { file =>
+          checkAppend(_.parquet(file.getCanonicalPath),
+            spark.read.option("mergeSchema", mergeSchema).parquet(file.getCanonicalPath))
+        }
+
+        withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> mergeSchema.toString) {
+          val tableName = "parquet_timestamp_migration"
+          withTable(tableName) {
+            checkAppend(_.saveAsTable(tableName), spark.table(tableName))
+          }
+        }
+      }
+    }
+
+    testMigration(fromTsType = "INT96", toTsType = "TIMESTAMP_MICROS")
+    testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
   }
 }
 

@@ -21,18 +21,29 @@ import java.io.File
 import java.net.URI
 
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
-import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.util.KnownSizeEstimation
 
 class FileIndexSuite extends SharedSQLContext {
+
+  private class TestInMemoryFileIndex(
+      spark: SparkSession,
+      path: Path,
+      fileStatusCache: FileStatusCache = NoopCache)
+      extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
+    def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+    def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
+    def leafFileStatuses: Iterable[FileStatus] = leafFiles.values
+  }
 
   test("InMemoryFileIndex: leaf files are qualified paths") {
     withTempDir { dir =>
@@ -40,12 +51,94 @@ class FileIndexSuite extends SharedSQLContext {
       stringToFile(file, "text")
 
       val path = new Path(file.getCanonicalPath)
-      val catalog = new InMemoryFileIndex(spark, Seq(path), Map.empty, None) {
-        def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-        def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-      }
+      val catalog = new TestInMemoryFileIndex(spark, path)
       assert(catalog.leafFilePaths.forall(p => p.toString.startsWith("file:/")))
       assert(catalog.leafDirPaths.forall(p => p.toString.startsWith("file:/")))
+    }
+  }
+
+  test("SPARK-26188: don't infer data types of partition columns if user specifies schema") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=4d")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val schema = StructType(Seq(StructField("a", StringType, false)))
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+      val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+      assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
+        partitionValues(0).getString(0) == "4d")
+    }
+  }
+
+  test("SPARK-26990: use user specified field names if possible") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val schema = StructType(Seq(StructField("A", StringType, false)))
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+        assert(fileIndex.partitionSchema.length == 1 && fileIndex.partitionSchema.head.name == "A")
+      }
+    }
+  }
+
+  test("SPARK-26230: if case sensitive, validate partitions with original column names") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=1")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val partitionDirectory2 = new File(dir, "A=2")
+      partitionDirectory2.mkdir()
+      val file2 = new File(partitionDirectory2, "text.txt")
+      stringToFile(file2, "text")
+      val path = new Path(dir.getCanonicalPath)
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+        val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+        assert(partitionValues.length == 2)
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val msg = intercept[AssertionError] {
+          val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg.contains("Conflicting partition column names detected"))
+        assert("Partition column name list #[0-1]: A".r.findFirstIn(msg).isDefined)
+        assert("Partition column name list #[0-1]: a".r.findFirstIn(msg).isDefined)
+      }
+    }
+  }
+
+  test("SPARK-26263: Throw exception when partition value can't be casted to user-specified type") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val schema = StructType(Seq(StructField("a", IntegerType, false)))
+      withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+        val msg = intercept[RuntimeException] {
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg == "Failed to cast value `foo` to `IntegerType` for partition column `a`")
+      }
+
+      withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+        val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+        assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
+          partitionValues(0).isNullAt(0))
+      }
     }
   }
 
@@ -202,11 +295,7 @@ class FileIndexSuite extends SharedSQLContext {
       val fileStatusCache = FileStatusCache.getOrCreate(spark)
       val dirPath = new Path(dir.getAbsolutePath)
       val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
-      val catalog =
-        new InMemoryFileIndex(spark, Seq(dirPath), Map.empty, None, fileStatusCache) {
-          def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-          def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-        }
+      val catalog = new TestInMemoryFileIndex(spark, dirPath, fileStatusCache)
 
       val file = new File(dir, "text.txt")
       stringToFile(file, "text")
@@ -248,6 +337,23 @@ class FileIndexSuite extends SharedSQLContext {
       assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
     }
   }
+
+  test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
+    "the FS returns") {
+    withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+      withTempDir { dir =>
+        val file = new File(dir, "text.txt")
+        stringToFile(file, "text")
+
+        val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
+        val blockLocations = inMemoryFileIndex.leafFileStatuses.flatMap(
+          _.asInstanceOf[LocatedFileStatus].getBlockLocations)
+
+        assert(blockLocations.forall(_.getClass == classOf[BlockLocation]))
+      }
+    }
+  }
+
 }
 
 class FakeParentPathFileSystem extends RawLocalFileSystem {
@@ -255,5 +361,22 @@ class FakeParentPathFileSystem extends RawLocalFileSystem {
 
   override def getUri: URI = {
     URI.create("mockFs://some-bucket")
+  }
+}
+
+class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
+
+  class SpecialBlockLocation(
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
+    extends BlockLocation(names, hosts, offset, length)
+
+  override def getFileBlockLocations(
+      file: FileStatus,
+      start: Long,
+      len: Long): Array[BlockLocation] = {
+    Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
   }
 }

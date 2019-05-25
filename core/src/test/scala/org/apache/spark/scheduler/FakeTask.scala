@@ -27,8 +27,10 @@ class FakeTask(
     partitionId: Int,
     prefLocs: Seq[TaskLocation] = Nil,
     serializedTaskMetrics: Array[Byte] =
-      SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array())
-  extends Task[Int](stageId, 0, partitionId, new Properties, serializedTaskMetrics) {
+      SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
+    isBarrier: Boolean = false)
+  extends Task[Int](stageId, 0, partitionId, new Properties, serializedTaskMetrics,
+    isBarrier = isBarrier) {
 
   override def runTask(context: TaskContext): Int = 0
   override def preferredLocations: Seq[TaskLocation] = prefLocs
@@ -73,5 +75,23 @@ object FakeTask {
         SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array())
     }
     new TaskSet(tasks, stageId, stageAttemptId, priority = 0, null)
+  }
+
+  def createBarrierTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createBarrierTaskSet(numTasks, stageId = 0, stageAttempId = 0, prefLocs: _*)
+  }
+
+  def createBarrierTaskSet(
+      numTasks: Int,
+      stageId: Int,
+      stageAttempId: Int,
+      prefLocs: Seq[TaskLocation]*): TaskSet = {
+    if (prefLocs.size != 0 && prefLocs.size != numTasks) {
+      throw new IllegalArgumentException("Wrong number of task locations")
+    }
+    val tasks = Array.tabulate[Task[_]](numTasks) { i =>
+      new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil, isBarrier = true)
+    }
+    new TaskSet(tasks, stageId, stageAttempId, priority = 0, null)
   }
 }

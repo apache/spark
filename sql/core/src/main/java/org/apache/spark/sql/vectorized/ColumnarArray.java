@@ -16,8 +16,11 @@
  */
 package org.apache.spark.sql.vectorized;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -25,7 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * Array abstraction in {@link ColumnVector}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public final class ColumnarArray extends ArrayData {
   // The data for this array. This array contains elements from
   // data[offset] to data[offset + length).
@@ -46,7 +49,25 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public ArrayData copy() {
-    throw new UnsupportedOperationException();
+    DataType dt = data.dataType();
+
+    if (dt instanceof BooleanType) {
+      return UnsafeArrayData.fromPrimitiveArray(toBooleanArray());
+    } else if (dt instanceof ByteType) {
+      return UnsafeArrayData.fromPrimitiveArray(toByteArray());
+    } else if (dt instanceof ShortType) {
+      return UnsafeArrayData.fromPrimitiveArray(toShortArray());
+    } else if (dt instanceof IntegerType || dt instanceof DateType) {
+      return UnsafeArrayData.fromPrimitiveArray(toIntArray());
+    } else if (dt instanceof LongType || dt instanceof TimestampType) {
+      return UnsafeArrayData.fromPrimitiveArray(toLongArray());
+    } else if (dt instanceof FloatType) {
+      return UnsafeArrayData.fromPrimitiveArray(toFloatArray());
+    } else if (dt instanceof DoubleType) {
+      return UnsafeArrayData.fromPrimitiveArray(toDoubleArray());
+    } else {
+      return new GenericArrayData(toObjectArray(dt));
+    }
   }
 
   @Override
@@ -154,42 +175,7 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    if (dataType instanceof BooleanType) {
-      return getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
-      return getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
-      return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
-      return getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
-      return getDouble(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return getBinary(ordinal);
-    } else if (dataType instanceof DecimalType) {
-      DecimalType t = (DecimalType) dataType;
-      return getDecimal(ordinal, t.precision(), t.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof ArrayType) {
-      return getArray(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType)dataType).fields().length);
-    } else if (dataType instanceof MapType) {
-      return getMap(ordinal);
-    } else if (dataType instanceof CalendarIntervalType) {
-      return getInterval(ordinal);
-    } else {
-      throw new UnsupportedOperationException("Datatype not supported " + dataType);
-    }
+    return SpecializedGettersReader.read(this, ordinal, dataType, false, false);
   }
 
   @Override

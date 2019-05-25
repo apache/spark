@@ -24,7 +24,7 @@ import org.apache.spark.graphx.util.GraphGenerators
 
 object GridPageRank {
   def apply(nRows: Int, nCols: Int, nIter: Int, resetProb: Double): Seq[(VertexId, Double)] = {
-    val inNbrs = Array.fill(nRows * nCols)(collection.mutable.MutableList.empty[Int])
+    val inNbrs = Array.fill(nRows * nCols)(collection.mutable.ArrayBuffer.empty[Int])
     val outDegree = Array.fill(nRows * nCols)(0)
     // Convert row column address into vertex ids (row major order)
     def sub2ind(r: Int, c: Int): Int = r * nCols + c
@@ -203,24 +203,42 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Chain PersonalizedPageRank") {
     withSpark { sc =>
-      val chain1 = (0 until 9).map(x => (x, x + 1) )
+      // Check that implementation can handle large vertexIds, SPARK-25149
+      val vertexIdOffset = Int.MaxValue.toLong + 1
+      val sourceOffest = 4
+      val source = vertexIdOffset + sourceOffest
+      val numIter = 10
+      val vertices = vertexIdOffset until vertexIdOffset + numIter
+      val chain1 = vertices.zip(vertices.tail)
       val rawEdges = sc.parallelize(chain1, 1).map { case (s, d) => (s.toLong, d.toLong) }
       val chain = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
       val resetProb = 0.15
       val tol = 0.0001
-      val numIter = 10
       val errorTol = 1.0e-1
 
-      val staticRanks = chain.staticPersonalizedPageRank(4, numIter, resetProb).vertices
-      val dynamicRanks = chain.personalizedPageRank(4, tol, resetProb).vertices
+      val a = resetProb / (1 - Math.pow(1 - resetProb, numIter - sourceOffest))
+      // We expect the rank to decay as (1 - resetProb) ^ distance
+      val expectedRanks = sc.parallelize(vertices).map { vid =>
+        val rank = if (vid < source) {
+          0.0
+        } else {
+          a * Math.pow(1 - resetProb, vid - source)
+        }
+        vid -> rank
+      }
+      val expected = VertexRDD(expectedRanks)
 
-      assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
+      val staticRanks = chain.staticPersonalizedPageRank(source, numIter, resetProb).vertices
+      assert(compareRanks(staticRanks, expected) < errorTol)
+
+      val dynamicRanks = chain.personalizedPageRank(source, tol, resetProb).vertices
+      assert(compareRanks(dynamicRanks, expected) < errorTol)
 
       val parallelStaticRanks = chain
-        .staticParallelPersonalizedPageRank(Array(4), numIter, resetProb).mapVertices {
+        .staticParallelPersonalizedPageRank(Array(source), numIter, resetProb).mapVertices {
           case (vertexId, vector) => vector(0)
         }.vertices.cache()
-      assert(compareRanks(staticRanks, parallelStaticRanks) < errorTol)
+      assert(compareRanks(parallelStaticRanks, expected) < errorTol)
     }
   }
 

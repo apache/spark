@@ -162,7 +162,7 @@ object InMemoryFileIndex extends Logging {
    *
    * @return for each input path, the set of discovered files for the path
    */
-  private def bulkListLeafFiles(
+  private[sql] def bulkListLeafFiles(
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
@@ -308,14 +308,21 @@ object InMemoryFileIndex extends Logging {
       //   implementations don't actually issue RPC for this method.
       //
       // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-      //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
+      //   be a big deal since we always use to `bulkListLeafFiles` when the number of
       //   paths exceeds threshold.
       case f =>
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
         // which is very slow on some file system (RawLocalFileSystem, which is launch a
         // subprocess and parse the stdout).
         try {
-          val locations = fs.getFileBlockLocations(f, 0, f.getLen)
+          val locations = fs.getFileBlockLocations(f, 0, f.getLen).map { loc =>
+            // Store BlockLocation objects to consume less memory
+            if (loc.getClass == classOf[BlockLocation]) {
+              loc
+            } else {
+              new BlockLocation(loc.getNames, loc.getHosts, loc.getOffset, loc.getLength)
+            }
+          }
           val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
             f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
           if (f.isSymlink) {

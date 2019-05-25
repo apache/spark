@@ -39,15 +39,13 @@ import org.apache.spark.util.Utils
  */
 class ArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
-    bufferSize: Int,
-    reuseWorker: Boolean,
     evalType: Int,
     argOffsets: Array[Array[Int]],
     schema: StructType,
     timeZoneId: String,
-    respectTimeZone: Boolean)
+    conf: Map[String, String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs, bufferSize, reuseWorker, evalType, argOffsets) {
+    funcs, evalType, argOffsets) {
 
   protected override def newWriterThread(
       env: SparkEnv,
@@ -58,12 +56,15 @@ class ArrowPythonRunner(
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
-        if (respectTimeZone) {
-          PythonRDD.writeUTF(timeZoneId, dataOut)
-        } else {
-          dataOut.writeInt(SpecialLengths.NULL)
+
+        // Write config for the worker as a number of key -> value pairs of strings
+        dataOut.writeInt(conf.size)
+        for ((k, v) <- conf) {
+          PythonRDD.writeUTF(k, dataOut)
+          PythonRDD.writeUTF(v, dataOut)
         }
+
+        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
@@ -116,9 +117,9 @@ class ArrowPythonRunner(
       startTime: Long,
       env: SparkEnv,
       worker: Socket,
-      released: AtomicBoolean,
+      releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[ColumnarBatch] = {
-    new ReaderIterator(stream, writerThread, startTime, env, worker, released, context) {
+    new ReaderIterator(stream, writerThread, startTime, env, worker, releasedOrClosed, context) {
 
       private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         s"stdin reader for $pythonExec", 0, Long.MaxValue)
@@ -128,7 +129,7 @@ class ArrowPythonRunner(
       private var schema: StructType = _
       private var vectors: Array[ColumnVector] = _
 
-      context.addTaskCompletionListener { _ =>
+      context.addTaskCompletionListener[Unit] { _ =>
         if (reader != null) {
           reader.close(false)
         }

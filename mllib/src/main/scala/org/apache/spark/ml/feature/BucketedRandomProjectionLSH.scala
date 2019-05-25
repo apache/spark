@@ -82,14 +82,12 @@ class BucketedRandomProjectionLSHModel private[ml](
   override def setOutputCol(value: String): this.type = super.set(outputCol, value)
 
   @Since("2.1.0")
-  override protected[ml] val hashFunction: Vector => Array[Vector] = {
-    key: Vector => {
-      val hashValues: Array[Double] = randUnitVectors.map({
-        randUnitVector => Math.floor(BLAS.dot(key, randUnitVector) / $(bucketLength))
-      })
-      // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-      hashValues.map(Vectors.dense(_))
-    }
+  override protected[ml] def hashFunction(elems: Vector): Array[Vector] = {
+    val hashValues = randUnitVectors.map(
+      randUnitVector => Math.floor(BLAS.dot(elems, randUnitVector) / $(bucketLength))
+    )
+    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
+    hashValues.map(Vectors.dense(_))
   }
 
   @Since("2.1.0")

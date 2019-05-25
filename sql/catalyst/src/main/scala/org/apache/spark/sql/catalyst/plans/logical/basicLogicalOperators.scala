@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
-  RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -64,7 +66,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   }
 
   override def validConstraints: Set[Expression] =
-    child.constraints.union(getAliasedConstraints(projectList))
+    getAllValidConstraints(projectList)
 }
 
 /**
@@ -74,7 +76,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
  * their output.
  *
  * @param generator the generator expression
- * @param unrequiredChildIndex this paramter starts as Nil and gets filled by the Optimizer.
+ * @param unrequiredChildIndex this parameter starts as Nil and gets filled by the Optimizer.
  *                             It's used as an optimization for omitting data generation that will
  *                             be discarded next by a projection.
  *                             A common use case is when we explode(array(..)) and are interested
@@ -113,7 +115,7 @@ case class Generate(
   def qualifiedGeneratorOutput: Seq[Attribute] = {
     val qualifiedOutput = qualifier.map { q =>
       // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifier(Some(q)))
+      generatorOutput.map(a => a.withQualifier(Seq(q)))
     }.getOrElse(generatorOutput)
     val nullableOutput = qualifiedOutput.map {
       // if outer, make all attributes nullable, otherwise keep existing nullability
@@ -164,7 +166,12 @@ object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+case class Intersect(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    isAll: Boolean) extends SetOperation(left, right) {
+
+  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
   override def output: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
@@ -183,8 +190,11 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
   }
 }
 
-case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
-
+case class Except(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    isAll: Boolean) extends SetOperation(left, right) {
+  override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
@@ -221,10 +231,25 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     }
   }
 
+  def duplicateResolved: Boolean = {
+    children.map(_.outputSet.size).sum ==
+      AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
+  }
+
   // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] =
-    children.map(_.output).transpose.map(attrs =>
-      attrs.head.withNullability(attrs.exists(_.nullable)))
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -280,7 +305,8 @@ case class Join(
     left: LogicalPlan,
     right: LogicalPlan,
     joinType: JoinType,
-    condition: Option[Expression])
+    condition: Option[Expression],
+    hint: JoinHint)
   extends BinaryNode with PredicateHelper {
 
   override def output: Seq[Attribute] = {
@@ -342,7 +368,137 @@ case class Join(
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
+
+  // Ignore hint for canonicalization
+  protected override def doCanonicalize(): LogicalPlan =
+    super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
+
+  // Do not include an empty join hint in string description
+  protected override def stringArgs: Iterator[Any] = super.stringArgs.filter { e =>
+    (!e.isInstanceOf[JoinHint]
+      || e.asInstanceOf[JoinHint].leftHint.isDefined
+      || e.asInstanceOf[JoinHint].rightHint.isDefined)
+  }
 }
+
+/**
+ * Base trait for DataSourceV2 write commands
+ */
+trait V2WriteCommand extends Command {
+  def table: NamedRelation
+  def query: LogicalPlan
+
+  override def children: Seq[LogicalPlan] = Seq(query)
+
+  override lazy val resolved: Boolean = outputResolved
+
+  def outputResolved: Boolean = {
+    // If the table doesn't require schema match, we don't need to resolve the output columns.
+    table.skipSchemaResolution || {
+      table.resolved && query.resolved && query.output.size == table.output.size &&
+        query.output.zip(table.output).forall {
+          case (inAttr, outAttr) =>
+            // names and types must match, nullability must be compatible
+            inAttr.name == outAttr.name &&
+              DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+              (outAttr.nullable || !inAttr.nullable)
+        }
+    }
+  }
+}
+
+/**
+ * Create a new table with a v2 catalog.
+ */
+case class CreateV2Table(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    properties: Map[String, String],
+    ignoreIfExists: Boolean) extends Command
+
+/**
+ * Create a new table from a select query with a v2 catalog.
+ */
+case class CreateTableAsSelect(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    partitioning: Seq[Transform],
+    query: LogicalPlan,
+    properties: Map[String, String],
+    writeOptions: Map[String, String],
+    ignoreIfExists: Boolean) extends Command {
+
+  override def children: Seq[LogicalPlan] = Seq(query)
+
+  override lazy val resolved: Boolean = {
+    // the table schema is created from the query schema, so the only resolution needed is to check
+    // that the columns referenced by the table's partitioning exist in the query schema
+    val references = partitioning.flatMap(_.references).toSet
+    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+  }
+}
+
+/**
+ * Append data to an existing table.
+ */
+case class AppendData(
+    table: NamedRelation,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand
+
+object AppendData {
+  def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
+    new AppendData(table, df, isByName = true)
+  }
+
+  def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
+    new AppendData(table, query, isByName = false)
+  }
+}
+
+/**
+ * Overwrite data matching a filter in an existing table.
+ */
+case class OverwriteByExpression(
+    table: NamedRelation,
+    deleteExpr: Expression,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand {
+  override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
+}
+
+object OverwriteByExpression {
+  def byName(
+      table: NamedRelation, df: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, df, isByName = true)
+  }
+
+  def byPosition(
+      table: NamedRelation, query: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, query, isByName = false)
+  }
+}
+
+/**
+ * Dynamically overwrite partitions in an existing table.
+ */
+case class OverwritePartitionsDynamic(
+    table: NamedRelation,
+    query: LogicalPlan,
+    isByName: Boolean) extends V2WriteCommand
+
+object OverwritePartitionsDynamic {
+  def byName(table: NamedRelation, df: LogicalPlan): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, df, isByName = true)
+  }
+
+  def byPosition(table: NamedRelation, query: LogicalPlan): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, query, isByName = false)
+  }
+}
+
 
 /**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
@@ -428,7 +584,7 @@ case class View(
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
 }
@@ -444,8 +600,8 @@ case class View(
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def simpleString: String = {
-    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+  override def simpleString(maxFields: Int): String = {
+    val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]", maxFields)
     s"CTE $cteAliases"
   }
 
@@ -517,7 +673,7 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Int): String = {
     s"Range ($start, $end, step=$step, splits=$numSlices)"
   }
 
@@ -535,6 +691,18 @@ case class Range(
   }
 }
 
+/**
+ * This is a Group by operator with the aggregate functions and projections.
+ *
+ * @param groupingExpressions expressions for grouping keys
+ * @param aggregateExpressions expressions for a project list, which could contain
+ *                             [[AggregateFunction]]s.
+ *
+ * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
+ * separating projection from grouping and aggregate, we should avoid expression-level optimization
+ * on aggregateExpressions, which could reference an expression in groupingExpressions.
+ * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
+ */
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
@@ -555,7 +723,7 @@ case class Aggregate(
 
   override def validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
-    child.constraints.union(getAliasedConstraints(nonAgg))
+    getAllValidConstraints(nonAgg)
   }
 }
 
@@ -700,7 +868,7 @@ case class GroupingSets(
 case class Pivot(
     groupByExprsOpt: Option[Seq[NamedExpression]],
     pivotColumn: Expression,
-    pivotValues: Seq[Literal],
+    pivotValues: Seq[Expression],
     aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
   override lazy val resolved = false // Pivot will be replaced after being resolved.
@@ -786,19 +954,37 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
 /**
  * Aliased subquery.
  *
- * @param alias the alias name for this subquery.
+ * @param name the alias identifier for this subquery.
  * @param child the logical plan of this subquery.
  */
 case class SubqueryAlias(
-    alias: String,
+    name: AliasIdentifier,
     child: LogicalPlan)
   extends OrderPreservingUnaryNode {
 
-  override def doCanonicalize(): LogicalPlan = child.canonicalized
+  def alias: String = name.identifier
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+  override def output: Seq[Attribute] = {
+    val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
+    child.output.map(_.withQualifier(qualifierList))
+  }
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
+object SubqueryAlias {
+  def apply(
+      identifier: String,
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier), child)
+  }
+
+  def apply(
+      identifier: String,
+      database: String,
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier, Some(database)), child)
+  }
+}
 /**
  * Sample the dataset.
  *
@@ -906,7 +1092,11 @@ case class OneRowRelation() extends LeafNode {
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
-  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = OneRowRelation()
+  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = {
+    val newCopy = OneRowRelation()
+    newCopy.copyTagsFrom(this)
+    newCopy
+  }
 }
 
 /** A logical plan for `dropDuplicates`. */
@@ -915,24 +1105,4 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
-}
-
-/**
- * A logical plan for setting a barrier of analysis.
- *
- * The SQL Analyzer goes through a whole query plan even most part of it is analyzed. This
- * increases the time spent on query analysis for long pipelines in ML, especially.
- *
- * This logical plan wraps an analyzed logical plan to prevent it from analysis again. The barrier
- * is applied to the analyzed logical plan in Dataset. It won't change the output of wrapped
- * logical plan and just acts as a wrapper to hide it from analyzer. New operations on the dataset
- * will be put on the barrier, so only the new nodes created will be analyzed.
- *
- * This analysis barrier will be removed at the end of analysis stage.
- */
-case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
-  override protected def innerChildren: Seq[LogicalPlan] = Seq(child)
-  override def output: Seq[Attribute] = child.output
-  override def isStreaming: Boolean = child.isStreaming
-  override def doCanonicalize(): LogicalPlan = child.canonicalized
 }

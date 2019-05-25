@@ -111,8 +111,12 @@ private[streaming] class ReceivedBlockTracker(
    */
   def allocateBlocksToBatch(batchTime: Time): Unit = synchronized {
     if (lastAllocatedBatchTime == null || batchTime > lastAllocatedBatchTime) {
+      // We explicitly create an ArrayBuffer here because at least as of Scala 2.11 and 2.12
+      // a mutable.Queue fails serialization with a StackOverflow error if it has more than
+      // a few thousand elements.  So we explicitly allocate a collection for serialization which
+      // we know doesn't have this issue.  (See SPARK-26734).
       val streamIdToBlocks = streamIds.map { streamId =>
-        (streamId, getReceivedBlockQueue(streamId).clone())
+        (streamId, mutable.ArrayBuffer(getReceivedBlockQueue(streamId).clone(): _*))
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {

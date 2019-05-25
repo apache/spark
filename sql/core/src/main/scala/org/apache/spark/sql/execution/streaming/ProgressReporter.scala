@@ -24,12 +24,13 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
+import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
+import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, SparkDataStream}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -44,7 +45,7 @@ import org.apache.spark.util.Clock
 trait ProgressReporter extends Logging {
 
   case class ExecutionStats(
-    inputRows: Map[BaseStreamingSource, Long],
+    inputRows: Map[SparkDataStream, Long],
     stateOperators: Seq[StateOperatorProgress],
     eventTimeStats: Map[String, String])
 
@@ -55,11 +56,10 @@ trait ProgressReporter extends Logging {
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
-  protected def newData: Map[BaseStreamingSource, LogicalPlan]
-  protected def availableOffsets: StreamProgress
-  protected def committedOffsets: StreamProgress
-  protected def sources: Seq[BaseStreamingSource]
-  protected def sink: BaseStreamingSink
+  protected def newData: Map[SparkDataStream, LogicalPlan]
+  protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
+  protected def sources: Seq[SparkDataStream]
+  protected def sink: Table
   protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
@@ -68,8 +68,11 @@ trait ProgressReporter extends Logging {
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
   private var currentTriggerEndTimestamp = -1L
+  private var currentTriggerStartOffsets: Map[SparkDataStream, String] = _
+  private var currentTriggerEndOffsets: Map[SparkDataStream, String] = _
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
+
   private val currentDurationsMs = new mutable.HashMap[String, Long]()
 
   /** Flag that signals whether any error with input metrics have already been logged */
@@ -85,7 +88,7 @@ trait ProgressReporter extends Logging {
   private var lastNoDataProgressEventTime = Long.MinValue
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
+  timestampFormat.setTimeZone(getTimeZone("UTC"))
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -113,8 +116,18 @@ trait ProgressReporter extends Logging {
     logDebug("Starting Trigger Calculation")
     lastTriggerStartTimestamp = currentTriggerStartTimestamp
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
-    currentStatus = currentStatus.copy(isTriggerActive = true)
+    currentTriggerStartOffsets = null
+    currentTriggerEndOffsets = null
     currentDurationsMs.clear()
+  }
+
+  /**
+   * Record the offsets range this trigger will process. Call this before updating
+   * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
+   */
+  protected def recordTriggerOffsets(from: StreamProgress, to: StreamProgress): Unit = {
+    currentTriggerStartOffsets = from.mapValues(_.json)
+    currentTriggerEndOffsets = to.mapValues(_.json)
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -130,14 +143,15 @@ trait ProgressReporter extends Logging {
 
   /** Finalizes the query progress and adds it to list of recent status updates. */
   protected def finishTrigger(hasNewData: Boolean): Unit = {
+    assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
     val executionStats = extractExecutionStats(hasNewData)
     val processingTimeSec =
-      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / 1000
+      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
-      (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / 1000
+      (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
     } else {
       Double.NaN
     }
@@ -147,14 +161,17 @@ trait ProgressReporter extends Logging {
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
       new SourceProgress(
         description = source.toString,
-        startOffset = committedOffsets.get(source).map(_.json).orNull,
-        endOffset = availableOffsets.get(source).map(_.json).orNull,
+        startOffset = currentTriggerStartOffsets.get(source).orNull,
+        endOffset = currentTriggerEndOffsets.get(source).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,
         processedRowsPerSecond = numRecords / processingTimeSec
       )
     }
-    val sinkProgress = new SinkProgress(sink.toString)
+
+    val sinkProgress = SinkProgress(
+      sink.toString,
+      sinkCommitProgress.map(_.numOutputRows))
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -224,57 +241,31 @@ trait ProgressReporter extends Logging {
   }
 
   /** Extract number of input sources for each streaming source in plan */
-  private def extractSourceToNumInputRows(): Map[BaseStreamingSource, Long] = {
+  private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
 
-    import java.util.IdentityHashMap
-    import scala.collection.JavaConverters._
-
-    def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
+    def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
       tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
 
     val onlyDataSourceV2Sources = {
-      // Check whether the streaming query's logical plan has only V2 data sources
-      val allStreamingLeaves =
-        logicalPlan.collect { case s: StreamingExecutionRelation => s }
-      allStreamingLeaves.forall { _.source.isInstanceOf[MicroBatchReader] }
+      // Check whether the streaming query's logical plan has only V2 micro-batch data sources
+      val allStreamingLeaves = logicalPlan.collect {
+        case s: StreamingDataSourceV2Relation => s.stream.isInstanceOf[MicroBatchStream]
+        case _: StreamingExecutionRelation => false
+      }
+      allStreamingLeaves.forall(_ == true)
     }
 
     if (onlyDataSourceV2Sources) {
-      // DataSourceV2ScanExec is the execution plan leaf that is responsible for reading data
-      // from a V2 source and has a direct reference to the V2 source that generated it. Each
-      // DataSourceV2ScanExec records the number of rows it has read using SQLMetrics. However,
-      // just collecting all DataSourceV2ScanExec nodes and getting the metric is not correct as
-      // a DataSourceV2ScanExec instance may be referred to in the execution plan from two (or
-      // even multiple times) points and considering it twice will leads to double counting. We
-      // can't dedup them using their hashcode either because two different instances of
-      // DataSourceV2ScanExec can have the same hashcode but account for separate sets of
-      // records read, and deduping them to consider only one of them would be undercounting the
-      // records read. Therefore the right way to do this is to consider the unique instances of
-      // DataSourceV2ScanExec (using their identity hash codes) and get metrics from them.
-      // Hence we calculate in the following way.
-      //
-      // 1. Collect all the unique DataSourceV2ScanExec instances using IdentityHashMap.
-      //
-      // 2. Extract the source and the number of rows read from the DataSourceV2ScanExec instanes.
-      //
-      // 3. Multiple DataSourceV2ScanExec instance may refer to the same source (can happen with
-      //    self-unions or self-joins). Add up the number of rows for each unique source.
-      val uniqueStreamingExecLeavesMap =
-        new IdentityHashMap[DataSourceV2ScanExec, DataSourceV2ScanExec]()
-
-      lastExecution.executedPlan.collectLeaves().foreach {
-        case s: DataSourceV2ScanExec if s.reader.isInstanceOf[BaseStreamingSource] =>
-          uniqueStreamingExecLeavesMap.put(s, s)
-        case _ =>
-      }
-
-      val sourceToInputRowsTuples =
-        uniqueStreamingExecLeavesMap.values.asScala.map { execLeaf =>
-          val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = execLeaf.reader.asInstanceOf[BaseStreamingSource]
+      // It's possible that multiple DataSourceV2ScanExec instances may refer to the same source
+      // (can happen with self-unions or self-joins). This means the source is scanned multiple
+      // times in the query, we should count the numRows for each scan.
+      val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
+        case s: MicroBatchScanExec =>
+          val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+          val source = s.stream
           source -> numRows
-        }.toSeq
+      }
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
       sumRows(sourceToInputRowsTuples)
     } else {

@@ -84,4 +84,25 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
     val r3 = Row("World")
     assert(r3.hashCode() != r1.hashCode())
   }
+
+  test("toString") {
+    val r1 = Row(2147483647, 21474.8364, (-5).toShort, "this is a string", true, null)
+    assert(r1.toString == "[2147483647,21474.8364,-5,this is a string,true,null]")
+    val r2 = Row(null, Int.MinValue, Double.NaN, Short.MaxValue, "", false)
+    assert(r2.toString == "[null,-2147483648,NaN,32767,,false]")
+    val tsString = "2019-05-01 17:30:12.0"
+    val dtString = "2019-05-01"
+    val r3 = Row(
+      r1,
+      Seq(1, 2, 3),
+      Map(1 -> "a", 2 -> "b"),
+      java.sql.Timestamp.valueOf(tsString),
+      java.sql.Date.valueOf(dtString),
+      BigDecimal("1234567890.1234567890"),
+      (-1).toByte)
+    assert(r3.toString == "[[2147483647,21474.8364,-5,this is a string,true,null],List(1, 2, 3)," +
+      s"Map(1 -> a, 2 -> b),$tsString,$dtString,1234567890.1234567890,-1]")
+    val empty = Row()
+    assert(empty.toString == "[]")
+  }
 }

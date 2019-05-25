@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
-import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
@@ -62,13 +61,13 @@ object ArrowWriter {
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
-      case (StructType(_), vector: NullableMapVector) =>
+      case (StructType(_), vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
       case (dt, _) =>
-        throw new UnsupportedOperationException(s"Unsupported data type: ${dt.simpleString}")
+        throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
     }
   }
 }
@@ -129,20 +128,7 @@ private[arrow] abstract class ArrowFieldWriter {
   }
 
   def reset(): Unit = {
-    // TODO: reset() should be in a common interface
-    valueVector match {
-      case fixedWidthVector: BaseFixedWidthVector => fixedWidthVector.reset()
-      case variableWidthVector: BaseVariableWidthVector => variableWidthVector.reset()
-      case listVector: ListVector =>
-        // Manual "reset" the underlying buffer.
-        // TODO: When we upgrade to Arrow 0.10.0, we can simply remove this and call
-        // `listVector.reset()`.
-        val buffers = listVector.getBuffers(false)
-        buffers.foreach(buf => buf.setZero(0, buf.capacity()))
-        listVector.setValueCount(0)
-        listVector.setLastSet(0)
-      case _ =>
-    }
+    valueVector.reset()
     count = 0
   }
 }
@@ -323,7 +309,7 @@ private[arrow] class ArrayWriter(
 }
 
 private[arrow] class StructWriter(
-    val valueVector: NullableMapVector,
+    val valueVector: StructVector,
     children: Array[ArrowFieldWriter]) extends ArrowFieldWriter {
 
   override def setNull(): Unit = {

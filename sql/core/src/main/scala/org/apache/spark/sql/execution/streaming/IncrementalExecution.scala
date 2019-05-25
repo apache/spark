@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -30,6 +31,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, 
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.util.Utils
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -40,6 +42,7 @@ class IncrementalExecution(
     logicalPlan: LogicalPlan,
     val outputMode: OutputMode,
     val checkpointLocation: String,
+    val queryId: UUID,
     val runId: UUID,
     val currentBatchId: Long,
     val offsetSeqMetadata: OffsetSeqMetadata)
@@ -59,7 +62,8 @@ class IncrementalExecution(
       StatefulAggregationStrategy ::
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
-      StreamingDeduplicationStrategy :: Nil
+      StreamingDeduplicationStrategy ::
+      StreamingGlobalLimitStrategy(outputMode) :: Nil
   }
 
   private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
@@ -71,11 +75,13 @@ class IncrementalExecution(
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
    * with the desired literal
    */
-  override lazy val optimizedPlan: LogicalPlan = {
+  override
+  lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
     sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
+      case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
   }
 
@@ -99,19 +105,21 @@ class IncrementalExecution(
   val state = new Rule[SparkPlan] {
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSaveExec(keys, None, None, None,
+      case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
-               StateStoreRestoreExec(_, None, child))) =>
+               StateStoreRestoreExec(_, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
         StateStoreSaveExec(
           keys,
           Some(aggStateInfo),
           Some(outputMode),
           Some(offsetSeqMetadata.batchWatermarkMs),
+          stateFormatVersion,
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,
               Some(aggStateInfo),
+              stateFormatVersion,
               child) :: Nil))
 
       case StreamingDeduplicateExec(keys, child, None, None) =>
@@ -134,8 +142,12 @@ class IncrementalExecution(
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              Some(offsetSeqMetadata.batchWatermarkMs))
-        )
+              Some(offsetSeqMetadata.batchWatermarkMs)))
+
+      case l: StreamingGlobalLimitExec =>
+        l.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo),
+          outputMode = Some(outputMode))
     }
   }
 

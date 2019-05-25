@@ -23,7 +23,6 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -32,18 +31,18 @@ import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
+import org.apache.spark.{TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
@@ -471,6 +470,8 @@ class CodegenContext {
       case NewFunctionSpec(functionName, None, None) => functionName
       case NewFunctionSpec(functionName, Some(_), Some(innerClassInstance)) =>
         innerClassInstance + "." + functionName
+      case _ =>
+        throw new IllegalArgumentException(s"$funcName is not matched at addNewFunction")
     }
   }
 
@@ -580,6 +581,18 @@ class CodegenContext {
   }
 
   /**
+   * Creates an `ExprValue` representing a local java variable of required data type.
+   */
+  def freshVariable(name: String, dt: DataType): VariableValue =
+    JavaCode.variable(freshName(name), dt)
+
+  /**
+   * Creates an `ExprValue` representing a local java variable of required Java class.
+   */
+  def freshVariable(name: String, javaClass: Class[_]): VariableValue =
+    JavaCode.variable(freshName(name), javaClass)
+
+  /**
    * Generates code for equal expression in Java.
    */
   def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
@@ -596,7 +609,7 @@ class CodegenContext {
     case NullType => "false"
     case _ =>
       throw new IllegalArgumentException(
-        "cannot generate equality code for un-comparable type: " + dataType.simpleString)
+        "cannot generate equality code for un-comparable type: " + dataType.catalogString)
   }
 
   /**
@@ -683,7 +696,7 @@ class CodegenContext {
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw new IllegalArgumentException(
-        "cannot generate compare code for un-comparable type: " + dataType.simpleString)
+        "cannot generate compare code for un-comparable type: " + dataType.catalogString)
   }
 
   /**
@@ -733,73 +746,6 @@ class CodegenContext {
   }
 
   /**
-   * Generates code creating a [[UnsafeArrayData]].
-   *
-   * @param arrayName name of the array to create
-   * @param numElements code representing the number of elements the array should contain
-   * @param elementType data type of the elements in the array
-   * @param additionalErrorMessage string to include in the error message
-   */
-  def createUnsafeArray(
-      arrayName: String,
-      numElements: String,
-      elementType: DataType,
-      additionalErrorMessage: String): String = {
-    val arraySize = freshName("size")
-    val arrayBytes = freshName("arrayBytes")
-
-    s"""
-       |long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-       |  $numElements,
-       |  ${elementType.defaultSize});
-       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  throw new RuntimeException("Unsuccessful try create array with " + $arraySize +
-       |    " bytes of data due to exceeding the limit " +
-       |    "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH} bytes for UnsafeArrayData." +
-       |    "$additionalErrorMessage");
-       |}
-       |byte[] $arrayBytes = new byte[(int)$arraySize];
-       |UnsafeArrayData $arrayName = new UnsafeArrayData();
-       |Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
-       |$arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
-      """.stripMargin
-  }
-
-  /**
-   * Generates code creating a [[UnsafeArrayData]]. The generated code executes
-   * a provided fallback when the size of backing array would exceed the array size limit.
-   * @param arrayName a name of the array to create
-   * @param numElements a piece of code representing the number of elements the array should contain
-   * @param elementSize a size of an element in bytes
-   * @param bodyCode a function generating code that fills up the [[UnsafeArrayData]]
-   *                 and getting the backing array as a parameter
-   * @param fallbackCode a piece of code executed when the array size limit is exceeded
-   */
-  def createUnsafeArrayWithFallback(
-      arrayName: String,
-      numElements: String,
-      elementSize: Int,
-      bodyCode: String => String,
-      fallbackCode: String): String = {
-    val arraySize = freshName("size")
-    val arrayBytes = freshName("arrayBytes")
-    s"""
-       |final long $arraySize = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
-       |  $numElements,
-       |  $elementSize);
-       |if ($arraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  $fallbackCode
-       |} else {
-       |  final byte[] $arrayBytes = new byte[(int)$arraySize];
-       |  UnsafeArrayData $arrayName = new UnsafeArrayData();
-       |  Platform.putLong($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, $numElements);
-       |  $arrayName.pointTo($arrayBytes, ${Platform.BYTE_ARRAY_OFFSET}, (int)$arraySize);
-       |  ${bodyCode(arrayBytes)}
-       |}
-     """.stripMargin
-  }
-
-  /**
    * Generates code to do null safe execution, i.e. only execute the code when the input is not
    * null by adding null check if necessary.
    *
@@ -816,6 +762,36 @@ class CodegenContext {
       """
     } else {
       "\n" + execute
+    }
+  }
+
+  /**
+   * Generates code to do null safe execution when accessing properties of complex
+   * ArrayData elements.
+   *
+   * @param nullElements used to decide whether the ArrayData might contain null or not.
+   * @param isNull a variable indicating whether the result will be evaluated to null or not.
+   * @param arrayData a variable name representing the ArrayData.
+   * @param execute the code that should be executed only if the ArrayData doesn't contain
+   *                any null.
+   */
+  def nullArrayElementsSaveExec(
+      nullElements: Boolean,
+      isNull: String,
+      arrayData: String)(
+      execute: String): String = {
+    val i = freshName("idx")
+    if (nullElements) {
+      s"""
+         |for (int $i = 0; !$isNull && $i < $arrayData.numElements(); $i++) {
+         |  $isNull |= $arrayData.isNullAt($i);
+         |}
+         |if (!$isNull) {
+         |  $execute
+         |}
+       """.stripMargin
+    } else {
+      execute
     }
   }
 
@@ -933,12 +909,13 @@ class CodegenContext {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     var length = 0
+    val splitThreshold = SQLConf.get.methodSplitThreshold
     for (code <- expressions) {
       // We can't know how many bytecode will be generated, so use the length of source code
       // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
-      if (length > 1024) {
+      if (length > splitThreshold) {
         blocks += blockBuilder.toString()
         blockBuilder.clear()
         length = 0
@@ -1143,12 +1120,7 @@ class CodegenContext {
        text: => String,
        placeholderId: String = "",
        force: Boolean = false): Block = {
-    // By default, disable comments in generated code because computing the comments themselves can
-    // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
-    // inputs with wide schemas. For more details on the performance issues that motivated this
-    // flat, see SPARK-15680.
-    if (force ||
-      SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+    if (force || SQLConf.get.codegenComments) {
       val name = if (placeholderId != "") {
         assert(!placeHolderToComments.contains(placeholderId))
         placeholderId
@@ -1231,7 +1203,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
 object CodeGenerator extends Logging {
 
-  // This is the value of HugeMethodLimit in the OpenJDK JVM settings
+  // This is the default value of HugeMethodLimit in the OpenJDK HotSpot JVM,
+  // beyond which methods will be rejected from JIT compilation
   final val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
 
   // The max valid length of method parameters in JVM.
@@ -1289,7 +1262,7 @@ object CodeGenerator extends Logging {
     evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
-    evaluator.setDefaultImports(Array(
+    evaluator.setDefaultImports(
       classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
@@ -1304,7 +1277,7 @@ object CodeGenerator extends Logging {
       classOf[TaskContext].getName,
       classOf[TaskKilledException].getName,
       classOf[InputMetrics].getName
-    ))
+    )
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
     logDebug({
@@ -1331,7 +1304,7 @@ object CodeGenerator extends Logging {
         throw new CompileException(msg, e.getLocation)
     }
 
-    (evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
+    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
   }
 
   /**
@@ -1358,9 +1331,15 @@ object CodeGenerator extends Logging {
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         val stats = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
+          method.getAttributes().filter(_.getClass eq codeAttr).map { a =>
             val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
+
+            if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
+              logInfo("Generated method too long to be JIT compiled: " +
+                s"${cf.getThisClassName}.${method.getName} is $byteCodeSize bytes")
+            }
+
             byteCodeSize
           }
         }
@@ -1372,7 +1351,11 @@ object CodeGenerator extends Logging {
       }
     }.flatten
 
-    codeSizes.max
+    if (codeSizes.nonEmpty) {
+      codeSizes.max
+    } else {
+      0
+    }
   }
 
   /**
@@ -1385,14 +1368,14 @@ object CodeGenerator extends Logging {
    * weak keys/values and thus does not respond to memory pressure.
    */
   private val cache = CacheBuilder.newBuilder()
-    .maximumSize(100)
+    .maximumSize(SQLConf.get.codegenCacheMaxEntries)
     .build(
       new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
         override def load(code: CodeAndComment): (GeneratedClass, Int) = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()
-          def timeMs: Double = (endTime - startTime).toDouble / 1000000
+          def timeMs: Double = (endTime - startTime).toDouble / NANOS_PER_MILLIS
           CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
           CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
           logInfo(s"Code generated in $timeMs ms")
@@ -1442,6 +1425,59 @@ object CodeGenerator extends Logging {
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
       case _ => s"($jt)$input.get($ordinal, null)"
     }
+  }
+
+  /**
+   * Generates code creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
+   * given parameters.
+   *
+   * @param arrayName name of the array to create
+   * @param elementType data type of the elements in source array
+   * @param numElements code representing the number of elements the array should contain
+   * @param additionalErrorMessage string to include in the error message
+   *
+   * @return code representing the allocation of [[ArrayData]]
+   */
+  def createArrayData(
+      arrayName: String,
+      elementType: DataType,
+      numElements: String,
+      additionalErrorMessage: String): String = {
+    val elementSize = if (CodeGenerator.isPrimitiveType(elementType)) {
+      elementType.defaultSize
+    } else {
+      -1
+    }
+    s"""
+       |ArrayData $arrayName = ArrayData.allocateArrayData(
+       |  $elementSize, $numElements, "$additionalErrorMessage");
+     """.stripMargin
+  }
+
+  /**
+   * Generates assignment code for an [[ArrayData]]
+   *
+   * @param dstArray name of the array to be assigned
+   * @param elementType data type of the elements in destination and source arrays
+   * @param srcArray name of the array to be read
+   * @param needNullCheck value which shows whether a nullcheck is required for the returning
+   *                      assignment
+   * @param dstArrayIndex an index variable to access each element of destination array
+   * @param srcArrayIndex an index variable to access each element of source array
+   *
+   * @return code representing an assignment to each element of the [[ArrayData]], which requires
+   *         a pair of destination and source loop index variables
+   */
+  def createArrayAssignment(
+      dstArray: String,
+      elementType: DataType,
+      srcArray: String,
+      dstArrayIndex: String,
+      srcArrayIndex: String,
+      needNullCheck: Boolean): String = {
+    CodeGenerator.setArrayElement(dstArray, elementType, dstArrayIndex,
+      CodeGenerator.getValue(srcArray, elementType, srcArrayIndex),
+      if (needNullCheck) Some(s"$srcArray.isNullAt($srcArrayIndex)") else None)
   }
 
   /**
@@ -1509,6 +1545,34 @@ object CodeGenerator extends Logging {
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    }
+  }
+
+  /**
+   * Generates code of setter for an [[ArrayData]].
+   */
+  def setArrayElement(
+      array: String,
+      elementType: DataType,
+      i: String,
+      value: String,
+      isNull: Option[String] = None): String = {
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+    val setFunc = if (isPrimitiveType) {
+      s"set${CodeGenerator.primitiveTypeName(elementType)}"
+    } else {
+      "update"
+    }
+    if (isNull.isDefined && isPrimitiveType) {
+      s"""
+         |if (${isNull.get}) {
+         |  $array.setNullAt($i);
+         |} else {
+         |  $array.$setFunc($i, $value);
+         |}
+       """.stripMargin
+    } else {
+      s"$array.$setFunc($i, $value);"
     }
   }
 

@@ -23,11 +23,25 @@ import org.apache.spark.{Partition, TaskContext}
 
 /**
  * An RDD that applies the provided function to every partition of the parent RDD.
+ *
+ * @param prev the parent RDD.
+ * @param f The function used to map a tuple of (TaskContext, partition index, input iterator) to
+ *          an output iterator.
+ * @param preservesPartitioning Whether the input function preserves the partitioner, which should
+ *                              be `false` unless `prev` is a pair RDD and the input function
+ *                              doesn't modify the keys.
+ * @param isFromBarrier Indicates whether this RDD is transformed from an RDDBarrier, a stage
+ *                      containing at least one RDDBarrier shall be turned into a barrier stage.
+ * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
+ *                         sensitive, it may return totally different result when the input order
+ *                         is changed. Mostly stateful functions are order-sensitive.
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
-    preservesPartitioning: Boolean = false)
+    preservesPartitioning: Boolean = false,
+    isFromBarrier: Boolean = false,
+    isOrderSensitive: Boolean = false)
   extends RDD[U](prev) {
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
@@ -40,5 +54,16 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
   override def clearDependencies() {
     super.clearDependencies()
     prev = null
+  }
+
+  @transient protected lazy override val isBarrier_ : Boolean =
+    isFromBarrier || dependencies.exists(_.rdd.isBarrier())
+
+  override protected def getOutputDeterministicLevel = {
+    if (isOrderSensitive && prev.outputDeterministicLevel == DeterministicLevel.UNORDERED) {
+      DeterministicLevel.INDETERMINATE
+    } else {
+      super.getOutputDeterministicLevel
+    }
   }
 }

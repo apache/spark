@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
+import java.lang.reflect.Method
+
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.orc.{OrcFilters => DatasourceOrcFilters}
+import org.apache.spark.sql.execution.datasources.orc.OrcFilters.buildTree
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -55,30 +61,56 @@ import org.apache.spark.sql.types._
  * known to be convertible.
  */
 private[orc] object OrcFilters extends Logging {
+
+  private def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
+    val method = klass.getMethod(name, args: _*)
+    method.setAccessible(true)
+    method
+  }
+
   def createFilter(schema: StructType, filters: Array[Filter]): Option[SearchArgument] = {
-    val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+    if (HiveUtils.isHive23) {
+      DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
+    } else {
+      val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
 
-    // First, tries to convert each filter individually to see whether it's convertible, and then
-    // collect all convertible ones to build the final `SearchArgument`.
-    val convertibleFilters = for {
-      filter <- filters
-      _ <- buildSearchArgument(dataTypeMap, filter, SearchArgumentFactory.newBuilder())
-    } yield filter
+      // First, tries to convert each filter individually to see whether it's convertible, and then
+      // collect all convertible ones to build the final `SearchArgument`.
+      val convertibleFilters = for {
+        filter <- filters
+        _ <- buildSearchArgument(dataTypeMap, filter, newBuilder)
+      } yield filter
 
-    for {
-      // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- convertibleFilters.reduceOption(And)
-      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
-      builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
-    } yield builder.build()
+      for {
+        // Combines all convertible filters using `And` to produce a single conjunction
+        conjunction <- buildTree(convertibleFilters)
+        // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
+        builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
+      } yield builder.build()
+    }
   }
 
   private def buildSearchArgument(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    def newBuilder = SearchArgumentFactory.newBuilder()
+    createBuilder(dataTypeMap, expression, builder, canPartialPushDownConjuncts = true)
+  }
 
+  /**
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the input filter predicates.
+   * @param builder the input SearchArgument.Builder.
+   * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
+   *                                    down safely. Pushing ONLY one side of AND down is safe to
+   *                                    do at the top level or none of its ancestors is NOT and OR.
+   * @return the builder so far.
+   */
+  private def createBuilder(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      builder: Builder,
+      canPartialPushDownConjuncts: Boolean): Option[Builder] = {
     def isSearchableType(dataType: DataType): Boolean = dataType match {
       // Only the values in the Spark types below can be recognized by
       // the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
@@ -90,32 +122,63 @@ private[orc] object OrcFilters extends Logging {
 
     expression match {
       case And(left, right) =>
-        // At here, it is not safe to just convert one side if we do not understand the
-        // other side. Here is an example used to explain the reason.
+        // At here, it is not safe to just convert one side and remove the other side
+        // if we do not understand what the parent filters are.
+        //
+        // Here is an example used to explain the reason.
         // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
         // convert b in ('1'). If we only convert a = 2, we will end up with a filter
         // NOT(a = 2), which will generate wrong results.
-        // Pushing one side of AND down is only safe to do at the top level.
-        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
-        for {
-          _ <- buildSearchArgument(dataTypeMap, left, newBuilder)
-          _ <- buildSearchArgument(dataTypeMap, right, newBuilder)
-          lhs <- buildSearchArgument(dataTypeMap, left, builder.startAnd())
-          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
-        } yield rhs.end()
+        //
+        // Pushing one side of AND down is only safe to do at the top level or in the child
+        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+        // can be safely removed.
+        val leftBuilderOption =
+          createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
+        val rightBuilderOption =
+          createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
+        (leftBuilderOption, rightBuilderOption) match {
+          case (Some(_), Some(_)) =>
+            for {
+              lhs <- createBuilder(dataTypeMap, left,
+                builder.startAnd(), canPartialPushDownConjuncts)
+              rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
+            } yield rhs.end()
+
+          case (Some(_), None) if canPartialPushDownConjuncts =>
+            createBuilder(dataTypeMap, left, builder, canPartialPushDownConjuncts)
+
+          case (None, Some(_)) if canPartialPushDownConjuncts =>
+            createBuilder(dataTypeMap, right, builder, canPartialPushDownConjuncts)
+
+          case _ => None
+        }
 
       case Or(left, right) =>
+        // The Or predicate is convertible when both of its children can be pushed down.
+        // That is to say, if one/both of the children can be partially pushed down, the Or
+        // predicate can be partially pushed down as well.
+        //
+        // Here is an example used to explain the reason.
+        // Let's say we have
+        // (a1 AND a2) OR (b1 AND b2),
+        // a1 and b1 is convertible, while a2 and b2 is not.
+        // The predicate can be converted as
+        // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+        // As per the logical in And predicate, we can push down (a1 OR b1).
         for {
-          _ <- buildSearchArgument(dataTypeMap, left, newBuilder)
-          _ <- buildSearchArgument(dataTypeMap, right, newBuilder)
-          lhs <- buildSearchArgument(dataTypeMap, left, builder.startOr())
-          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
+          _ <- createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
+          _ <- createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
+          lhs <- createBuilder(dataTypeMap, left,
+            builder.startOr(), canPartialPushDownConjuncts)
+          rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
         } yield rhs.end()
 
       case Not(child) =>
         for {
-          _ <- buildSearchArgument(dataTypeMap, child, newBuilder)
-          negate <- buildSearchArgument(dataTypeMap, child, builder.startNot())
+          _ <- createBuilder(dataTypeMap, child, newBuilder, canPartialPushDownConjuncts = false)
+          negate <- createBuilder(dataTypeMap,
+            child, builder.startNot(), canPartialPushDownConjuncts = false)
         } yield negate.end()
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
@@ -123,31 +186,50 @@ private[orc] object OrcFilters extends Logging {
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().equals(attribute, value).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "equals", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().nullSafeEquals(attribute, value).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "nullSafeEquals", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThan(attribute, value).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "lessThan", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThanEquals(attribute, value).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "lessThanEquals", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThanEquals(attribute, value).end())
+        val bd = builder.startNot()
+        val method = findMethod(bd.getClass, "lessThanEquals", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThan(attribute, value).end())
+        val bd = builder.startNot()
+        val method = findMethod(bd.getClass, "lessThan", classOf[String], classOf[Object])
+        Some(method.invoke(bd, attribute, value.asInstanceOf[AnyRef]).asInstanceOf[Builder].end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().isNull(attribute).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "isNull", classOf[String])
+        Some(method.invoke(bd, attribute).asInstanceOf[Builder].end())
 
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().isNull(attribute).end())
+        val bd = builder.startNot()
+        val method = findMethod(bd.getClass, "isNull", classOf[String])
+        Some(method.invoke(bd, attribute).asInstanceOf[Builder].end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().in(attribute, values.map(_.asInstanceOf[AnyRef]): _*).end())
+        val bd = builder.startAnd()
+        val method = findMethod(bd.getClass, "in", classOf[String], classOf[Array[Object]])
+        Some(method.invoke(bd, attribute, values.map(_.asInstanceOf[AnyRef]))
+          .asInstanceOf[Builder].end())
 
       case _ => None
     }

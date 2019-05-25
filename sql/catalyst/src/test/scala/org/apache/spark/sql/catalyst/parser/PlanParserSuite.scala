@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -64,15 +65,16 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select * from a union select * from b", Distinct(a.union(b)))
     assertEqual("select * from a union distinct select * from b", Distinct(a.union(b)))
     assertEqual("select * from a union all select * from b", a.union(b))
-    assertEqual("select * from a except select * from b", a.except(b))
-    intercept("select * from a except all select * from b", "EXCEPT ALL is not supported.")
-    assertEqual("select * from a except distinct select * from b", a.except(b))
-    assertEqual("select * from a minus select * from b", a.except(b))
-    intercept("select * from a minus all select * from b", "MINUS ALL is not supported.")
-    assertEqual("select * from a minus distinct select * from b", a.except(b))
-    assertEqual("select * from a intersect select * from b", a.intersect(b))
-    intercept("select * from a intersect all select * from b", "INTERSECT ALL is not supported.")
-    assertEqual("select * from a intersect distinct select * from b", a.intersect(b))
+    assertEqual("select * from a except select * from b", a.except(b, isAll = false))
+    assertEqual("select * from a except distinct select * from b", a.except(b, isAll = false))
+    assertEqual("select * from a except all select * from b", a.except(b, isAll = true))
+    assertEqual("select * from a minus select * from b", a.except(b, isAll = false))
+    assertEqual("select * from a minus all select * from b", a.except(b, isAll = true))
+    assertEqual("select * from a minus distinct select * from b", a.except(b, isAll = false))
+    assertEqual("select * from a " +
+      "intersect select * from b", a.intersect(b, isAll = false))
+    assertEqual("select * from a intersect distinct select * from b", a.intersect(b, isAll = false))
+    assertEqual("select * from a intersect all select * from b", a.intersect(b, isAll = true))
   }
 
   test("common table expressions") {
@@ -106,7 +108,7 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
     assertEqual(
       "select a, b from db.c having x < 1",
-      table("db", "c").select('a, 'b).where('x < 1))
+      table("db", "c").groupBy()('a, 'b).where('x < 1))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
     assertEqual("select from tbl", OneRowRelation().select('from.as("tbl")))
@@ -130,11 +132,19 @@ class PlanParserSuite extends AnalysisTest {
       table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10",
-      "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements")
+      "This select statement can not have FROM cause as its already specified upfront")
+    intercept(
+      "from a select * from b",
+      "This select statement can not have FROM cause as its already specified upfront")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(
         table("a").where('s < 10).select(star()).insertInto("tbl2")))
+    assertEqual(
+      "select * from (from a select * select *)",
+      table("a").select(star())
+        .union(table("a").select(star()))
+        .as("__auto_generated_subquery_name").select(star()))
   }
 
   test("query organization") {
@@ -368,6 +378,7 @@ class PlanParserSuite extends AnalysisTest {
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
     test("left semi join", LeftSemi, testExistence)
+    test("semi join", LeftSemi, testExistence)
     test("left anti join", LeftAnti, testExistence)
     test("anti join", LeftAnti, testExistence)
 
@@ -592,6 +603,33 @@ class PlanParserSuite extends AnalysisTest {
       parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
       UnresolvedHint("MAPJOIN", Seq($"t"),
         table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
+
+    comparePlans(
+      parsePlan("SELECT /*+ COALESCE(10) */ * FROM t"),
+      UnresolvedHint("COALESCE", Seq(Literal(10)),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(100) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(Literal(100)),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan(
+        "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t"),
+      InsertIntoTable(table("s"), Map.empty,
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          UnresolvedHint("COALESCE", Seq(Literal(500)),
+            UnresolvedHint("COALESCE", Seq(Literal(10)),
+              table("t").select(star())))), overwrite = false, ifPartitionNotExists = false))
+
+    comparePlans(
+      parsePlan("SELECT /*+ BROADCASTJOIN(u), REPARTITION(100) */ * FROM t"),
+      UnresolvedHint("BROADCASTJOIN", Seq($"u"),
+        UnresolvedHint("REPARTITION", Seq(Literal(100)),
+          table("t").select(star()))))
+
+    intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", "mismatched input")
   }
 
   test("SPARK-20854: select hint syntax with expressions") {
@@ -677,5 +715,94 @@ class PlanParserSuite extends AnalysisTest {
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
       OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
     )
+  }
+
+  test("precedence of set operations") {
+    val a = table("a").select(star())
+    val b = table("b").select(star())
+    val c = table("c").select(star())
+    val d = table("d").select(star())
+
+    val query1 =
+      """
+        |SELECT * FROM a
+        |UNION
+        |SELECT * FROM b
+        |EXCEPT
+        |SELECT * FROM c
+        |INTERSECT
+        |SELECT * FROM d
+      """.stripMargin
+
+    val query2 =
+      """
+        |SELECT * FROM a
+        |UNION
+        |SELECT * FROM b
+        |EXCEPT ALL
+        |SELECT * FROM c
+        |INTERSECT ALL
+        |SELECT * FROM d
+      """.stripMargin
+
+    assertEqual(query1, Distinct(a.union(b)).except(c.intersect(d, isAll = false), isAll = false))
+    assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
+
+    // Now disable precedence enforcement to verify the old behaviour.
+    withSQLConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED.key -> "true") {
+      assertEqual(query1,
+        Distinct(a.union(b)).except(c, isAll = false).intersect(d, isAll = false))
+      assertEqual(query2, Distinct(a.union(b)).except(c, isAll = true).intersect(d, isAll = true))
+    }
+
+    // Explicitly enable the precedence enforcement
+    withSQLConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED.key -> "false") {
+      assertEqual(query1,
+        Distinct(a.union(b)).except(c.intersect(d, isAll = false), isAll = false))
+      assertEqual(query2, Distinct(a.union(b)).except(c.intersect(d, isAll = true), isAll = true))
+    }
+  }
+
+  test("create/alter view as insert into table") {
+    val m1 = intercept[ParseException] {
+      parsePlan("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)")
+    }.getMessage
+    assert(m1.contains("mismatched input 'INSERT' expecting"))
+    // Multi insert query
+    val m2 = intercept[ParseException] {
+      parsePlan(
+        """
+          |CREATE VIEW testView AS FROM jt
+          |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
+          |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
+        """.stripMargin)
+    }.getMessage
+    assert(m2.contains("mismatched input 'INSERT' expecting"))
+    val m3 = intercept[ParseException] {
+      parsePlan("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)")
+    }.getMessage
+    assert(m3.contains("mismatched input 'INSERT' expecting"))
+    // Multi insert query
+    val m4 = intercept[ParseException] {
+      parsePlan(
+        """
+          |ALTER VIEW testView AS FROM jt
+          |INSERT INTO tbl1 SELECT * WHERE jt.id < 5
+          |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
+        """.stripMargin
+      )
+    }.getMessage
+    assert(m4.contains("mismatched input 'INSERT' expecting"))
+  }
+
+  test("Invalid insert constructs in the query") {
+    val m1 = intercept[ParseException] {
+      parsePlan("SELECT * FROM (INSERT INTO BAR VALUES (2))")
+    }.getMessage
+    assert(m1.contains("mismatched input 'FROM' expecting"))
+    val m2 = intercept[ParseException] {
+      parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
+    }.getMessage
+    assert(m2.contains("mismatched input 'FROM' expecting"))
   }
 }

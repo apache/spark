@@ -44,6 +44,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -280,7 +281,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
 
-    withMultipleConnectionJdbcStatement("test_map")(
+    withMultipleConnectionJdbcStatement("test_map", "db1.test_map2")(
       // create table
       { statement =>
 
@@ -295,7 +296,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val plan = statement.executeQuery("explain select * from test_table")
         plan.next()
         plan.next()
-        assert(plan.getString(1).contains("InMemoryTableScan"))
+        assert(plan.getString(1).contains("Scan In-memory table `test_table`"))
 
         val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
         val buf1 = new collection.mutable.ArrayBuffer[Int]()
@@ -381,7 +382,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val plan = statement.executeQuery("explain select key from test_map ORDER BY key DESC")
         plan.next()
         plan.next()
-        assert(plan.getString(1).contains("InMemoryTableScan"))
+        assert(plan.getString(1).contains("Scan In-memory table `test_table`"))
 
         val rs = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
         val buf = new collection.mutable.ArrayBuffer[Int]()
@@ -484,10 +485,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement("smallKV", "addJar")(
       {
         statement =>
-          val jarFile =
-            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
-              .split("/")
-              .mkString(File.separator)
+          val jarFile = HiveTestUtils.getHiveHcatalogCoreJar.getCanonicalPath
 
           statement.executeQuery(s"ADD JAR $jarFile")
       },
@@ -636,6 +634,14 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(pipeoutFileList(sessionID).length == 0)
     }
   }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -766,6 +772,14 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
 }
 
 object ServerMode extends Enumeration {
@@ -796,6 +810,22 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     } finally {
       tableNames.foreach { name =>
         statements(0).execute(s"DROP TABLE IF EXISTS $name")
+      }
+      statements.foreach(_.close())
+      connections.foreach(_.close())
+    }
+  }
+
+  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*) {
+    val user = System.getProperty("user.name")
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val statements = connections.map(_.createStatement())
+
+    try {
+      statements.zip(fs).foreach { case (s, f) => f(s) }
+    } finally {
+      dbNames.foreach { name =>
+        statements(0).execute(s"DROP DATABASE IF EXISTS $name")
       }
       statements.foreach(_.close())
       connections.foreach(_.close())

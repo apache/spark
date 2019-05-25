@@ -40,7 +40,6 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-
 class DDLParserSuite extends PlanTest with SharedSQLContext {
   private lazy val parser = new SparkSqlParser(new SQLConf)
 
@@ -85,8 +84,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     val sql =
       """
        |CREATE DATABASE IF NOT EXISTS database_name
-       |COMMENT 'database_comment' LOCATION '/home/user/db'
        |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+       |COMMENT 'database_comment' LOCATION '/home/user/db'
       """.stripMargin
     val parsed = parser.parsePlan(sql)
     val expected = CreateDatabaseCommand(
@@ -96,6 +95,23 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       Some("database_comment"),
       Map("a" -> "a", "b" -> "b", "c" -> "c"))
     comparePlans(parsed, expected)
+  }
+
+  test("create database -- check duplicates") {
+    def createDatabase(duplicateClause: String): String = {
+      s"""
+        |CREATE DATABASE IF NOT EXISTS database_name
+        |$duplicateClause
+        |$duplicateClause
+      """.stripMargin
+    }
+    val sql1 = createDatabase("COMMENT 'database_comment'")
+    val sql2 = createDatabase("LOCATION '/home/user/db'")
+    val sql3 = createDatabase("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: LOCATION")
+    intercept(sql3, "Found duplicate clauses: WITH DBPROPERTIES")
   }
 
   test("create database - property values must be set") {
@@ -415,171 +431,26 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
-  test("create table - with partitioned by") {
-    val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
-      "USING parquet PARTITIONED BY (a)"
-
-    val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType()
-        .add("a", IntegerType, nullable = true, "test")
-        .add("b", StringType),
-      provider = Some("parquet"),
-      partitionColumnNames = Seq("a")
-    )
-
-    parser.parsePlan(query) match {
-      case CreateTable(tableDesc, _, None) =>
-        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $query")
-    }
-  }
-
-  test("create table - with bucket") {
-    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
-      "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
-
-    val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType().add("a", IntegerType).add("b", StringType),
-      provider = Some("parquet"),
-      bucketSpec = Some(BucketSpec(5, Seq("a"), Seq("b")))
-    )
-
-    parser.parsePlan(query) match {
-      case CreateTable(tableDesc, _, None) =>
-        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $query")
-    }
-  }
-
-  test("create table - with comment") {
-    val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
-
-    val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType().add("a", IntegerType).add("b", StringType),
-      provider = Some("parquet"),
-      comment = Some("abc"))
-
-    parser.parsePlan(sql) match {
-      case CreateTable(tableDesc, _, None) =>
-        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $sql")
-    }
-  }
-
-  test("create table - with table properties") {
-    val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet TBLPROPERTIES('test' = 'test')"
-
-    val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType().add("a", IntegerType).add("b", StringType),
-      provider = Some("parquet"),
-      properties = Map("test" -> "test"))
-
-    parser.parsePlan(sql) match {
-      case CreateTable(tableDesc, _, None) =>
-        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $sql")
-    }
-  }
-
-  test("Duplicate clauses - create table") {
-    def createTableHeader(duplicateClause: String, isNative: Boolean): String = {
-      val fileFormat = if (isNative) "USING parquet" else "STORED AS parquet"
-      s"CREATE TABLE my_tab(a INT, b STRING) $fileFormat $duplicateClause $duplicateClause"
+  test("Duplicate clauses - create hive table") {
+    def createTableHeader(duplicateClause: String): String = {
+      s"CREATE TABLE my_tab(a INT, b STRING) STORED AS parquet $duplicateClause $duplicateClause"
     }
 
-    Seq(true, false).foreach { isNative =>
-      intercept(createTableHeader("TBLPROPERTIES('test' = 'test2')", isNative),
-        "Found duplicate clauses: TBLPROPERTIES")
-      intercept(createTableHeader("LOCATION '/tmp/file'", isNative),
-        "Found duplicate clauses: LOCATION")
-      intercept(createTableHeader("COMMENT 'a table'", isNative),
-        "Found duplicate clauses: COMMENT")
-      intercept(createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS", isNative),
-        "Found duplicate clauses: CLUSTERED BY")
-    }
-
-    // Only for native data source tables
-    intercept(createTableHeader("PARTITIONED BY (b)", isNative = true),
+    intercept(createTableHeader("TBLPROPERTIES('test' = 'test2')"),
+      "Found duplicate clauses: TBLPROPERTIES")
+    intercept(createTableHeader("LOCATION '/tmp/file'"),
+      "Found duplicate clauses: LOCATION")
+    intercept(createTableHeader("COMMENT 'a table'"),
+      "Found duplicate clauses: COMMENT")
+    intercept(createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS"),
+      "Found duplicate clauses: CLUSTERED BY")
+    intercept(createTableHeader("PARTITIONED BY (k int)"),
       "Found duplicate clauses: PARTITIONED BY")
-
-    // Only for Hive serde tables
-    intercept(createTableHeader("PARTITIONED BY (k int)", isNative = false),
-      "Found duplicate clauses: PARTITIONED BY")
-    intercept(createTableHeader("STORED AS parquet", isNative = false),
+    intercept(createTableHeader("STORED AS parquet"),
       "Found duplicate clauses: STORED AS/BY")
     intercept(
-      createTableHeader("ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'", isNative = false),
+      createTableHeader("ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'"),
       "Found duplicate clauses: ROW FORMAT")
-  }
-
-  test("create table - with location") {
-    val v1 = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
-
-    val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("my_tab"),
-      tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("/tmp/file"))),
-      schema = new StructType().add("a", IntegerType).add("b", StringType),
-      provider = Some("parquet"))
-
-    parser.parsePlan(v1) match {
-      case CreateTable(tableDesc, _, None) =>
-        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $v1")
-    }
-
-    val v2 =
-      """
-        |CREATE TABLE my_tab(a INT, b STRING)
-        |USING parquet
-        |OPTIONS (path '/tmp/file')
-        |LOCATION '/tmp/file'
-      """.stripMargin
-    val e = intercept[ParseException] {
-      parser.parsePlan(v2)
-    }
-    assert(e.message.contains("you can only specify one of them."))
-  }
-
-  test("create table - byte length literal table name") {
-    val sql = "CREATE TABLE 1m.2g(a INT) USING parquet"
-
-    val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("2g", Some("1m")),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType().add("a", IntegerType),
-      provider = Some("parquet"))
-
-    parser.parsePlan(sql) match {
-      case CreateTable(tableDesc, _, None) =>
-        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $sql")
-    }
   }
 
   test("insert overwrite directory") {
@@ -1165,84 +1036,6 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     comparePlans(parsed, expected)
   }
 
-  test("support for other types in OPTIONS") {
-    val sql =
-      """
-        |CREATE TABLE table_name USING json
-        |OPTIONS (a 1, b 0.1, c TRUE)
-      """.stripMargin
-
-    val expectedTableDesc = CatalogTable(
-      identifier = TableIdentifier("table_name"),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty.copy(
-        properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true")
-      ),
-      schema = new StructType,
-      provider = Some("json")
-    )
-
-    parser.parsePlan(sql) match {
-      case CreateTable(tableDesc, _, None) =>
-        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $sql")
-    }
-  }
-
-  test("Test CTAS against data source tables") {
-    val s1 =
-      """
-        |CREATE TABLE IF NOT EXISTS mydb.page_view
-        |USING parquet
-        |COMMENT 'This is the staging page view table'
-        |LOCATION '/user/external/page_view'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    val s2 =
-      """
-        |CREATE TABLE IF NOT EXISTS mydb.page_view
-        |USING parquet
-        |LOCATION '/user/external/page_view'
-        |COMMENT 'This is the staging page view table'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    val s3 =
-      """
-        |CREATE TABLE IF NOT EXISTS mydb.page_view
-        |USING parquet
-        |COMMENT 'This is the staging page view table'
-        |LOCATION '/user/external/page_view'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    checkParsing(s1)
-    checkParsing(s2)
-    checkParsing(s3)
-
-    def checkParsing(sql: String): Unit = {
-      val (desc, exists) = extractTableDesc(sql)
-      assert(exists)
-      assert(desc.identifier.database == Some("mydb"))
-      assert(desc.identifier.table == "page_view")
-      assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
-      assert(desc.schema.isEmpty) // will be populated later when the table is actually created
-      assert(desc.comment == Some("This is the staging page view table"))
-      assert(desc.viewText.isEmpty)
-      assert(desc.viewDefaultDatabase.isEmpty)
-      assert(desc.viewQueryColumnNames.isEmpty)
-      assert(desc.partitionColumnNames.isEmpty)
-      assert(desc.provider == Some("parquet"))
-      assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
-    }
-  }
-
   test("Test CTAS #1") {
     val s1 =
       """
@@ -1740,8 +1533,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       """
         |CREATE OR REPLACE VIEW view1
         |(col1, col3 COMMENT 'hello')
-        |COMMENT 'BLABLA'
         |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
         |AS SELECT * FROM tab1
       """.stripMargin
     val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
@@ -1758,6 +1551,22 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     intercept[ParseException] {
       parser.parsePlan(v1)
     }
+  }
+
+  test("create view - duplicate clauses") {
+    def createViewStatement(duplicateClause: String): String = {
+      s"""
+        |CREATE OR REPLACE VIEW view1
+        |(col1, col3 COMMENT 'hello')
+        |$duplicateClause
+        |$duplicateClause
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    }
+    val sql1 = createViewStatement("COMMENT 'BLABLA'")
+    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
   test("MSCK REPAIR table") {

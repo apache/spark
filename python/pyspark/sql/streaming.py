@@ -19,17 +19,16 @@ import sys
 import json
 
 if sys.version >= '3':
-    intlike = int
-    basestring = unicode = str
-else:
-    intlike = (int, long)
+    basestring = str
+
+from py4j.java_gateway import java_import
 
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
-from pyspark.sql.utils import StreamingQueryException
+from pyspark.sql.utils import ForeachBatchFunction, StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
@@ -187,7 +186,7 @@ class StreamingQuery(object):
             je = self._jsq.exception().get()
             msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
             stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
-            return StreamingQueryException(msg, stackTrace)
+            return StreamingQueryException(msg, stackTrace, je.getCause())
         else:
             return None
 
@@ -342,6 +341,9 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
 
@@ -358,6 +360,9 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
 
@@ -405,7 +410,8 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None,  allowUnquotedControlChars=None, lineSep=None):
+             multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
+             dropFieldIfAllNull=None, encoding=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -441,7 +447,7 @@ class DataStreamReader(OptionUtils):
                      set, it uses the default value, ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
@@ -456,11 +462,12 @@ class DataStreamReader(OptionUtils):
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
@@ -470,6 +477,16 @@ class DataStreamReader(OptionUtils):
                                           including tab and line feed characters) or not.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
+                       it uses the default value, ``en-US``. For instance, ``locale`` is used while
+                       parsing dates and timestamps.
+        :param dropFieldIfAllNull: whether to ignore column of all null values or empty
+                                   array/struct during schema inference. If None is set, it
+                                   uses the default value, ``false``.
+        :param encoding: allows to forcibly set one of standard basic or extended encoding for
+                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
+                         the encoding of input JSON will be detected automatically
+                         when the multiLine option is set to ``true``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -484,7 +501,8 @@ class DataStreamReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
+            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
@@ -536,6 +554,7 @@ class DataStreamReader(OptionUtils):
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
+        The text files must be encoded as UTF-8.
 
         By default, each line in the text file is a new row in the resulting DataFrame.
 
@@ -565,8 +584,8 @@ class DataStreamReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            enforceSchema=None):
-        """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
+            enforceSchema=None, emptyValue=None, locale=None, lineSep=None):
+        r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
@@ -619,11 +638,12 @@ class DataStreamReader(OptionUtils):
         :param negativeInf: sets the string representation of a negative infinity value. If None
                             is set, it uses the default value, ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
@@ -637,7 +657,7 @@ class DataStreamReader(OptionUtils):
                      set, it uses the default value, ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
@@ -659,6 +679,14 @@ class DataStreamReader(OptionUtils):
                                           the quote character. If None is set, the default value is
                                           escape character when escape and quote characters are
                                           different, ``\0`` otherwise..
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, empty string.
+        :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
+                       it uses the default value, ``en-US``. For instance, ``locale`` is used while
+                       parsing dates and timestamps.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+                        Maximum length is 1 character.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -675,7 +703,8 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema)
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
+            emptyValue=emptyValue, locale=locale, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
@@ -1014,6 +1043,35 @@ class DataStreamWriter(object):
             self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
                 wrapped_func, self._df._jdf.schema())
         self._jwrite.foreach(jForeachWriter)
+        return self
+
+    @since(2.4)
+    def foreachBatch(self, func):
+        """
+        Sets the output of the streaming query to be processed using the provided
+        function. This is supported only the in the micro-batch execution modes (that is, when the
+        trigger is not continuous). In every micro-batch, the provided function will be called in
+        every micro-batch with (i) the output rows as a DataFrame and (ii) the batch identifier.
+        The batchId can be used deduplicate and transactionally write the output
+        (that is, the provided Dataset) to external systems. The output DataFrame is guaranteed
+        to exactly same for the same batchId (assuming all operations are deterministic in the
+        query).
+
+        .. note:: Evolving.
+
+        >>> def func(batch_df, batch_id):
+        ...     batch_df.collect()
+        ...
+        >>> writer = sdf.writeStream.foreach(func)
+        """
+
+        from pyspark.java_gateway import ensure_callback_server_started
+        gw = self._spark._sc._gateway
+        java_import(gw.jvm, "org.apache.spark.sql.execution.streaming.sources.*")
+
+        wrapped_func = ForeachBatchFunction(self._spark, func)
+        gw.jvm.PythonForeachBatchHelper.callForeachBatch(self._jwrite, wrapped_func)
+        ensure_callback_server_started(gw)
         return self
 
     @ignore_unicode_prefix
