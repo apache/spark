@@ -157,18 +157,24 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(bytes);
   }
 
+  /**
+   * Returns true if the given string consists entirely of ASCII characters, false otherwise.
+   */
   private static boolean isAscii(String str) {
     for (int i = 0; i < str.length(); i++) {
-      if (str.charAt(i) > 127) {
+      if (str.charAt(i) > 127) { // unsigned comparison
         return false;
       }
     }
     return true;
   }
 
+  /**
+   * Returns true if the given UTF8 bytes consist entirely of ASCII characters, false otherwise.
+   */
   private static boolean isAscii(byte[] bytes) {
     for (int i = 0; i < bytes.length; i++) {
-      if (bytes[i] < 0) {
+      if (bytes[i] < 0) { // signed comparision
         return false;
       }
     }
