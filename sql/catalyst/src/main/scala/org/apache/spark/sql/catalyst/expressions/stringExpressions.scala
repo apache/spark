@@ -25,6 +25,7 @@ import java.util.regex.Pattern
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
+import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -443,9 +444,50 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (src, search, replace) => {
-      s"""${ev.value} = $src.replace($search, $replace);"""
-    })
+    if (searchExpr.foldable && replaceExpr.foldable) {
+      // The search and replacement strings are constants, so we can use a more optimized path
+      // which avoids repeatedly decoding those UTF8Strings.
+      val search = searchExpr.eval()
+      val replace = replaceExpr.eval()
+      if (search == null || replace == null) {
+        // Either the search or replacement is null, so the entire expression evaluates to null
+        ev.copy(code = code"""
+          boolean ${ev.isNull} = true;
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        """)
+      } else {
+        val searchStr: String = search.asInstanceOf[UTF8String].toString
+        val replaceStr: String = replace.asInstanceOf[UTF8String].toString
+        val escapedSearchStr = StringEscapeUtils.escapeJava(searchStr)
+        val escapedReplaceStr = StringEscapeUtils.escapeJava(replaceStr)
+        val q: String = {
+          if (searchStr.length == 1 && replaceStr.length == 1) {
+            // Both strings are single characters, so embed them as character literals
+            // in order to use a single-character-replacement fast path.
+            "'"
+          } else {
+            // Use slower string literal replacement path (double quotes for string literal)
+            "\""
+          }
+        }
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate the search
+        // and replace expressions.
+        val eval = srcExpr.genCode(ctx)
+        ev.copy(code = code"""
+        ${eval.code}
+        boolean ${ev.isNull} = ${eval.isNull};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          ${ev.value} = ${eval.value}.replace($q$escapedSearchStr$q, $q$escapedReplaceStr$q);
+        }
+      """)
+      }
+    } else {
+      // Either the search or replace expression is non-foldable, so use a slower path:
+      nullSafeCodeGen(ctx, ev, (src, search, replace) => {
+        s"""${ev.value} = $src.replace($search, $replace);"""
+      })
+    }
   }
 
   override def dataType: DataType = StringType

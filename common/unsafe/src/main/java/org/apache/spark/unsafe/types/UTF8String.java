@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
 
+import org.apache.commons.lang3.StringUtils;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
@@ -976,9 +977,34 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (EMPTY_UTF8.equals(search)) {
       return this;
     }
-    String replaced = toString().replace(
-      search.toString(), replace.toString());
-    return fromString(replaced);
+    return replace(search.toString(), replace.toString());
+  }
+
+  public UTF8String replace(String search, String replace) {
+    // In Java 8, String.replace() is implemented using a regex and is therefore
+    // somewhat inefficient (see https://bugs.openjdk.java.net/browse/JDK-8058779).
+    // This is fixed in Java 9, but in Java 8 we can use Commons StringUtils instead:
+    String before = toString();
+    String after = StringUtils.replace(before, search, replace);
+    // Use reference equality to cheaply detect whether the replacement had no effect,
+    // in which case we can simply return the original UTF8String and save some copying.
+    if (before == after) {
+      return this;
+    } else {
+      return fromString(after);
+    }
+  }
+
+  public UTF8String replace(char search, char replace) {
+    String before = toString();
+    String after = before.replace(search, replace);
+    // Use reference equality to cheaply detect whether the replacement had no effect,
+    // in which case we can simply return the original UTF8String and save some copying.
+    if (before == after) {
+      return this;
+    } else {
+      return fromString(after);
+    }
   }
 
   // TODO: Need to use `Code Point` here instead of Char in case the character longer than 2 bytes
