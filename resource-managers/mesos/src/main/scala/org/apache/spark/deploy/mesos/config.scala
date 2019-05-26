@@ -147,13 +147,4 @@ package object config {
             "be cached by the Mesos Fetcher Cache.")
         .booleanConf
         .createWithDefault(false)
-
-  private[spark] val URIS_TO_DOWNLOAD =
-    ConfigBuilder("spark.mesos.uris")
-        .doc("A comma-separated list of URIs to be downloaded to the sandbox when driver or " +
-            "executor is launched by Mesos. This applies to both coarse-grained and fine-grained " +
-            "mode.")
-        .stringConf
-        .toSequence
-        .createWithDefault(Nil)
 }
