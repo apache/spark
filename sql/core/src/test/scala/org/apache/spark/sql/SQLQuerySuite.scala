@@ -1694,8 +1694,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
-    assert(e.message.contains("Table or view not found: " +
-      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`"))
+    assert(e.message.contains("Table or view not found"))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `Jdbc`.`file_path`")

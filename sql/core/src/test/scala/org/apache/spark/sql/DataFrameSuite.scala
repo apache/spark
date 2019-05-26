@@ -2160,7 +2160,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(output.contains(
         """== Parsed Logical Plan ==
           |'Project [*]
-          |+- 'UnresolvedRelation `tmp`""".stripMargin))
+          |+- 'UnresolvedRelation [tmp]""".stripMargin))
       assert(output.contains(
         """== Physical Plan ==
           |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
