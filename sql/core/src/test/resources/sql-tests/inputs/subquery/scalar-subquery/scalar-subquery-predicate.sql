@@ -279,4 +279,3 @@ HAVING   max(t1b) <= (SELECT   max(t2b)
                       FROM     t2
                       WHERE    t2c = t1c
                       GROUP BY t2c);
-

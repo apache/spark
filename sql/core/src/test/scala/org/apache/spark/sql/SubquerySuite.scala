@@ -1372,13 +1372,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-27782 scalar subquuery name should start with scalar-subquery#") {
-    val df = sql(
-      """
-        |SELECT a
-        |FROM l
-        |WHERE a = (SELECT max(c) FROM r WHERE c = 1)
-      """.stripMargin)
+  test("Scalar subquery name should start with scalar-subquery#") {
+    val df = sql("SELECT a FROM l WHERE a = (SELECT max(c) FROM r WHERE c = 1)".stripMargin)
     var subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
     df.queryExecution.executedPlan.transformAllExpressions {
       case s @ ScalarSubquery(p: SubqueryExec, _) =>
