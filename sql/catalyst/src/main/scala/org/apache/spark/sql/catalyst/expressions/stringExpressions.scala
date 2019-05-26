@@ -458,7 +458,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
         val searchStr: String = search.asInstanceOf[UTF8String].toString
         val replaceStr: String = replace.asInstanceOf[UTF8String].toString
         val searchStrRef = ctx.addReferenceObj("searchStr", searchStr, "String")
-        val replaceStrRef = ctx.addReferenceObj("searchStr", replaceStr, "String")
+        val replaceStrRef = ctx.addReferenceObj("replaceStr", replaceStr, "String")
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate the search
         // and replace expressions.
         val eval = srcExpr.genCode(ctx)
