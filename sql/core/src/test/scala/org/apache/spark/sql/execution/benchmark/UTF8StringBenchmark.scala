@@ -104,9 +104,9 @@ object UTF8StringBenchmark extends BenchmarkBase {
     }
   }
 
-  def benchmarkFromString(): Unit = {
-    runBenchmark("fromString") {
-      val benchmark = new Benchmark("fromString", numStringsPerIteration, output = output)
+  def benchmarkToString(): Unit = {
+    runBenchmark("toString") {
+      val benchmark = new Benchmark("toString", numStringsPerIteration, output = output)
       for (
         length <- Seq(16, 32, 256);
         charset <- Seq("ASCII", "UTF8")
@@ -120,9 +120,9 @@ object UTF8StringBenchmark extends BenchmarkBase {
     }
   }
 
-  def benchmarkToString(): Unit = {
-    runBenchmark("toString") {
-      val benchmark = new Benchmark("toString", numStringsPerIteration, output = output)
+  def benchmarkFromString(): Unit = {
+    runBenchmark("fromString") {
+      val benchmark = new Benchmark("fromString", numStringsPerIteration, output = output)
       for (
         length <- Seq(16, 32, 256);
         charset <- Seq("ASCII", "UTF8")
@@ -140,8 +140,8 @@ object UTF8StringBenchmark extends BenchmarkBase {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("UTF8String") {
       benchmarkNumChars()
-      benchmarkFromString()
       benchmarkToString()
+      benchmarkFromString()
     }
   }
 }
