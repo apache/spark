@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+
 /**
  * An identifier that optionally specifies a database.
  *
@@ -65,13 +67,36 @@ object AliasIdentifier {
 }
 
 /**
+ * An interface to ease transition from [[TableIdentifier]] to [[CatalogTableIdentifier]].
+ */
+sealed trait TableIdentifierLike {
+  def tableIdentifier: TableIdentifier
+}
+
+/**
+ * A data source V2 table identifier.
+ *
+ * @param catalog a catalog plugin
+ * @param ident an object identifier
+ */
+case class CatalogTableIdentifier(catalog: TableCatalog, ident: Identifier)
+  extends TableIdentifierLike {
+
+  override def tableIdentifier: TableIdentifier =
+    throw new UnsupportedOperationException(
+      s"$this should not be used on non-DSv2 code path")
+}
+
+/**
  * Identifies a table in a database.
  * If `database` is not defined, the current database is used.
  * When we register a permanent function in the FunctionRegistry, we use
  * unquotedString as the function name.
  */
 case class TableIdentifier(table: String, database: Option[String])
-  extends IdentifierWithDatabase {
+  extends IdentifierWithDatabase with TableIdentifierLike {
+
+  override def tableIdentifier: TableIdentifier = this
 
   override val identifier: String = table
 

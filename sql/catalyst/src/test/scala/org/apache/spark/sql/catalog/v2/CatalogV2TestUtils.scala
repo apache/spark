@@ -24,6 +24,12 @@ private[sql] trait CatalogV2TestUtils {
   protected lazy val catalogManager: CatalogManager = new CatalogManager(SQLConf.get)
 
   /**
+   * Loads a catalog.
+   */
+  protected def catalog(name: String): CatalogPlugin =
+    catalogManager.load(name)
+
+  /**
    * Adds a catalog.
    */
   protected def addCatalog(name: String, pluginClassName: String): Unit =
@@ -36,6 +42,12 @@ private[sql] trait CatalogV2TestUtils {
     catalogNames.foreach { catalogName =>
       catalogManager.remove(catalogName)
     }
+
+  /**
+   * Removes catalogs after calling `f`.
+   */
+  protected def withCatalog(catalogNames: String*)(f: => Unit): Unit =
+    try f finally removeCatalog(catalogNames: _*)
 
   /**
    * Sets the default catalog.
@@ -55,4 +67,14 @@ private[sql] trait CatalogV2TestUtils {
    */
   protected def restoreDefaultCatalog(previous: Option[String]): Unit =
     previous.foreach(SQLConf.get.setConfString(SQLConf.DEFAULT_V2_CATALOG.key, _))
+
+  /**
+   * Sets default catalog to `catalog` before executing `f`,
+   * then switches back to the previous default catalog after `f` returns.
+   */
+  protected def activateCatalog(catalog: String)(f: => Unit): Unit = {
+    val previous = defaultCatalog
+    setDefaultCatalog(catalog)
+    try f finally restoreDefaultCatalog(previous)
+  }
 }

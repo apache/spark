@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -71,17 +72,18 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case ResolvedHint(u: UnresolvedRelation, hint)
-              if relations.exists(resolver(_, u.tableIdentifier.table)) =>
-            relations.remove(u.tableIdentifier.table)
+          case ResolvedHint(u @ UnresolvedRelation(TableIdentifier(table, _)), hint)
+              if relations.exists(resolver(_, table)) =>
+            relations.remove(table)
             ResolvedHint(u, createHintInfo(hintName).merge(hint, handleOverriddenHintInfo))
           case ResolvedHint(r: SubqueryAlias, hint)
               if relations.exists(resolver(_, r.alias)) =>
             relations.remove(r.alias)
             ResolvedHint(r, createHintInfo(hintName).merge(hint, handleOverriddenHintInfo))
 
-          case u: UnresolvedRelation if relations.exists(resolver(_, u.tableIdentifier.table)) =>
-            relations.remove(u.tableIdentifier.table)
+          case UnresolvedRelation(TableIdentifier(table, _))
+            if relations.exists(resolver(_, table)) =>
+            relations.remove(table)
             ResolvedHint(plan, createHintInfo(hintName))
           case r: SubqueryAlias if relations.exists(resolver(_, r.alias)) =>
             relations.remove(r.alias)

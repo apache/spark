@@ -190,10 +190,10 @@ case class CreateViewCommand(
       // package (e.g., HiveGenericUDF).
       child.collect {
         // Disallow creating permanent views based on temporary views.
-        case s: UnresolvedRelation
-          if sparkSession.sessionState.catalog.isTemporaryTable(s.tableIdentifier) =>
+        case UnresolvedRelation(tableIdentifier: TableIdentifier)
+          if sparkSession.sessionState.catalog.isTemporaryTable(tableIdentifier) =>
           throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-            s"referencing a temporary view ${s.tableIdentifier}")
+            s"referencing a temporary view ${tableIdentifier}")
         case other if !other.resolved => other.expressions.flatMap(_.collect {
           // Disallow creating permanent views based on temporary UDFs.
           case e: UnresolvedFunction
