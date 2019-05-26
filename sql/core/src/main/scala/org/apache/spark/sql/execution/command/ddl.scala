@@ -614,7 +614,7 @@ case class AlterTableRecoverPartitionsCommand(
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
-    val threshold = spark.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
+    val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
