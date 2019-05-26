@@ -123,9 +123,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
       }
-      // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
       if (version == "3.1") {
+        // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
         hadoopConf.set("hive.in.test", "true")
+        // Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
+        hadoopConf.set("hive.query.reexecution.enabled", "false")
       }
       client = buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
       if (versionSpark != null) versionSpark.reset()
@@ -584,10 +586,13 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: sql read hive materialized view") {
       // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
-      // But skip Hive 3.1 because of SPARK-27074.
-      if (version == "2.3") {
+      if (version == "2.3" || version == "3.1") {
+        // Since HIVE-14498(Hive 3.0), Automatic rewriting for materialized view cannot be enabled
+        // if the materialized view uses non-transactional tables.
+        val disableRewrite = if (version == "2.3") "" else "DISABLE REWRITE"
         client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
-        client.runSqlHive("CREATE MATERIALIZED VIEW mv1 AS SELECT * FROM materialized_view_tbl")
+        client.runSqlHive(
+          s"CREATE MATERIALIZED VIEW mv1 $disableRewrite AS SELECT * FROM materialized_view_tbl")
         val e = intercept[AnalysisException](versionSpark.table("mv1").collect()).getMessage
         assert(e.contains("Hive materialized view is not supported"))
       }
