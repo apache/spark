@@ -102,6 +102,8 @@ class TestInMemoryTableCatalog extends TableCatalog {
   def clearTables(): Unit = {
     tables.clear()
   }
+
+  override def toString: String = name
 }
 
 /**

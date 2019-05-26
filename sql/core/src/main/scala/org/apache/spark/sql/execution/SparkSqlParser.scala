@@ -649,8 +649,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[DropTableCommand]] command.
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    DropTableCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
+    sql.DropTableStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier()),
       ctx.EXISTS != null,
       ctx.VIEW != null,
       ctx.PURGE != null)

@@ -23,16 +23,31 @@ import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.Utils;
 
-import java.util.HashMap;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static scala.collection.JavaConverters.mapAsJavaMapConverter;
 
 @Private
 public class Catalogs {
   private Catalogs() {
+  }
+
+  public static String classKey(String name) {
+    return "spark.sql.catalog." + name;
+  }
+
+  public static String optionKeyPrefix(String name) {
+    return "spark.sql.catalog." + name + ".";
+  }
+
+  public static boolean isOptionKey(String name, String keyName) {
+    return keyName.startsWith(optionKeyPrefix(name));
+  }
+
+  public static String optionName(String name, String keyName) {
+    assert(isOptionKey(name, keyName));
+    return keyName.substring(optionKeyPrefix(name).length());
   }
 
   /**
@@ -49,10 +64,10 @@ public class Catalogs {
    */
   public static CatalogPlugin load(String name, SQLConf conf)
       throws CatalogNotFoundException, SparkException {
-    String pluginClassName = conf.getConfString("spark.sql.catalog." + name, null);
+    String pluginClassName = conf.getConfString(classKey(name), null);
     if (pluginClassName == null) {
       throw new CatalogNotFoundException(String.format(
-          "Catalog '%s' plugin class not found: spark.sql.catalog.%s is not defined", name, name));
+          "Catalog '%s' plugin class not found: %s is not defined", name, classKey(name)));
     }
 
     ClassLoader loader = Utils.getContextOrSparkClassLoader();
@@ -96,17 +111,12 @@ public class Catalogs {
    * @return a case insensitive string map of options starting with spark.sql.catalog.(name).
    */
   private static CaseInsensitiveStringMap catalogOptions(String name, SQLConf conf) {
-    Map<String, String> allConfs = mapAsJavaMapConverter(conf.getAllConfs()).asJava();
-    Pattern prefix = Pattern.compile("^spark\\.sql\\.catalog\\." + name + "\\.(.+)");
-
-    HashMap<String, String> options = new HashMap<>();
-    for (Map.Entry<String, String> entry : allConfs.entrySet()) {
-      Matcher matcher = prefix.matcher(entry.getKey());
-      if (matcher.matches() && matcher.groupCount() > 0) {
-        options.put(matcher.group(1), entry.getValue());
-      }
-    }
-
+    Map<String, String> options =
+        mapAsJavaMapConverter(conf.getAllConfs()).asJava().entrySet().stream()
+            .filter(e -> isOptionKey(name, e.getKey()))
+            .collect(Collectors.toMap(
+                e -> optionName(name, e.getKey()),
+                e -> e.getValue()));
     return new CaseInsensitiveStringMap(options);
   }
 }
