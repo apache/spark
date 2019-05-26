@@ -32,13 +32,13 @@ import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical.{Project, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan, Project, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.sql.DropTableStatement
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class DDLParserSuite extends PlanTest with SharedSQLContext {
   private lazy val parser = new SparkSqlParser(new SQLConf)
@@ -906,59 +906,39 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
   test("drop table") {
     val tableName1 = "db.tab"
     val tableName2 = "tab"
-
-    val parsed = Seq(
-        s"DROP TABLE $tableName1",
-        s"DROP TABLE IF EXISTS $tableName1",
-        s"DROP TABLE $tableName2",
-        s"DROP TABLE IF EXISTS $tableName2",
-        s"DROP TABLE $tableName2 PURGE",
-        s"DROP TABLE IF EXISTS $tableName2 PURGE"
-      ).map(parser.parsePlan)
-
-    val expected = Seq(
-      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = false, isView = false,
-        purge = false),
-      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = true, isView = false,
-        purge = false),
-      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
-        purge = false),
-      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
-        purge = false),
-      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
-        purge = true),
-      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
-        purge = true))
-
-    parsed.zip(expected).foreach { case (p, e) => comparePlans(p, e) }
+    Seq(
+      (s"DROP TABLE $tableName1",
+        DropTableStatement(Seq("db", "tab"), ifExists = false, isView = false, purge = false)),
+      (s"DROP TABLE IF EXISTS $tableName1",
+        DropTableStatement(Seq("db", "tab"), ifExists = true, isView = false, purge = false)),
+      (s"DROP TABLE $tableName2",
+        DropTableStatement(Seq("tab"), ifExists = false, isView = false, purge = false)),
+      (s"DROP TABLE IF EXISTS $tableName2",
+        DropTableStatement(Seq("tab"), ifExists = true, isView = false, purge = false)),
+      (s"DROP TABLE $tableName2 PURGE",
+        DropTableStatement(Seq("tab"), ifExists = false, isView = false, purge = true)),
+      (s"DROP TABLE IF EXISTS $tableName2 PURGE",
+        DropTableStatement(Seq("tab"), ifExists = true, isView = false, purge = true))).foreach {
+      case (sql, expected) =>
+        comparePlans(parser.parsePlan(sql), expected, checkAnalysis = false)
+    }
   }
 
   test("drop view") {
     val viewName1 = "db.view"
     val viewName2 = "view"
-
-    val parsed1 = parser.parsePlan(s"DROP VIEW $viewName1")
-    val parsed2 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName1")
-    val parsed3 = parser.parsePlan(s"DROP VIEW $viewName2")
-    val parsed4 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName2")
-
-    val expected1 =
-      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = false, isView = true,
-        purge = false)
-    val expected2 =
-      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = true, isView = true,
-        purge = false)
-    val expected3 =
-      DropTableCommand(TableIdentifier("view", None), ifExists = false, isView = true,
-        purge = false)
-    val expected4 =
-      DropTableCommand(TableIdentifier("view", None), ifExists = true, isView = true,
-        purge = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
+    Seq(
+      (s"DROP VIEW $viewName1",
+        DropTableStatement(Seq("db", "view"), ifExists = false, isView = true, purge = false)),
+      (s"DROP VIEW IF EXISTS $viewName1",
+        DropTableStatement(Seq("db", "view"), ifExists = true, isView = true, purge = false)),
+      (s"DROP VIEW $viewName2",
+        DropTableStatement(Seq("view"), ifExists = false, isView = true, purge = false)),
+      (s"DROP VIEW IF EXISTS $viewName2",
+        DropTableStatement(Seq("view"), ifExists = true, isView = true, purge = false))).foreach {
+      case (sql, expected) =>
+        comparePlans(parser.parsePlan(sql), expected, checkAnalysis = false)
+    }
   }
 
   test("show columns") {
