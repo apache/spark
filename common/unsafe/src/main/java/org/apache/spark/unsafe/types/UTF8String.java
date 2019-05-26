@@ -158,6 +158,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Pre-SPARK-27841 version of fromString(), retained for benchmarking purposes.
+   */
+  public static UTF8String fromStringSlow(String str) {
+    return str == null ? null : fromBytes(str.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
    * Returns true if the given string consists entirely of ASCII characters, false otherwise.
    */
   private static boolean isAscii(String str) {
@@ -1265,6 +1272,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       return new String(bytes, StandardCharsets.UTF_8);
     }
+  }
+
+  /**
+   * Pre-SPARK-27841 version of toString(), retained for benchmarking purposes.
+   */
+  public String toStringSlow() {
+    return new String(getBytes(), StandardCharsets.UTF_8);
   }
 
   @Override

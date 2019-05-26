@@ -112,7 +112,10 @@ object UTF8StringBenchmark extends BenchmarkBase {
         charset <- Seq("ASCII", "UTF8")
       ) {
         val utf8Strings = generateStrings(charset, length).map(UTF8String.fromString)
-        benchmark.addCase(s"$length-char $charset", numIters) {
+        benchmark.addCase(s"$length-char $charset (baseline)", numIters) {
+          _ => testUTF8(utf8Strings, _.toStringSlow)
+        }
+        benchmark.addCase(s"$length-char $charset (optimized)", numIters) {
           _ => testUTF8(utf8Strings, _.toString)
         }
       }
@@ -128,7 +131,10 @@ object UTF8StringBenchmark extends BenchmarkBase {
         charset <- Seq("ASCII", "UTF8")
       ) {
         val strings = generateStrings(charset, length)
-        benchmark.addCase(s"$length-char $charset", numIters) {
+        benchmark.addCase(s"$length-char $charset (baseline)", numIters) {
+          _ => testStr(strings, UTF8String.fromStringSlow)
+        }
+        benchmark.addCase(s"$length-char $charset (optimized)", numIters) {
           _ => testStr(strings, UTF8String.fromString)
         }
       }
