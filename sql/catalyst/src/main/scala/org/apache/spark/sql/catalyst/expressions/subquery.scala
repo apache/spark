@@ -270,8 +270,8 @@ object ScalarSubquery {
 }
 
 /**
- * A [[ListQuery]] expression defines the query which we want to search in an IN subquery
- * expression. It should and can only be used in conjunction with an IN expression.
+ * A [[ListQuery]] expression defines the query which we want to search in an PredicateSubquery
+ * expression. It should and can only be used in conjunction with an PredicateSubquery expression.
  *
  * For example (SQL):
  * {{{

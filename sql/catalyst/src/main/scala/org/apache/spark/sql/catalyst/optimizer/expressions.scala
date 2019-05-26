@@ -548,7 +548,8 @@ object NullPropagation extends Rule[LogicalPlan] {
           Coalesce(newChildren)
         }
 
-      // If the value expression is NULL then transform the In expression to null literal.
+      // If the value expression is NULL then transform the In expression
+      // or PredicateSubquery expression to null literal.
       case In(Literal(null, _), _) => Literal.create(null, BooleanType)
       case PredicateSubquery(Seq(Literal(null, _)), _, _) => Literal.create(null, BooleanType)
 
