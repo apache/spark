@@ -69,10 +69,10 @@ class LogicalPlanSuite extends SparkFunSuite {
     }
 
     require(relation.isStreaming === false)
-    require(incrementalRelation.isStreaming === true)
+    require(incrementalRelation.isStreaming)
     assert(TestBinaryRelation(relation, relation).isStreaming === false)
-    assert(TestBinaryRelation(incrementalRelation, relation).isStreaming === true)
-    assert(TestBinaryRelation(relation, incrementalRelation).isStreaming === true)
+    assert(TestBinaryRelation(incrementalRelation, relation).isStreaming)
+    assert(TestBinaryRelation(relation, incrementalRelation).isStreaming)
     assert(TestBinaryRelation(incrementalRelation, incrementalRelation).isStreaming)
   }
 

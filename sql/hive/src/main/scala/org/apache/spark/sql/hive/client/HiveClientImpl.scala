@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
 import java.util.{Locale, Map => JMap}
+import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -177,6 +178,8 @@ private[hive] class HiveClientImpl(
          """.stripMargin)
       hiveConf.set(k, v)
     }
+    // Disable CBO because we removed the Calcite dependency.
+    hiveConf.setBoolean("hive.cbo.enable", false)
     val state = new SessionState(hiveConf)
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
@@ -434,8 +437,9 @@ private[hive] class HiveClientImpl(
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
-          case HiveTableType.INDEX_TABLE =>
-            throw new AnalysisException("Hive index table is not supported.")
+          case unsupportedType =>
+            val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
+            throw new AnalysisException(s"Hive $tableTypeStr is not supported.")
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
@@ -948,8 +952,8 @@ private[hive] object HiveClientImpl {
     hiveTable.setFields(schema.asJava)
     hiveTable.setPartCols(partCols.asJava)
     userName.foreach(hiveTable.setOwner)
-    hiveTable.setCreateTime((table.createTime / 1000).toInt)
-    hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
+    hiveTable.setCreateTime(MILLISECONDS.toSeconds(table.createTime).toInt)
+    hiveTable.setLastAccessTime(MILLISECONDS.toSeconds(table.lastAccessTime).toInt)
     table.storage.locationUri.map(CatalogUtils.URIToString).foreach { loc =>
       hiveTable.getTTable.getSd.setLocation(loc)}
     table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
@@ -995,10 +999,8 @@ private[hive] object HiveClientImpl {
       ht: HiveTable): HivePartition = {
     val tpart = new org.apache.hadoop.hive.metastore.api.Partition
     val partValues = ht.getPartCols.asScala.map { hc =>
-      p.spec.get(hc.getName).getOrElse {
-        throw new IllegalArgumentException(
-          s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}")
-      }
+      p.spec.getOrElse(hc.getName, throw new IllegalArgumentException(
+        s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}"))
     }
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
@@ -1012,8 +1014,8 @@ private[hive] object HiveClientImpl {
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
-    tpart.setCreateTime((p.createTime / 1000).toInt)
-    tpart.setLastAccessTime((p.lastAccessTime / 1000).toInt)
+    tpart.setCreateTime(MILLISECONDS.toSeconds(p.createTime).toInt)
+    tpart.setLastAccessTime(MILLISECONDS.toSeconds(p.lastAccessTime).toInt)
     tpart.setParameters(mutable.Map(p.parameters.toSeq: _*).asJava)
     new HivePartition(ht, tpart)
   }

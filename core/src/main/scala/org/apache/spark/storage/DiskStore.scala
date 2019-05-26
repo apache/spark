@@ -27,6 +27,7 @@ import scala.collection.mutable.ListBuffer
 
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.{config, Logging}
@@ -95,18 +96,17 @@ private[spark] class DiskStore(
   }
 
   def getBytes(blockId: BlockId): BlockData = {
-    val file = diskManager.getFile(blockId.name)
-    val blockSize = getSize(blockId)
+    getBytes(diskManager.getFile(blockId.name), getSize(blockId))
+  }
 
-    securityManager.getIOEncryptionKey() match {
-      case Some(key) =>
-        // Encrypted blocks cannot be memory mapped; return a special object that does decryption
-        // and provides InputStream / FileRegion implementations for reading the data.
-        new EncryptedBlockData(file, blockSize, conf, key)
+  def getBytes(f: File, blockSize: Long): BlockData = securityManager.getIOEncryptionKey() match {
+    case Some(key) =>
+      // Encrypted blocks cannot be memory mapped; return a special object that does decryption
+      // and provides InputStream / FileRegion implementations for reading the data.
+      new EncryptedBlockData(f, blockSize, conf, key)
 
-      case _ =>
-        new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, file, blockSize)
-    }
+    case _ =>
+      new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, f, blockSize)
   }
 
   def remove(blockId: BlockId): Boolean = {
@@ -121,6 +121,16 @@ private[spark] class DiskStore(
     } else {
       false
     }
+  }
+
+  /**
+   * @param blockSize if encryption is configured, the file is assumed to already be encrypted and
+   *                  blockSize should be the decrypted size
+   */
+  def moveFileToBlock(sourceFile: File, blockSize: Long, targetBlockId: BlockId): Unit = {
+    blockSizes.put(targetBlockId, blockSize)
+    val targetFile = diskManager.getFile(targetBlockId.name)
+    FileUtils.moveFile(sourceFile, targetFile)
   }
 
   def contains(blockId: BlockId): Boolean = {

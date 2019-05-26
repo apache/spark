@@ -24,10 +24,14 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.Output
+import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
@@ -130,7 +134,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
-        hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, f.toKryo)
+        hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }
@@ -194,6 +198,16 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
+  }
+
+  // HIVE-11253 moved `toKryo` from `SearchArgument` to `storage-api` module.
+  // This is copied from Hive 1.2's SearchArgumentImpl.toKryo().
+  private def toKryo(sarg: SearchArgument): String = {
+    val kryo = new Kryo()
+    val out = new Output(4 * 1024, 10 * 1024 * 1024)
+    kryo.writeObject(out, sarg)
+    out.close()
+    Base64.encodeBase64String(out.toBytes)
   }
 }
 

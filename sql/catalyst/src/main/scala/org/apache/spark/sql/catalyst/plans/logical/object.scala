@@ -123,16 +123,25 @@ object MapPartitionsInR {
       schema: StructType,
       encoder: ExpressionEncoder[Row],
       child: LogicalPlan): LogicalPlan = {
-    val deserialized = CatalystSerde.deserialize(child)(encoder)
-    val mapped = MapPartitionsInR(
-      func,
-      packageNames,
-      broadcastVars,
-      encoder.schema,
-      schema,
-      CatalystSerde.generateObjAttr(RowEncoder(schema)),
-      deserialized)
-    CatalystSerde.serialize(mapped)(RowEncoder(schema))
+    if (SQLConf.get.arrowEnabled) {
+      MapPartitionsInRWithArrow(
+        func,
+        packageNames,
+        broadcastVars,
+        encoder.schema,
+        schema.toAttributes,
+        child)
+    } else {
+      val deserialized = CatalystSerde.deserialize(child)(encoder)
+      CatalystSerde.serialize(MapPartitionsInR(
+        func,
+        packageNames,
+        broadcastVars,
+        encoder.schema,
+        schema,
+        CatalystSerde.generateObjAttr(RowEncoder(schema)),
+        deserialized))(RowEncoder(schema))
+    }
   }
 }
 
@@ -152,6 +161,28 @@ case class MapPartitionsInR(
 
   override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
     outputObjAttr, child)
+}
+
+/**
+ * Similar with `MapPartitionsInR` but serializes and deserializes input/output in
+ * Arrow format.
+ *
+ * This is somewhat similar with `org.apache.spark.sql.execution.python.ArrowEvalPython`
+ */
+case class MapPartitionsInRWithArrow(
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    inputSchema: StructType,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  // This operator always need all columns of its child, even it doesn't reference to.
+  override def references: AttributeSet = child.outputSet
+
+  override protected def stringArgs: Iterator[Any] = Iterator(
+    inputSchema, StructType.fromAttributes(output), child)
+
+  override val producedAttributes = AttributeSet(output)
 }
 
 object MapElements {

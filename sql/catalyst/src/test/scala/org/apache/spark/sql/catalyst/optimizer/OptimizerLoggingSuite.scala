@@ -51,20 +51,10 @@ class OptimizerLoggingSuite extends PlanTest {
     override def requiresLayout(): Boolean = false
   }
 
-  private def withLogLevelAndAppender(level: Level, appender: Appender)(f: => Unit): Unit = {
-    val logger = Logger.getLogger(Optimize.getClass.getName.dropRight(1))
-    val restoreLevel = logger.getLevel
-    logger.setLevel(level)
-    logger.addAppender(appender)
-    try f finally {
-      logger.setLevel(restoreLevel)
-      logger.removeAppender(appender)
-    }
-  }
-
   private def verifyLog(expectedLevel: Level, expectedRules: Seq[String]): Unit = {
     val logAppender = new MockAppender()
-    withLogLevelAndAppender(Level.TRACE, logAppender) {
+    withLogAppender(logAppender,
+        loggerName = Some(Optimize.getClass.getName.dropRight(1)), level = Some(Level.TRACE)) {
       val input = LocalRelation('a.int, 'b.string, 'c.double)
       val query = input.select('a, 'b).select('a).where('a > 1).analyze
       val expected = input.where('a > 1).select('a).analyze

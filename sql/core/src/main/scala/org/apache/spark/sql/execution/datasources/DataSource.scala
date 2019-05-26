@@ -102,7 +102,7 @@ case class DataSource(
     // [[DataFrameReader]]/[[DataFrameWriter]], since they use method `lookupDataSource`
     // instead of `providingClass`.
     cls.newInstance() match {
-      case f: FileDataSourceV2 => f.fallBackFileFormat
+      case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
   }

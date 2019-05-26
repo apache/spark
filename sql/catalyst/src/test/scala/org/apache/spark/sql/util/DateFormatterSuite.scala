@@ -18,7 +18,6 @@
 package org.apache.spark.sql.util
 
 import java.time.LocalDate
-import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper

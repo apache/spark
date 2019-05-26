@@ -53,7 +53,6 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 
 public final class UnsafeArrayData extends ArrayData {
-
   public static int calculateHeaderPortionInBytes(int numFields) {
     return (int)calculateHeaderPortionInBytes((long)numFields);
   }
@@ -137,46 +136,7 @@ public final class UnsafeArrayData extends ArrayData {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    if (isNullAt(ordinal) || dataType instanceof NullType) {
-      return null;
-    } else if (dataType instanceof BooleanType) {
-      return getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
-      return getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
-      return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
-      return getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
-      return getDouble(ordinal);
-    } else if (dataType instanceof DecimalType) {
-      DecimalType dt = (DecimalType) dataType;
-      return getDecimal(ordinal, dt.precision(), dt.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return getBinary(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
-    } else if (dataType instanceof CalendarIntervalType) {
-      return getInterval(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType) dataType).size());
-    } else if (dataType instanceof ArrayType) {
-      return getArray(ordinal);
-    } else if (dataType instanceof MapType) {
-      return getMap(ordinal);
-    } else if (dataType instanceof UserDefinedType) {
-      return get(ordinal, ((UserDefinedType)dataType).sqlType());
-    } else {
-      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
-    }
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override
@@ -300,6 +260,7 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
 
+  @Override
   public void setNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
     BitSetMethods.set(baseObject, baseOffset + 8, ordinal);
@@ -308,36 +269,43 @@ public final class UnsafeArrayData extends ArrayData {
        will be set to 0 later by the caller side */
   }
 
+  @Override
   public void setBoolean(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
     Platform.putBoolean(baseObject, getElementOffset(ordinal, 1), value);
   }
 
+  @Override
   public void setByte(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
     Platform.putByte(baseObject, getElementOffset(ordinal, 1), value);
   }
 
+  @Override
   public void setShort(int ordinal, short value) {
     assertIndexIsValid(ordinal);
     Platform.putShort(baseObject, getElementOffset(ordinal, 2), value);
   }
 
+  @Override
   public void setInt(int ordinal, int value) {
     assertIndexIsValid(ordinal);
     Platform.putInt(baseObject, getElementOffset(ordinal, 4), value);
   }
 
+  @Override
   public void setLong(int ordinal, long value) {
     assertIndexIsValid(ordinal);
     Platform.putLong(baseObject, getElementOffset(ordinal, 8), value);
   }
 
+  @Override
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     Platform.putFloat(baseObject, getElementOffset(ordinal, 4), value);
   }
 
+  @Override
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     Platform.putDouble(baseObject, getElementOffset(ordinal, 8), value);

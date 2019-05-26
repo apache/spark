@@ -125,16 +125,18 @@
     <zookeeper.version>3.4.6</zookeeper.version>
     <curator.version>2.7.1</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
+    <hive.classifier></hive.classifier>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.1.1</kafka.version>
+    <kafka.version>2.2.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.4</orc.version>
+    <orc.version>1.5.5</orc.version>
     <orc.classifier>nohive</orc.classifier>
+    <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.12.v20180830</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
@@ -163,10 +165,9 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
-    <snappy.version>1.1.7.1</snappy.version>
+    <fasterxml.jackson.version>2.9.8</fasterxml.jackson.version>
+    <snappy.version>1.1.7.3</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
     <commons-io.version>2.4</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
@@ -179,7 +180,7 @@
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
-    <libthrift.version>0.9.3</libthrift.version>
+    <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
@@ -398,7 +399,7 @@
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
-        <version>1.2.15</version>
+        <version>1.4.8</version>
         <scope>provided</scope>
         <exclusions>
           <exclusion>
@@ -408,6 +409,29 @@
         </exclusions>
       </dependency>
       <!-- End of shaded deps -->
+
+      <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
+      <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>jaxb-runtime</artifactId>
+        <version>2.3.2</version>
+        <scope>runtime</scope>
+        <exclusions>
+          <!-- for now, we only write XML in PMML export, and these can be excluded -->
+          <exclusion>
+            <groupId>com.sun.xml.fastinfoset</groupId>
+            <artifactId>FastInfoset</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>txw2</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jvnet.staxex</groupId>
+            <artifactId>stax-ex</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -582,7 +606,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.5.11</version>
+        <version>0.7.45</version>
       </dependency>
       <dependency>
         <groupId>commons-net</groupId>
@@ -750,7 +774,6 @@
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
         <version>1.1.0</version>
       </dependency>
-      <!-- SPARK-16770 affecting Scala 2.11.x -->
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
@@ -759,7 +782,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.0.3</version>
+        <version>3.0.5</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -921,6 +944,11 @@
           <exclusion>
             <groupId>net.java.dev.jets3t</groupId>
             <artifactId>jets3t</artifactId>
+          </exclusion>
+          <!-- Hadoop-3.2 -->
+          <exclusion>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>jsr311-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1392,9 +1420,7 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-exec</artifactId>
-<!--
-        <classifier>core</classifier>
--->
+        <classifier>${hive.classifier}</classifier>
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
@@ -1444,10 +1470,14 @@
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
           </exclusion>
-          <!--  this is needed and must be explicitly included later-->
+          <!--  Do not need Calcite because we disabled hive.cbo.enable -->
           <exclusion>
             <groupId>org.apache.calcite</groupId>
             <artifactId>calcite-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-avatica</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.curator</groupId>
@@ -1813,75 +1843,10 @@
         <scope>${parquet.test.deps.scope}</scope>
       </dependency>
       <dependency>
-        <groupId>com.twitter</groupId>
+        <groupId>${hive.parquet.group}</groupId>
         <artifactId>parquet-hadoop-bundle</artifactId>
         <version>${hive.parquet.version}</version>
         <scope>compile</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-core</artifactId>
-        <version>${calcite.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.code.findbugs</groupId>
-            <artifactId>jsr305</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>janino</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>commons-compiler</artifactId>
-          </exclusion>
-          <!-- hsqldb interferes with the use of derby as the default db
-            in hive's use of datanucleus.
-          -->
-          <exclusion>
-            <groupId>org.hsqldb</groupId>
-            <artifactId>hsqldb</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.pentaho</groupId>
-            <artifactId>pentaho-aggdesigner-algorithm</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica</artifactId>
-        <version>${calcite.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.codehaus.janino</groupId>
@@ -1922,7 +1887,7 @@
       <dependency>
         <groupId>org.apache.thrift</groupId>
         <artifactId>libfb303</artifactId>
-        <version>${libthrift.version}</version>
+        <version>0.9.3</version>
         <exclusions>
           <exclusion>
             <groupId>org.slf4j</groupId>
@@ -2005,13 +1970,6 @@
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
-                      <!--
-                        Akka depends on io.netty:netty, which puts classes under the org.jboss.netty
-                        package. This conflicts with the classes in org.jboss.netty:netty
-                        artifact, so we have to ban that artifact here. In Netty 4.x, the classes
-                        are under the io.netty package, so it's fine for us to depend on both
-                        io.netty:netty and io.netty:netty-all.
-                      -->
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
                       <exclude>*:*_2.11</exclude>
@@ -2072,6 +2030,7 @@
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
               <arg>-Yno-adapted-args</arg>
+              <arg>-target:jvm-1.8</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
@@ -2692,11 +2651,11 @@
     </profile>
 
     <profile>
-      <id>hadoop-3.1</id>
+      <id>hadoop-3.2</id>
       <properties>
-        <hadoop.version>3.1.0</hadoop.version>
-        <curator.version>2.12.0</curator.version>
-        <zookeeper.version>3.4.9</zookeeper.version>
+        <hadoop.version>3.2.0</hadoop.version>
+        <curator.version>2.13.0</curator.version>
+        <zookeeper.version>3.4.13</zookeeper.version>
       </properties>
     </profile>
 
@@ -2757,41 +2716,6 @@
     <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
       <id>scala-2.12</id>
-    </profile>
-
-    <profile>
-      <id>scala-2.11</id>
-      <properties>
-        <scala.version>2.11.12</scala.version>
-        <scala.binary.version>2.11</scala.binary.version>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-enforcer-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>enforce-versions</id>
-                <goals>
-                  <goal>enforce</goal>
-                </goals>
-                <configuration>
-                  <rules>
-                    <bannedDependencies>
-                      <excludes combine.self="override">
-                        <exclude>org.jboss.netty</exclude>
-                        <exclude>org.codehaus.groovy</exclude>
-                        <exclude>*:*_2.10</exclude>
-                      </excludes>
-                    </bannedDependencies>
-                  </rules>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
 
     <!--

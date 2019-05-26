@@ -146,7 +146,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
     eventually { assert(clock.isStreamWaitingFor(200)) }
     clock.advance(200)
     waitForThreadJoin(t)
-    assert(batchFallingBehindCalled === true)
+    assert(batchFallingBehindCalled)
   }
 
   private def eventually(body: => Unit): Unit = {

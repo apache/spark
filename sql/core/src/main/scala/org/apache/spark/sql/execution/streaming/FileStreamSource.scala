@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.net.URI
-
-import scala.collection.JavaConverters._
+import java.util.concurrent.TimeUnit._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
@@ -237,7 +236,7 @@ class FileStreamSource(
       (status.getPath.toUri.toString, status.getModificationTime)
     }
     val endTime = System.nanoTime
-    val listingTimeMs = (endTime.toDouble - startTime) / 1000000
+    val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
       // Output a warning when listing files uses more than 2 seconds.
       logWarning(s"Listed ${files.size} file(s) in $listingTimeMs ms")

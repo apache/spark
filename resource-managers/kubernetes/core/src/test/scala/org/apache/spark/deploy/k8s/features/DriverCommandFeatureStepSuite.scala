@@ -23,12 +23,13 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 class DriverCommandFeatureStepSuite extends SparkFunSuite {
 
   test("java resource") {
-    val mainResource = "local:///main.jar"
+    val mainResource = "local:/main.jar"
     val spec = applyFeatureStep(
       JavaMainAppResource(Some(mainResource)),
       appArgs = Array("5", "7"))
@@ -36,72 +37,33 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       "driver",
       "--properties-file", SPARK_CONF_PATH,
       "--class", KubernetesTestConf.MAIN_CLASS,
-      "spark-internal", "5", "7"))
-
-    val jars = Utils.stringToSeq(spec.systemProperties("spark.jars"))
-    assert(jars.toSet === Set(mainResource))
+      mainResource, "5", "7"))
   }
 
-  test("python resource with no extra files") {
-    val mainResource = "local:///main.py"
+  test("python resource") {
+    val mainResource = "local:/main.py"
     val sparkConf = new SparkConf(false)
-      .set(PYSPARK_MAJOR_PYTHON_VERSION, "3")
-
-    val spec = applyFeatureStep(
-      PythonMainAppResource(mainResource),
-      conf = sparkConf)
-    assert(spec.pod.container.getArgs.asScala === List(
-      "driver",
-      "--properties-file", SPARK_CONF_PATH,
-      "--class", KubernetesTestConf.MAIN_CLASS,
-      "/main.py"))
-    val envs = spec.pod.container.getEnv.asScala
-      .map { env => (env.getName, env.getValue) }
-      .toMap
-    assert(envs(ENV_PYSPARK_MAJOR_PYTHON_VERSION) === "3")
-
-    val files = Utils.stringToSeq(spec.systemProperties("spark.files"))
-    assert(files.toSet === Set(mainResource))
-  }
-
-  test("python resource with extra files") {
-    val expectedMainResource = "/main.py"
-    val expectedPySparkFiles = "/example2.py:/example3.py"
-    val filesInConf = Set("local:///example.py")
-
-    val mainResource = s"local://$expectedMainResource"
-    val pyFiles = Seq("local:///example2.py", "local:///example3.py")
-
-    val sparkConf = new SparkConf(false)
-      .set("spark.files", filesInConf.mkString(","))
       .set(PYSPARK_MAJOR_PYTHON_VERSION, "2")
     val spec = applyFeatureStep(
       PythonMainAppResource(mainResource),
       conf = sparkConf,
-      appArgs = Array("5", "7", "9"),
-      pyFiles = pyFiles)
+      appArgs = Array("5", "7", "9"))
 
     assert(spec.pod.container.getArgs.asScala === List(
       "driver",
       "--properties-file", SPARK_CONF_PATH,
       "--class", KubernetesTestConf.MAIN_CLASS,
-      "/main.py", "5", "7", "9"))
+      mainResource, "5", "7", "9"))
 
     val envs = spec.pod.container.getEnv.asScala
       .map { env => (env.getName, env.getValue) }
       .toMap
-    val expected = Map(
-      ENV_PYSPARK_FILES -> expectedPySparkFiles,
-      ENV_PYSPARK_MAJOR_PYTHON_VERSION -> "2")
+    val expected = Map(ENV_PYSPARK_MAJOR_PYTHON_VERSION -> "2")
     assert(envs === expected)
-
-    val files = Utils.stringToSeq(spec.systemProperties("spark.files"))
-    assert(files.toSet === pyFiles.toSet ++ filesInConf ++ Set(mainResource))
   }
 
   test("R resource") {
-    val expectedMainResource = "/main.R"
-    val mainResource = s"local://$expectedMainResource"
+    val mainResource = "local:/main.R"
 
     val spec = applyFeatureStep(
       RMainAppResource(mainResource),
@@ -111,19 +73,17 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       "driver",
       "--properties-file", SPARK_CONF_PATH,
       "--class", KubernetesTestConf.MAIN_CLASS,
-      "/main.R", "5", "7", "9"))
+      mainResource, "5", "7", "9"))
   }
 
   private def applyFeatureStep(
       resource: MainAppResource,
       conf: SparkConf = new SparkConf(false),
-      appArgs: Array[String] = Array(),
-      pyFiles: Seq[String] = Nil): KubernetesDriverSpec = {
+      appArgs: Array[String] = Array()): KubernetesDriverSpec = {
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = conf,
       mainAppResource = resource,
-      appArgs = appArgs,
-      pyFiles = pyFiles)
+      appArgs = appArgs)
     val step = new DriverCommandFeatureStep(kubernetesConf)
     val pod = step.configurePod(SparkPod.initialPod())
     val props = step.getAdditionalPodSystemProperties()

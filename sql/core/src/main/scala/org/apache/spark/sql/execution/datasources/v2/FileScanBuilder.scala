@@ -21,8 +21,7 @@ import org.apache.spark.sql.types.StructType
 
 abstract class FileScanBuilder(schema: StructType)
   extends ScanBuilder
-  with SupportsPushDownRequiredColumns
-  with SupportsPushDownFilters {
+  with SupportsPushDownRequiredColumns {
   protected var readSchema = schema
 
   override def pruneColumns(requiredSchema: StructType): Unit = {

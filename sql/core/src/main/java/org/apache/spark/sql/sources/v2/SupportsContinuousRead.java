@@ -20,14 +20,15 @@ package org.apache.spark.sql.sources.v2;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.reader.Scan;
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * An empty mix-in interface for {@link Table}, to indicate this table supports streaming scan with
  * continuous mode.
  * <p>
  * If a {@link Table} implements this interface, the
- * {@link SupportsRead#newScanBuilder(DataSourceOptions)} must return a {@link ScanBuilder} that
- * builds {@link Scan} with {@link Scan#toContinuousStream(String)} implemented.
+ * {@link SupportsRead#newScanBuilder(CaseInsensitiveStringMap)} must return a {@link ScanBuilder}
+ * that builds {@link Scan} with {@link Scan#toContinuousStream(String)} implemented.
  * </p>
  */
 @Evolving

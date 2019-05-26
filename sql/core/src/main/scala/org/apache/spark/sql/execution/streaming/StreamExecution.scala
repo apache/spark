@@ -24,6 +24,7 @@ import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.{Condition, ReentrantLock}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
 import scala.util.control.NonFatal
 
@@ -34,11 +35,16 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.SupportsStreamingWrite
+import org.apache.spark.sql.sources.v2.writer.SupportsTruncate
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /** States for [[StreamExecution]]'s lifecycle. */
@@ -573,6 +579,35 @@ abstract class StreamExecution(
     val batchDescription = if (currentBatchId < 0) "init" else currentBatchId.toString
     Option(name).map(_ + "<br/>").getOrElse("") +
       s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
+  }
+
+  protected def createStreamingWrite(
+      table: SupportsStreamingWrite,
+      options: Map[String, String],
+      inputPlan: LogicalPlan): StreamingWrite = {
+    val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
+      .withQueryId(id.toString)
+      .withInputDataSchema(inputPlan.schema)
+    outputMode match {
+      case Append =>
+        writeBuilder.buildForStreaming()
+
+      case Complete =>
+        // TODO: we should do this check earlier when we have capability API.
+        require(writeBuilder.isInstanceOf[SupportsTruncate],
+          table.name + " does not support Complete mode.")
+        writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
+
+      case Update =>
+        // Although no v2 sinks really support Update mode now, but during tests we do want them
+        // to pretend to support Update mode, and treat Update mode same as Append mode.
+        if (Utils.isTesting) {
+          writeBuilder.buildForStreaming()
+        } else {
+          throw new IllegalArgumentException(
+            "Data source v2 streaming sinks does not support Update mode.")
+        }
+    }
   }
 }
 

@@ -20,13 +20,14 @@ package org.apache.spark.sql.sources.v2;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * An empty mix-in interface for {@link Table}, to indicate this table supports streaming write.
  * <p>
  * If a {@link Table} implements this interface, the
- * {@link SupportsWrite#newWriteBuilder(DataSourceOptions)} must return a {@link WriteBuilder}
- * with {@link WriteBuilder#buildForStreaming()} implemented.
+ * {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap)} must return a
+ * {@link WriteBuilder} with {@link WriteBuilder#buildForStreaming()} implemented.
  * </p>
  */
 @Evolving

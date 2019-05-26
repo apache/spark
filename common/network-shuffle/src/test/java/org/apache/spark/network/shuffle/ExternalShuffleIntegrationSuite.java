@@ -58,6 +58,7 @@ public class ExternalShuffleIntegrationSuite {
   static ExternalShuffleBlockHandler handler;
   static TransportServer server;
   static TransportConf conf;
+  static TransportContext transportContext;
 
   static byte[][] exec0Blocks = new byte[][] {
     new byte[123],
@@ -87,7 +88,7 @@ public class ExternalShuffleIntegrationSuite {
 
     conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     handler = new ExternalShuffleBlockHandler(conf, null);
-    TransportContext transportContext = new TransportContext(conf, handler);
+    transportContext = new TransportContext(conf, handler);
     server = transportContext.createServer();
   }
 
@@ -95,6 +96,7 @@ public class ExternalShuffleIntegrationSuite {
   public static void afterAll() {
     dataContext0.cleanup();
     server.close();
+    transportContext.close();
   }
 
   @After

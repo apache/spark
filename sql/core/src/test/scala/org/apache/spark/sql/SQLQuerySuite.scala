@@ -19,13 +19,13 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.net.{MalformedURLException, URL}
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.{aggregate, ScalarSubquery, SubqueryExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -109,6 +109,33 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
+      }
+    }
+  }
+
+  test("Reuse Subquery") {
+    Seq(true, false).foreach { reuse =>
+      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
+        val df = sql(
+          """
+            |SELECT (SELECT avg(key) FROM testData) + (SELECT avg(key) FROM testData)
+            |FROM testData
+            |LIMIT 1
+          """.stripMargin)
+
+        import scala.collection.mutable.ArrayBuffer
+        val subqueries = ArrayBuffer[SubqueryExec]()
+        df.queryExecution.executedPlan.transformAllExpressions {
+          case s @ ScalarSubquery(plan: SubqueryExec, _) =>
+            subqueries += plan
+            s
+        }
+
+        if (reuse) {
+          assert(subqueries.distinct.size == 1, "Subquery reusing not working correctly")
+        } else {
+          assert(subqueries.distinct.size == 2, "There should be 2 subqueries when not reusing")
+        }
       }
     }
   }
@@ -413,32 +440,32 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.0'"),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00")))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time=CAST('1969-12-31 16:00:00.001' AS TIMESTAMP)"),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='1969-12-31 16:00:00.001'"),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE '1969-12-31 16:00:00.001'=time"),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00.001")))
 
     checkAnswer(sql(
       """SELECT time FROM timestamps WHERE time<'1969-12-31 16:00:00.003'
           AND time>'1969-12-31 16:00:00.001'"""),
-      Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002")))
+      Row(Timestamp.valueOf("1969-12-31 16:00:00.002")))
 
     checkAnswer(sql(
       """
         |SELECT time FROM timestamps
         |WHERE time IN ('1969-12-31 16:00:00.001','1969-12-31 16:00:00.002')
       """.stripMargin),
-      Seq(Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.001")),
-        Row(java.sql.Timestamp.valueOf("1969-12-31 16:00:00.002"))))
+      Seq(Row(Timestamp.valueOf("1969-12-31 16:00:00.001")),
+        Row(Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='123'"),
@@ -548,7 +575,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("date row") {
     checkAnswer(sql(
       """select cast("2015-01-28" as date) from testData limit 1"""),
-      Row(java.sql.Date.valueOf("2015-01-28"))
+      Row(Date.valueOf("2015-01-28"))
     )
   }
 
@@ -1484,11 +1511,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("select interval")
     }
     assert(e1.message.contains("at least one time unit should be given for interval literal"))
+
     // Currently we don't yet support nanosecond
     val e2 = intercept[AnalysisException] {
       sql("select interval 23 nanosecond")
     }
-    assert(e2.message.contains("No interval can be constructed"))
+    assert(e2.message.contains("no viable alternative at input 'interval 23 nanosecond'"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
@@ -2042,6 +2070,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
+      )
+    }
+  }
+
+  test("xxhash64 function") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    withTempView("tbl") {
+      df.createOrReplaceTempView("tbl")
+      checkAnswer(
+        df.select(xxhash64($"i", $"j")),
+        sql("SELECT xxhash64(i, j) from tbl")
       )
     }
   }
@@ -3001,6 +3040,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           checkAnswer(readDF.selectExpr("max(col)"), Row(9))
         }
       }
+    }
+  }
+
+  test("reset command should not fail with cache") {
+    withTable("tbl") {
+      val provider = spark.sessionState.conf.defaultDataSourceName
+      sql(s"CREATE TABLE tbl(i INT, j STRING) USING $provider")
+      sql("reset")
+      sql("cache table tbl")
+      sql("reset")
     }
   }
 }

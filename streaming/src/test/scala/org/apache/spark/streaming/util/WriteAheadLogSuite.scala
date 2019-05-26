@@ -83,7 +83,7 @@ abstract class CommonWriteAheadLogTests(
 
     val logDirectoryPath = new Path(testDir)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
-    assert(fileSystem.exists(logDirectoryPath) === true)
+    assert(fileSystem.exists(logDirectoryPath))
 
     // Read data using manager and verify
     val readData = readDataUsingWriteAheadLog(testDir, closeFileAfterWrite, allowBatching)

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
 
+import org.apache.hadoop.fs.{Path, PathFilter}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
@@ -29,6 +31,10 @@ case class OrcParData(intField: Int, stringField: String)
 
 // The data that also includes the partitioning key
 case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
+
+class TestFileFilter extends PathFilter {
+  override def accept(path: Path): Boolean = path.getParent.getName != "p=2"
+}
 
 abstract class OrcPartitionDiscoveryTest extends OrcTest {
   val defaultPartitionName = "__HIVE_DEFAULT_PARTITION__"
@@ -224,6 +230,23 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
             pi <- Seq(1, 2)
           } yield Row(i, pi, i.toString, null))
       }
+    }
+  }
+
+  test("SPARK-27162: handle pathfilter configuration correctly") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = spark.range(2)
+      df.write.orc(path + "/p=1")
+      df.write.orc(path + "/p=2")
+      assert(spark.read.orc(path).count() === 4)
+
+      val extraOptions = Map(
+        "mapred.input.pathFilter.class" -> classOf[TestFileFilter].getName,
+        "mapreduce.input.pathFilter.class" -> classOf[TestFileFilter].getName
+      )
+      assert(spark.read.options(extraOptions).orc(path).count() === 2)
     }
   }
 }

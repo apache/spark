@@ -17,24 +17,28 @@
 
 package org.apache.spark.deploy.worker
 
+import java.io.{File, IOException}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Supplier
+
+import scala.concurrent.duration._
 
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
-import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged}
+import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, WorkDirCleanup}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
+import org.apache.spark.util.Utils
 
 class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
@@ -228,11 +232,8 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     val conf = new SparkConf().set(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT, value)
 
     val cleanupCalled = new AtomicBoolean(false)
-    when(shuffleService.executorRemoved(any[String], any[String])).thenAnswer(new Answer[Unit] {
-      override def answer(invocations: InvocationOnMock): Unit = {
-        cleanupCalled.set(true)
-      }
-    })
+    when(shuffleService.executorRemoved(any[String], any[String])).thenAnswer(
+      (_: InvocationOnMock) => cleanupCalled.set(true))
     val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
       override def get: ExternalShuffleService = shuffleService
     }
@@ -244,5 +245,46 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     worker.handleExecutorStateChanged(
       ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
     assert(cleanupCalled.get() == value)
+  }
+
+  test("WorkDirCleanup cleans app dirs and shuffle metadata when " +
+    "spark.shuffle.service.db.enabled=true") {
+    testWorkDirCleanupAndRemoveMetadataWithConfig(true)
+  }
+
+  test("WorkdDirCleanup cleans only app dirs when" +
+    "spark.shuffle.service.db.enabled=false") {
+    testWorkDirCleanupAndRemoveMetadataWithConfig(false)
+  }
+
+  private def testWorkDirCleanupAndRemoveMetadataWithConfig(dbCleanupEnabled: Boolean) = {
+    val conf = new SparkConf().set("spark.shuffle.service.db.enabled", dbCleanupEnabled.toString)
+    conf.set("spark.worker.cleanup.appDataTtl", "60")
+    conf.set("spark.shuffle.service.enabled", "true")
+
+    val appId = "app1"
+    val execId = "exec1"
+    val cleanupCalled = new AtomicBoolean(false)
+    when(shuffleService.applicationRemoved(any[String])).thenAnswer(
+      (_: InvocationOnMock) => cleanupCalled.set(true))
+    val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val worker = makeWorker(conf, externalShuffleServiceSupplier)
+    val workDir = Utils.createTempDir(namePrefix = "work")
+    // initialize workers
+    worker.workDir = workDir
+    // Create the executor's working directory
+    val executorDir = new File(worker.workDir, appId + "/" + execId)
+
+    if (!executorDir.exists && !executorDir.mkdirs()) {
+      throw new IOException("Failed to create directory " + executorDir)
+    }
+    executorDir.setLastModified(System.currentTimeMillis - (1000 * 120))
+    worker.receive(WorkDirCleanup)
+    eventually(timeout(1000.milliseconds), interval(10.milliseconds)) {
+      assert(!executorDir.exists())
+      assert(cleanupCalled.get() == dbCleanupEnabled)
+    }
   }
 }

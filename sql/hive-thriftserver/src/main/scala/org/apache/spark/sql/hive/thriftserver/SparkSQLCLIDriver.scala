@@ -29,7 +29,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
-import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
+import org.apache.hadoop.hive.common.HiveInterruptUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
@@ -65,16 +65,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
    * a command is being processed by the current thread.
    */
   def installSignalHandler() {
-    HiveInterruptUtils.add(new HiveInterruptCallback {
-      override def interrupt() {
-        // Handle remote execution mode
-        if (SparkSQLEnv.sparkContext != null) {
-          SparkSQLEnv.sparkContext.cancelAllJobs()
-        } else {
-          if (transport != null) {
-            // Force closing of TCP connection upon session termination
-            transport.getSocket.close()
-          }
+    HiveInterruptUtils.add(() => {
+      // Handle remote execution mode
+      if (SparkSQLEnv.sparkContext != null) {
+        SparkSQLEnv.sparkContext.cancelAllJobs()
+      } else {
+        if (transport != null) {
+          // Force closing of TCP connection upon session termination
+          transport.getSocket.close()
         }
       }
     })
@@ -208,7 +206,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     reader.setBellEnabled(false)
     reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
-    CliDriver.getCommandCompleter.foreach((e) => reader.addCompleter(e))
+    CliDriver.getCommandCompleter.foreach(reader.addCompleter)
 
     val historyDirectory = System.getProperty("user.home")
 

@@ -315,6 +315,9 @@ private[netty] class NettyRpcEnv(
     if (fileDownloadFactory != null) {
       fileDownloadFactory.close()
     }
+    if (transportContext != null) {
+      transportContext.close()
+    }
   }
 
   override def deserialize[T](deserializationAction: () => T): T = {

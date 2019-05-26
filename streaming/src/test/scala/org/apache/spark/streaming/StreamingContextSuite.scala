@@ -212,7 +212,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     ssc.sc.setLocalProperty("customPropKey", "value2")
 
     eventually(timeout(10 seconds), interval(10 milliseconds)) {
-      assert(allFound === true)
+      assert(allFound)
     }
 
     // Verify streaming jobs have expected thread-local properties
@@ -493,7 +493,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
         }
       }
       t.start()
-      assert(ssc.awaitTerminationOrTimeout(10000) === true)
+      assert(ssc.awaitTerminationOrTimeout(10000))
     }
     // SparkContext.stop will set SparkEnv.env to null. We need to make sure SparkContext is stopped
     // before running the next test. Otherwise, it's possible that we set SparkEnv.env to null after
@@ -605,7 +605,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
       sc = new SparkContext(conf)
       ssc = StreamingContext.getActiveOrCreate(creatingFunc _)
       assert(ssc != null, "no context created")
-      assert(newContextCreated === true, "new context not created")
+      assert(newContextCreated, "new context not created")
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
       ssc.start()

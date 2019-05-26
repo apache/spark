@@ -57,7 +57,7 @@ class MetadataSuite extends SparkFunSuite {
     val meta = new MetadataBuilder().putBoolean("key", true).build()
     assert(meta === meta)
     assert(meta.## !== 0)
-    assert(meta.getBoolean("key") === true)
+    assert(meta.getBoolean("key"))
     assert(meta.contains("key"))
     assert(meta === Metadata.fromJson(meta.json))
     intercept[NoSuchElementException](meta.getBoolean("no_such_key"))

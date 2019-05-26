@@ -428,7 +428,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val message = intercept[AnalysisException] {
       testRead(spark.read.csv(), Seq.empty, schema)
     }.getMessage
-    assert(message.contains("Unable to infer schema for CSV. It must be specified manually."))
+    assert(message.toLowerCase(Locale.ROOT).contains("unable to infer schema for csv"))
 
     testRead(spark.read.csv(dir), data, schema)
     testRead(spark.read.csv(dir, dir), data ++ data, schema)
@@ -838,6 +838,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
           checkReadPartitionColumnDuplication("parquet", c0, c1, src)
+
+          // Check ORC format
+          checkWriteDataColumnDuplication("orc", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "orc", c0, c1, src)
+          checkReadPartitionColumnDuplication("orc", c0, c1, src)
         }
       }
     }

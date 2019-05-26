@@ -21,6 +21,7 @@ import java.{util => ju}
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, Locale}
+import java.util.concurrent.TimeUnit._
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfter, Matchers}
@@ -28,7 +29,6 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
@@ -347,12 +347,13 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
 
     testStream(aggWithWatermark)(
-      AddData(input, currentTimeMs / 1000),
+      AddData(input, MILLISECONDS.toSeconds(currentTimeMs)),
       CheckAnswer(),
-      AddData(input, currentTimeMs / 1000),
+      AddData(input, MILLISECONDS.toSeconds(currentTimeMs)),
       CheckAnswer(),
       assertEventStats { e =>
-        assert(timestampFormat.parse(e.get("max")).getTime === (currentTimeMs / 1000) * 1000)
+        assert(timestampFormat.parse(e.get("max")).getTime ===
+          SECONDS.toMillis(MILLISECONDS.toSeconds((currentTimeMs))))
         val watermarkTime = timestampFormat.parse(e.get("watermark"))
         val monthDiff = monthsSinceEpoch(currentTime) - monthsSinceEpoch(watermarkTime)
         // monthsSinceEpoch is like `math.floor(num)`, so monthDiff has two possible values.

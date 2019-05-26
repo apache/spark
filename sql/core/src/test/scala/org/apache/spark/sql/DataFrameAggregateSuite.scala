@@ -720,7 +720,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(testData.groupBy(col("key")).toString.contains(
       "[grouping expressions: [key], value: [key: int, value: string], type: GroupBy]"))
     assert(testData.groupBy(current_date()).toString.contains(
-      "grouping expressions: [current_date(None)], value: [key: int, value: string], " +
+      "grouping expressions: [current_date()], value: [key: int, value: string], " +
         "type: GroupBy]"))
   }
 

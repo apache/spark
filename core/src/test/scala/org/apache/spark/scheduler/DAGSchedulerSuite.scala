@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.annotation.meta.param
@@ -890,7 +891,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     // Confirm job finished successfully
     sc.listenerBus.waitUntilEmpty(1000)
-    assert(ended === true)
+    assert(ended)
     assert(results === (0 until parts).map { idx => idx -> 42 }.toMap)
     assertDataStructuresEmpty()
   }
@@ -1049,7 +1050,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     assertDataStructuresEmpty()
     sc.listenerBus.waitUntilEmpty(1000)
-    assert(ended === true)
+    assert(ended)
     assert(results === Map(0 -> 42))
   }
 
@@ -2847,6 +2848,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       shuffleMapRdd.checkpoint()
       assertResultStageFailToRollback(shuffleMapRdd)
     }
+  }
+
+  test("SPARK-27164: RDD.countApprox on empty RDDs schedules jobs which never complete") {
+    val latch = new CountDownLatch(1)
+    val jobListener = new SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        latch.countDown()
+      }
+    }
+    sc.addSparkListener(jobListener)
+    sc.emptyRDD[Int].countApprox(10000).getFinalValue()
+    assert(latch.await(10, TimeUnit.SECONDS))
   }
 
   /**

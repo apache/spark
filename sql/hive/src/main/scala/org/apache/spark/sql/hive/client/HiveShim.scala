@@ -516,7 +516,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       f.className,
       null,
       PrincipalType.USER,
-      (System.currentTimeMillis / 1000).toInt,
+      TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis).toInt,
       FunctionType.JAVA,
       resourceUris.asJava)
   }

@@ -18,15 +18,23 @@
 package test.org.apache.spark.sql.sources.v2;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.sources.v2.SupportsBatchRead;
+import org.apache.spark.sql.sources.v2.SupportsRead;
 import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.sources.v2.TableCapability;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
-abstract class JavaSimpleBatchTable implements Table, SupportsBatchRead {
+abstract class JavaSimpleBatchTable implements Table, SupportsRead {
+  private static final Set<TableCapability> CAPABILITIES = new HashSet<>(Arrays.asList(
+      TableCapability.BATCH_READ,
+      TableCapability.BATCH_WRITE,
+      TableCapability.TRUNCATE));
 
   @Override
   public StructType schema() {
@@ -36,6 +44,11 @@ abstract class JavaSimpleBatchTable implements Table, SupportsBatchRead {
   @Override
   public String name() {
     return this.getClass().toString();
+  }
+
+  @Override
+  public Set<TableCapability> capabilities() {
+    return CAPABILITIES;
   }
 }
 

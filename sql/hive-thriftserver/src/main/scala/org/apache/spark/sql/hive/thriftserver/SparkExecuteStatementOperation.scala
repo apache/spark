@@ -226,9 +226,9 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
     sqlContext.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
-    if (pool != null) {
-      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
-    }
+    // It may have unpredictably behavior since we use thread pools to execute quries and
+    // the 'spark.scheduler.pool' may not be 'default' when we did not set its value.(SPARK-26914)
+    sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
     try {
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())

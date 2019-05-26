@@ -19,7 +19,6 @@ package org.apache.spark.status
 
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
-import java.util.function.Function
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
@@ -128,7 +127,6 @@ private[spark] class AppStatusListener(
     // code registers the driver before this event is sent.
     event.driverLogs.foreach { logs =>
       val driver = liveExecutors.get(SparkContext.DRIVER_IDENTIFIER)
-        .orElse(liveExecutors.get(SparkContext.LEGACY_DRIVER_IDENTIFIER))
       driver.foreach { d =>
         d.executorLogs = logs.toMap
         d.attributes = event.driverAttributes.getOrElse(Map.empty).toMap
@@ -210,6 +208,30 @@ private[spark] class AppStatusListener(
         if (rdd.removeDistribution(exec)) {
           update(rdd, now)
         }
+      }
+      // Remove all RDD partitions that reference the removed executor
+      liveRDDs.values.foreach { rdd =>
+        rdd.getPartitions.values
+          .filter(_.executors.contains(event.executorId))
+          .foreach { partition =>
+            if (partition.executors.length == 1) {
+              rdd.removePartition(partition.blockName)
+              rdd.memoryUsed = addDeltaToValue(rdd.memoryUsed, partition.memoryUsed * -1)
+              rdd.diskUsed = addDeltaToValue(rdd.diskUsed, partition.diskUsed * -1)
+            } else {
+              rdd.memoryUsed = addDeltaToValue(rdd.memoryUsed,
+                (partition.memoryUsed / partition.executors.length) * -1)
+              rdd.diskUsed = addDeltaToValue(rdd.diskUsed,
+                (partition.diskUsed / partition.executors.length) * -1)
+              partition.update(partition.executors
+                .filter(!_.equals(event.executorId)), rdd.storageLevel,
+                addDeltaToValue(partition.memoryUsed,
+                  (partition.memoryUsed / partition.executors.length) * -1),
+                addDeltaToValue(partition.diskUsed,
+                  (partition.diskUsed / partition.executors.length) * -1))
+            }
+          }
+        update(rdd, now)
       }
       if (isExecutorActiveForLiveStages(exec)) {
         // the executor was running for a currently active stage, so save it for now in
@@ -817,11 +839,11 @@ private[spark] class AppStatusListener(
     // check if there is a new peak value for any of the executor level memory metrics,
     // while reading from the log. SparkListenerStageExecutorMetrics are only processed
     // when reading logs.
-    liveExecutors.get(executorMetrics.execId)
-      .orElse(deadExecutors.get(executorMetrics.execId)).map { exec =>
-      if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)) {
-        update(exec, now)
-      }
+    liveExecutors.get(executorMetrics.execId).orElse(
+      deadExecutors.get(executorMetrics.execId)).foreach { exec =>
+        if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)) {
+          update(exec, now)
+        }
     }
   }
 
@@ -1025,9 +1047,7 @@ private[spark] class AppStatusListener(
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
     val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber),
-      new Function[(Int, Int), LiveStage]() {
-        override def apply(key: (Int, Int)): LiveStage = new LiveStage()
-      })
+      (_: (Int, Int)) => new LiveStage())
     stage.info = info
     stage
   }

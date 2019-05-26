@@ -18,10 +18,10 @@
 package org.apache.spark.ml.regression
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.util.Random
 
-import org.dmg.pmml.{OpType, PMML, RegressionModel => PMMLRegressionModel}
+import org.dmg.pmml.{OpType, PMML}
+import org.dmg.pmml.regression.{RegressionModel => PMMLRegressionModel}
 
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint

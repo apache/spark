@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -152,14 +153,9 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
   def genCmp: (Expression, Expression) => Expression
   def symbol: String
 
-  @transient protected lazy val cmpSymbol: String = genCmp(value, query) match {
-    case b: BinaryComparison =>
-      b.symbol
-    case _ @ Not(EqualTo(_, _)) =>
-      "!="
-  }
+  def sqlSymbol: String = symbol
 
-  @transient private lazy val value: Expression = if (values.length > 1) {
+  @transient protected lazy val value: Expression = if (values.length > 1) {
     CreateNamedStruct(values.zipWithIndex.flatMap {
       case (v: NamedExpression, _) => Seq(Literal(v.name), v)
       case (v, idx) => Seq(Literal(s"_$idx"), v)
@@ -168,12 +164,13 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
     values.head
   }
 
+  @transient lazy val cmp: Expression = genCmp(value, query)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
       TypeCheckResult.TypeCheckFailure(
         s"""
-           |The number of columns in the left hand side of a predicate subquery does not match the
+           |The number of columns in the left hand side of an $symbol subquery does not match the
            |number of columns in the output of subquery.
            |#columns in left hand side: ${values.length}.
            |#columns in right hand side: ${query.childOutputs.length}.
@@ -191,7 +188,7 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
       }
       TypeCheckResult.TypeCheckFailure(
         s"""
-           |The data type of one or more elements in the left hand side of a predicate subquery
+           |The data type of one or more elements in the left hand side of an $symbol subquery
            |is not compatible with the data type of the output of the subquery
            |Mismatched columns:
            |[${mismatchedColumns.mkString(", ")}]
@@ -208,8 +205,17 @@ abstract class PredicateSubquery extends Predicate with Unevaluable {
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def hashCode(): Int = {
+    scala.util.hashing.MurmurHash3.productHash(cmp)
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case ps: PredicateSubquery => ps.cmp == cmp
+    case _ => false
+  }
+
   private def toString(left: String, right: String): String = {
-    s"$left $symbol ($right)"
+    s"$left $sqlSymbol ($right)"
   }
 
   override def toString: String = toString(value.toString, query.toString)
@@ -232,7 +238,13 @@ case class AnySubquery(
     query: ListQuery,
     genCmp: (Expression, Expression) => Expression) extends PredicateSubquery {
 
-  override def symbol: String = s"$cmpSymbol ANY"
+  @transient lazy val cmpSymbol: String = cmp match {
+    case b: BinaryComparison => b.symbol
+    case _ @ Not(EqualTo(_, _)) => "!="
+  }
+
+  override def symbol: String = "ANY"
+  override def sqlSymbol: String = s"$cmpSymbol ANY"
 }
 
 /**
@@ -242,16 +254,9 @@ case class AnySubquery(
 case class InSubquery(
     values: Seq[Expression],
     query: ListQuery,
-    genCmp: (Expression, Expression) => Expression) extends PredicateSubquery {
+    genCmp: (Expression, Expression) => Expression = EqualTo) extends PredicateSubquery {
 
   override def symbol: String = "IN"
-}
-
-object InSubquery {
-
-  def apply(values: Seq[Expression], query: ListQuery): InSubquery = {
-    InSubquery(values, query, EqualTo)
-  }
 }
 
 /**
@@ -425,6 +430,19 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
+      genCodeWithSwitch(ctx, ev)
+    } else {
+      genCodeWithSet(ctx, ev)
+    }
+  }
+
+  private def canBeComputedUsingSwitch: Boolean = child.dataType match {
+    case ByteType | ShortType | IntegerType | DateType => true
+    case _ => false
+  }
+
+  private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val setTerm = ctx.addReferenceObj("set", set)
       val setIsNull = if (hasNull) {
@@ -437,6 +455,34 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
          |$setIsNull
        """.stripMargin
     })
+  }
+
+  // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
+  // so the code size should not exceed 64KB
+  private def genCodeWithSwitch(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val caseValuesGen = hset.filter(_ != null).map(Literal(_).genCode(ctx))
+    val valueGen = child.genCode(ctx)
+
+    val caseBranches = caseValuesGen.map(literal =>
+      code"""
+        case ${literal.value}:
+          ${ev.value} = true;
+          break;
+       """)
+
+    ev.copy(code =
+      code"""
+        ${valueGen.code}
+        ${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${valueGen.isNull};
+        ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
+        if (!${valueGen.isNull}) {
+          switch (${valueGen.value}) {
+            ${caseBranches.mkString("\n")}
+            default:
+              ${ev.isNull} = $hasNull;
+          }
+        }
+       """)
   }
 
   override def sql: String = {

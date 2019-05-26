@@ -21,7 +21,6 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.function.BiFunction
 
 import scala.annotation.tailrec
 import scala.collection.Map
@@ -370,9 +369,10 @@ private[spark] class DAGScheduler(
    * 2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2)).
    */
   private def checkBarrierStageWithRDDChainPattern(rdd: RDD[_], numTasksInStage: Int): Unit = {
-    val predicate: RDD[_] => Boolean = (r =>
-      r.getNumPartitions == numTasksInStage && r.dependencies.filter(_.rdd.isBarrier()).size <= 1)
-    if (rdd.isBarrier() && !traverseParentRDDsWithinStage(rdd, predicate)) {
+    if (rdd.isBarrier() &&
+        !traverseParentRDDsWithinStage(rdd, (r: RDD[_]) =>
+          r.getNumPartitions == numTasksInStage &&
+          r.dependencies.count(_.rdd.isBarrier()) <= 1)) {
       throw new BarrierJobUnsupportedRDDChainException
     }
   }
@@ -692,7 +692,7 @@ private[spark] class DAGScheduler(
     }
 
     val jobId = nextJobId.getAndIncrement()
-    if (partitions.size == 0) {
+    if (partitions.isEmpty) {
       val time = clock.getTimeMillis()
       listenerBus.post(
         SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
@@ -702,9 +702,9 @@ private[spark] class DAGScheduler(
       return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
 
-    assert(partitions.size > 0)
+    assert(partitions.nonEmpty)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+    val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
       SerializationUtils.clone(properties)))
@@ -767,12 +767,19 @@ private[spark] class DAGScheduler(
       callSite: CallSite,
       timeout: Long,
       properties: Properties): PartialResult[R] = {
+    val jobId = nextJobId.getAndIncrement()
+    if (rdd.partitions.isEmpty) {
+      // Return immediately if the job is running 0 tasks
+      val time = clock.getTimeMillis()
+      listenerBus.post(SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
+      listenerBus.post(SparkListenerJobEnd(jobId, time, JobSucceeded))
+      return new PartialResult(evaluator.currentResult(), true)
+    }
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val partitions = (0 until rdd.partitions.length).toArray
-    val jobId = nextJobId.getAndIncrement()
     eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
+      jobId, rdd, func2, rdd.partitions.indices.toArray, callSite, listener,
+      SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -805,7 +812,9 @@ private[spark] class DAGScheduler(
     // This makes it easier to avoid race conditions between the user code and the map output
     // tracker that might result if we told the user the stage had finished, but then they queries
     // the map output tracker and some node failures had caused the output statistics to be lost.
-    val waiter = new JobWaiter(this, jobId, 1, (i: Int, r: MapOutputStatistics) => callback(r))
+    val waiter = new JobWaiter[MapOutputStatistics](
+      this, jobId, 1,
+      (_: Int, r: MapOutputStatistics) => callback(r))
     eventProcessLoop.post(MapStageSubmitted(
       jobId, dependency, callSite, waiter, SerializationUtils.clone(properties)))
     waiter
@@ -863,7 +872,7 @@ private[spark] class DAGScheduler(
    * the last fetch failure.
    */
   private[scheduler] def resubmitFailedStages() {
-    if (failedStages.size > 0) {
+    if (failedStages.nonEmpty) {
       // Failed stages may be removed by job cancellation, so failed might be empty even if
       // the ResubmitFailedStages event has been scheduled.
       logInfo("Resubmitting failed stages")
@@ -975,9 +984,7 @@ private[spark] class DAGScheduler(
           "than the total number of slots in the cluster currently.")
         // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
         val numCheckFailures = barrierJobIdToNumTasksCheckFailures.compute(jobId,
-          new BiFunction[Int, Int, Int] {
-            override def apply(key: Int, value: Int): Int = value + 1
-          })
+          (_: Int, value: Int) => value + 1)
         if (numCheckFailures <= maxFailureNumTasksCheck) {
           messageScheduler.schedule(
             new Runnable {
@@ -1220,7 +1227,7 @@ private[spark] class DAGScheduler(
         return
     }
 
-    if (tasks.size > 0) {
+    if (tasks.nonEmpty) {
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
@@ -1935,7 +1942,7 @@ private[spark] class DAGScheduler(
       job: ActiveJob,
       failureReason: String,
       exception: Option[Throwable] = None): Unit = {
-    val error = new SparkException(failureReason, exception.getOrElse(null))
+    val error = new SparkException(failureReason, exception.orNull)
     var ableToCancelStages = true
 
     // Cancel all independent, running stages.

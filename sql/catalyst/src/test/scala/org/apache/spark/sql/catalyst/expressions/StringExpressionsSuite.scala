@@ -231,15 +231,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val s_notNull = 'a.string.notNull.at(0)
 
-    assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable
-      === true)
+    assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable)
     assert(
       Substring(s_notNull, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable
         === false)
     assert(Substring(s_notNull,
-      Literal.create(null, IntegerType), Literal.create(2, IntegerType)).nullable === true)
+      Literal.create(null, IntegerType), Literal.create(2, IntegerType)).nullable)
     assert(Substring(s_notNull,
-      Literal.create(0, IntegerType), Literal.create(null, IntegerType)).nullable === true)
+      Literal.create(0, IntegerType), Literal.create(null, IntegerType)).nullable)
 
     checkEvaluation(s.substr(0, 2), "ex", row)
     checkEvaluation(s.substr(0), "example", row)

@@ -52,7 +52,7 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
     val encoder = new OneHotEncoder()
       .setInputCols(Array("input"))
       .setOutputCols(Array("output"))
-    assert(encoder.getDropLast === true)
+    assert(encoder.getDropLast)
     encoder.setDropLast(false)
     assert(encoder.getDropLast === false)
     val model = encoder.fit(df)
@@ -193,7 +193,7 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
     val encoder = new OneHotEncoder()
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("output1", "output2"))
-    assert(encoder.getDropLast === true)
+    assert(encoder.getDropLast)
     encoder.setDropLast(false)
     assert(encoder.getDropLast === false)
 

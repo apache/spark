@@ -256,6 +256,31 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
   }
 
   test("supports setting fetcher cache") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map(config.EXECUTOR_HOME.key -> "test",
+          config.ENABLE_FETCHER_CACHE.key -> "true",
+          "spark.app.name" -> "test"),
+        "s1",
+        new Date()))
+
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+
+    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+    val uris = launchedTasks.head.getCommand.getUrisList
+    assert(uris.asScala.forall(_.getCache))
+  }
+
+  test("supports setting fetcher cache on the dispatcher") {
     setScheduler(Map(config.ENABLE_FETCHER_CACHE.key -> "true"))
 
     val mem = 1000
@@ -280,7 +305,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
   }
 
   test("supports disabling fetcher cache") {
-    setScheduler(Map(config.ENABLE_FETCHER_CACHE.key -> "false"))
+    setScheduler()
 
     val mem = 1000
     val cpu = 1
@@ -289,6 +314,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       new MesosDriverDescription("d1", "jar", mem, cpu, true,
         command,
         Map(config.EXECUTOR_HOME.key -> "test",
+          config.ENABLE_FETCHER_CACHE.key -> "false",
           "spark.app.name" -> "test"),
         "s1",
         new Date()))
@@ -458,6 +484,43 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val launchedTasks = launchDriverTask(
       Utils.configFileBasedValueSecrets(config.driverSecretConfig))
     Utils.verifyFileBasedValueSecrets(launchedTasks)
+  }
+
+  test("assembles a valid driver command, escaping all confs and args") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+    val driverDesc = new MesosDriverDescription(
+      "d1",
+      "jar",
+      mem,
+      cpu,
+      true,
+      new Command(
+        "Main",
+        Seq("--a=$2", "--b", "x y z"),
+        Map(),
+        Seq(),
+        Seq(),
+        Seq()),
+      Map("spark.app.name" -> "app name",
+        config.EXECUTOR_URI.key -> "s3a://bucket/spark-version.tgz",
+        "another.conf" -> "\\value"),
+      "s1",
+      new Date())
+
+    val expectedCmd = "cd spark-version*;  " +
+        "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
+        "--driver-cores 1.0 --driver-memory 1000M --class Main --py-files  " +
+        "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
+        "--conf \"another.conf=\\\\value\" " +
+        "--conf \"spark.app.name=app name\" " +
+        "../jar " +
+        "\"--a=\\$2\" " +
+        "--b \"x y z\""
+
+    assert(scheduler.getDriverCommandValue(driverDesc) == expectedCmd)
   }
 
   private def launchDriverTask(addlSparkConfVars: Map[String, String]): List[TaskInfo] = {

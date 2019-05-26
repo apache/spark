@@ -134,7 +134,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val mapped = inputData.toDS().map { 6 / _}
 
     testStream(mapped)(
-      AssertOnQuery(_.isActive === true),
+      AssertOnQuery(_.isActive),
       AssertOnQuery(_.exception.isEmpty),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
@@ -148,7 +148,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       TestAwaitTermination(ExpectNotBlocked, timeoutMs = 2000, expectedReturnValue = true),
       TestAwaitTermination(ExpectNotBlocked, timeoutMs = 10, expectedReturnValue = true),
       StartStream(),
-      AssertOnQuery(_.isActive === true),
+      AssertOnQuery(_.isActive),
       AddData(inputData, 0),
       ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
@@ -170,7 +170,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val mapped = inputData.toDS().map { 6 / _}
 
     testStream(mapped)(
-      AssertOnQuery(_.isActive === true),
+      AssertOnQuery(_.isActive),
       StopStream,
       AddData(inputData, 1, 2),
       StartStream(trigger = Once),
@@ -272,7 +272,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AdvanceManualClock(1000), // time = 1000 to start new trigger, will block on `latestOffset`
       AssertStreamExecThreadIsWaitingForTime(1050),
       AssertOnQuery(_.status.isDataAvailable === false),
-      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.isTriggerActive),
       AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
@@ -280,16 +280,16 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertClockTime(1050),
       // will block on `planInputPartitions` that needs 1350
       AssertStreamExecThreadIsWaitingForTime(1150),
-      AssertOnQuery(_.status.isDataAvailable === true),
-      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.isDataAvailable),
+      AssertOnQuery(_.status.isTriggerActive),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       AdvanceManualClock(100), // time = 1150 to unblock `planInputPartitions`
       AssertClockTime(1150),
       AssertStreamExecThreadIsWaitingForTime(1500), // will block on map task that needs 1500
-      AssertOnQuery(_.status.isDataAvailable === true),
-      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.isDataAvailable),
+      AssertOnQuery(_.status.isTriggerActive),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
@@ -298,7 +298,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertClockTime(1500),
       CheckAnswer(2),
       AssertStreamExecThreadIsWaitingForTime(2000),  // will block until the next trigger
-      AssertOnQuery(_.status.isDataAvailable === true),
+      AssertOnQuery(_.status.isDataAvailable),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>
@@ -341,7 +341,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertClockTime(2000),
       AssertStreamExecThreadIsWaitingForTime(3000),  // will block waiting for next trigger time
       CheckAnswer(4),
-      AssertOnQuery(_.status.isDataAvailable === true),
+      AssertOnQuery(_.status.isDataAvailable),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery { query =>

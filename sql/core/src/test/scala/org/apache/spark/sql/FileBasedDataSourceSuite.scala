@@ -329,27 +329,27 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
+      // TODO: test file source V2 after write path is fixed.
       Seq(true).foreach { useV1 =>
         val useV1List = if (useV1) {
-          "orc"
+          "csv,orc"
         } else {
           ""
         }
-        def errorMessage(format: String, isWrite: Boolean): String = {
-          if (isWrite && (useV1 || format != "orc")) {
-            "cannot save interval data type into external storage."
-          } else {
-            s"$format data source does not support calendarinterval data type."
-          }
+        def validateErrorMessage(msg: String): Unit = {
+          val msg1 = "cannot save interval data type into external storage."
+          val msg2 = "data source does not support calendarinterval data type."
+          assert(msg.toLowerCase(Locale.ROOT).contains(msg1) ||
+            msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
 
         withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> useV1List) {
           // write path
           Seq("csv", "json", "parquet", "orc").foreach { format =>
-            var msg = intercept[AnalysisException] {
+            val msg = intercept[AnalysisException] {
               sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, true)))
+            validateErrorMessage(msg)
           }
 
           // read path
@@ -359,14 +359,14 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
               spark.range(1).write.format(format).mode("overwrite").save(tempDir)
               spark.read.schema(schema).format(format).load(tempDir).collect()
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, false)))
+            validateErrorMessage(msg)
 
             msg = intercept[AnalysisException] {
               val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
               spark.range(1).write.format(format).mode("overwrite").save(tempDir)
               spark.read.schema(schema).format(format).load(tempDir).collect()
             }.getMessage
-            assert(msg.toLowerCase(Locale.ROOT).contains(errorMessage(format, false)))
+            validateErrorMessage(msg)
           }
         }
       }
@@ -374,9 +374,10 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
+    // TODO: test file source V2 after write path is fixed.
     Seq(true).foreach { useV1 =>
       val useV1List = if (useV1) {
-        "orc"
+        "csv,orc"
       } else {
         ""
       }
@@ -470,22 +471,25 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   test("SPARK-25237 compute correct input metrics in FileScanRDD") {
-    withTempPath { p =>
-      val path = p.getAbsolutePath
-      spark.range(1000).repartition(1).write.csv(path)
-      val bytesReads = new mutable.ArrayBuffer[Long]()
-      val bytesReadListener = new SparkListener() {
-        override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-          bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+    // TODO: Test CSV V2 as well after it implements [[SupportsReportStatistics]].
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "csv") {
+      withTempPath { p =>
+        val path = p.getAbsolutePath
+        spark.range(1000).repartition(1).write.csv(path)
+        val bytesReads = new mutable.ArrayBuffer[Long]()
+        val bytesReadListener = new SparkListener() {
+          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+            bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+          }
         }
-      }
-      sparkContext.addSparkListener(bytesReadListener)
-      try {
-        spark.read.csv(path).limit(1).collect()
-        sparkContext.listenerBus.waitUntilEmpty(1000L)
-        assert(bytesReads.sum === 7860)
-      } finally {
-        sparkContext.removeSparkListener(bytesReadListener)
+        sparkContext.addSparkListener(bytesReadListener)
+        try {
+          spark.read.csv(path).limit(1).collect()
+          sparkContext.listenerBus.waitUntilEmpty(1000L)
+          assert(bytesReads.sum === 7860)
+        } finally {
+          sparkContext.removeSparkListener(bytesReadListener)
+        }
       }
     }
   }

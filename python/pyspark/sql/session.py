@@ -530,8 +530,9 @@ class SparkSession(object):
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        from pyspark.serializers import ArrowStreamSerializer, _create_batch
-        from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
+        from distutils.version import LooseVersion
+        from pyspark.serializers import ArrowStreamPandasSerializer
+        from pyspark.sql.types import from_arrow_type, to_arrow_type, TimestampType
         from pyspark.sql.utils import require_minimum_pandas_version, \
             require_minimum_pyarrow_version
 
@@ -539,6 +540,19 @@ class SparkSession(object):
         require_minimum_pyarrow_version()
 
         from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+        import pyarrow as pa
+
+        # Create the Spark schema from list of names passed in with Arrow types
+        if isinstance(schema, (list, tuple)):
+            if LooseVersion(pa.__version__) < LooseVersion("0.12.0"):
+                temp_batch = pa.RecordBatch.from_pandas(pdf[0:100], preserve_index=False)
+                arrow_schema = temp_batch.schema
+            else:
+                arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
+            struct = StructType()
+            for name, field in zip(schema, arrow_schema):
+                struct.add(name, from_arrow_type(field.type), nullable=field.nullable)
+            schema = struct
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
@@ -555,21 +569,15 @@ class SparkSession(object):
         step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
 
-        # Create Arrow record batches
-        safecheck = self._wrapped._conf.arrowSafeTypeConversion()
-        batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)],
-                                 timezone, safecheck)
-                   for pdf_slice in pdf_slices]
-
-        # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
-        if isinstance(schema, (list, tuple)):
-            struct = from_arrow_schema(batches[0].schema)
-            for i, name in enumerate(schema):
-                struct.fields[i].name = name
-                struct.names[i] = name
-            schema = struct
+        # Create list of Arrow (columns, type) for serializer dump_stream
+        arrow_data = [[(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)]
+                      for pdf_slice in pdf_slices]
 
         jsqlContext = self._wrapped._jsqlContext
+
+        safecheck = self._wrapped._conf.arrowSafeTypeConversion()
+        col_by_name = True  # col by name only applies to StructType columns, can't happen here
+        ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
 
         def reader_func(temp_filename):
             return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsqlContext, temp_filename)
@@ -578,8 +586,7 @@ class SparkSession(object):
             return self._jvm.ArrowRDDServer(jsqlContext)
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jrdd = self._sc._serialize_to_jvm(batches, ArrowStreamSerializer(), reader_func,
-                                          create_RDD_server)
+        jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema

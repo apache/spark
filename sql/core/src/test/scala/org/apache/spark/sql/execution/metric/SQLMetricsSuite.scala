@@ -345,10 +345,10 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
-    // ... -> BroadcastHashJoin(nodeId = 0)
+    // ... -> BroadcastHashJoin(nodeId = 1)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> (("BroadcastHashJoin", Map(
+      1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L))))
     )
   }

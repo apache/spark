@@ -90,27 +90,27 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(CaseWhen(Seq((c1, c4), (c2, c5)), c6), "c", row)
     checkEvaluation(CaseWhen(Seq((c1, c4), (c2, c5))), null, row)
 
-    assert(CaseWhen(Seq((c2, c4)), c6).nullable === true)
-    assert(CaseWhen(Seq((c2, c4), (c3, c5)), c6).nullable === true)
-    assert(CaseWhen(Seq((c2, c4), (c3, c5))).nullable === true)
+    assert(CaseWhen(Seq((c2, c4)), c6).nullable)
+    assert(CaseWhen(Seq((c2, c4), (c3, c5)), c6).nullable)
+    assert(CaseWhen(Seq((c2, c4), (c3, c5))).nullable)
 
     val c4_notNull = 'a.boolean.notNull.at(3)
     val c5_notNull = 'a.boolean.notNull.at(4)
     val c6_notNull = 'a.boolean.notNull.at(5)
 
     assert(CaseWhen(Seq((c2, c4_notNull)), c6_notNull).nullable === false)
-    assert(CaseWhen(Seq((c2, c4)), c6_notNull).nullable === true)
-    assert(CaseWhen(Seq((c2, c4_notNull))).nullable === true)
-    assert(CaseWhen(Seq((c2, c4_notNull)), c6).nullable === true)
+    assert(CaseWhen(Seq((c2, c4)), c6_notNull).nullable)
+    assert(CaseWhen(Seq((c2, c4_notNull))).nullable)
+    assert(CaseWhen(Seq((c2, c4_notNull)), c6).nullable)
 
     assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5_notNull)), c6_notNull).nullable === false)
-    assert(CaseWhen(Seq((c2, c4), (c3, c5_notNull)), c6_notNull).nullable === true)
-    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5)), c6_notNull).nullable === true)
-    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5_notNull)), c6).nullable === true)
+    assert(CaseWhen(Seq((c2, c4), (c3, c5_notNull)), c6_notNull).nullable)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5)), c6_notNull).nullable)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5_notNull)), c6).nullable)
 
-    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5_notNull))).nullable === true)
-    assert(CaseWhen(Seq((c2, c4), (c3, c5_notNull))).nullable === true)
-    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5))).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5_notNull))).nullable)
+    assert(CaseWhen(Seq((c2, c4), (c3, c5_notNull))).nullable)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5))).nullable)
   }
 
   test("if/case when - null flags of non-primitive types") {

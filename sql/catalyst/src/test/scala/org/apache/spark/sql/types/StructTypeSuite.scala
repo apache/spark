@@ -70,4 +70,16 @@ class StructTypeSuite extends SparkFunSuite {
 
     assert(struct.toDDL == """`b` BOOLEAN COMMENT 'Field\'s comment'""")
   }
+
+
+  test("Print up to the given level") {
+    val schema = StructType.fromDDL(
+      "c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
+
+    assert(5 == schema.treeString(2).split("\n").length)
+    assert(3 == schema.treeString(1).split("\n").length)
+    assert(7 == schema.treeString.split("\n").length)
+    assert(7 == schema.treeString(0).split("\n").length)
+    assert(7 == schema.treeString(-1).split("\n").length)
+  }
 }

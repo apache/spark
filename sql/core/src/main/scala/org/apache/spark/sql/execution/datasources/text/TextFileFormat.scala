@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * A data source for reading text files.
+ * A data source for reading text files. The text files must be encoded as UTF-8.
  */
 class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 

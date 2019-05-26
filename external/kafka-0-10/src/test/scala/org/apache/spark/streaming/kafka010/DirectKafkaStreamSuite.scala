@@ -53,7 +53,7 @@ class DirectKafkaStreamSuite
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
     // Set a timeout of 10 seconds that's going to be used to fetch topics/partitions from kafka.
-    // Othewise the poll timeout defaults to 2 minutes and causes test cases to run longer.
+    // Otherwise the poll timeout defaults to 2 minutes and causes test cases to run longer.
     .set("spark.streaming.kafka.consumer.poll.ms", "10000")
 
   private var ssc: StreamingContext = _
@@ -61,13 +61,13 @@ class DirectKafkaStreamSuite
 
   private var kafkaTestUtils: KafkaTestUtils = _
 
-  override def beforeAll {
+  override def beforeAll() {
     super.beforeAll()
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
-  override def afterAll {
+  override def afterAll() {
     try {
       if (kafkaTestUtils != null) {
         kafkaTestUtils.teardown()
@@ -454,13 +454,11 @@ class DirectKafkaStreamSuite
         val data = rdd.map(_.value).collect()
         collectedData.addAll(Arrays.asList(data: _*))
         kafkaStream.asInstanceOf[CanCommitOffsets]
-          .commitAsync(offsets, new OffsetCommitCallback() {
-            def onComplete(m: JMap[TopicPartition, OffsetAndMetadata], e: Exception) {
-              if (null != e) {
-                logError("commit failed", e)
-              } else {
-                committed.putAll(m)
-              }
+          .commitAsync(offsets, (m: JMap[TopicPartition, OffsetAndMetadata], e: Exception) => {
+            if (null != e) {
+              logError("commit failed", e)
+            } else {
+              committed.putAll(m)
             }
           })
       }

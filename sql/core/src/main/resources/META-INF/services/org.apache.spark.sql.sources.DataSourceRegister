@@ -1,4 +1,4 @@
-org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
 org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 org.apache.spark.sql.execution.datasources.noop.NoopDataSource

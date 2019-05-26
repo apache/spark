@@ -25,14 +25,13 @@ import scala.collection.mutable.ArrayBuffer
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
 import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ManualClock, Utils}
+import org.apache.spark.util.{AccumulatorV2, ManualClock}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -736,7 +735,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Complete one copy of the task, which should result in the task set manager
     // being marked as a zombie, because at least one copy of its only task has completed.
     manager.handleSuccessfulTask(task1.taskId, directTaskResult)
-    assert(manager.isZombie === true)
+    assert(manager.isZombie)
     assert(resubmittedTasks === 0)
     assert(manager.runningTasks === 1)
 
@@ -1190,11 +1189,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock(1))
     when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any())).thenAnswer(
-      new Answer[Unit] {
-        override def answer(invocationOnMock: InvocationOnMock): Unit = {
-          assert(manager.isZombie)
-        }
-      })
+      (invocationOnMock: InvocationOnMock) => assert(manager.isZombie))
     val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
     // this would fail, inside our mock dag scheduler, if it calls dagScheduler.taskEnded() too soon
@@ -1317,12 +1312,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Assert the task has been black listed on the executor it was last executed on.
     when(taskSetManagerSpy.addPendingTask(anyInt())).thenAnswer(
-      new Answer[Unit] {
-        override def answer(invocationOnMock: InvocationOnMock): Unit = {
-          val task: Int = invocationOnMock.getArgument(0)
-          assert(taskSetManager.taskSetBlacklistHelperOpt.get.
-            isExecutorBlacklistedForTask(exec, task))
-        }
+      (invocationOnMock: InvocationOnMock) => {
+        val task: Int = invocationOnMock.getArgument(0)
+        assert(taskSetManager.taskSetBlacklistHelperOpt.get.
+          isExecutorBlacklistedForTask(exec, task))
       }
     )
 

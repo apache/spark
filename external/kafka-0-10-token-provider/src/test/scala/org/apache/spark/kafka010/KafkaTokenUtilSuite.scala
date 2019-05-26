@@ -17,20 +17,17 @@
 
 package org.apache.spark.kafka010
 
-import java.{util => ju}
 import java.security.PrivilegedExceptionAction
-import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 
-class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
+class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   private val bootStrapServers = "127.0.0.1:0"
   private val trustStoreLocation = "/path/to/trustStore"
   private val trustStorePassword = "trustStoreSecret"
@@ -42,42 +39,9 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private var sparkConf: SparkConf = null
 
-  private class KafkaJaasConfiguration extends Configuration {
-    val entry =
-      new AppConfigurationEntry(
-        "DummyModule",
-        AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
-        ju.Collections.emptyMap[String, Object]()
-      )
-
-    override def getAppConfigurationEntry(name: String): Array[AppConfigurationEntry] = {
-      if (name.equals("KafkaClient")) {
-        Array(entry)
-      } else {
-        null
-      }
-    }
-  }
-
   override def beforeEach(): Unit = {
     super.beforeEach()
     sparkConf = new SparkConf()
-  }
-
-  override def afterEach(): Unit = {
-    try {
-      resetGlobalConfig()
-    } finally {
-      super.afterEach()
-    }
-  }
-
-  private def setGlobalKafkaClientConfig(): Unit = {
-    Configuration.setConfiguration(new KafkaJaasConfiguration)
-  }
-
-  private def resetGlobalConfig(): Unit = {
-    Configuration.setConfiguration(null)
   }
 
   test("checkProxyUser with proxy current user should throw exception") {
@@ -228,5 +192,26 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     setGlobalKafkaClientConfig()
 
     assert(KafkaTokenUtil.isGlobalJaasConfigurationProvided)
+  }
+
+  test("isTokenAvailable without token should return false") {
+    assert(!KafkaTokenUtil.isTokenAvailable())
+  }
+
+  test("isTokenAvailable with token should return true") {
+    addTokenToUGI()
+
+    assert(KafkaTokenUtil.isTokenAvailable())
+  }
+
+  test("getTokenJaasParams with token should return scram module") {
+    addTokenToUGI()
+
+    val jaasParams = KafkaTokenUtil.getTokenJaasParams(new SparkConf())
+
+    assert(jaasParams.contains("ScramLoginModule required"))
+    assert(jaasParams.contains("tokenauth=true"))
+    assert(jaasParams.contains(tokenId))
+    assert(jaasParams.contains(tokenPassword))
   }
 }

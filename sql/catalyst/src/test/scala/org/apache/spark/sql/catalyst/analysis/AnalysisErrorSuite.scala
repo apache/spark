@@ -216,11 +216,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
 
   errorTest(
-    "bad casts",
-    testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
-  "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
-
-  errorTest(
     "sorting by unsupported column types",
     mapRelation.orderBy('map.asc),
     "sort" :: "type" :: "map<int,int>" :: Nil)
@@ -603,5 +598,32 @@ class AnalysisErrorSuite extends AnalysisTest {
       LocalRelation(a))
     assertAnalysisError(plan5,
                         "Accessing outer query column is not allowed in" :: Nil)
+  }
+
+  test("Error on filter condition containing aggregate expressions") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val plan = Filter('a === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    assertAnalysisError(plan,
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
+  }
+
+  test("ANY/SOME predicate doesn't support multi-column comparison") {
+    val a1 = AttributeReference("a1", IntegerType)()
+    val a2 = AttributeReference("a2", IntegerType)()
+    val b1 = AttributeReference("b1", IntegerType)()
+    val b2 = AttributeReference("b2", IntegerType)()
+    val a = LocalRelation(a1, a2)
+    val b = LocalRelation(b1, b2)
+    // (a1, a2) = ANY (SELECT b1, b2 FROM b)
+    val plan = Filter(
+      AnySubquery(Seq(a1, a2), ListQuery(Project(Seq(b1, b2), b)), EqualTo), a)
+    assertAnalysisSuccess(plan)
+    // (a1, a2) > ANY (SELECT b1, b2 FROM b)
+    val errorPlan = Filter(
+      AnySubquery(Seq(a1, a2), ListQuery(Project(Seq(b1, b2), b)), GreaterThan), a)
+    assertAnalysisError(errorPlan,
+      "ANY/SOME predicate does not support '>' operation when " +
+        "multiple columns are specified in operands." :: Nil)
   }
 }

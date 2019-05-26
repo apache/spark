@@ -97,6 +97,32 @@ class Window(object):
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
 
+        A row based boundary is based on the position of the row within the partition.
+        An offset indicates the number of rows above or below the current row, the frame for the
+        current row starts or ends. For instance, given a row based sliding frame with a lower bound
+        offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
+        index 4 to index 6.
+
+        >>> from pyspark.sql import Window
+        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import SQLContext
+        >>> sc = SparkContext.getOrCreate()
+        >>> sqlContext = SQLContext(sc)
+        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       b|  3|
+        |  2|       b|  5|
+        |  3|       b|  3|
+        |  1|       a|  2|
+        |  1|       a|  3|
+        |  2|       a|  2|
+        +---+--------+---+
+
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
                       any value less than or equal to -9223372036854775808.
@@ -126,6 +152,35 @@ class Window(object):
         We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
+
+        A range-based boundary is based on the actual value of the ORDER BY
+        expression(s). An offset is used to alter the value of the ORDER BY expression, for
+        instance if the current ORDER BY expression has a value of 10 and the lower bound offset
+        is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+        number of constraints on the ORDER BY expressions: there can be only one expression and this
+        expression must have a numerical data type. An exception can be made when the offset is
+        unbounded, because no value modification is needed, in this case multiple and non-numeric
+        ORDER BY expression are allowed.
+
+        >>> from pyspark.sql import Window
+        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import SQLContext
+        >>> sc = SparkContext.getOrCreate()
+        >>> sqlContext = SQLContext(sc)
+        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       b|  3|
+        |  2|       b|  5|
+        |  3|       b|  3|
+        |  1|       a|  4|
+        |  1|       a|  4|
+        |  2|       a|  2|
+        +---+--------+---+
 
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
@@ -231,8 +286,12 @@ class WindowSpec(object):
 
 def _test():
     import doctest
+    import pyspark.sql.window
     SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod()
+    globs = pyspark.sql.window.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.window, globs=globs,
+        optionflags=doctest.NORMALIZE_WHITESPACE)
     if failure_count:
         sys.exit(-1)
 

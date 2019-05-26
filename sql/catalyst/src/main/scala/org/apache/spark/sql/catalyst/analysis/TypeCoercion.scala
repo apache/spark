@@ -47,7 +47,7 @@ import org.apache.spark.sql.types._
 object TypeCoercion {
 
   def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
-    PredicateSubqueryConversion(conf) ::
+    SubqueryAndInSetConversion(conf) ::
       WidenSetOperationTypes ::
       PromoteStrings(conf) ::
       DecimalPrecision ::
@@ -444,7 +444,7 @@ object TypeCoercion {
   }
 
   /**
-   * Handles type coercion for both IN/ANY expression with subquery and IN/ANY
+   * Handles type coercion for both IN/ANY expression with subquery and IN
    * expressions without subquery.
    * 1. In the first case, find the common type by comparing the left hand side (LHS)
    *    expression types against corresponding right hand side (RHS) expression derived
@@ -457,7 +457,7 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  case class PredicateSubqueryConversion(conf: SQLConf) extends TypeCoercionRule {
+  case class SubqueryAndInSetConversion(conf: SQLConf) extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.

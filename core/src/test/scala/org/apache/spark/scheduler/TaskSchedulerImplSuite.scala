@@ -201,28 +201,39 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Even if one of the task sets has not-serializable tasks, the other task set should
     // still be processed without error
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
-    taskScheduler.submitTasks(taskSet)
+    val taskSet2 = new TaskSet(
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 1, 0, 0, null)
+    taskScheduler.submitTasks(taskSet2)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
   }
 
-  test("refuse to schedule concurrent attempts for the same stage (SPARK-8103)") {
+  test("concurrent attempts for the same stage only have one active taskset") {
     val taskScheduler = setupScheduler()
-    val attempt1 = FakeTask.createTaskSet(1, 0)
-    val attempt2 = FakeTask.createTaskSet(1, 1)
-    taskScheduler.submitTasks(attempt1)
-    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt2) }
+    def isTasksetZombie(taskset: TaskSet): Boolean = {
+      taskScheduler.taskSetManagerForAttempt(taskset.stageId, taskset.stageAttemptId).get.isZombie
+    }
 
-    // OK to submit multiple if previous attempts are all zombie
-    taskScheduler.taskSetManagerForAttempt(attempt1.stageId, attempt1.stageAttemptId)
-      .get.isZombie = true
+    val attempt1 = FakeTask.createTaskSet(1, 0)
+    taskScheduler.submitTasks(attempt1)
+    // The first submitted taskset is active
+    assert(!isTasksetZombie(attempt1))
+
+    val attempt2 = FakeTask.createTaskSet(1, 1)
     taskScheduler.submitTasks(attempt2)
+    // The first submitted taskset is zombie now
+    assert(isTasksetZombie(attempt1))
+    // The newly submitted taskset is active
+    assert(!isTasksetZombie(attempt2))
+
     val attempt3 = FakeTask.createTaskSet(1, 2)
-    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt3) }
-    taskScheduler.taskSetManagerForAttempt(attempt2.stageId, attempt2.stageAttemptId)
-      .get.isZombie = true
     taskScheduler.submitTasks(attempt3)
-    assert(!failedTaskSet)
+    // The first submitted taskset remains zombie
+    assert(isTasksetZombie(attempt1))
+    // The second submitted taskset is zombie now
+    assert(isTasksetZombie(attempt2))
+    // The newly submitted taskset is active
+    assert(!isTasksetZombie(attempt3))
   }
 
   test("don't schedule more tasks after a taskset is zombie") {
@@ -1102,7 +1113,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
-  test("Completions in zombie tasksets update status of non-zombie taskset") {
+  test("SPARK-23433/25250 Completions in zombie tasksets update status of non-zombie taskset") {
     val taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
     val valueSer = SparkEnv.get.serializer.newInstance()
 
@@ -1114,9 +1125,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     // Submit a task set, have it fail with a fetch failed, and then re-submit the task attempt,
-    // two times, so we have three active task sets for one stage.  (For this to really happen,
-    // you'd need the previous stage to also get restarted, and then succeed, in between each
-    // attempt, but that happens outside what we're mocking here.)
+    // two times, so we have three TaskSetManagers(2 zombie, 1 active) for one stage.  (For this
+    // to really happen, you'd need the previous stage to also get restarted, and then succeed,
+    // in between each attempt, but that happens outside what we're mocking here.)
     val zombieAttempts = (0 until 2).map { stageAttempt =>
       val attempt = FakeTask.createTaskSet(10, stageAttemptId = stageAttempt)
       taskScheduler.submitTasks(attempt)
@@ -1133,13 +1144,33 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       assert(tsm.runningTasks === 9)
       tsm
     }
+    // we've now got 2 zombie attempts, each with 9 tasks still running. And there's no active
+    // attempt exists in taskScheduler by now.
 
-    // we've now got 2 zombie attempts, each with 9 tasks still active.  Submit the 3rd attempt for
-    // the stage, but this time with insufficient resources so not all tasks are active.
+    // finish partition 1,2 by completing the tasks before a new attempt for the same stage submit.
+    // This is possible since the behaviour of submitting new attempt and handling successful task
+    // is from two different threads, which are "task-result-getter" and "dag-scheduler-event-loop"
+    // separately.
+    (0 until 2).foreach { i =>
+      completeTaskSuccessfully(zombieAttempts(i), i + 1)
+      assert(taskScheduler.stageIdToFinishedPartitions(0).contains(i + 1))
+    }
 
+    // Submit the 3rd attempt still with 10 tasks, this happens due to the race between thread
+    // "task-result-getter" and "dag-scheduler-event-loop", where a TaskSet gets submitted with
+    // already completed tasks. And this time with insufficient resources so not all tasks are
+    // active.
     val finalAttempt = FakeTask.createTaskSet(10, stageAttemptId = 2)
     taskScheduler.submitTasks(finalAttempt)
     val finalTsm = taskScheduler.taskSetManagerForAttempt(0, 2).get
+    // Though finalTSM gets submitted with 10 tasks, the call to taskScheduler.submitTasks should
+    // realize that 2 tasks have already completed, and mark them appropriately, so it won't launch
+    // any duplicate tasks later (SPARK-25250).
+    (0 until 2).map(_ + 1).foreach { partitionId =>
+      val index = finalTsm.partitionToIndex(partitionId)
+      assert(finalTsm.successful(index))
+    }
+
     val offers = (0 until 5).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
     val finalAttemptLaunchedPartitions = taskScheduler.resourceOffers(offers).flatten.map { task =>
       finalAttempt.tasks(task.index).partitionId
@@ -1147,16 +1178,17 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(finalTsm.runningTasks === 5)
     assert(!finalTsm.isZombie)
 
-    // We simulate late completions from our zombie tasksets, corresponding to all the pending
-    // partitions in our final attempt.  This means we're only waiting on the tasks we've already
-    // launched.
+    // We continually simulate late completions from our zombie tasksets(but this time, there's one
+    // active attempt exists in taskScheduler), corresponding to all the pending partitions in our
+    // final attempt. This means we're only waiting on the tasks we've already launched.
     val finalAttemptPendingPartitions = (0 until 10).toSet.diff(finalAttemptLaunchedPartitions)
     finalAttemptPendingPartitions.foreach { partition =>
       completeTaskSuccessfully(zombieAttempts(0), partition)
+      assert(taskScheduler.stageIdToFinishedPartitions(0).contains(partition))
     }
 
     // If there is another resource offer, we shouldn't run anything.  Though our final attempt
-    // used to have pending tasks, now those tasks have been completed by zombie attempts.  The
+    // used to have pending tasks, now those tasks have been completed by zombie attempts. The
     // remaining tasks to compute are already active in the non-zombie attempt.
     assert(
       taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec-1", "host-1", 1))).flatten.isEmpty)
@@ -1204,6 +1236,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       // perspective, as the failures weren't from a problem w/ the tasks themselves.
       verify(blacklist).updateBlacklistForSuccessfulTaskSet(meq(0), meq(stageAttempt), any())
     }
+    assert(taskScheduler.stageIdToFinishedPartitions.isEmpty)
   }
 
   test("don't schedule for a barrier taskSet if available slots are less than pending tasks") {

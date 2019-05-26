@@ -1394,6 +1394,10 @@ setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 #' @name NULL
 setGeneric("window", function(x, ...) { standardGeneric("window") })
 
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("xxhash64", function(x, ...) { standardGeneric("xxhash64") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("year", function(x) { standardGeneric("year") })

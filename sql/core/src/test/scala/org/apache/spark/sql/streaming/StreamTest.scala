@@ -354,11 +354,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     val listener = new StreamingQueryListener {
       override def onQueryStarted(event: QueryStartedEvent): Unit = {
         // Note: this assumes there is only one query active in the `testStream` method.
-        Thread.currentThread.setUncaughtExceptionHandler(new UncaughtExceptionHandler {
-          override def uncaughtException(t: Thread, e: Throwable): Unit = {
-            streamThreadDeathCause = e
-          }
-        })
+        Thread.currentThread.setUncaughtExceptionHandler(
+          (_: Thread, e: Throwable) => streamThreadDeathCause = e)
       }
 
       override def onQueryProgress(event: QueryProgressEvent): Unit = {}

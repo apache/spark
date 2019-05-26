@@ -356,13 +356,9 @@ private[spark] abstract class MockBackend(
     assignedTasksWaitingToRun.nonEmpty
   }
 
-  override def start(): Unit = {
-    reviveThread.scheduleAtFixedRate(new Runnable {
-      override def run(): Unit = Utils.tryLogNonFatalError {
-        reviveOffers()
-      }
-    }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
-  }
+  override def start(): Unit =
+    reviveThread.scheduleAtFixedRate(() => Utils.tryLogNonFatalError { reviveOffers() },
+      0, reviveIntervalMs, TimeUnit.MILLISECONDS)
 
   override def stop(): Unit = {
     reviveThread.shutdown()

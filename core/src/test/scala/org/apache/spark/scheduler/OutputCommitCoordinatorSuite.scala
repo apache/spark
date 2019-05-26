@@ -29,7 +29,6 @@ import org.apache.hadoop.mapreduce.TaskType
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{doAnswer, spy, times, verify}
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
@@ -98,34 +97,29 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
     val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
-    doAnswer(new Answer[Unit]() {
-      override def answer(invoke: InvocationOnMock): Unit = {
-        // Submit the tasks, then force the task scheduler to dequeue the
-        // speculated task
-        invoke.callRealMethod()
-        mockTaskScheduler.backend.reviveOffers()
-      }
-    }).when(mockTaskScheduler).submitTasks(any())
+    doAnswer { (invoke: InvocationOnMock) =>
+      // Submit the tasks, then force the task scheduler to dequeue the
+      // speculated task
+      invoke.callRealMethod()
+      mockTaskScheduler.backend.reviveOffers()
+    }.when(mockTaskScheduler).submitTasks(any())
 
-    doAnswer(new Answer[TaskSetManager]() {
-      override def answer(invoke: InvocationOnMock): TaskSetManager = {
-        val taskSet = invoke.getArguments()(0).asInstanceOf[TaskSet]
-        new TaskSetManager(mockTaskScheduler, taskSet, 4) {
-          var hasDequeuedSpeculatedTask = false
-          override def dequeueSpeculativeTask(
-              execId: String,
-              host: String,
-              locality: TaskLocality.Value): Option[(Int, TaskLocality.Value)] = {
-            if (!hasDequeuedSpeculatedTask) {
-              hasDequeuedSpeculatedTask = true
-              Some((0, TaskLocality.PROCESS_LOCAL))
-            } else {
-              None
-            }
+    doAnswer { (invoke: InvocationOnMock) =>
+      val taskSet = invoke.getArguments()(0).asInstanceOf[TaskSet]
+      new TaskSetManager(mockTaskScheduler, taskSet, 4) {
+        private var hasDequeuedSpeculatedTask = false
+        override def dequeueSpeculativeTask(execId: String,
+            host: String,
+            locality: TaskLocality.Value): Option[(Int, TaskLocality.Value)] = {
+          if (hasDequeuedSpeculatedTask) {
+            None
+          } else {
+            hasDequeuedSpeculatedTask = true
+            Some((0, TaskLocality.PROCESS_LOCAL))
           }
         }
       }
-    }).when(mockTaskScheduler).createTaskSetManager(any(), any())
+    }.when(mockTaskScheduler).createTaskSetManager(any(), any())
 
     sc.taskScheduler = mockTaskScheduler
     val dagSchedulerWithMockTaskScheduler = new DAGScheduler(sc, mockTaskScheduler)

@@ -29,9 +29,9 @@ import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relati
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.streaming.Offset
 import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ManualClock
 
 class RateStreamProviderSuite extends StreamTest {
@@ -135,7 +135,7 @@ class RateStreamProviderSuite extends StreamTest {
     withTempDir { temp =>
       val stream = new RateStreamMicroBatchStream(
         rowsPerSecond = 100,
-        options = new DataSourceOptions(Map("useManualClock" -> "true").asJava),
+        options = new CaseInsensitiveStringMap(Map("useManualClock" -> "true").asJava),
         checkpointLocation = temp.getCanonicalPath)
       stream.clock.asInstanceOf[ManualClock].advance(100000)
       val startOffset = stream.initialOffset()
@@ -154,7 +154,7 @@ class RateStreamProviderSuite extends StreamTest {
     withTempDir { temp =>
       val stream = new RateStreamMicroBatchStream(
         rowsPerSecond = 20,
-        options = DataSourceOptions.empty(),
+        options = CaseInsensitiveStringMap.empty(),
         checkpointLocation = temp.getCanonicalPath)
       val partitions = stream.planInputPartitions(LongOffset(0L), LongOffset(1L))
       val readerFactory = stream.createReaderFactory()
@@ -173,7 +173,7 @@ class RateStreamProviderSuite extends StreamTest {
       val stream = new RateStreamMicroBatchStream(
         rowsPerSecond = 33,
         numPartitions = 11,
-        options = DataSourceOptions.empty(),
+        options = CaseInsensitiveStringMap.empty(),
         checkpointLocation = temp.getCanonicalPath)
       val partitions = stream.planInputPartitions(LongOffset(0L), LongOffset(1L))
       val readerFactory = stream.createReaderFactory()
@@ -309,8 +309,7 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   test("continuous data") {
-    val stream = new RateStreamContinuousStream(
-      rowsPerSecond = 20, numPartitions = 2, options = DataSourceOptions.empty())
+    val stream = new RateStreamContinuousStream(rowsPerSecond = 20, numPartitions = 2)
     val partitions = stream.planInputPartitions(stream.initialOffset)
     val readerFactory = stream.createContinuousReaderFactory()
     assert(partitions.size == 2)

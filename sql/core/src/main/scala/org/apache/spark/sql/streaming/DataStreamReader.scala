@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRel
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -175,7 +176,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
-        val dsOptions = new DataSourceOptions(options.asJava)
+        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
         val table = userSpecifiedSchema match {
           case Some(schema) => provider.getTable(dsOptions, schema)
           case _ => provider.getTable(dsOptions)
@@ -185,7 +186,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
             Dataset.ofRows(
               sparkSession,
               StreamingRelationV2(
-                provider, source, table, options, table.schema.toAttributes, v1Relation)(
+                provider, source, table, dsOptions, table.schema.toAttributes, v1Relation)(
                 sparkSession))
 
           // fallback to v1
@@ -387,6 +388,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
+   * The text files must be encoded as UTF-8.
    *
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
@@ -414,6 +416,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads text file(s) and returns a `Dataset` of String. The underlying schema of the Dataset
    * contains a single string column named "value".
+   * The text files must be encoded as UTF-8.
    *
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.

@@ -33,8 +33,10 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, Logi
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -250,7 +252,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val cls = lookupCls.newInstance() match {
       case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
         useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
-        f.fallBackFileFormat
+        f.fallbackFileFormat
       case _ => lookupCls
     }
     // In Data Source V2 project, partitioning is still under development.
@@ -260,19 +262,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, session.sessionState.conf)
-      val checkFilesExistsOption = DataSourceOptions.CHECK_FILES_EXIST_KEY -> "false"
-      val options = sessionOptions ++ extraOptions + checkFilesExistsOption
-      val dsOptions = new DataSourceOptions(options.asJava)
+      val options = sessionOptions ++ extraOptions
+      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       provider.getTable(dsOptions) match {
-        case table: SupportsBatchWrite =>
-          lazy val relation = DataSourceV2Relation.create(table, options)
+        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
           mode match {
             case SaveMode.Append =>
               runCommand(df.sparkSession, "save") {
                 AppendData.byName(relation, df.logicalPlan)
               }
 
-            case SaveMode.Overwrite =>
+            case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
               // truncate the table
               runCommand(df.sparkSession, "save") {
                 OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
@@ -612,7 +615,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * </ul>
    *
    * @since 1.5.0
-   * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
     format("orc").save(path)
@@ -629,6 +631,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   // Java:
    *   df.write().text("/path/to/output")
    * }}}
+   * The text files will be encoded as UTF-8.
    *
    * You can set the following option(s) for writing text files:
    * <ul>

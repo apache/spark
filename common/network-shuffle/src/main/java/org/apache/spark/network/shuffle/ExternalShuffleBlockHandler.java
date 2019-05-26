@@ -66,6 +66,11 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
   }
 
+  @VisibleForTesting
+  public ExternalShuffleBlockResolver getBlockResolver() {
+    return blockManager;
+  }
+
   /** Enables mocking out the StreamManager and BlockManager. */
   @VisibleForTesting
   public ExternalShuffleBlockHandler(

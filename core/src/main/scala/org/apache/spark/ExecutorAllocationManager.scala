@@ -725,10 +725,15 @@ private[spark] class ExecutorAllocationManager(
         if (stageIdToNumRunningTask.contains(stageId)) {
           stageIdToNumRunningTask(stageId) += 1
         }
-        // This guards against the race condition in which the `SparkListenerTaskStart`
-        // event is posted before the `SparkListenerBlockManagerAdded` event, which is
-        // possible because these events are posted in different threads. (see SPARK-4951)
-        if (!allocationManager.executorIds.contains(executorId)) {
+        // This guards against the following race condition:
+        // 1. The `SparkListenerTaskStart` event is posted before the
+        // `SparkListenerExecutorAdded` event
+        // 2. The `SparkListenerExecutorRemoved` event is posted before the
+        // `SparkListenerTaskStart` event
+        // Above cases are possible because these events are posted in different threads.
+        // (see SPARK-4951 SPARK-26927)
+        if (!allocationManager.executorIds.contains(executorId) &&
+            client.getExecutorIds().contains(executorId)) {
           allocationManager.onExecutorAdded(executorId)
         }
 

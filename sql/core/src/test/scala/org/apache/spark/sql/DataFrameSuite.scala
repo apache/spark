@@ -137,6 +137,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       structDf.select(hash($"a", $"record.*")))
   }
 
+  test("Star Expansion - xxhash64") {
+    val structDf = testData2.select("a", "b").as("record")
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(min(xxhash64($"a", $"*"))),
+      structDf.groupBy($"a", $"b").agg(min(xxhash64($"a", $"a", $"b"))))
+
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(xxhash64($"a", $"*")),
+      structDf.groupBy($"a", $"b").agg(xxhash64($"a", $"a", $"b")))
+
+    checkAnswer(
+      structDf.select(xxhash64($"*")),
+      structDf.select(xxhash64($"record.*")))
+
+    checkAnswer(
+      structDf.select(xxhash64($"a", $"*")),
+      structDf.select(xxhash64($"a", $"record.*")))
+  }
+
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
     val e = intercept[AnalysisException] {
@@ -1553,8 +1572,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
       val df = spark.createDataFrame(
         rdd,
-        new StructType().add("f1", IntegerType).add("f2", IntegerType),
-        needsConversion = false).select($"F1", $"f2".as("f2"))
+        new StructType().add("f1", IntegerType).add("f2", IntegerType))
+        .select($"F1", $"f2".as("f2"))
       val df1 = df.as("a")
       val df2 = df.as("b")
       checkAnswer(df1.join(df2, $"a.f2" === $"b.f2"), Row(1, 3, 1, 3) :: Row(2, 1, 2, 1) :: Nil)
@@ -1755,7 +1774,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val size = 201L
     val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
     val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
-    val df = spark.createDataFrame(rdd, StructType(schemas), false)
+    val df = spark.createDataFrame(rdd, StructType(schemas))
     assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 

@@ -29,7 +29,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private val timestampParser = TimestampFormatter(
     options.timestampFormat,
-    options.timeZone,
+    options.zoneId,
     options.locale)
 
   private val decimalParser = {

@@ -273,6 +273,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             StructField('map', MapType(StringType(), IntegerType())),
             StructField('arr_ts', ArrayType(TimestampType())),
             StructField('null', NullType()),
+            StructField('struct', StructType([StructField('l', LongType())])),
         ]
 
         # TODO: Remove this if-statement once minimum pyarrow version is 0.10.0

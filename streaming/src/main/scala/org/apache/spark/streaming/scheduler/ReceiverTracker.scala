@@ -255,9 +255,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-  def numReceivers(): Int = {
-    receiverInputStreams.size
-  }
+  def numReceivers(): Int = receiverInputStreams.length
 
   /** Register a receiver */
   private def registerReceiver(
@@ -516,14 +514,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
         if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf, isDriver = true)) {
-          walBatchingThreadPool.execute(new Runnable {
-            override def run(): Unit = Utils.tryLogNonFatalError {
-              if (active) {
-                context.reply(addBlock(receivedBlockInfo))
-              } else {
-                context.sendFailure(
-                  new IllegalStateException("ReceiverTracker RpcEndpoint already shut down."))
-              }
+          walBatchingThreadPool.execute(() => Utils.tryLogNonFatalError {
+            if (active) {
+              context.reply(addBlock(receivedBlockInfo))
+            } else {
+              context.sendFailure(
+                new IllegalStateException("ReceiverTracker RpcEndpoint already shut down."))
             }
           })
         } else {
