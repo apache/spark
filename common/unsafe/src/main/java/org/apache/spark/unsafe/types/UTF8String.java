@@ -180,12 +180,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns true if the given UTF8 bytes consist entirely of ASCII characters, false otherwise.
    */
   private static boolean isAscii(byte[] bytes) {
-    for (int i = 0; i < bytes.length; i++) {
-      if (bytes[i] < 0) { // signed comparision
-        return false;
-      }
+    int length = bytes.length;
+    int s = 0;
+    for (int i = 0; i < length; i++) {
+      s |= bytes[i] & 0x80;
     }
-    return true;
+    return s == 0;
   }
 
   /**

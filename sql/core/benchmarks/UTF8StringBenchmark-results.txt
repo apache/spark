@@ -10,12 +10,12 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Mac OS X 10.14.5
 Intel(R) Core(TM) i5-8210Y CPU @ 1.60GHz
 numChars:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-16-char ASCII                                         0              0           0         17.3          57.9       1.0X
-16-char UTF8                                          0              0           0          9.9         101.1       0.6X
-32-char ASCII                                         0              0           0          9.0         111.3       0.5X
-32-char UTF8                                          0              0           0          4.7         212.4       0.3X
-256-char ASCII                                        1              1           0          1.3         746.3       0.1X
-256-char UTF8                                         1              2           0          0.8        1237.2       0.0X
+16-char ASCII                                         0              0           0         22.2          45.1       1.0X
+16-char UTF8                                          0              0           0         11.9          84.0       0.5X
+32-char ASCII                                         0              0           0         10.9          92.1       0.5X
+32-char UTF8                                          0              0           0          6.4         156.5       0.3X
+256-char ASCII                                        1              1           2          1.1         870.7       0.1X
+256-char UTF8                                         1              1           0          0.9        1175.1       0.0X
 
 
 ================================================================================================
@@ -26,18 +26,18 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Mac OS X 10.14.5
 Intel(R) Core(TM) i5-8210Y CPU @ 1.60GHz
 toString:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-16-char ASCII (baseline)                              0              0           0         28.3          35.3       1.0X
-16-char ASCII (optimized)                             0              0           0         33.0          30.3       1.2X
-16-char UTF8 (baseline)                               0              0           0          4.7         211.9       0.2X
-16-char UTF8 (optimized)                              0              0           0          5.0         198.5       0.2X
-32-char ASCII (baseline)                              0              0           0         17.7          56.5       0.6X
-32-char ASCII (optimized)                             0              0           0         23.5          42.6       0.8X
-32-char UTF8 (baseline)                               0              0           0          2.6         390.2       0.1X
-32-char UTF8 (optimized)                              0              0           0          2.8         358.3       0.1X
-256-char ASCII (baseline)                             0              0           0          6.0         165.9       0.2X
-256-char ASCII (optimized)                            0              0           0          5.8         172.6       0.2X
-256-char UTF8 (baseline)                              3              3           0          0.4        2786.8       0.0X
-256-char UTF8 (optimized)                             3              4           2          0.4        2693.0       0.0X
+16-char ASCII (baseline)                              0              0           0         31.0          32.3       1.0X
+16-char ASCII (optimized)                             0              0           0         35.1          28.5       1.1X
+16-char UTF8 (baseline)                               0              0           0          5.0         199.4       0.2X
+16-char UTF8 (optimized)                              0              0           0          4.7         212.8       0.2X
+32-char ASCII (baseline)                              0              0           0         20.0          50.0       0.6X
+32-char ASCII (optimized)                             0              0           0         26.4          37.8       0.9X
+32-char UTF8 (baseline)                               0              0           0          2.8         356.8       0.1X
+32-char UTF8 (optimized)                              0              0           0          2.6         386.1       0.1X
+256-char ASCII (baseline)                             0              0           0          6.8         148.0       0.2X
+256-char ASCII (optimized)                            0              0           0          5.6         178.4       0.2X
+256-char UTF8 (baseline)                              3              3           1          0.4        2626.3       0.0X
+256-char UTF8 (optimized)                             3              4           1          0.4        2843.4       0.0X
 
 
 ================================================================================================
@@ -48,18 +48,18 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Mac OS X 10.14.5
 Intel(R) Core(TM) i5-8210Y CPU @ 1.60GHz
 fromString:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-16-char ASCII (baseline)                              0              0           0         17.7          56.6       1.0X
-16-char ASCII (optimized)                             0              0           0         33.1          30.3       1.9X
-16-char UTF8 (baseline)                               0              0           0          4.9         205.0       0.3X
-16-char UTF8 (optimized)                              0              0           0          4.8         207.8       0.3X
-32-char ASCII (baseline)                              0              0           0         17.0          58.9       1.0X
-32-char ASCII (optimized)                             0              0           0         22.7          44.0       1.3X
-32-char UTF8 (baseline)                               0              0           0          2.8         352.6       0.2X
-32-char UTF8 (optimized)                              0              0           0          2.8         353.7       0.2X
-256-char ASCII (baseline)                             0              0           0          5.3         189.1       0.3X
-256-char ASCII (optimized)                            0              0           0          6.0         167.3       0.3X
-256-char UTF8 (baseline)                              3              3           0          0.4        2662.9       0.0X
-256-char UTF8 (optimized)                             3              3           0          0.4        2621.4       0.0X
+16-char ASCII (baseline)                              0              0           0         20.0          50.0       1.0X
+16-char ASCII (optimized)                             0              0           0         37.1          27.0       1.9X
+16-char UTF8 (baseline)                               0              0           0          5.3         187.0       0.3X
+16-char UTF8 (optimized)                              0              0           0          5.3         189.9       0.3X
+32-char ASCII (baseline)                              0              0           0         18.5          54.0       0.9X
+32-char ASCII (optimized)                             0              0           0         24.8          40.4       1.2X
+32-char UTF8 (baseline)                               0              0           0          3.0         330.2       0.2X
+32-char UTF8 (optimized)                              0              0           0          3.0         333.2       0.2X
+256-char ASCII (baseline)                             0              0           0          5.8         171.9       0.3X
+256-char ASCII (optimized)                            0              0           0          6.5         153.0       0.3X
+256-char UTF8 (baseline)                              2              3           0          0.4        2451.4       0.0X
+256-char UTF8 (optimized)                             2              3           1          0.4        2469.2       0.0X
 
 
 
