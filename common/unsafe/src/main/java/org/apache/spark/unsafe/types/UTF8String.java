@@ -183,9 +183,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int length = bytes.length;
     int s = 0;
     for (int i = 0; i < length; i++) {
-      s |= bytes[i] & 0x80;
+      s |= bytes[i];
     }
-    return s == 0;
+    return (s & 0x80) == 0;
   }
 
   /**
