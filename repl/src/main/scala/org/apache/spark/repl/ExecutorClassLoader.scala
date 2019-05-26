@@ -265,8 +265,8 @@ extends ClassVisitor(ASM7, cv) {
 
 /**
  * An error when we cannot load a class due to exceptions. We don't know if this class exists, so
- * throw a special one that's not [[LinkageError]] nor [[ClassNotFoundException]] to make JVM retry
- * to load this class later.
+ * throw a special one that's neither [[LinkageError]] nor [[ClassNotFoundException]] to make JVM
+ * retry to load this class later.
  */
 private[repl] class RemoteClassLoaderError(className: String, cause: Throwable)
   extends Error(className, cause)
