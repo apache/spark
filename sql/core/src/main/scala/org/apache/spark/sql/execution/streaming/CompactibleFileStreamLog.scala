@@ -85,8 +85,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     val compactibleBatchIds = fileManager.list(metadataPath, batchFilesFilter)
       .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
       .map(f => pathToBatchId(f.getPath))
-      .sorted
-      .reverse
+      .sorted(Ordering.Long.reverse)
 
     // Case 1
     var interval = defaultCompactInterval
