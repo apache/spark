@@ -61,7 +61,6 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         (label, weight)
     }.groupBy(_._1)
       .mapValues(_.map(_._2).sum)
-      .map(identity)
   }
 
   private lazy val labelCount: Double = labelCountByClass.values.sum
@@ -76,7 +75,6 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         }
     }.groupBy(_._1)
       .mapValues(_.map(_._2).sum)
-      .map(identity)
   }
 
   private lazy val fpByClass: Map[Double, Double] = {
@@ -89,7 +87,6 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         }
     }.groupBy(_._1)
       .mapValues(_.map(_._2).sum)
-      .map(identity)
   }
 
   private lazy val confusions = predLabelsWeight
