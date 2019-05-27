@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.command.DropTableCommand
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DropTableCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{Metadata, StructField, StructType}
 
 case class DataSourceResolution(
     conf: SQLConf,
@@ -98,6 +98,35 @@ case class DataSourceResolution(
 
     case DropViewStatement(AsTableIdentifier(tableName), ifExists) =>
       DropTableCommand(tableName, ifExists, isView = true, purge = false)
+
+    case AlterTableSetPropertiesStatement(AsTableIdentifier(table), properties) =>
+      AlterTableSetPropertiesCommand(table, properties, isView = false)
+
+    case AlterViewSetPropertiesStatement(AsTableIdentifier(table), properties) =>
+      AlterTableSetPropertiesCommand(table, properties, isView = true)
+
+    case AlterTableUnsetPropertiesStatement(AsTableIdentifier(table), propertyKeys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(table, propertyKeys, ifExists, isView = false)
+
+    case AlterViewUnsetPropertiesStatement(AsTableIdentifier(table), propertyKeys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(table, propertyKeys, ifExists, isView = true)
+
+    case AlterTableSetLocationStatement(AsTableIdentifier(table), newLocation) =>
+      AlterTableSetLocationCommand(table, None, newLocation)
+
+    case AlterTableAddColumnsStatement(AsTableIdentifier(table), newColumns)
+        if newColumns.forall(_.name.size == 1) =>
+      // only top-level adds are supported using AlterTableAddColumnsCommand
+      val newFields = newColumns.map { newCol =>
+        val struct = StructField(
+          newCol.name.head,
+          newCol.dataType,
+          nullable = true,
+          Metadata.empty)
+        newCol.comment.map(struct.withComment).getOrElse(struct)
+      }
+
+      AlterTableAddColumnsCommand(table, newFields)
   }
 
   object V1WriteProvider {
