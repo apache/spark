@@ -248,7 +248,7 @@ private[evaluation] class MultilabelSummarizer extends MultilabelSummary with Se
     }
 
     predictions.diff(labels).foreach { k =>
-      val v = tpPerClass_.getOrElse(k, 0L)
+      val v = fpPerClass_.getOrElse(k, 0L)
       fpPerClass_.update(k, v + 1)
     }
 

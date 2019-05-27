@@ -81,9 +81,9 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
     confusions.toSeq.map {
       case ((label, prediction), weight) =>
         if (label != prediction) {
-          (label, weight)
+          (prediction, weight)
         } else {
-          (label, 0.0)
+          (prediction, 0.0)
         }
     }.groupBy(_._1)
       .mapValues(_.map(_._2).sum)
