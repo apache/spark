@@ -25,7 +25,7 @@ package org.apache.spark.sql.sources.v2.writer;
  * write does not contain data will remain unchanged.
  * <p>
  * This is provided to implement SQL compatible with Hive table operations but is not recommended.
- * Instead, use the {@link SupportsOverwrite overwrite by filter API} to explicitly replace data.
+ * Instead, use the {@code SupportsOverwrite overwrite by filter API} to explicitly replace data.
  */
 public interface SupportsDynamicOverwrite extends WriteBuilder {
   /**

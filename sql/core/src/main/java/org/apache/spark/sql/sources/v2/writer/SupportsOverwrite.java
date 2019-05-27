@@ -26,6 +26,7 @@ import org.apache.spark.sql.sources.Filter;
  * Overwriting data by filter will delete any data that matches the filter and replace it with data
  * that is committed in the write.
  */
+// TODO: create data source v2 filter API and move this interface to the catalyst module.
 public interface SupportsOverwrite extends WriteBuilder, SupportsTruncate {
   /**
    * Configures a write to replace data matching the filters with data committed in the write.
