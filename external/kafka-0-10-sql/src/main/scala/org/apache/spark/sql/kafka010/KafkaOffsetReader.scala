@@ -89,10 +89,10 @@ private[kafka010] class KafkaOffsetReader(
   }
 
   private val maxOffsetFetchAttempts =
-    readerOptions.getOrElse("fetchOffset.numRetries", "3").toInt
+    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
 
   private val offsetFetchAttemptIntervalMs =
-    readerOptions.getOrElse("fetchOffset.retryIntervalMs", "1000").toLong
+    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 
   private def nextGroupId(): String = {
     groupId = driverGroupIdPrefix + "-" + nextId

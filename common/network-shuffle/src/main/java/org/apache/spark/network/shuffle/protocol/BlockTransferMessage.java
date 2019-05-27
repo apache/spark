@@ -35,6 +35,7 @@ import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
  *     shuffle service. It returns a StreamHandle.
  *   - UploadBlock is only handled by the NettyBlockTransferService.
  *   - RegisterExecutor is only handled by the external shuffle service.
+ *   - RemoveBlocks is only handled by the external shuffle service.
  */
 public abstract class BlockTransferMessage implements Encodable {
   protected abstract Type type();
@@ -42,7 +43,7 @@ public abstract class BlockTransferMessage implements Encodable {
   /** Preceding every serialized message is its type, which allows us to deserialize it. */
   public enum Type {
     OPEN_BLOCKS(0), UPLOAD_BLOCK(1), REGISTER_EXECUTOR(2), STREAM_HANDLE(3), REGISTER_DRIVER(4),
-    HEARTBEAT(5), UPLOAD_BLOCK_STREAM(6);
+    HEARTBEAT(5), UPLOAD_BLOCK_STREAM(6), REMOVE_BLOCKS(7), BLOCKS_REMOVED(8);
 
     private final byte id;
 
@@ -68,6 +69,8 @@ public abstract class BlockTransferMessage implements Encodable {
         case 4: return RegisterDriver.decode(buf);
         case 5: return ShuffleServiceHeartbeat.decode(buf);
         case 6: return UploadBlockStream.decode(buf);
+        case 7: return RemoveBlocks.decode(buf);
+        case 8: return BlocksRemoved.decode(buf);
         default: throw new IllegalArgumentException("Unknown message type: " + type);
       }
     }

@@ -194,14 +194,16 @@ private[spark] object RandomForest extends Logging with Serializable {
       training the same tree in the next iteration.  This focus allows us to send fewer trees to
       workers on each iteration; see topNodesForGroup below.
      */
-    val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
+    val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
 
     val rng = new Random()
     rng.setSeed(seed)
 
     // Allocate and queue root nodes.
     val topNodes = Array.fill[LearningNode](numTrees)(LearningNode.emptyNode(nodeIndex = 1))
-    Range(0, numTrees).foreach(treeIndex => nodeStack.push((treeIndex, topNodes(treeIndex))))
+    for (treeIndex <- 0 until numTrees) {
+      nodeStack.prepend((treeIndex, topNodes(treeIndex)))
+    }
 
     timer.stop("init")
 
@@ -398,7 +400,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       nodesForGroup: Map[Int, Array[LearningNode]],
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
       splits: Array[Array[Split]],
-      nodeStack: mutable.ArrayStack[(Int, LearningNode)],
+      nodeStack: mutable.ListBuffer[(Int, LearningNode)],
       timer: TimeTracker = new TimeTracker,
       nodeIdCache: Option[NodeIdCache] = None): Unit = {
 
@@ -639,10 +641,10 @@ private[spark] object RandomForest extends Logging with Serializable {
 
           // enqueue left child and right child if they are not leaves
           if (!leftChildIsLeaf) {
-            nodeStack.push((treeIndex, node.leftChild.get))
+            nodeStack.prepend((treeIndex, node.leftChild.get))
           }
           if (!rightChildIsLeaf) {
-            nodeStack.push((treeIndex, node.rightChild.get))
+            nodeStack.prepend((treeIndex, node.rightChild.get))
           }
 
           logDebug("leftChildIndex = " + node.leftChild.get.id +
@@ -1042,8 +1044,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       var partNumSamples = 0.0
       var unweightedNumSamples = 0.0
       featureSamples.foreach { case (sampleWeight, feature) =>
-        partValueCountMap(feature) = partValueCountMap.getOrElse(feature, 0.0) + sampleWeight;
-        partNumSamples += sampleWeight;
+        partValueCountMap(feature) = partValueCountMap.getOrElse(feature, 0.0) + sampleWeight
+        partNumSamples += sampleWeight
         unweightedNumSamples += 1.0
       }
 
@@ -1131,7 +1133,7 @@ private[spark] object RandomForest extends Logging with Serializable {
    *          The feature indices are None if not subsampling features.
    */
   private[tree] def selectNodesToSplit(
-      nodeStack: mutable.ArrayStack[(Int, LearningNode)],
+      nodeStack: mutable.ListBuffer[(Int, LearningNode)],
       maxMemoryUsage: Long,
       metadata: DecisionTreeMetadata,
       rng: Random): (Map[Int, Array[LearningNode]], Map[Int, Map[Int, NodeIndexInfo]]) = {
@@ -1146,7 +1148,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     // so we allow one iteration if memUsage == 0.
     var groupDone = false
     while (nodeStack.nonEmpty && !groupDone) {
-      val (treeIndex, node) = nodeStack.top
+      val (treeIndex, node) = nodeStack.head
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
         Some(SamplingUtils.reservoirSampleAndCount(Range(0,
@@ -1157,7 +1159,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       // Check if enough memory remains to add this node to the group.
       val nodeMemUsage = RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
       if (memUsage + nodeMemUsage <= maxMemoryUsage || memUsage == 0) {
-        nodeStack.pop()
+        nodeStack.remove(0)
         mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[LearningNode]()) +=
           node
         mutableTreeToNodeToIndexInfo
