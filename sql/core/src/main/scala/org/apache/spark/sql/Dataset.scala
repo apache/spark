@@ -498,12 +498,21 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution, extended = extended)
-    sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
-      // scalastyle:off println
-      r => println(r.getString(0))
-      // scalastyle:on println
-    }
+    // Because temporary views are resolved during analysis when we create a Dataset, and
+    // `ExplainCommand` analyzes input query plan and resolves temporary views again. Using
+    // `ExplainCommand` here will probably output different query plans, compared to the results
+    // of evaluation of the Dataset. So just output QueryExecution's query plans here.
+    val qe = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan, queryExecution)
+
+    val outputString =
+      if (extended) {
+        qe.toString
+      } else {
+        qe.simpleString
+      }
+    // scalastyle:off println
+    println(outputString)
+    // scalastyle:on println
   }
 
   /**
@@ -695,8 +704,14 @@ class Dataset[T] private[sql](
   // defined on a derived column cannot referenced elsewhere in the plan.
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
     val parsedDelay =
-      Option(CalendarInterval.fromString("interval " + delayThreshold))
-        .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
+      try {
+        CalendarInterval.fromCaseInsensitiveString(delayThreshold)
+      } catch {
+        case e: IllegalArgumentException =>
+          throw new AnalysisException(
+            s"Unable to parse time delay '$delayThreshold'",
+            cause = Some(e))
+      }
     require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
@@ -3284,15 +3299,12 @@ class Dataset[T] private[sql](
       PythonRDD.serveToStream("serve-Arrow") { outputStream =>
         val out = new DataOutputStream(outputStream)
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
-        val arrowBatchRdd = toArrowBatchRdd(plan)
-        val numPartitions = arrowBatchRdd.partitions.length
 
         // Batches ordered by (index of partition, batch index in that partition) tuple
         val batchOrder = ArrayBuffer.empty[(Int, Int)]
-        var partitionCount = 0
 
         // Handler to eagerly write batches to Python as they arrive, un-ordered
-        def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
+        val handlePartitionBatches = (index: Int, arrowBatches: Array[Array[Byte]]) =>
           if (arrowBatches.nonEmpty) {
             // Write all batches (can be more than 1) in the partition, store the batch order tuple
             batchWriter.writeBatches(arrowBatches.iterator)
@@ -3300,27 +3312,22 @@ class Dataset[T] private[sql](
               partitionBatchIndex => batchOrder.append((index, partitionBatchIndex))
             }
           }
-          partitionCount += 1
 
-          // After last batch, end the stream and write batch order indices
-          if (partitionCount == numPartitions) {
-            batchWriter.end()
-            out.writeInt(batchOrder.length)
-            // Sort by (index of partition, batch index in that partition) tuple to get the
-            // overall_batch_index from 0 to N-1 batches, which can be used to put the
-            // transferred batches in the correct order
-            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
-              out.writeInt(overallBatchIndex)
-            }
-            out.flush()
-          }
-        }
-
+        val arrowBatchRdd = toArrowBatchRdd(plan)
         sparkSession.sparkContext.runJob(
           arrowBatchRdd,
-          (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
-          0 until numPartitions,
+          (it: Iterator[Array[Byte]]) => it.toArray,
           handlePartitionBatches)
+
+        // After processing all partitions, end the stream and write batch order indices
+        batchWriter.end()
+        out.writeInt(batchOrder.length)
+        // Sort by (index of partition, batch index in that partition) tuple to get the
+        // overall_batch_index from 0 to N-1 batches, which can be used to put the
+        // transferred batches in the correct order
+        batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+          out.writeInt(overallBatchIndex)
+        }
       }
     }
   }

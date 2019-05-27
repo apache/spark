@@ -302,7 +302,8 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
-                assert num_output_rows <= num_input_rows
+                assert num_output_rows <= num_input_rows, \
+                    "Pandas iterator UDF generate more rows then read rows."
                 yield (result_batch, result_type)
             try:
                 iterator.__next__()

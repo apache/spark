@@ -40,7 +40,8 @@ class ResourceDiscovererSuite extends SparkFunSuite
 
   test("Resource discoverer no resources") {
     val sparkconf = new SparkConf
-    val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+    val resources =
+      ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
     assert(resources.size === 0)
     assert(resources.get("gpu").isEmpty,
       "Should have a gpus entry that is empty")
@@ -54,8 +55,36 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val scriptPath = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu","addresses":["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, scriptPath)
-      val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
+      val resources =
+        ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
+      val gpuValue = resources.get("gpu")
+      assert(gpuValue.nonEmpty, "Should have a gpu entry")
+      assert(gpuValue.get.name == "gpu", "name should be gpu")
+      assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
+      assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
+    }
+  }
+
+  test("Resource discoverer passed in resources") {
+    val sparkconf = new SparkConf
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val gpuScript = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu","addresses":["0", "1"]}'""")
+      val fpgaFile = new File(dir, "fpgaDiscoverScript")
+      val fpgaScript = mockDiscoveryScript(fpgaFile,
+        """'{"name": "fpga","addresses":["f0", "f1"]}'""")
+      sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuScript)
+      sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" +
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, fpgaScript)
+      // it should only look at the resources passed in and ignore fpga conf
+      val resources =
+        ResourceDiscoverer.discoverResourcesInformation(sparkconf,
+          SPARK_EXECUTOR_RESOURCE_PREFIX, Some(Set("gpu")))
+      assert(resources.size === 1, "should only have the gpu resource")
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
@@ -72,8 +101,9 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val scriptPath = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu"}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, scriptPath)
-      val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
+      val resources =
+        ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
@@ -89,15 +119,16 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val gpuDiscovery = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu", "addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuDiscovery)
 
       val fpgaFile = new File(dir, "fpgaDiscoverScript")
       val fpgaDiscovery = mockDiscoveryScript(fpgaFile,
         """'{"name": "fpga", "addresses": ["f1", "f2", "f3"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "fpga" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, fpgaDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, fpgaDiscovery)
 
-      val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+      val resources =
+        ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
       assert(resources.size === 2)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
@@ -122,16 +153,34 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val gpuDiscovery = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu", "addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuDiscovery)
       sparkconf set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, "boguspath")
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, "boguspath")
       // make sure it reads from correct config, here it should use driver
-      val resources = ResourceDiscoverer.findResources(sparkconf, isDriver = true)
+      val resources =
+        ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_DRIVER_RESOURCE_PREFIX)
       val gpuValue = resources.get("gpu")
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")
       assert(gpuValue.get.addresses.size == 2, "Should have 2 indexes")
       assert(gpuValue.get.addresses.deep == Array("0", "1").deep, "should have 0,1 entries")
+    }
+  }
+
+  test("Resource discoverer script returns mismatched name") {
+    val sparkconf = new SparkConf
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val gpuDiscovery = mockDiscoveryScript(gpuFile,
+        """'{"name": "fpga", "addresses": ["0", "1"]}'""")
+      sparkconf.set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuDiscovery)
+      val error = intercept[SparkException] {
+        ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_DRIVER_RESOURCE_PREFIX)
+      }.getMessage()
+
+      assert(error.contains("Error running the resource discovery script"))
     }
   }
 
@@ -143,9 +192,9 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val gpuDiscovery = mockDiscoveryScript(gpuFile,
         """'{"addresses": ["0", "1"]}'""")
       sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-        SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, gpuDiscovery)
+        SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, gpuDiscovery)
       val error = intercept[SparkException] {
-        ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+        ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
       }.getMessage()
 
       assert(error.contains("Error running the resource discovery"))
@@ -158,10 +207,10 @@ class ResourceDiscovererSuite extends SparkFunSuite
       val file1 = new File(dir, "bogusfilepath")
       try {
         sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_DISCOVERY_SCRIPT_POSTFIX, file1.getPath())
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, file1.getPath())
 
         val error = intercept[SparkException] {
-          ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+          ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
         }.getMessage()
 
         assert(error.contains("doesn't exist"))
@@ -174,10 +223,10 @@ class ResourceDiscovererSuite extends SparkFunSuite
   test("gpu's specified but not discovery script") {
     val sparkconf = new SparkConf
     sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" +
-      SPARK_RESOURCE_COUNT_POSTFIX, "2")
+      SPARK_RESOURCE_COUNT_SUFFIX, "2")
 
     val error = intercept[SparkException] {
-      ResourceDiscoverer.findResources(sparkconf, isDriver = false)
+      ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)
     }.getMessage()
 
     assert(error.contains("User is expecting to use"))

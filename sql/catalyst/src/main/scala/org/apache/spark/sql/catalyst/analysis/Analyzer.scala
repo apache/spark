@@ -2327,7 +2327,7 @@ class Analyzer(
         expected.flatMap { tableAttr =>
           query.resolveQuoted(tableAttr.name, resolver) match {
             case Some(queryExpr) =>
-              checkField(tableAttr, queryExpr, err => errors += err)
+              checkField(tableAttr, queryExpr, byName, err => errors += err)
             case None =>
               errors += s"Cannot find data for output column '${tableAttr.name}'"
               None
@@ -2345,7 +2345,7 @@ class Analyzer(
 
         query.output.zip(expected).flatMap {
           case (queryExpr, tableAttr) =>
-            checkField(tableAttr, queryExpr, err => errors += err)
+            checkField(tableAttr, queryExpr, byName, err => errors += err)
         }
       }
 
@@ -2360,11 +2360,12 @@ class Analyzer(
     private def checkField(
         tableAttr: Attribute,
         queryExpr: NamedExpression,
+        byName: Boolean,
         addError: String => Unit): Option[NamedExpression] = {
 
       // run the type check first to ensure type errors are present
       val canWrite = DataType.canWrite(
-        queryExpr.dataType, tableAttr.dataType, resolver, tableAttr.name, addError)
+        queryExpr.dataType, tableAttr.dataType, byName, resolver, tableAttr.name, addError)
 
       if (queryExpr.nullable && !tableAttr.nullable) {
         addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
@@ -2562,7 +2563,7 @@ class Analyzer(
         case e => e.sql
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
+        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
         "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
@@ -2575,11 +2576,15 @@ class Analyzer(
       case p => p transformExpressions {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
-        case UpCast(child, dataType, walkedTypePath)
-          if Cast.mayTruncate(child.dataType, dataType) =>
+        case UpCast(child, dt: AtomicType, _)
+            if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
+              child.dataType == StringType =>
+          Cast(child, dt.asNullable)
+
+        case UpCast(child, dataType, walkedTypePath) if !Cast.canUpCast(child.dataType, dataType) =>
           fail(child, dataType, walkedTypePath)
 
-        case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
+        case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
     }
   }

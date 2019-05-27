@@ -170,14 +170,7 @@
               <goal>run</goal>
             </goals>
           </execution>
-        </executions>
-    </plugin>
-
-      <!-- probes to validate that those dependencies which must be shaded are  -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <executions>
+          <!-- probes to validate that those dependencies which must be shaded are  -->
           <execution>
             <phase>verify</phase>
             <goals>

@@ -27,7 +27,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -43,7 +42,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
   // CPU settings
-  private val driverCpuCores = conf.get(DRIVER_CORES.key, "1")
+  private val driverCpuCores = conf.get(DRIVER_CORES)
+  private val driverCoresRequest = conf
+    .get(KUBERNETES_DRIVER_REQUEST_CORES)
+    .getOrElse(driverCpuCores.toString)
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
@@ -77,7 +79,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       }
 
     val driverCpuQuantity = new QuantityBuilder(false)
-      .withAmount(driverCpuCores)
+      .withAmount(driverCoresRequest)
       .build()
     val driverMemoryQuantity = new QuantityBuilder(false)
       .withAmount(s"${driverMemoryWithOverheadMiB}Mi")
@@ -153,6 +155,15 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.resourceNamePrefix,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
+    // try upload local, resolvable files to a hadoop compatible file system
+    Seq(JARS, FILES).foreach { key =>
+      val value = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
+      val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
+      if (resolved.nonEmpty) {
+        additionalProps.put(key.key, resolved.mkString(","))
+      }
+    }
     additionalProps.toMap
   }
 }
+

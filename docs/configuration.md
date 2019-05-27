@@ -188,6 +188,25 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.driver.resource.{resourceName}.count</code></td>
+  <td>0</td>
+  <td>
+    The number of a particular resource type to use on the driver.
+    If this is used, you must also specify the
+    <code>spark.driver.resource.{resourceName}.discoveryScript</code>
+    for the driver to find the resource on startup.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.driver.resource.{resourceName}.discoveryScript</code></td>
+  <td>None</td>
+  <td>
+    A script for the driver to run to discover a particular resource type. This should
+    write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
+    name and an array of addresses.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
@@ -222,17 +241,17 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
- <td><code>spark.executor.resource.{resourceType}.count</code></td>
+ <td><code>spark.executor.resource.{resourceName}.count</code></td>
   <td>0</td>
   <td>
     The number of a particular resource type to use per executor process.
     If this is used, you must also specify the
-    <code>spark.executor.resource.{resourceType}.discoveryScript</code>
+    <code>spark.executor.resource.{resourceName}.discoveryScript</code>
     for the executor to find the resource on startup.
   </td>
 </tr>
 <tr>
- <td><code>spark.executor.resource.{resourceType}.discoveryScript</code></td>
+ <td><code>spark.executor.resource.{resourceName}.discoveryScript</code></td>
   <td>None</td>
   <td>
     A script for the executor to run to discover a particular resource type. This should
@@ -1813,11 +1832,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.task.resource.{resourceType}.count</code></td>
+  <td><code>spark.task.resource.{resourceName}.count</code></td>
   <td>1</td>
   <td>
     Number of a particular resource type to allocate for each task. If this is specified
-    you must also provide the executor config <code>spark.executor.resource.{resourceType}.count</code>
+    you must also provide the executor config <code>spark.executor.resource.{resourceName}.count</code>
     and any corresponding discovery configs so that your executors are created with that resource type.
   </td>
 </tr>
