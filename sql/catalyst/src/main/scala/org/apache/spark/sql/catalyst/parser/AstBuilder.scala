@@ -1788,7 +1788,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case ("day", Some("second")) =>
           CalendarInterval.fromDayTimeString(s)
         case ("hour", Some("second")) =>
-          CalendarInterval.fromHourTimeString(s)
+          CalendarInterval.fromDayTimeString(s)
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
