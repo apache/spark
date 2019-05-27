@@ -675,14 +675,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
 
     object ExtractAttribute {
-      val partitionKeys = table.getPartitionKeys.asScala.map(_.getName).toSet
       var castToStr = false
 
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute
-              if (!castToStr || !partitionKeys.contains(attr.name) ||
-                attr.dataType == StringType) =>
+              if (!castToStr || attr.dataType == StringType) =>
             castToStr = false
             Some(attr)
           case Cast(child @ AtomicType(), dt: AtomicType, _)
