@@ -409,23 +409,22 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("replace") {
-    val nullString = Literal.create(null, StringType)
-    checkEvaluation(StringReplace(Literal("replace"), Literal("pl"), Literal("123")), "re123ace")
+    checkEvaluation(
+      StringReplace(Literal("replace"), Literal("pl"), Literal("123")), "re123ace")
     checkEvaluation(StringReplace(Literal("replace"), Literal("pl"), Literal("")), "reace")
     checkEvaluation(StringReplace(Literal("replace"), Literal(""), Literal("123")), "replace")
-    checkEvaluation(StringReplace(nullString, Literal("pl"), Literal("123")), null)
-    checkEvaluation(StringReplace(Literal("replace"), nullString, Literal("123")), null)
-    checkEvaluation(StringReplace(Literal("replace"), Literal("pl"), nullString), null)
+    checkEvaluation(StringReplace(Literal.create(null, StringType),
+      Literal("pl"), Literal("123")), null)
+    checkEvaluation(StringReplace(Literal("replace"),
+      Literal.create(null, StringType), Literal("123")), null)
+    checkEvaluation(StringReplace(Literal("replace"),
+      Literal("pl"), Literal.create(null, StringType)), null)
     // test for multiple replace
     checkEvaluation(StringReplace(Literal("abcabc"), Literal("b"), Literal("12")), "a12ca12c")
     checkEvaluation(StringReplace(Literal("abcdabcd"), Literal("bc"), Literal("")), "adad")
-    // tests for single character search and replacement strings
-    checkEvaluation(StringReplace(Literal("abcabc"), Literal("a"), Literal("A")), "AbcAbc")
-    checkEvaluation(StringReplace(Literal("abcabc"), Literal("Z"), Literal("A")), "abcabc")
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     checkEvaluation(StringReplace(Literal("花花世界"), Literal("花世"), Literal("ab")), "花ab界")
-    checkEvaluation(StringReplace(Literal("火"), Literal("火"), Literal("水")), "水")
     // scalastyle:on
   }
 

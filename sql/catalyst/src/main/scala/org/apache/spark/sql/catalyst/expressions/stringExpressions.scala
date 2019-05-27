@@ -443,40 +443,9 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (searchExpr.foldable && replaceExpr.foldable) {
-      // The search and replacement strings are constants, so we can use a more optimized path
-      // which avoids repeatedly decoding those UTF8Strings.
-      val search = searchExpr.eval()
-      val replace = replaceExpr.eval()
-      if (search == null || replace == null) {
-        // Either the search or replacement is null, so the entire expression evaluates to null
-        ev.copy(code = code"""
-          boolean ${ev.isNull} = true;
-          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        """)
-      } else {
-        val searchStr: String = search.asInstanceOf[UTF8String].toString
-        val replaceStr: String = replace.asInstanceOf[UTF8String].toString
-        val searchStrRef = ctx.addReferenceObj("searchStr", searchStr, "String")
-        val replaceStrRef = ctx.addReferenceObj("replaceStr", replaceStr, "String")
-        // We don't use nullSafeCodeGen here because we don't want to re-evaluate the search
-        // and replace expressions.
-        val eval = srcExpr.genCode(ctx)
-        ev.copy(code = code"""
-        ${eval.code}
-        boolean ${ev.isNull} = ${eval.isNull};
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if (!${ev.isNull}) {
-          ${ev.value} = ${eval.value}.replace($searchStrRef, $replaceStrRef);
-        }
-      """)
-      }
-    } else {
-      // Either the search or replace expression is non-foldable, so use a slower path:
-      nullSafeCodeGen(ctx, ev, (src, search, replace) => {
-        s"""${ev.value} = $src.replace($search, $replace);"""
-      })
-    }
+    nullSafeCodeGen(ctx, ev, (src, search, replace) => {
+      s"""${ev.value} = $src.replace($search, $replace);"""
+    })
   }
 
   override def dataType: DataType = StringType
