@@ -25,6 +25,7 @@ import org.apache.spark.sql.sources.Filter;
  * push down filters to the data source and reduce the size of the data to be read.
  */
 @Evolving
+// TODO: create data source v2 filter API and move this interface to the catalyst module.
 public interface SupportsPushDownFilters extends ScanBuilder {
 
   /**
