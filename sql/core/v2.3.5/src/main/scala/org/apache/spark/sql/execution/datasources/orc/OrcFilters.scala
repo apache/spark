@@ -241,6 +241,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
               Right(Unit)
           }
 
+        // NOTE: For all case branches dealing with leaf predicates below, the additional
+        // `startAnd()` call is mandatory.  ORC `SearchArgument` builder requires that all leaf
+        // predicates must be wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+
         case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
             case FilterAction => Left(Some(expression))
