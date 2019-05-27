@@ -1777,6 +1777,12 @@ object SQLConf {
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_INSERT_TABLE_FORCIBLE_CAST = buildConf("spark.sql.legacy.insertTable.forcibleCast")
+    .doc("When inserting data to a table, Spark will cast the data type of input query to " +
+      "the data type of target table forcibly if this config is true.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**

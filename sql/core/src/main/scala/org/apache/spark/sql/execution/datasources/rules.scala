@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -356,8 +358,32 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
-    val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
-      insert.query, expectedColumns, conf)
+    val newQuery = if (conf.getConf(SQLConf.LEGACY_INSERT_TABLE_FORCIBLE_CAST)) {
+      DDLPreprocessingUtils.castAndRenameQueryOutput(insert.query, expectedColumns, conf)
+    } else {
+      val errors = new mutable.ArrayBuffer[String]()
+      val resolved = insert.query.output.zip(expectedColumns).flatMap {
+        case (queryExpr, tableAttr) =>
+          ResolveOutputRelation.checkField(
+            tableAttr,
+            queryExpr,
+            byName = false,
+            resolver = conf.resolver,
+            addError = err => errors += err)
+      }
+      if (errors.nonEmpty) {
+        throw new AnalysisException(
+          s"Cannot write incompatible data to table '$tblName':\n- ${errors.mkString("\n- ")}")
+      } else {
+        assert(resolved.length == insert.query.output.length)
+        if (resolved == insert.query.output) {
+          insert.query
+        } else {
+          Project(resolved, insert.query)
+        }
+      }
+    }
+
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(

@@ -63,7 +63,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     spark.read.json(ds).createOrReplaceTempView("jt")
     sql(
       s"""
-        |CREATE TEMPORARY VIEW jsonTable (a int, b string)
+        |CREATE TEMPORARY VIEW jsonTable (a long, b string)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
         |  path '${path.toURI.toString}'
@@ -351,14 +351,14 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
   test("SPARK-15824 - Execute an INSERT wrapped in a WITH statement immediately") {
     withTable("target", "target2") {
-      sql(s"CREATE TABLE target(a INT, b STRING) USING JSON")
+      sql(s"CREATE TABLE target(a LONG, b STRING) USING JSON")
       sql("WITH tbl AS (SELECT * FROM jt) INSERT OVERWRITE TABLE target SELECT a, b FROM tbl")
       checkAnswer(
         sql("SELECT a, b FROM target"),
         sql("SELECT a, b FROM jt")
       )
 
-      sql(s"CREATE TABLE target2(a INT, b STRING) USING JSON")
+      sql(s"CREATE TABLE target2(a LONG, b STRING) USING JSON")
       val e = sql(
         """
           |WITH tbl AS (SELECT * FROM jt)
@@ -566,27 +566,51 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
   }
 
   test("SPARK-24583 Wrong schema type in InsertIntoDataSourceCommand") {
-    withTable("test_table") {
-      val schema = new StructType()
-        .add("i", LongType, false)
-        .add("s", StringType, false)
-      val newTable = CatalogTable(
-        identifier = TableIdentifier("test_table", None),
-        tableType = CatalogTableType.EXTERNAL,
-        storage = CatalogStorageFormat(
-          locationUri = None,
-          inputFormat = None,
-          outputFormat = None,
-          serde = None,
-          compressed = false,
-          properties = Map.empty),
-        schema = schema,
-        provider = Some(classOf[SimpleInsertSource].getName))
+    // This test needs to write null value to a non-nullable column.
+    withSQLConf(SQLConf.LEGACY_INSERT_TABLE_FORCIBLE_CAST.key -> "true") {
+      withTable("test_table") {
+        val schema = new StructType()
+          .add("i", LongType, false)
+          .add("s", StringType, false)
+        val newTable = CatalogTable(
+          identifier = TableIdentifier("test_table", None),
+          tableType = CatalogTableType.EXTERNAL,
+          storage = CatalogStorageFormat(
+            locationUri = None,
+            inputFormat = None,
+            outputFormat = None,
+            serde = None,
+            compressed = false,
+            properties = Map.empty),
+          schema = schema,
+          provider = Some(classOf[SimpleInsertSource].getName))
 
-      spark.sessionState.catalog.createTable(newTable, false)
+        spark.sessionState.catalog.createTable(newTable, false)
 
-      sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      sql("INSERT INTO TABLE test_table SELECT 2, null")
+        sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
+        sql("INSERT INTO TABLE test_table SELECT 2, null")
+      }
+    }
+  }
+
+  test("disallow unsafe type casting during table inserting") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT, j STRING) USING json")
+
+      // int can be casted to string safely
+      sql("INSERT INTO t VALUES (1, 1)")
+      checkAnswer(spark.table("t"), Row(1, "1"))
+
+      // long can't be casted to int safely
+      val e = intercept[AnalysisException] {
+        sql("INSERT INTO t VALUES (2L, 'a')")
+      }
+      assert(e.message.contains("Cannot write incompatible data to table"))
+
+      withSQLConf(SQLConf.LEGACY_INSERT_TABLE_FORCIBLE_CAST.key -> "true") {
+        sql("INSERT INTO t VALUES (2L, 'a')")
+        checkAnswer(spark.table("t"), Row(1, "1") :: Row(2, "a") :: Nil)
+      }
     }
   }
 }
