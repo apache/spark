@@ -144,20 +144,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 
   /**
-   * A TrimmedFilter is a Filter that has been trimmed such that all the remaining nodes
-   * are convertible to ORC predicates.
-   *
-   * Since nothing in the underlying representation of the Filter is actually different from a
-   * regular Filter (the only difference is that we might remove some subtrees), this class is just
-   * a wrapper around a `Filter` value. The main benefits of using this class are readability
-   * and type safety (to signal that the respective functions only work with already trimmed
-   * filters).
-   *
-   * @param filter The underlying filter representation.
-   */
-  private case class TrimmedFilter(filter: Filter) extends AnyVal
-
-  /**
    * Build a SearchArgument and return the builder so far.
    */
   private def buildSearchArgument(
