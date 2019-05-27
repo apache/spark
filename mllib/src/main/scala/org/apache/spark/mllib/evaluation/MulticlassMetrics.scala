@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.evaluation
 
 import scala.collection.Map
-import scala.collection.mutable
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
