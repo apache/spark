@@ -44,20 +44,20 @@ private[evaluation] object AreaUnderCurve {
     val localAreas = curve.mapPartitions { iter =>
       if (iter.nonEmpty) {
         var localArea = 0.0
-        var cnt = 0L
+        var head = true
         var firstPoint = (Double.NaN, Double.NaN)
         var lastPoint = (Double.NaN, Double.NaN)
 
         iter.sliding(2).foreach { points =>
-          if (cnt == 0) {
+          if (head) {
             firstPoint = points.head
+            head = false
           }
           lastPoint = points.last
 
           if (points.length == 2) {
             localArea += trapezoid(points)
           }
-          cnt += 1
         }
         Iterator.single((localArea, (firstPoint, lastPoint)))
       } else {
@@ -65,12 +65,11 @@ private[evaluation] object AreaUnderCurve {
       }
     }.collect()
 
-    localAreas.map(_._1).sum +
-      localAreas.iterator.map(_._2)
-        .sliding(2).withPartial(false)
-        .map { case Seq((_, last1), (first2, _)) =>
-          trapezoid(Seq(last1, first2))
-        }.sum
+    localAreas.map(_._1).sum + localAreas.iterator.map(_._2)
+      .sliding(2).withPartial(false)
+      .map { case Seq((_, last1), (first2, _)) =>
+        trapezoid(Seq(last1, first2))
+      }.sum
   }
 
   /**
