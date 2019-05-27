@@ -402,6 +402,9 @@ private[deploy] class Worker(
           }
         }
 
+        // there're corner cases which we could hardly avoid duplicate worker registration,
+        // e.g. Master disconnect(maybe due to network drop) and recover immediately, see
+        // SPARK-23191 for more details.
         if (duplicate) {
           logWarning(s"Duplicate registration at master $preferredMasterAddress")
         }
@@ -493,13 +496,8 @@ private[deploy] class Worker(
       masterRef.send(WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq))
 
     case ReconnectWorker(masterUrl) =>
-      if (masterUrl != activeMasterUrl) {
-        logWarning(s"New Master is at $activeMasterUrl, " +
-          s"ignore old Master ($masterUrl)'s request to reconnect.")
-      } else {
-        logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
-        registerWithMaster()
-      }
+      logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
+      registerWithMaster()
 
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
