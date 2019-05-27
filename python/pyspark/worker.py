@@ -285,12 +285,11 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=i)
 
         def func(_, iterator):
-            num_input_rows = 0
+            num_input_rows = [0]
 
             def map_batch(batch):
-                nonlocal num_input_rows
                 udf_args = [batch[offset] for offset in arg_offsets]
-                num_input_rows += len(udf_args[0])
+                num_input_rows[0] += len(udf_args[0])
                 if len(udf_args) == 1:
                     return udf_args[0]
                 else:
@@ -302,7 +301,7 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
-                assert num_output_rows <= num_input_rows, \
+                assert num_output_rows <= num_input_rows[0], \
                     "Pandas iterator UDF generate more rows then read rows."
                 yield (result_batch, result_type)
             try:
@@ -311,7 +310,7 @@ def read_udfs(pickleSer, infile, eval_type):
             except StopIteration:
                 pass
 
-            if num_output_rows != num_input_rows:
+            if num_output_rows != num_input_rows[0]:
                 raise Exception("The number of output rows of the pandas iterator UDF should be "
                                 "the same with input rows.")
 
