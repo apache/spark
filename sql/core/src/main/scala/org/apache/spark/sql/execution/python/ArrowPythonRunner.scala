@@ -87,6 +87,7 @@ class ArrowPythonRunner(
 
             arrowWriter.finish()
             writer.writeBatch()
+            dataOut.flush()
             arrowWriter.reset()
           }
           // end writes footer to the output stream and doesn't clean any resources.

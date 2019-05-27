@@ -231,6 +231,7 @@ class ArrowStreamSerializer(Serializer):
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
+                stream.flush()
         finally:
             if writer is not None:
                 writer.close()
