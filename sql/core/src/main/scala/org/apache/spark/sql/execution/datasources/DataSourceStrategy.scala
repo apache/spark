@@ -256,6 +256,21 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   }
 }
 
+case class DetermineDataSourceTableStats(session: SparkSession) extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case logicalRelation @ LogicalRelation(_, _, catalogTable, _) if catalogTable.nonEmpty &&
+        catalogTable.forall(DDLUtils.isDatasourceTable) && catalogTable.forall(_.stats.isEmpty) =>
+      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+        CommandUtils.calculateTotalSize(session, catalogTable.get)
+      } else {
+        BigInt(session.sessionState.conf.defaultSizeInBytes)
+      }
+      val withStats =
+        catalogTable.map(_.copy(stats = Some(CatalogStatistics(sizeInBytes = sizeInBytes))))
+      logicalRelation.copy(catalogTable = withStats)
+  }
+}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.

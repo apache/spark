@@ -77,7 +77,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      new DetermineTableStats(session) +:
+      DetermineDataSourceTableStats(session) +:
+        new DetermineTableStats(session) +:
         RelationConversions(conf, catalog) +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:
