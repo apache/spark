@@ -57,7 +57,7 @@ public final class CalendarInterval implements Serializable {
     Pattern.compile("^(?:['|\"])?([+|-])?(\\d+) (\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
 
   private static final Pattern hourTimePattern =
-          Pattern.compile("^(?:['|\"])?(\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
+    Pattern.compile("^(?:['|\"])?([+|-])?(\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
 
   private static Pattern quoteTrimPattern = Pattern.compile("^(?:['|\"])?(.*?)(?:['|\"])?$");
 
@@ -169,7 +169,6 @@ public final class CalendarInterval implements Serializable {
 
   /**
    * Parse dayTime string in form: HH:mm:ss.nnnnnnnnn
-   *
    */
   public static CalendarInterval fromHourTimeString(String s) throws IllegalArgumentException {
     if (s == null) {
@@ -179,19 +178,20 @@ public final class CalendarInterval implements Serializable {
     Matcher m = hourTimePattern.matcher(s);
     if (!m.matches()) {
       throw new IllegalArgumentException(
-              "Interval string does not match hour-time format of 'h:m:s.n': " + s);
+        "Interval string does not match hour-time format of 'h:m:s.n': " + s);
     } else {
       try {
-        long hours = toLongWithRange("hour", m.group(1), 0, 23);
-        long minutes = toLongWithRange("minute", m.group(2), 0, 59);
-        long seconds = toLongWithRange("second", m.group(3), 0, 59);
+        int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
+        long hours = toLongWithRange("hour", m.group(2), 0, 23);
+        long minutes = toLongWithRange("minute", m.group(3), 0, 59);
+        long seconds = toLongWithRange("second", m.group(4), 0, 59);
         // Hive allow nanosecond precision interval
-        long nanos = toLongWithRange("nanosecond", m.group(5), 0L, 999999999L);
-        return new CalendarInterval(0, hours * MICROS_PER_HOUR +
-                minutes * MICROS_PER_MINUTE + seconds * MICROS_PER_SECOND + nanos / 1000L);
+        long nanos = toLongWithRange("nanosecond", m.group(6), 0L, 999999999L);
+        return new CalendarInterval(0, sign * (hours * MICROS_PER_HOUR +
+          minutes * MICROS_PER_MINUTE + seconds * MICROS_PER_SECOND + nanos / 1000L));
       } catch (Exception e) {
         throw new IllegalArgumentException(
-                "Error parsing interval hour-time string: " + e.getMessage(), e);
+          "Error parsing interval hour-time string: " + e.getMessage(), e);
       }
     }
   }
