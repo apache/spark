@@ -45,10 +45,8 @@ from pyspark import shuffle
 
 if sys.version >= '3':
     basestring = str
-    from queue import Queue
 else:
     from itertools import imap as map  # use iterator map by default
-    from Queue import Queue
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -287,33 +285,34 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=i)
 
         def func(_, iterator):
-            batch_size_queue = Queue()
+            num_input_rows = 0
 
-            def map_row(row):
-                batch_size_queue.put(len(row[0]))
-                udf_args = [row[offset] for offset in arg_offsets]
+            def map_batch(batch):
+                nonlocal num_input_rows
+                udf_args = [batch[offset] for offset in arg_offsets]
+                num_input_rows += len(udf_args[0])
                 if len(udf_args) == 1:
                     return udf_args[0]
                 else:
                     return tuple(udf_args)
 
-            iterator = map(map_row, iterator)
+            iterator = map(map_batch, iterator)
             result_iter = udf(iterator)
 
+            num_output_rows = 0
             for result_batch, result_type in result_iter:
-                result_batch = verify_scalar_pandas_udf_result_length(
-                    result_batch, batch_size_queue.get(block=False))
+                num_output_rows += len(result_batch)
+                assert num_output_rows <= num_input_rows
                 yield (result_batch, result_type)
-
-            if not batch_size_queue.empty():
-                raise Exception("SQL_SCALAR_PANDAS_ITER_UDF should consume all input batches"
-                                "and generate the same number batches.")
-
             try:
                 iterator.__next__()
                 raise Exception("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator.")
             except StopIteration:
                 pass
+
+            if num_output_rows != num_input_rows:
+                raise Exception("The number of output rows of the pandas iterator UDF should be "
+                                "the same with input rows.")
 
         # profiling is not supported for UDF
         return func, None, ser, ser
