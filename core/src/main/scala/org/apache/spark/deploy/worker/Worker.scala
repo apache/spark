@@ -394,12 +394,10 @@ private[deploy] class Worker(
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
       case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate) =>
-        val preferredMasterAddress = {
-          if (preferConfiguredMasterAddress) {
-            masterAddress.toSparkURL
-          } else {
-            masterRef.address.toSparkURL
-          }
+        val preferredMasterAddress = if (preferConfiguredMasterAddress) {
+          masterAddress.toSparkURL
+        } else {
+          masterRef.address.toSparkURL
         }
 
         // there're corner cases which we could hardly avoid duplicate worker registration,
