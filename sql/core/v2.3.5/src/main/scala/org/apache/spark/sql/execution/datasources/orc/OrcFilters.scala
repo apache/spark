@@ -187,10 +187,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
               // Pushing one side of AND down is only safe to do at the top level or in the child
               // AND before hitting NOT or OR conditions, and in this case, the unsupported
               // predicate can be safely removed.
-              val lhs =
-                performFilter(left, canPartialPushDownConjuncts = true)
-              val rhs =
-                performFilter(right, canPartialPushDownConjuncts = true)
+              val lhs = performFilter(left, canPartialPushDownConjuncts)
+              val rhs = performFilter(right, canPartialPushDownConjuncts)
               (lhs, rhs) match {
                 case (Some(l), Some(r)) => Left(Some(And(l, r)))
                 case (Some(_), None) if canPartialPushDownConjuncts => Left(lhs)
