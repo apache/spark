@@ -171,6 +171,20 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   case object FilterAction extends ActionType
   case object BuildAction extends ActionType
 
+  /**
+   * Builds a SearchArgument for a Filter by first trimming the non-convertible nodes, and then
+   * only building the remaining convertible nodes.
+   *
+   * Doing the conversion in this way avoids the computational complexity problems introduced by
+   * checking whether a node is convertible while building it. The approach implemented here has
+   * complexity that's linear in the size of the Filter tree - O(number of Filter nodes) - we run
+   * a single pass over the tree to trim it, and then another pass on the trimmed tree to convert
+   * the remaining nodes.
+   *
+   * The alternative approach of checking-while-building can (and did) result
+   * in exponential complexity in the height of the tree, causing perf problems with Filters with
+   * as few as ~35 nodes if they were skewed.
+   */
   private def filterAndBuild(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
@@ -181,6 +195,25 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
     import org.apache.spark.sql.sources._
 
+    // The performAction method can run both the filtering and building operations for a given
+    // node - we signify which one we want with the `actionType` parameter.
+    //
+    // There are a couple of benefits to coupling the two operations like this:
+    // 1. All the logic for a given predicate is grouped logically in the same place. You don't
+    //   have to scroll across the whole file to see what the filter action for an And is while
+    //   you're looking at the build action.
+    // 2. It's much easier to keep the implementations of the two operations up-to-date with
+    //   each other. If the `filter` and `build` operations are implemented as separate case-matches
+    //   in different methods, it's very easy to change one without appropriately updating the
+    //   other. For example, if we add a new supported node type to `filter`, it would be very
+    //   easy to forget to update `build` to support it too, thus leading to conversion errors.
+    //
+    // Doing things this way does have some annoying side effects:
+    // - We need to return an `Either`, with one action type always returning a Left and the other
+    //   always returning a Right.
+    // - We always need to pass the canPartialPushDownConjuncts parameter even though the build
+    //   action doesn't need it (because by the time we run the `build` operation, we know all
+    //   remaining nodes are convertible).
     def performAction(
         actionType: ActionType,
         expression: Filter,
@@ -340,7 +373,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
     def updateBuilder(expression: Filter) =
       performAction(BuildAction, expression, canPartialPushDownConjuncts = true).right.get
-
 
     val filteredExpression = performFilter(expression, canPartialPushDownConjuncts = true)
     filteredExpression.foreach(updateBuilder)
