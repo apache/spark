@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.evaluation
 
 import scala.collection.Map
+import scala.collection.mutable
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
@@ -55,25 +56,43 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
     })
 
-  private lazy val labelCountByClass: Map[Double, Double] =
-    predLabelsWeight.map {
-      case (_: Double, label: Double, weight: Double) =>
+  private lazy val labelCountByClass: Map[Double, Double] = {
+    confusions.toSeq.map {
+      case ((label, _), weight) =>
         (label, weight)
-    }.reduceByKey(_ + _)
-    .collectAsMap()
+    }.groupBy(_._1)
+      .mapValues(_.map(_._2).sum)
+      .map(identity)
+  }
+
   private lazy val labelCount: Double = labelCountByClass.values.sum
-  private lazy val tpByClass: Map[Double, Double] = predLabelsWeight
-    .map {
-      case (prediction: Double, label: Double, weight: Double) =>
-        (label, if (label == prediction) weight else 0.0)
-    }.reduceByKey(_ + _)
-    .collectAsMap()
-  private lazy val fpByClass: Map[Double, Double] = predLabelsWeight
-    .map {
-      case (prediction: Double, label: Double, weight: Double) =>
-        (prediction, if (prediction != label) weight else 0.0)
-    }.reduceByKey(_ + _)
-    .collectAsMap()
+
+  private lazy val tpByClass: Map[Double, Double] = {
+    confusions.toSeq.map {
+      case ((label, prediction), weight) =>
+        if (label == prediction) {
+          (label, weight)
+        } else {
+          (label, 0.0)
+        }
+    }.groupBy(_._1)
+      .mapValues(_.map(_._2).sum)
+      .map(identity)
+  }
+
+  private lazy val fpByClass: Map[Double, Double] = {
+    confusions.toSeq.map {
+      case ((label, prediction), weight) =>
+        if (label != prediction) {
+          (label, weight)
+        } else {
+          (label, 0.0)
+        }
+    }.groupBy(_._1)
+      .mapValues(_.map(_._2).sum)
+      .map(identity)
+  }
+
   private lazy val confusions = predLabelsWeight
     .map {
       case (prediction: Double, label: Double, weight: Double) =>
