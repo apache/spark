@@ -86,28 +86,11 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       sessionLocalTimeZone,
       pythonRunnerConf).compute(batchIter, context.partitionId(), context)
 
-    new Iterator[InternalRow] {
-
-      private var currentIter = if (columnarBatchIter.hasNext) {
-        val batch = columnarBatchIter.next()
-        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-        assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
-          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
-        batch.rowIterator.asScala
-      } else {
-        Iterator.empty
-      }
-
-      override def hasNext: Boolean = currentIter.hasNext || {
-        if (columnarBatchIter.hasNext) {
-          currentIter = columnarBatchIter.next().rowIterator.asScala
-          hasNext
-        } else {
-          false
-        }
-      }
-
-      override def next(): InternalRow = currentIter.next()
+    columnarBatchIter.flatMap { batch =>
+      val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+      assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
+        s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+      batch.rowIterator.asScala
     }
   }
 }
