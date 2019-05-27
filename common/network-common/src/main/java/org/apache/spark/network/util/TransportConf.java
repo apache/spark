@@ -341,4 +341,13 @@ public class TransportConf {
     return (int) Math.ceil(threads * (chunkFetchHandlerThreadsPercent / 100.0));
   }
 
+  /**
+   * Whether to use the old protocol while doing the shuffle block fetching.
+   * It is only enabled while we need the compatibility in the scenario of new spark version
+   * job fetching blocks from old version external shuffle service.
+   */
+  public boolean useOldFetchProtocol() {
+    return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
+  }
+
 }

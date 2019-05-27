@@ -92,22 +92,37 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       BlockTransferMessage msgObj,
       TransportClient client,
       RpcResponseCallback callback) {
-    if (msgObj instanceof OpenBlocks) {
+    if (msgObj instanceof FetchShuffleBlocks || msgObj instanceof OpenBlocks) {
       final Timer.Context responseDelayContext = metrics.openBlockRequestLatencyMillis.time();
       try {
-        OpenBlocks msg = (OpenBlocks) msgObj;
-        checkAuth(client, msg.appId);
-        long streamId = streamManager.registerStream(client.getClientId(),
-          new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds), client.getChannel());
+        int numBlockIds;
+        long streamId;
+        if (msgObj instanceof FetchShuffleBlocks) {
+          FetchShuffleBlocks msg = (FetchShuffleBlocks) msgObj;
+          checkAuth(client, msg.appId);
+          numBlockIds = 0;
+          for (int[] ids: msg.reduceIds) {
+            numBlockIds += ids.length;
+          }
+          streamId = streamManager.registerStream(client.getClientId(),
+            new ManagedBufferIterator(msg, numBlockIds), client.getChannel());
+        } else {
+          // For the compatibility with the old version, still keep the support for OpenBlocks.
+          OpenBlocks msg = (OpenBlocks) msgObj;
+          numBlockIds = msg.blockIds.length;
+          checkAuth(client, msg.appId);
+          streamId = streamManager.registerStream(client.getClientId(),
+            new ManagedBufferIterator(msg), client.getChannel());
+        }
         if (logger.isTraceEnabled()) {
           logger.trace(
             "Registered streamId {} with {} buffers for client {} from host {}",
             streamId,
-            msg.blockIds.length,
+            numBlockIds,
             client.getClientId(),
             getRemoteAddress(client.getChannel()));
         }
-        callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
+        callback.onSuccess(new StreamHandle(streamId, numBlockIds).toByteBuffer());
       } finally {
         responseDelayContext.stop();
       }
@@ -224,7 +239,10 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private final Function<Integer, ManagedBuffer> blockDataForIndexFn;
     private final int size;
 
-    ManagedBufferIterator(final String appId, final String execId, String[] blockIds) {
+    ManagedBufferIterator(OpenBlocks msg) {
+      String appId = msg.appId;
+      String execId = msg.execId;
+      String[] blockIds = msg.blockIds;
       String[] blockId0Parts = blockIds[0].split("_");
       if (blockId0Parts.length == 4 && blockId0Parts[0].equals("shuffle")) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
@@ -270,6 +288,21 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
       }
       return mapIdAndReduceIds;
+    }
+
+    ManagedBufferIterator(FetchShuffleBlocks msg, int numBlockIds) {
+      final int[] mapIdAndReduceIds = new int[2 * numBlockIds];
+      int idx = 0;
+      for (int i = 0; i < msg.mapIds.length; i++) {
+        for (int reduceId : msg.reduceIds[i]) {
+          mapIdAndReduceIds[idx++] = msg.mapIds[i];
+          mapIdAndReduceIds[idx++] = reduceId;
+        }
+      }
+      assert(idx == 2 * numBlockIds);
+      size = mapIdAndReduceIds.length;
+      blockDataForIndexFn = index -> blockManager.getBlockData(msg.appId, msg.execId,
+        msg.shuffleId, mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
     }
 
     @Override
