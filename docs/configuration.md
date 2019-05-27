@@ -186,7 +186,8 @@ of the most common options to set are:
     accounts for things like VM overheads, interned strings, other native overheads, etc. 
     This tends to grow with the container size (typically 6-10%). 
     <em>Note:</em> Non-heap memory including off-heap memory 
-    (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other non-driver 
+    (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other driver processes
+    (e.g python process that goes with a PySpark driver) and memory used by other non-driver 
     processes running in the same container. The maximum memory size of container to running 
     driver is determined by the sum of <code>spark.driver.memoryOverhead</code> 
     and <code>spark.driver.memory</code>.
@@ -226,7 +227,8 @@ of the most common options to set are:
     the executor size (typically 6-10%).This option is currently supported on YARN and Kubernetes.
     <br/>
     <em>Note:</em> Non-heap memory including off-heap memory 
-    (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other non-executor 
+    (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other executor processes
+    (e.g python process that goes with a PySpark executor) and memory used by other non-executor 
     processes running in the same container. The maximum memory size of container to running executor 
     is determined by the sum of <code>spark.executor.memoryOverhead</code> and 
     <code>spark.executor.memory</code>.
