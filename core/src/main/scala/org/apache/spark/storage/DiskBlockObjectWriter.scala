@@ -250,6 +250,7 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     bs.write(kvBytes, offs, len)
+    updateBytesWritten()   // the function is missed
   }
 
   /**
