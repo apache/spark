@@ -249,26 +249,22 @@ private[deploy] class Master(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
+      } else if (idToWorker.contains(id)) {
+        workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
-        withLeadership(workerRef, {
-          if (idToWorker.contains(id)) {
-            workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
-          } else {
-            val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-              workerRef, workerWebUiUrl)
-            if (registerWorker(worker)) {
-              persistenceEngine.addWorker(worker)
-              workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, false))
-              schedule()
-            } else {
-              val workerAddress = worker.endpoint.address
-              logWarning("Worker registration failed. Attempted to re-register worker at same " +
-                "address: " + workerAddress)
-              workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same" +
-                " address: " + workerAddress))
-            }
-          }
-        })
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          workerRef, workerWebUiUrl)
+        if (registerWorker(worker)) {
+          persistenceEngine.addWorker(worker)
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, false))
+          schedule()
+        } else {
+          val workerAddress = worker.endpoint.address
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress))
+        }
       }
 
     case RegisterApplication(description, driver) =>
@@ -340,21 +336,19 @@ private[deploy] class Master(
       }
 
     case Heartbeat(workerId, worker) =>
-      withLeadership(worker, {
-        idToWorker.get(workerId) match {
-          case Some(workerInfo) =>
-            workerInfo.lastHeartbeat = System.currentTimeMillis()
-          case None =>
-            if (workers.map(_.id).contains(workerId)) {
-              logWarning(s"Got heartbeat from unregistered worker $workerId." +
-                " Asking it to re-register.")
-              worker.send(ReconnectWorker(masterUrl))
-            } else {
-              logWarning(s"Got heartbeat from unregistered worker $workerId." +
-                " This worker was never registered, so ignoring the heartbeat.")
-            }
-        }
-      })
+      idToWorker.get(workerId) match {
+        case Some(workerInfo) =>
+          workerInfo.lastHeartbeat = System.currentTimeMillis()
+        case None =>
+          if (workers.map(_.id).contains(workerId)) {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " Asking it to re-register.")
+            worker.send(ReconnectWorker(masterUrl))
+          } else {
+            logWarning(s"Got heartbeat from unregistered worker $workerId." +
+              " This worker was never registered, so ignoring the heartbeat.")
+          }
+      }
 
     case MasterChangeAcknowledged(appId) =>
       idToApp.get(appId) match {
@@ -370,26 +364,24 @@ private[deploy] class Master(
     case WorkerSchedulerStateResponse(workerId, executors, driverIds) =>
       idToWorker.get(workerId) match {
         case Some(worker) =>
-          withLeadership(worker.endpoint, {
-            logInfo("Worker has been re-registered: " + workerId)
-            worker.state = WorkerState.ALIVE
+          logInfo("Worker has been re-registered: " + workerId)
+          worker.state = WorkerState.ALIVE
 
-            val validExecutors = executors.filter(exec => idToApp.get(exec.appId).isDefined)
-            for (exec <- validExecutors) {
-              val app = idToApp(exec.appId)
-              val execInfo = app.addExecutor(worker, exec.cores, Some(exec.execId))
-              worker.addExecutor(execInfo)
-              execInfo.copyState(exec)
-            }
+          val validExecutors = executors.filter(exec => idToApp.get(exec.appId).isDefined)
+          for (exec <- validExecutors) {
+            val app = idToApp(exec.appId)
+            val execInfo = app.addExecutor(worker, exec.cores, Some(exec.execId))
+            worker.addExecutor(execInfo)
+            execInfo.copyState(exec)
+          }
 
-            for (driverId <- driverIds) {
-              drivers.find(_.id == driverId).foreach { driver =>
-                driver.worker = Some(worker)
-                driver.state = DriverState.RUNNING
-                worker.addDriver(driver)
-              }
+          for (driverId <- driverIds) {
+            drivers.find(_.id == driverId).foreach { driver =>
+              driver.worker = Some(worker)
+              driver.state = DriverState.RUNNING
+              worker.addDriver(driver)
             }
-          })
+          }
         case None =>
           logWarning("Scheduler state from unknown worker: " + workerId)
       }
@@ -399,25 +391,23 @@ private[deploy] class Master(
     case WorkerLatestState(workerId, executors, driverIds) =>
       idToWorker.get(workerId) match {
         case Some(worker) =>
-          withLeadership(worker.endpoint, {
-            for (exec <- executors) {
-              val executorMatches = worker.executors.exists {
-                case (_, e) => e.application.id == exec.appId && e.id == exec.execId
-              }
-              if (!executorMatches) {
-                // master doesn't recognize this executor. So just tell worker to kill it.
-                worker.endpoint.send(KillExecutor(masterUrl, exec.appId, exec.execId))
-              }
+          for (exec <- executors) {
+            val executorMatches = worker.executors.exists {
+              case (_, e) => e.application.id == exec.appId && e.id == exec.execId
             }
+            if (!executorMatches) {
+              // master doesn't recognize this executor. So just tell worker to kill it.
+              worker.endpoint.send(KillExecutor(masterUrl, exec.appId, exec.execId))
+            }
+          }
 
-            for (driverId <- driverIds) {
-              val driverMatches = worker.drivers.exists { case (id, _) => id == driverId }
-              if (!driverMatches) {
-                // master doesn't recognize this driver. So just tell worker to kill it.
-                worker.endpoint.send(KillDriver(driverId))
-              }
+          for (driverId <- driverIds) {
+            val driverMatches = worker.drivers.exists { case (id, _) => id == driverId }
+            if (!driverMatches) {
+              // master doesn't recognize this driver. So just tell worker to kill it.
+              worker.endpoint.send(KillDriver(driverId))
             }
-          })
+          }
         case None =>
           logWarning("Worker state from unknown worker: " + workerId)
       }
@@ -590,24 +580,6 @@ private[deploy] class Master(
     logInfo("Recovery complete - resuming operations!")
   }
 
-  private def hasLeadership: Boolean = leaderElectionAgent.hasLeadership
-
-  private def withLeadership(workerRef: RpcEndpointRef, handleReq: => Unit): Unit = {
-    assert(state != RecoveryState.STANDBY)
-    if (hasLeadership) {
-      handleReq
-    } else {
-      // Master in Alive couldn't guarantee that it must has leadership at the time,
-      // since the state between Master and ZooKeeper could be out of sync for a
-      // little while(due to RevokedLeadership blocked by other messages or unexpectedly
-      // network delay). We should detect it as early as possible to avoid undefined
-      // behaviour between Master and Worker(e.g. duplicate worker registration).
-      logWarning(s"Master($state) with url $masterUrl is being revoked.")
-      state = RecoveryState.STANDBY
-      workerRef.send(MasterInRevoking(masterUrl))
-    }
-  }
-
   /**
    * Schedule executors to be launched on the workers.
    * Returns an array containing number of cores assigned to each worker.
@@ -754,7 +726,7 @@ private[deploy] class Master(
    * every time a new app joins or resource availability changes.
    */
   private def schedule(): Unit = {
-    if (!(state == RecoveryState.ALIVE && hasLeadership)) {
+    if (state != RecoveryState.ALIVE) {
       return
     }
     // Drivers take strict precedence over executors
