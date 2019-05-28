@@ -46,13 +46,9 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @transient private var prevWeightCol: String = _
 
   private def updateMetrics(dataset: Dataset[_]): Boolean = {
-    if (isDefined(weightCol)) {
-      dataset != prevDataset || $(predictionCol) != prevPredictionCol ||
-        $(labelCol) != prevLabelCol || $(weightCol) != prevWeightCol
-    } else {
-      dataset != prevDataset || $(predictionCol) != prevPredictionCol ||
-        $(labelCol) != prevLabelCol || null != prevWeightCol
-    }
+    prevMetrics == null || dataset != prevDataset || $(predictionCol) != prevPredictionCol ||
+      (isDefined(weightCol) && $(weightCol) != prevWeightCol) ||
+      (!isDefined(weightCol) && null != prevWeightCol)
   }
 
   /**
