@@ -33,9 +33,9 @@ import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
+import org.apache.spark.sql.sources.v2.reader.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, WriteBuilder}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -106,7 +106,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   override def getTable(options: CaseInsensitiveStringMap): KafkaTable = {
-    new KafkaTable(strategy(options.asScala.toMap))
+    new KafkaTable
   }
 
   /**
@@ -216,7 +216,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           + STRATEGY_OPTION_KEYS.mkString(", ") + ". See the docs for more details.")
     }
 
-    val strategy = caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+    caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
       case (ASSIGN, value) =>
         if (!value.trim.startsWith("{")) {
           throw new IllegalArgumentException(
@@ -353,15 +353,14 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  class KafkaTable(strategy: => ConsumerStrategy) extends Table
-    with SupportsRead with SupportsWrite {
+  class KafkaTable extends Table with SupportsRead with SupportsWrite {
 
-    override def name(): String = s"Kafka $strategy"
+    override def name(): String = s"KafkaTable"
 
     override def schema(): StructType = KafkaOffsetReader.kafkaSchema
 
     override def capabilities(): ju.Set[TableCapability] = {
-      Set(MICRO_BATCH_READ, CONTINUOUS_READ, STREAMING_WRITE).asJava
+      Set(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, CONTINUOUS_READ, STREAMING_WRITE).asJava
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
@@ -370,18 +369,21 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
       new WriteBuilder {
         private var inputSchema: StructType = _
+        private val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)
+        private val producerParams = kafkaParamsForProducer(options.asScala.toMap)
 
         override def withInputDataSchema(schema: StructType): WriteBuilder = {
           this.inputSchema = schema
           this
         }
 
-        override def buildForStreaming(): StreamingWrite = {
-          import scala.collection.JavaConverters._
-
+        override def buildForBatch(): BatchWrite = {
           assert(inputSchema != null)
-          val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)
-          val producerParams = kafkaParamsForProducer(options.asScala.toMap)
+          new KafkaBatchWrite(topic, producerParams, inputSchema)
+        }
+
+        override def buildForStreaming(): StreamingWrite = {
+          assert(inputSchema != null)
           new KafkaStreamingWrite(topic, producerParams, inputSchema)
         }
       }
@@ -391,6 +393,29 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   class KafkaScan(options: CaseInsensitiveStringMap) extends Scan {
 
     override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
+
+    override def toBatch(): Batch = {
+      val parameters = options.asScala.toMap
+      validateBatchOptions(parameters)
+      val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+      val specifiedKafkaParams = convertToSpecifiedParams(parameters)
+
+      val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+        caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
+      assert(startingRelationOffsets != LatestOffsetRangeLimit)
+
+      val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+        caseInsensitiveParams, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+      assert(endingRelationOffsets != EarliestOffsetRangeLimit)
+
+      new KafkaBatch(
+        strategy(caseInsensitiveParams),
+        sourceOptions = parameters,
+        specifiedKafkaParams = specifiedKafkaParams,
+        failOnDataLoss = failOnDataLoss(caseInsensitiveParams),
+        startingOffsets = startingRelationOffsets,
+        endingOffsets = endingRelationOffsets)
+    }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
       val parameters = options.asScala.toMap

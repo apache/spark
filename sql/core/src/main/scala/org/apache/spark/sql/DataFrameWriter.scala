@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
@@ -252,16 +252,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val useV1Sources =
       session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
     val lookupCls = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val cls = lookupCls.newInstance() match {
-      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
-        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+    val lookupClsInstance = lookupCls.newInstance().asInstanceOf[DataSourceRegister]
+    val useV1 = useV1Sources.contains(lookupClsInstance.shortName()) ||
+      useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT))
+    val cls = lookupClsInstance match {
+      case f: FileDataSourceV2 if useV1 =>
         f.fallbackFileFormat
       case _ => lookupCls
     }
     // In Data Source V2 project, partitioning is still under development.
     // Here we fallback to V1 if partitioning columns are specified.
     // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
-    if (classOf[TableProvider].isAssignableFrom(cls) && partitioningColumns.isEmpty) {
+    if (classOf[TableProvider].isAssignableFrom(cls) && partitioningColumns.isEmpty && !useV1) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, session.sessionState.conf)
