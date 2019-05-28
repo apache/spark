@@ -60,6 +60,6 @@ case class OrcScan(
   override def hashCode(): Int = getClass.hashCode()
 
   override def description(): String = {
-    super.description() + ",PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
+    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
   }
 }

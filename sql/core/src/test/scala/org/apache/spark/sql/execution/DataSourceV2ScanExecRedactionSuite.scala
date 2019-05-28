@@ -26,12 +26,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
- * Suite that tests the redaction of DataSourceScanExec
+ * Suite that tests the redaction of BatchScanExec.
  */
 class DataSourceV2ScanExecRedactionSuite extends QueryTest with SharedSQLContext {
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.redaction.string.regex", "file:/[\\w_/]+")
+    .set(SQLConf.SQL_STRING_REDACTION_PATTERN.key, "file:/[\\w_/]+")
     .set(SQLConf.USE_V1_SOURCE_READER_LIST.key, "")
 
   test("treeString is redacted") {
@@ -84,7 +84,7 @@ class DataSourceV2ScanExecRedactionSuite extends QueryTest with SharedSQLContext
     }
   }
 
-  test("FileSourceScanExec metadata") {
+  test("FileScan description") {
     withTempPath { path =>
       val dir = path.getCanonicalPath
       spark.range(0, 10).write.orc(dir)
