@@ -873,8 +873,7 @@ class RDD(object):
         with SCCallSiteSync(self.context) as css:
             java_map = MapConverter().convert(self.context.getLocalProperties(),
                                               self.context._gateway._gateway_client)
-            sock_info = self.ctx._jvm.PythonRDD.collectAndServe(
-                self._jrdd.rdd() ,java_map)
+            sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd(), java_map)
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
     def reduce(self, f):

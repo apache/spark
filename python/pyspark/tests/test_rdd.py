@@ -819,7 +819,7 @@ class RDDTests(ReusedPySparkTestCase):
             else:
                 # make sure group B job succeeded.
                 self.assertFalse(is_job_cancelled[i],
-                                "Thread {i}: Job in group B didn't succeeded.".format(i=i))
+                                 "Thread {i}: Job in group B didn't succeeded.".format(i=i))
 
 
 if __name__ == "__main__":

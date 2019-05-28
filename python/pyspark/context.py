@@ -1031,7 +1031,7 @@ class SparkContext(object):
         if not hasattr(self.local, 'local_properties'):
             return ""
         else:
-            if not key in self.local.local_properties:
+            if key not in self.local.local_properties:
                 return ""
         return self.local.local_properties[key]
 
