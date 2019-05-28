@@ -18,7 +18,7 @@
 package org.apache.spark.executor
 
 
-import java.io.{File, PrintWriter}
+import java.io.File
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JavaFiles}

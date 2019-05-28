@@ -371,7 +371,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * If a resources file was specified then assume all resources will be specified
    * in that file. Otherwise use the discovery scripts to find the resources. Users should
-   * not really be setting the resources file config directly and should not be mixing methods
+   * not be setting the resources file config directly and should not be mixing methods
    * for different types of resources since the resources file config is meant for Standalone mode
    * and other cluster managers should use the discovery scripts.
    */
@@ -380,7 +380,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // configs.
     val allDriverResourceConfs = _conf.getAllWithPrefix(SPARK_DRIVER_RESOURCE_PREFIX)
     val resourcesFile = _conf.get(DRIVER_RESOURCES_FILE)
-
     _resources = resourcesFile.map { rFile => {
       ResourceDiscoverer.parseAllocatedFromJsonFile(rFile)
     }}.getOrElse {
@@ -390,7 +389,6 @@ class SparkContext(config: SparkConf) extends Logging {
       ResourceDiscoverer.discoverResourcesInformation(_conf, SPARK_DRIVER_RESOURCE_PREFIX,
         Some(uniqueResources))
     }
-
     // verify the resources we discovered are what the user requested
     val driverReqResourcesAndCounts =
       SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_COUNT_SUFFIX).toMap
