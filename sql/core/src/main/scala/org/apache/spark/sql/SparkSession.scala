@@ -313,6 +313,23 @@ class SparkSession private(
   }
 
   /**
+   * Creates a `DataFrame` from a csv files with schema of Product (e.g. case classes).
+   * All options related to CSV data source can be used.
+   * @return
+   */
+  def createDataFrame[A <: Product : TypeTag](options: Map[String, String], csvFilePath: String*)
+  : DataFrame = {
+    val structSchema = Encoders.product[A].schema
+    val inferredSchemaDisabled = options.map(x => (x._1,
+      if (x._1 == "inferSchema") "false" else x._2))
+
+    SparkSession.this.read
+      .options(inferredSchemaDisabled)
+      .schema(structSchema)
+      .csv(csvFilePath: _*)
+  }
+
+  /**
    * :: Experimental ::
    * Creates a `DataFrame` from a local Seq of Product.
    *
@@ -525,6 +542,42 @@ class SparkSession private(
   @Evolving
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
+  }
+
+  /**
+   * Creates a `[[Dataset]]` from a csv file with schema of Product (e.g. case classes).
+   * All options related to CSV data source can be used.
+   *
+   * == Example ==
+   *
+   * {{{
+   *
+   *   import spark.implicits._
+   *   case class Person(name: String, age: Long)
+   *   val ds = spark.createDataset[Person](Map("header" -> "false"), csvFilePath)
+   *
+   *   ds.show()
+   *   // +-------+---+
+   *   // |   name|age|
+   *   // +-------+---+
+   *   // |Michael| 29|
+   *   // |   Andy| 30|
+   *   // | Justin| 19|
+   *   // +-------+---+
+   * }}}
+   * @return
+   */
+  def createDataset[A <: Product : TypeTag](options: Map[String, String], csvFilePath: String*)
+  : Dataset[A] = {
+    import implicits._
+    val structSchema = Encoders.product[A].schema
+    val inferredSchemaDisabled = options.map(x => (x._1,
+      if (x._1 == "inferSchema") "false" else x._2))
+
+    SparkSession.this.read
+      .options(inferredSchemaDisabled)
+      .schema(structSchema)
+      .csv(csvFilePath: _*).as[A]
   }
 
   /**
