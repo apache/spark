@@ -115,22 +115,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Filter] = {
-    filterAndBuild(dataTypeMap, expression, builder, shouldBuildSearchArgument = false).left.get
+    performFilter(dataTypeMap, expression, canPartialPushDownConjuncts = true)
   }
-
-  /**
-   * Build a SearchArgument and return the builder so far.
-   */
-  private def buildSearchArgument(
-      dataTypeMap: Map[String, DataType],
-      expression: Filter,
-      builder: Builder): Option[Builder] = {
-    filterAndBuild(dataTypeMap, expression, builder, shouldBuildSearchArgument = true).right.get
-  }
-
-  sealed trait ActionType
-  case class TrimUnconvertibleFilters(canPartialPushDownConjuncts: Boolean) extends ActionType {}
-  case object BuildSearchArgument extends ActionType
 
   /**
    * Builds a SearchArgument for a Filter by first trimming the non-convertible nodes, and then
@@ -146,213 +132,225 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * in exponential complexity in the height of the tree, causing perf problems with Filters with
    * as few as ~35 nodes if they were skewed.
    */
-  private def filterAndBuild(
+  private def buildSearchArgument(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
-      builder: Builder,
-      shouldBuildSearchArgument: Boolean): Either[Option[Filter], Option[Builder]] = {
+      builder: Builder): Option[Builder] = {
+    val filteredExpression: Option[Filter] = performFilter(
+      dataTypeMap,
+      expression,
+      canPartialPushDownConjuncts = true)
+    filteredExpression.foreach(updateBuilder(dataTypeMap, _, builder))
+    filteredExpression.map(_ => builder)
+  }
+
+  import org.apache.spark.sql.sources._
+
+  sealed trait ActionType
+  case class TrimUnconvertibleFilters(canPartialPushDownConjuncts: Boolean) extends ActionType
+  case class BuildSearchArgument(builder: Builder) extends ActionType
+
+  // The performAction method can run both the filtering and building operations for a given
+  // node - we signify which one we want with the `actionType` parameter.
+  //
+  // There are a couple of benefits to coupling the two operations like this:
+  // 1. All the logic for a given predicate is grouped logically in the same place. You don't
+  //   have to scroll across the whole file to see what the filter action for an And is while
+  //   you're looking at the build action.
+  // 2. It's much easier to keep the implementations of the two operations up-to-date with
+  //   each other. If the `filter` and `build` operations are implemented as separate case-matches
+  //   in different methods, it's very easy to change one without appropriately updating the
+  //   other. For example, if we add a new supported node type to `filter`, it would be very
+  //   easy to forget to update `build` to support it too, thus leading to conversion errors.
+  //
+  // Doing things this way does have some annoying side effects:
+  // - We need to return an `Either`, with one action type always returning a Left and the other
+  //   always returning a Right.
+  // - We always need to pass the canPartialPushDownConjuncts parameter even though the build
+  //   action doesn't need it (because by the time we run the `build` operation, we know all
+  //   remaining nodes are convertible).
+  def performAction(
+      actionType: ActionType,
+      dataTypeMap: Map[String, DataType],
+      expression: Filter): Either[Option[Filter], Unit] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
 
-    import org.apache.spark.sql.sources._
+    expression match {
+      case And(left, right) =>
+        actionType match {
+          case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
+            // At here, it is not safe to just keep one side and remove the other side
+            // if we do not understand what the parent filters are.
+            //
+            // Here is an example used to explain the reason.
+            // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+            // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+            // NOT(a = 2), which will generate wrong results.
+            //
+            // Pushing one side of AND down is only safe to do at the top level or in the child
+            // AND before hitting NOT or OR conditions, and in this case, the unsupported
+            // predicate can be safely removed.
+            val lhs = performFilter(dataTypeMap, left, canPartialPushDownConjuncts)
+            val rhs = performFilter(dataTypeMap, right, canPartialPushDownConjuncts)
+            (lhs, rhs) match {
+              case (Some(l), Some(r)) => Left(Some(And(l, r)))
+              case (Some(_), None) if canPartialPushDownConjuncts => Left(lhs)
+              case (None, Some(_)) if canPartialPushDownConjuncts => Left(rhs)
+              case _ => Left(None)
+            }
+          case BuildSearchArgument(builder) =>
+            builder.startAnd()
+            updateBuilder(dataTypeMap, left, builder)
+            updateBuilder(dataTypeMap, right, builder)
+            builder.end()
+            Right(Unit)
+        }
 
-    // The performAction method can run both the filtering and building operations for a given
-    // node - we signify which one we want with the `actionType` parameter.
-    //
-    // There are a couple of benefits to coupling the two operations like this:
-    // 1. All the logic for a given predicate is grouped logically in the same place. You don't
-    //   have to scroll across the whole file to see what the filter action for an And is while
-    //   you're looking at the build action.
-    // 2. It's much easier to keep the implementations of the two operations up-to-date with
-    //   each other. If the `filter` and `build` operations are implemented as separate case-matches
-    //   in different methods, it's very easy to change one without appropriately updating the
-    //   other. For example, if we add a new supported node type to `filter`, it would be very
-    //   easy to forget to update `build` to support it too, thus leading to conversion errors.
-    //
-    // Doing things this way does have some annoying side effects:
-    // - We need to return an `Either`, with one action type always returning a Left and the other
-    //   always returning a Right.
-    // - We always need to pass the canPartialPushDownConjuncts parameter even though the build
-    //   action doesn't need it (because by the time we run the `build` operation, we know all
-    //   remaining nodes are convertible).
-    def performAction(
-        actionType: ActionType,
-        expression: Filter): Either[Option[Filter], Unit] = {
-      expression match {
-        case And(left, right) =>
-          actionType match {
-            case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
-              // At here, it is not safe to just keep one side and remove the other side
-              // if we do not understand what the parent filters are.
-              //
-              // Here is an example used to explain the reason.
-              // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
-              // convert b in ('1'). If we only convert a = 2, we will end up with a filter
-              // NOT(a = 2), which will generate wrong results.
-              //
-              // Pushing one side of AND down is only safe to do at the top level or in the child
-              // AND before hitting NOT or OR conditions, and in this case, the unsupported
-              // predicate can be safely removed.
-              val lhs = performFilter(left, canPartialPushDownConjuncts)
-              val rhs = performFilter(right, canPartialPushDownConjuncts)
-              (lhs, rhs) match {
-                case (Some(l), Some(r)) => Left(Some(And(l, r)))
-                case (Some(_), None) if canPartialPushDownConjuncts => Left(lhs)
-                case (None, Some(_)) if canPartialPushDownConjuncts => Left(rhs)
-                case _ => Left(None)
-              }
-            case BuildSearchArgument =>
-              builder.startAnd()
-              updateBuilder(left)
-              updateBuilder(right)
-              builder.end()
-              Right(Unit)
-          }
+      case Or(left, right) =>
+        actionType match {
+          case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
+            // The Or predicate is convertible when both of its children can be pushed down.
+            // That is to say, if one/both of the children can be partially pushed down, the Or
+            // predicate can be partially pushed down as well.
+            //
+            // Here is an example used to explain the reason.
+            // Let's say we have
+            // (a1 AND a2) OR (b1 AND b2),
+            // a1 and b1 is convertible, while a2 and b2 is not.
+            // The predicate can be converted as
+            // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+            // As per the logical in And predicate, we can push down (a1 OR b1).
+            Left(for {
+              lhs: Filter <- performFilter(dataTypeMap, left, canPartialPushDownConjuncts)
+              rhs: Filter <- performFilter(dataTypeMap, right, canPartialPushDownConjuncts)
+            } yield Or(lhs, rhs))
+          case BuildSearchArgument(builder) =>
+            builder.startOr()
+            updateBuilder(dataTypeMap, left, builder)
+            updateBuilder(dataTypeMap, right, builder)
+            builder.end()
+            Right(Unit)
+        }
 
-        case Or(left, right) =>
-          actionType match {
-            case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
-              // The Or predicate is convertible when both of its children can be pushed down.
-              // That is to say, if one/both of the children can be partially pushed down, the Or
-              // predicate can be partially pushed down as well.
-              //
-              // Here is an example used to explain the reason.
-              // Let's say we have
-              // (a1 AND a2) OR (b1 AND b2),
-              // a1 and b1 is convertible, while a2 and b2 is not.
-              // The predicate can be converted as
-              // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
-              // As per the logical in And predicate, we can push down (a1 OR b1).
-              Left(for {
-                lhs: Filter <- performFilter(left, canPartialPushDownConjuncts)
-                rhs: Filter <- performFilter(right, canPartialPushDownConjuncts)
-              } yield Or(lhs, rhs))
-            case BuildSearchArgument =>
-              builder.startOr()
-              updateBuilder(left)
-              updateBuilder(right)
-              builder.end()
-              Right(Unit)
-          }
+      case Not(child) =>
+        actionType match {
+          case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
+            val filteredSubtree =
+              performFilter(dataTypeMap, child, canPartialPushDownConjuncts = false)
+            Left(filteredSubtree.map(Not(_)))
+          case BuildSearchArgument(builder) =>
+            builder.startNot()
+            updateBuilder(dataTypeMap, child, builder)
+            builder.end()
+            Right(Unit)
+        }
 
-        case Not(child) =>
-          actionType match {
-            case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
-              val filteredSubtree = performFilter(child, canPartialPushDownConjuncts = false)
-              Left(filteredSubtree.map(Not(_)))
-            case BuildSearchArgument =>
-              builder.startNot()
-              updateBuilder(child)
-              builder.end()
-              Right(Unit)
-          }
+      // NOTE: For all case branches dealing with leaf predicates below, the additional
+      // `startAnd()` call is mandatory.  ORC `SearchArgument` builder requires that all leaf
+      // predicates must be wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
-        // NOTE: For all case branches dealing with leaf predicates below, the additional
-        // `startAnd()` call is mandatory.  ORC `SearchArgument` builder requires that all leaf
-        // predicates must be wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+      case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+            builder.startAnd().equals(quotedName, getType(attribute), castedValue).end()
+            Right(Unit)
+        }
+      case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+            builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end()
+            Right(Unit)
+        }
+      case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+            builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end()
+            Right(Unit)
+        }
+      case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+            builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end()
+            Right(Unit)
+        }
+      case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+            builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end()
+            Right(Unit)
+        }
+      case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+            builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end()
+            Right(Unit)
+        }
+      case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            builder.startAnd().isNull(quotedName, getType(attribute)).end()
+            Right(Unit)
+        }
+      case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            builder.startNot().isNull(quotedName, getType(attribute)).end()
+            Right(Unit)
+        }
+      case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(Some(expression))
+          case BuildSearchArgument(builder) =>
+            val quotedName = quoteAttributeNameIfNeeded(attribute)
+            val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
+            builder.startAnd().in(quotedName, getType(attribute),
+              castedValues.map(_.asInstanceOf[AnyRef]): _*).end()
+            Right(Unit)
+        }
 
-        case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-              builder.startAnd().equals(quotedName, getType(attribute), castedValue).end()
-              Right(Unit)
-          }
-        case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-              builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end()
-              Right(Unit)
-          }
-        case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-              builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end()
-              Right(Unit)
-          }
-        case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-              builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end()
-              Right(Unit)
-          }
-        case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-              builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end()
-              Right(Unit)
-          }
-        case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-              builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end()
-              Right(Unit)
-          }
-        case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              builder.startAnd().isNull(quotedName, getType(attribute)).end()
-              Right(Unit)
-          }
-        case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              builder.startNot().isNull(quotedName, getType(attribute)).end()
-              Right(Unit)
-          }
-        case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(Some(expression))
-            case BuildSearchArgument =>
-              val quotedName = quoteAttributeNameIfNeeded(attribute)
-              val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
-              builder.startAnd().in(quotedName, getType(attribute),
-                castedValues.map(_.asInstanceOf[AnyRef]): _*).end()
-              Right(Unit)
-          }
-
-        case _ =>
-          actionType match {
-            case TrimUnconvertibleFilters(_) => Left(None)
-            case BuildSearchArgument =>
-              throw new IllegalArgumentException(s"Can't build unsupported filter ${expression}")
-          }
-      }
-    }
-
-    def performFilter(expression: Filter, canPartialPushDownConjuncts: Boolean): Option[Filter] =
-      performAction(TrimUnconvertibleFilters(canPartialPushDownConjuncts), expression).left.get
-
-    def updateBuilder(expression: Filter): Unit =
-      performAction(BuildSearchArgument, expression).right.get
-
-    val filteredExpression = performFilter(expression, canPartialPushDownConjuncts = true)
-    if (shouldBuildSearchArgument) {
-      filteredExpression.foreach(updateBuilder)
-      Right(filteredExpression.map(_ => builder))
-    } else {
-      Left(filteredExpression)
+      case _ =>
+        actionType match {
+          case TrimUnconvertibleFilters(_) => Left(None)
+          case BuildSearchArgument(builder) =>
+            throw new IllegalArgumentException(s"Can't build unsupported filter ${expression}")
+        }
     }
   }
+
+  private def performFilter(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      canPartialPushDownConjuncts: Boolean): Option[Filter] =
+    performAction(TrimUnconvertibleFilters(canPartialPushDownConjuncts), dataTypeMap, expression)
+        .left
+        .get
+
+  private def updateBuilder(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      builder: Builder): Unit =
+    performAction(BuildSearchArgument(builder), dataTypeMap, expression).right.get
 }
