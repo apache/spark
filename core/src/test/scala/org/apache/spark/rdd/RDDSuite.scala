@@ -1176,6 +1176,24 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }.collect()
   }
 
+  test("SPARK-27666: Do not release lock while TaskContext already completed") {
+    val rdd = sc.parallelize(Range(0, 10), 1).cache()
+    // validate cache
+    rdd.collect()
+    rdd.mapPartitions { iter =>
+      val t = new Thread(() => {
+        while (iter.hasNext) {
+          iter.next()
+          Thread.sleep(100)
+        }
+      })
+      t.setDaemon(false)
+      t.start()
+      Iterator(0)
+    }.collect()
+    Thread.sleep(10 * 150)
+  }
+
   test("SPARK-23496: order of input partitions can result in severe skew in coalesce") {
     val numInputPartitions = 100
     val numCoalescedPartitions = 50
