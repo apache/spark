@@ -77,10 +77,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       dataTypeMap: Map[String, DataType],
       filters: Seq[Filter]): Seq[Filter] = {
     val orcFilterConverter = new OrcFilterConverter(dataTypeMap)
-    for {
-      filter <- filters
-      trimmedFilter <- orcFilterConverter.trimUnconvertibleFilters(filter, newBuilder())
-    } yield trimmedFilter
+    filters.flatMap(orcFilterConverter.trimUnconvertibleFilters)
   }
 
 }
@@ -118,12 +115,11 @@ private class OrcFilterConverter(
       new HiveDecimalWritable(HiveDecimal.create(value.asInstanceOf[java.math.BigDecimal]))
     case _ => value
   }
+
   import org.apache.spark.sql.sources._
   import OrcFilters._
 
-  private[sql] def trimUnconvertibleFilters(
-      expression: Filter,
-      builder: Builder): Option[Filter] = {
+  private[sql] def trimUnconvertibleFilters(expression: Filter): Option[Filter] = {
     performFilter(expression, canPartialPushDownConjuncts = true)
   }
 
