@@ -48,7 +48,7 @@ the Spark configuration 'spark.sql.pyspark.execution.arrow.enabled' to 'true'. T
 
 In addition, optimizations enabled by 'spark.sql.pyspark.execution.arrow.enabled' could fallback automatically
 to non-Arrow optimization implementation if an error occurs before the actual computation within Spark.
-This can be controlled by 'spark.sql.execution.arrow.fallback.enabled'.
+This can be controlled by 'spark.sql.pyspark.execution.arrow.fallback.enabled'.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
