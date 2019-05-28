@@ -144,11 +144,34 @@ case class SortMergeJoinExec(
     sqlContext.conf.sortMergeJoinExecBufferInMemoryThreshold
   }
 
+  private def getFormattedRdds(left: SparkPlan, right: SparkPlan):
+      (RDD[InternalRow], RDD[InternalRow]) = {
+
+    val leftBucketNum = left.execute().getNumPartitions
+    val rightBucketNum = right.execute().getNumPartitions
+
+    if (leftBucketNum == rightBucketNum) {
+      (left.execute(), right.execute())
+    } else if (leftBucketNum > rightBucketNum) {
+      val multiplier = leftBucketNum / rightBucketNum
+      val newRightRdd = (1 until multiplier)
+        .foldLeft(right.execute())((rdd, i) => rdd.union(right.execute()))
+      (left.execute(), newRightRdd)
+    } else {
+      val multiplier = rightBucketNum / leftBucketNum
+      val newLeftRdd = (1 until multiplier)
+        .foldLeft(left.execute())((rdd, i) => rdd.union(left.execute()))
+      (newLeftRdd, right.execute())
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
-    left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
+    val (leftRdd, rightRdd) = getFormattedRdds(left, right)
+
+    leftRdd.zipPartitions(rightRdd) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
           newPredicate(cond, left.output ++ right.output).eval _
@@ -384,7 +407,9 @@ case class SortMergeJoinExec(
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    left.execute() :: right.execute() :: Nil
+    val (leftRdd, rightRdd) = getFormattedRdds(left, right)
+    leftRdd :: rightRdd :: Nil
+//    left.execute() :: right.execute() :: Nil
   }
 
   private def createJoinKey(
@@ -623,7 +648,7 @@ case class SortMergeJoinExec(
       (evaluateVariables(leftVars), "")
     }
 
-    s"""
+    val result = s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
        |  ${leftVarDecl.mkString("\n")}
        |  ${beforeLoop.trim}
@@ -637,6 +662,8 @@ case class SortMergeJoinExec(
        |  if (shouldStop()) return;
        |}
      """.stripMargin
+    println(result)
+    result
   }
 }
 

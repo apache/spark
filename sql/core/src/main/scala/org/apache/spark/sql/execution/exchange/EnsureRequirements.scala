@@ -183,7 +183,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, distribution), index) if childrenIndexes.contains(index) =>
-          if (child.outputPartitioning.numPartitions == targetNumPartitions) {
+          if (targetNumPartitions % child.outputPartitioning.numPartitions == 0) {
             child
           } else {
             val defaultPartitioning = distribution.createPartitioning(targetNumPartitions)

@@ -302,9 +302,13 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
 case class PartitioningCollection(partitionings: Seq[Partitioning])
   extends Expression with Partitioning with Unevaluable {
 
-  require(
-    partitionings.map(_.numPartitions).distinct.length == 1,
-    s"PartitioningCollection requires all of its partitionings have the same numPartitions.")
+  require ({
+    val minPartitions = partitionings.map(_.numPartitions).min
+    partitionings.map(_.numPartitions).forall(_ % minPartitions == 0)
+  }, s"")
+//  require(
+//    partitionings.map(_.numPartitions).distinct.length == 1,
+//    s"PartitioningCollection requires all of its partitionings have the same numPartitions.")
 
   override def children: Seq[Expression] = partitionings.collect {
     case expr: Expression => expr
@@ -314,7 +318,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 
   override def dataType: DataType = IntegerType
 
-  override val numPartitions = partitionings.map(_.numPartitions).distinct.head
+  override val numPartitions = partitionings.map(_.numPartitions).max
 
   /**
    * Returns true if any `partitioning` of this collection satisfies the given
