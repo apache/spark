@@ -34,6 +34,10 @@
   <url>http://spark.apache.org/</url>
   <dependencies>
     <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-xml_${scala.binary.version}</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.thoughtworks.paranamer</groupId>
       <artifactId>paranamer</artifactId>
     </dependency>
