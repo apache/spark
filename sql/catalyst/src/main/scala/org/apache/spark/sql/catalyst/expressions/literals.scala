@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
 
@@ -260,6 +261,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
+  override def supportsColumnar: Boolean = true
 
   override def toString: String = value match {
     case null => "null"
@@ -300,6 +302,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   }
 
   override def eval(input: InternalRow): Any = value
+  override def columnarEval(batch: ColumnarBatch): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)

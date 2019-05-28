@@ -48,7 +48,7 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public void close() {
+  protected void doClose() {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
         childColumns[i].close();

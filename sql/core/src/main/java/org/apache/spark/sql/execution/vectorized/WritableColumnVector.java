@@ -65,7 +65,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   @Override
-  public void close() {
+  protected void doClose() {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
         childColumns[i].close();
@@ -604,7 +604,10 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   public final int appendStruct(boolean isNull) {
     if (isNull) {
-      appendNull();
+      // This is the same as appendNull but without the assertion for struct types
+      reserve(elementsAppended + 1);
+      putNull(elementsAppended);
+      elementsAppended++;
       for (WritableColumnVector c: childColumns) {
         if (c.type instanceof StructType) {
           c.appendStruct(true);
