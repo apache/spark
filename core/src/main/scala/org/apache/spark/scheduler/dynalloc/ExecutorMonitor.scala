@@ -103,10 +103,11 @@ private[spark] class ExecutorMonitor(
 
             // An event arriving while this scan is happening may cause the deadline for
             // the executor to change after it was read above. Check the deadline again,
-            // and if it changed, don't consider this executor for removal yet, delaying
-            // the decision until the next check.
-            if (exec.timeoutAt > deadline) {
-              recomputeTimedOutExecs = true
+            // and if it changed, don't consider this executor for removal yet.
+            val newDeadline = exec.timeoutAt
+            if (newDeadline > deadline) {
+              exec.timedOut = false
+              newNextTimeout = math.min(newNextTimeout, newDeadline)
               false
             } else {
               true
@@ -254,13 +255,17 @@ private[spark] class ExecutorMonitor(
         Long.MaxValue
       }
 
+      // Update the timeout before checking whether a recomputation is needed. This ensures
+      // that if the EAM sees the new timeout when double-checking whether an executor is really
+      // timed out, after setting the "timedOut" flag checked below.
+      timeoutAt = newDeadline
+
       // If the executor was thought to be timed out, but the new deadline is later than the
       // old one, ask the EAM thread to update the list of timed out executors.
       if (timedOut && newDeadline > oldDeadline) {
         recomputeTimedOutExecs = true
       }
 
-      timeoutAt = newDeadline
       updateNextTimeout(newDeadline)
     }
   }
