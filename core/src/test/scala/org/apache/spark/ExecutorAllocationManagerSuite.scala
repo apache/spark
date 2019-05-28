@@ -1016,6 +1016,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     executorsRemoved.nonEmpty && executorsRemoved(0) == executorId
   }
 
+  private def executorsPendingToRemove(manager: ExecutorAllocationManager): Set[String] = {
+    manager.executorMonitor.executorsPendingToRemove()
+  }
 }
 
 /**
@@ -1051,8 +1054,6 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _numExecutorsToAdd = PrivateMethod[Int]('numExecutorsToAdd)
   private val _numExecutorsTarget = PrivateMethod[Int]('numExecutorsTarget)
   private val _maxNumExecutorsNeeded = PrivateMethod[Int]('maxNumExecutorsNeeded)
-  private val _executorsPendingToRemove =
-    PrivateMethod[collection.Set[String]]('executorsPendingToRemove)
   private val _addTime = PrivateMethod[Long]('addTime)
   private val _schedule = PrivateMethod[Unit]('schedule)
   private val _addExecutors = PrivateMethod[Int]('addExecutors)
@@ -1072,11 +1073,6 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def numExecutorsTarget(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsTarget()
-  }
-
-  private def executorsPendingToRemove(
-      manager: ExecutorAllocationManager): collection.Set[String] = {
-    manager invokePrivate _executorsPendingToRemove()
   }
 
   private def addTime(manager: ExecutorAllocationManager): Long = {

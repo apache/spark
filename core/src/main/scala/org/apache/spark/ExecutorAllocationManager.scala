@@ -134,9 +134,6 @@ private[spark] class ExecutorAllocationManager(
   // is the number of executors we would immediately want from the cluster manager.
   private var numExecutorsTarget = initialNumExecutors
 
-  // Executors that have been requested to be removed but have not been killed yet
-  private val executorsPendingToRemove = new mutable.HashSet[String]
-
   // A timestamp of when an addition should be triggered, or NOT_SET if it is not set
   // This is set when pending tasks are added but not scheduled yet
   private var addTime: Long = NOT_SET
@@ -253,7 +250,6 @@ private[spark] class ExecutorAllocationManager(
   def reset(): Unit = synchronized {
     addTime = 0L
     numExecutorsTarget = initialNumExecutors
-    executorsPendingToRemove.clear()
     executorMonitor.reset()
   }
 
@@ -422,10 +418,12 @@ private[spark] class ExecutorAllocationManager(
    */
   private def removeExecutors(executors: Seq[String]): Seq[String] = synchronized {
     val executorIdsToBeRemoved = new ArrayBuffer[String]
-    val numExistingExecutors = executorMonitor.executorCount - executorsPendingToRemove.size
+
+    logInfo("Request to remove executorIds: " + executors.mkString(", "))
+    val numExistingExecutors = executorMonitor.executorCount - executorMonitor.pendingRemovalCount
 
     var newExecutorTotal = numExistingExecutors
-    executors.filter(!executorsPendingToRemove.contains(_)).foreach { executorIdToBeRemoved =>
+    executors.foreach { executorIdToBeRemoved =>
       if (newExecutorTotal - 1 < minNumExecutors) {
         logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
           s"$newExecutorTotal executor(s) left (minimum number of executor limit $minNumExecutors)")
@@ -441,8 +439,6 @@ private[spark] class ExecutorAllocationManager(
     if (executorIdsToBeRemoved.isEmpty) {
       return Seq.empty[String]
     }
-
-    logInfo("Request to remove executorIds: " + executorIdsToBeRemoved.mkString(", "))
 
     // Send a request to the backend to kill this executor(s)
     val executorsRemoved = if (testing) {
@@ -460,12 +456,10 @@ private[spark] class ExecutorAllocationManager(
     // reset the newExecutorTotal to the existing number of executors
     newExecutorTotal = numExistingExecutors
     if (testing || executorsRemoved.nonEmpty) {
-      executorsRemoved.foreach { removedExecutorId =>
-        newExecutorTotal -= 1
-        logInfo(s"Removing executor $removedExecutorId because of idle timeout " +
-          s"(new desired total will be $newExecutorTotal)")
-        executorsPendingToRemove.add(removedExecutorId)
-      }
+      newExecutorTotal -= executorsRemoved.size
+      executorMonitor.executorsKilled(executorsRemoved)
+      logInfo(s"Executors ${executorsRemoved.mkString(",")} removed due to idle timeout." +
+        s"(new desired total will be $newExecutorTotal)")
       executorsRemoved
     } else {
       logWarning(s"Unable to reach the cluster manager to kill executor/s " +
@@ -619,16 +613,6 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-      val executorId = executorRemoved.executorId
-      allocationManager.synchronized {
-        if (executorsPendingToRemove.remove(executorId)) {
-          logDebug(s"Executor $executorId is no longer pending to " +
-            s"be removed (${executorsPendingToRemove.size} left)")
-        }
-      }
-    }
-
     override def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted)
       : Unit = {
        val stageId = speculativeTask.stageId
@@ -711,7 +695,7 @@ private[spark] class ExecutorAllocationManager(
     }
 
     registerGauge("numberExecutorsToAdd", numExecutorsToAdd, 0)
-    registerGauge("numberExecutorsPendingToRemove", executorsPendingToRemove.size, 0)
+    registerGauge("numberExecutorsPendingToRemove", executorMonitor.pendingRemovalCount, 0)
     registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
     registerGauge("numberTargetExecutors", numExecutorsTarget, 0)
     registerGauge("numberMaxNeededExecutors", maxNumExecutorsNeeded(), 0)

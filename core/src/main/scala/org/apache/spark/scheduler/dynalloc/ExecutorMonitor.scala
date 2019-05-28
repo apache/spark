@@ -63,7 +63,6 @@ private[spark] class ExecutorMonitor(
   // from being removed.
   private var nextTimeout = new AtomicLong(Long.MaxValue)
   private var timedOutExecs = Seq.empty[String]
-  @volatile private var recomputeTimedOutExecs = false
 
   if (idleTimeoutMs < 0) {
     throw new SparkException(s"${DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key} must be >= 0!")
@@ -76,14 +75,11 @@ private[spark] class ExecutorMonitor(
     executors.clear()
     nextTimeout.set(Long.MaxValue)
     timedOutExecs = Nil
-    recomputeTimedOutExecs = false
   }
 
   def timedOutExecutors(): Seq[String] = {
     val now = clock.getTimeMillis()
-    if (recomputeTimedOutExecs || now >= nextTimeout.get()) {
-      recomputeTimedOutExecs = false
-
+    if (now >= nextTimeout.get()) {
       // Temporarily set the next timeout at Long.MaxValue. This ensures that after
       // scanning all executors below, we know when the next timeout for non-timed out
       // executors is (whether that update came from the scan, or from a new event
@@ -92,6 +88,7 @@ private[spark] class ExecutorMonitor(
 
       var newNextTimeout = Long.MaxValue
       timedOutExecs = executors.asScala
+        .filter { case (_, exec) => !exec.pendingRemoval }
         .filter { case (_, exec) =>
           val deadline = exec.timeoutAt
           if (deadline > now) {
@@ -121,7 +118,25 @@ private[spark] class ExecutorMonitor(
     timedOutExecs
   }
 
+  /**
+   * Mark the given executors as pending to be removed. Should only be called in the EAM thread.
+   */
+  def executorsKilled(ids: Seq[String]): Unit = {
+    ids.foreach { id =>
+      val tracker = executors.get(id)
+      if (tracker != null) {
+        tracker.pendingRemoval = true
+      }
+    }
+
+    // Recompute timed out executors in the next EAM callback, since this call invalidates
+    // the current list.
+    nextTimeout.set(Long.MinValue)
+  }
+
   def executorCount: Int = executors.size()
+
+  def pendingRemovalCount: Int = executors.asScala.count { case (_, exec) => exec.pendingRemoval }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = {
     val executorId = event.taskInfo.executorId
@@ -149,7 +164,6 @@ private[spark] class ExecutorMonitor(
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     if (executors.remove(event.executorId) != null) {
       logInfo(s"Executor ${event.executorId} removed (new total is ${executors.size()})")
-      recomputeTimedOutExecs = true
     }
   }
 
@@ -207,6 +221,11 @@ private[spark] class ExecutorMonitor(
     }.toSeq
   }
 
+  // Visible for testing
+  def executorsPendingToRemove(): Set[String] = {
+    executors.asScala.filter { case (_, exec) => exec.pendingRemoval }.keys.toSet
+  }
+
   /**
    * This method should be used when updating executor state. It guards against a race condition in
    * which the `SparkListenerTaskStart` event is posted before the `SparkListenerBlockManagerAdded`
@@ -231,6 +250,8 @@ private[spark] class ExecutorMonitor(
     // Tracks whether this executor is thought to be timed out. It's used to detect when the list
     // of timed out executors needs to be updated due to the executor's state changing.
     @volatile var timedOut: Boolean = false
+
+    var pendingRemoval: Boolean = false
 
     private var idleStart: Long = -1
     private var runningTasks: Int = 0
@@ -263,7 +284,7 @@ private[spark] class ExecutorMonitor(
       // If the executor was thought to be timed out, but the new deadline is later than the
       // old one, ask the EAM thread to update the list of timed out executors.
       if (timedOut && newDeadline > oldDeadline) {
-        recomputeTimedOutExecs = true
+        nextTimeout.set(Long.MinValue)
       }
 
       updateNextTimeout(newDeadline)
