@@ -189,7 +189,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   private val caseInsensitiveConf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> false)
-  private val caseInsensitiveAnalyzer = new Analyzer(
+  private val caseInsensitiveAnalyzer = new TestAnalyzer(
     new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, caseInsensitiveConf),
     caseInsensitiveConf)
 

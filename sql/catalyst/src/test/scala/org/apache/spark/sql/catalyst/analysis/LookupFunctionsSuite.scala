@@ -36,7 +36,7 @@ class LookupFunctionsSuite extends PlanTest {
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
         ignoreIfExists = false)
-      new Analyzer(catalog, conf)
+      new TestAnalyzer(catalog, conf)
     }
 
     def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
@@ -63,7 +63,7 @@ class LookupFunctionsSuite extends PlanTest {
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
         ignoreIfExists = false)
-      new Analyzer(catalog, conf)
+      new TestAnalyzer(catalog, conf)
     }
 
     def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
