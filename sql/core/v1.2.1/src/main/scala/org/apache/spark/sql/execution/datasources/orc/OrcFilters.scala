@@ -77,8 +77,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       filters: Seq[Filter]): Seq[Filter] = {
     for {
       filter <- filters
-      _ <- buildSearchArgument(dataTypeMap, filter, newBuilder())
-    } yield filter
+      trimmedFilter <- trimUnconvertibleFilters(dataTypeMap, filter, newBuilder())
+    } yield trimmedFilter
   }
 
   /**
@@ -111,6 +111,13 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case _ => value
   }
 
+  private def trimUnconvertibleFilters(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      builder: Builder): Option[Filter] = {
+    filterAndBuild(dataTypeMap, expression, builder, shouldBuildSearchArgument = false).left.get
+  }
+
   /**
    * Build a SearchArgument and return the builder so far.
    */
@@ -118,7 +125,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    filterAndBuild(dataTypeMap, expression, builder)
+    filterAndBuild(dataTypeMap, expression, builder, shouldBuildSearchArgument = true).right.get
   }
 
   sealed trait ActionType
@@ -142,7 +149,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   private def filterAndBuild(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
-      builder: Builder): Option[Builder] = {
+      builder: Builder,
+      shouldBuildSearchArgument: Boolean): Either[Option[Filter], Option[Builder]] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
 
@@ -340,8 +348,12 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       performAction(BuildSearchArgument, expression).right.get
 
     val filteredExpression = performFilter(expression, canPartialPushDownConjuncts = true)
-    filteredExpression.foreach(updateBuilder)
-    filteredExpression.map(_ => builder)
+    if (shouldBuildSearchArgument) {
+      filteredExpression.foreach(updateBuilder)
+      Right(filteredExpression.map(_ => builder))
+    } else {
+      Left(filteredExpression)
+    }
   }
 }
 
