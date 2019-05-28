@@ -30,7 +30,8 @@ import org.apache.spark.sql.types._
  * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
  *
  * Due to limitation of ORC `SearchArgument` builder, we had to implement separate checking and
- * conversion code paths to make sure we only convert predicates that are known to be convertible.
+ * conversion passes through the Filter to make sure we only convert predicates that are known
+ * to be convertible.
  *
  * An ORC `SearchArgument` must be built in one pass using a single builder.  For example, you can't
  * build `a = 1` and `b = 2` first, and then combine them into `a = 1 AND b = 2`.  This is quite
