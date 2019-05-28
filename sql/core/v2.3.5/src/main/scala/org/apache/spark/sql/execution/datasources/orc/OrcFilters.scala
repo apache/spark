@@ -63,11 +63,12 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    */
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
     val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+    val orcFilterConverter = new OrcFilterConverter(dataTypeMap)
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
       conjunction <- buildTree(convertibleFilters(schema, dataTypeMap, filters))
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
-      builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
+      builder <- orcFilterConverter.buildSearchArgument(conjunction, newBuilder)
     } yield builder.build()
   }
 
@@ -75,11 +76,18 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       schema: StructType,
       dataTypeMap: Map[String, DataType],
       filters: Seq[Filter]): Seq[Filter] = {
+    val orcFilterConverter = new OrcFilterConverter(dataTypeMap)
     for {
       filter <- filters
-      trimmedFilter <- trimUnconvertibleFilters(dataTypeMap, filter, newBuilder())
+      trimmedFilter <- orcFilterConverter.trimUnconvertibleFilters(filter, newBuilder())
     } yield trimmedFilter
   }
+
+}
+
+private class OrcFilterConverter(
+    val dataTypeMap: Map[String, DataType]
+) {
 
   /**
    * Get PredicateLeafType which is corresponding to the given DataType.
@@ -110,12 +118,13 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       new HiveDecimalWritable(HiveDecimal.create(value.asInstanceOf[java.math.BigDecimal]))
     case _ => value
   }
+  import org.apache.spark.sql.sources._
+  import OrcFilters._
 
-  private def trimUnconvertibleFilters(
-      dataTypeMap: Map[String, DataType],
+  private[sql] def trimUnconvertibleFilters(
       expression: Filter,
       builder: Builder): Option[Filter] = {
-    performFilter(dataTypeMap, expression, canPartialPushDownConjuncts = true)
+    performFilter(expression, canPartialPushDownConjuncts = true)
   }
 
   /**
@@ -132,19 +141,15 @@ private[sql] object OrcFilters extends OrcFiltersBase {
    * in exponential complexity in the height of the tree, causing perf problems with Filters with
    * as few as ~35 nodes if they were skewed.
    */
-  private def buildSearchArgument(
-      dataTypeMap: Map[String, DataType],
+  private[sql] def buildSearchArgument(
       expression: Filter,
       builder: Builder): Option[Builder] = {
     val filteredExpression: Option[Filter] = performFilter(
-      dataTypeMap,
       expression,
       canPartialPushDownConjuncts = true)
-    filteredExpression.foreach(updateBuilder(dataTypeMap, _, builder))
+    filteredExpression.foreach(updateBuilder(_, builder))
     filteredExpression.map(_ => builder)
   }
-
-  import org.apache.spark.sql.sources._
 
   sealed trait ActionType
   case class TrimUnconvertibleFilters(canPartialPushDownConjuncts: Boolean) extends ActionType
@@ -171,7 +176,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   //   remaining nodes are convertible).
   def performAction(
       actionType: ActionType,
-      dataTypeMap: Map[String, DataType],
       expression: Filter): Either[Option[Filter], Unit] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
@@ -191,8 +195,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
             // Pushing one side of AND down is only safe to do at the top level or in the child
             // AND before hitting NOT or OR conditions, and in this case, the unsupported
             // predicate can be safely removed.
-            val lhs = performFilter(dataTypeMap, left, canPartialPushDownConjuncts)
-            val rhs = performFilter(dataTypeMap, right, canPartialPushDownConjuncts)
+            val lhs = performFilter(left, canPartialPushDownConjuncts)
+            val rhs = performFilter(right, canPartialPushDownConjuncts)
             (lhs, rhs) match {
               case (Some(l), Some(r)) => Left(Some(And(l, r)))
               case (Some(_), None) if canPartialPushDownConjuncts => Left(lhs)
@@ -201,8 +205,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
             }
           case BuildSearchArgument(builder) =>
             builder.startAnd()
-            updateBuilder(dataTypeMap, left, builder)
-            updateBuilder(dataTypeMap, right, builder)
+            updateBuilder(left, builder)
+            updateBuilder(right, builder)
             builder.end()
             Right(Unit)
         }
@@ -222,13 +226,13 @@ private[sql] object OrcFilters extends OrcFiltersBase {
             // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
             // As per the logical in And predicate, we can push down (a1 OR b1).
             Left(for {
-              lhs: Filter <- performFilter(dataTypeMap, left, canPartialPushDownConjuncts)
-              rhs: Filter <- performFilter(dataTypeMap, right, canPartialPushDownConjuncts)
+              lhs: Filter <- performFilter(left, canPartialPushDownConjuncts)
+              rhs: Filter <- performFilter(right, canPartialPushDownConjuncts)
             } yield Or(lhs, rhs))
           case BuildSearchArgument(builder) =>
             builder.startOr()
-            updateBuilder(dataTypeMap, left, builder)
-            updateBuilder(dataTypeMap, right, builder)
+            updateBuilder(left, builder)
+            updateBuilder(right, builder)
             builder.end()
             Right(Unit)
         }
@@ -237,11 +241,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         actionType match {
           case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
             val filteredSubtree =
-              performFilter(dataTypeMap, child, canPartialPushDownConjuncts = false)
+              performFilter(child, canPartialPushDownConjuncts = false)
             Left(filteredSubtree.map(Not(_)))
           case BuildSearchArgument(builder) =>
             builder.startNot()
-            updateBuilder(dataTypeMap, child, builder)
+            updateBuilder(child, builder)
             builder.end()
             Right(Unit)
         }
@@ -341,16 +345,14 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 
   private def performFilter(
-      dataTypeMap: Map[String, DataType],
       expression: Filter,
       canPartialPushDownConjuncts: Boolean): Option[Filter] =
-    performAction(TrimUnconvertibleFilters(canPartialPushDownConjuncts), dataTypeMap, expression)
+    performAction(TrimUnconvertibleFilters(canPartialPushDownConjuncts), expression)
         .left
         .get
 
   private def updateBuilder(
-      dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Unit =
-    performAction(BuildSearchArgument(builder), dataTypeMap, expression).right.get
+    performAction(BuildSearchArgument(builder), expression).right.get
 }
