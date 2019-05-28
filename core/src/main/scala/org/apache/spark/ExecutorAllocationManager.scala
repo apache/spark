@@ -575,7 +575,6 @@ private[spark] class ExecutorAllocationManager(
       val stageId = taskStart.stageId
       val taskId = taskStart.taskInfo.taskId
       val taskIndex = taskStart.taskInfo.index
-      val executorId = taskStart.taskInfo.executorId
 
       allocationManager.synchronized {
         if (stageIdToNumRunningTask.contains(stageId)) {
@@ -596,7 +595,6 @@ private[spark] class ExecutorAllocationManager(
     }
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-      val executorId = taskEnd.taskInfo.executorId
       val taskId = taskEnd.taskInfo.taskId
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
