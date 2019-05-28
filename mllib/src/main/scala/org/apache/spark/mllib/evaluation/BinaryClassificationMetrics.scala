@@ -163,15 +163,26 @@ class BinaryClassificationMetrics @Since("3.0.0") (
   private lazy val (
     cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
+
+    val numPartitions = if (numBins == 0) {
+      scoreLabelsWeight.getNumPartitions
+    } else {
+      numBins
+    }
+
     // Create a bin for each distinct score value, count weighted positives and
     // negatives within each bin, and then sort by score values in descending order.
+    // Some algorithmUse UniqueId here to make range-based partition more even.
     val counts = scoreLabelsWeight.combineByKey(
       createCombiner = (labelAndWeight: (Double, Double)) =>
         new BinaryLabelCounter(0.0, 0.0) += (labelAndWeight._1, labelAndWeight._2),
       mergeValue = (c: BinaryLabelCounter, labelAndWeight: (Double, Double)) =>
         c += (labelAndWeight._1, labelAndWeight._2),
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
-    ).sortByKey(ascending = false)
+    ).zipWithUniqueId()
+      .sortBy(f = { case ((value, _), id) => (value, id) }, false, numPartitions)
+      .map(_._1)
+
 
     val binnedCounts =
       // Only down-sample if bins is > 0
@@ -179,31 +190,25 @@ class BinaryClassificationMetrics @Since("3.0.0") (
         // Use original directly
         counts
       } else {
-        val countsSize = counts.count()
-        // Group the iterator into chunks of about countsSize / numBins points,
-        // so that the resulting number of bins is about numBins
-        var grouping = countsSize / numBins
-        if (grouping < 2) {
-          // numBins was more than half of the size; no real point in down-sampling to bins
-          logInfo(s"Curve is too small ($countsSize) for $numBins bins to be useful")
-          counts
-        } else {
-          if (grouping >= Int.MaxValue) {
-            logWarning(
-              s"Curve too large ($countsSize) for $numBins bins; capping at ${Int.MaxValue}")
-            grouping = Int.MaxValue
-          }
-          counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
+        counts.mapPartitions { iter =>
+          if (iter.nonEmpty) {
             // The score of the combined point will be just the last one's score, which is also
             // the minimal in each chunk since all scores are already sorted in descending.
-            val lastScore = pairs.last._1
+            var lastScore = Double.NaN
             // The combined point will contain all counts in this chunk. Thus, calculated
             // metrics (like precision, recall, etc.) on its score (or so-called threshold) are
             // the same as those without sampling.
             val agg = new BinaryLabelCounter()
-            pairs.foreach(pair => agg += pair._2)
-            (lastScore, agg)
-          })
+
+            while (iter.hasNext) {
+              val pair = iter.next()
+              lastScore = pair._1
+              agg += pair._2
+            }
+            Iterator.single((lastScore, agg))
+          } else {
+            Iterator.empty
+          }
         }
       }
 
