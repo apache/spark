@@ -661,7 +661,7 @@ class ExpressionParserSuite extends PlanTest {
       "0:0:0",
       "0:0:1")
     hourTimeValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromHourTimeString(value))
+      val result = Literal(CalendarInterval.fromDayTimeString(value))
       checkIntervals(s"'$value' hour to second", result)
     }
 
