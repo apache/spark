@@ -44,7 +44,7 @@ case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
 
-  private val runId: UUID = UUID.randomUUID
+  private[sql] val runId: UUID = UUID.randomUUID
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -72,7 +72,7 @@ case class BroadcastExchangeExec(
   private val timeout: Long = SQLConf.get.broadcastTimeout
 
   @transient
-  private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+  private[sql] lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val task = new Callable[broadcast.Broadcast[Any]]() {

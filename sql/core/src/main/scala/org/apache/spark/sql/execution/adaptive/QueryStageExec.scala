@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.concurrent.Future
 
-import org.apache.spark.MapOutputStatistics
+import org.apache.spark.{FutureAction, MapOutputStatistics}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -59,6 +59,11 @@ abstract class QueryStageExec extends LeafExecNode {
    * stage is ready.
    */
   def doMaterialize(): Future[Any]
+
+  /**
+   * Cancel the stage materialization if in progress; otherwise do nothing.
+   */
+  def cancel(): Unit
 
   /**
    * Materialize this query stage, to prepare for the execution, like submitting map stages,
@@ -113,18 +118,19 @@ case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: ShuffleExchangeExec) extends QueryStageExec {
 
-  @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
-    if (plan.inputRDD.getNumPartitions == 0) {
-      // `submitMapStage` does not accept RDD with 0 partition. Here we return null and the caller
-      // side should take care of it.
-      Future.successful(null)
-    } else {
-      sparkContext.submitMapStage(plan.shuffleDependency)
-    }
+  @transient lazy val mapOutputStatisticsFuture: FutureAction[MapOutputStatistics] = {
+    assert (plan.inputRDD.getNumPartitions > 0)
+    sparkContext.submitMapStage(plan.shuffleDependency)
   }
 
   override def doMaterialize(): Future[Any] = {
     mapOutputStatisticsFuture
+  }
+
+  override def cancel(): Unit = {
+    if (!mapOutputStatisticsFuture.isCompleted) {
+      mapOutputStatisticsFuture.cancel()
+    }
   }
 }
 
@@ -137,6 +143,13 @@ case class BroadcastQueryStageExec(
 
   override def doMaterialize(): Future[Any] = {
     plan.completionFuture
+  }
+
+  override def cancel(): Unit = {
+    if (!plan.relationFuture.isDone) {
+      sparkContext.cancelJobGroup(plan.runId.toString)
+      plan.relationFuture.cancel(true)
+    }
   }
 }
 
@@ -161,6 +174,10 @@ case class ReusedQueryStageExec(
 
   override def doMaterialize(): Future[Any] = {
     plan.materialize()
+  }
+
+  override def cancel(): Unit = {
+    plan.cancel()
   }
 
   // `ReusedQueryStageExec` can have distinct set of output attribute ids from its child, we need

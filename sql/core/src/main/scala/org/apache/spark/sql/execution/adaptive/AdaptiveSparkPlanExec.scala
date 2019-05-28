@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import java.util
 import java.util.concurrent.LinkedBlockingQueue
 
+import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
@@ -67,41 +69,57 @@ case class AdaptiveSparkPlanExec(
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
   override def doExecute(): RDD[InternalRow] = {
-    val events = new LinkedBlockingQueue[StageMaterializationEvent]()
     var result = createQueryStages(currentPhysicalPlan)
-    while(!result.allChildStagesMaterialized) {
-      currentPhysicalPlan = result.newPlan
-      updateLogicalPlan(result.newStages)
-      onUpdatePlan()
-      result.newStages.map(_._2).foreach { stage =>
-        stage.materialize().onComplete { res =>
-          if (res.isSuccess) {
-            stage.resultOption = Some(res.get)
-            events.offer(StageSuccess(stage))
-          } else {
-            events.offer(StageFailure(stage, res.failed.get))
+    currentPhysicalPlan.synchronized {
+      val events = new LinkedBlockingQueue[StageMaterializationEvent]()
+      val errors = new mutable.ArrayBuffer[SparkException]()
+      while (!result.allChildStagesMaterialized) {
+        currentPhysicalPlan = result.newPlan
+        updateLogicalPlan(result.newStages)
+        onUpdatePlan()
+
+        // Start materialization of all new stages.
+        result.newStages.map(_._2).foreach { stage =>
+          stage.materialize().onComplete { res =>
+            if (res.isSuccess) {
+              events.offer(StageSuccess(stage, res.get))
+            } else {
+              events.offer(StageFailure(stage, res.failed.get))
+            }
           }
         }
-      }
-      // Wait on the next completed stage, which indicates new stats are available and probably
-      // new stages can be created. There might be other stages that finish at around the same
-      // time, so we process those stages too in order to reduce re-planning.
-      val nextMsg = events.take()
-      val rem = mutable.ArrayBuffer.empty[StageMaterializationEvent]
-      (Seq(nextMsg) ++ rem).foreach{ e => e match
-        {
-          case StageSuccess(stage) =>
+
+        // Wait on the next completed stage, which indicates new stats are available and probably
+        // new stages can be created. There might be other stages that finish at around the same
+        // time, so we process those stages too in order to reduce re-planning.
+        val nextMsg = events.take()
+        val rem = new util.ArrayList[StageMaterializationEvent]()
+        events.drainTo(rem)
+        (Seq(nextMsg) ++ rem.asScala).foreach {
+          case StageSuccess(stage, res) =>
+            stage.resultOption = Some(res)
             completedStages += stage.id
           case StageFailure(stage, ex) =>
-            throw new SparkException(
-              s"""
-                 |Fail to materialize query stage ${stage.id}:
-                 |${stage.plan.treeString}
-               """.stripMargin, ex)
+            errors.append(
+              new SparkException(s"Fail to materialize query stage: ${stage.treeString}", ex))
         }
+
+        // In case of errors, we cancel all running stages and throw exception.
+        if (errors.nonEmpty) {
+          currentPhysicalPlan.foreach {
+            case s: QueryStageExec => s.cancel()
+            case _ =>
+          }
+          val ex = new SparkException(
+            "Adaptive execution failed due to stage materialization failures.", errors.head)
+          errors.tail.foreach(ex.addSuppressed)
+          throw ex
+        }
+
+        // Do re-planning and try creating new stages on the new physical plan.
+        reOptimize()
+        result = createQueryStages(currentPhysicalPlan)
       }
-      reOptimize()
-      result = createQueryStages(currentPhysicalPlan)
     }
 
     // Run the final plan when there's no more unfinished stages.
@@ -359,7 +377,7 @@ sealed trait StageMaterializationEvent
 /**
  * The materialization of a query stage completed with success.
  */
-case class StageSuccess(stage: QueryStageExec) extends StageMaterializationEvent
+case class StageSuccess(stage: QueryStageExec, result: Any) extends StageMaterializationEvent
 
 /**
  * The materialization of a query stage hit an error and failed.

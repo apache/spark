@@ -28,9 +28,9 @@ case class PlanAdaptiveSubqueries(
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case expressions.ScalarSubquery(_, _, exprId) =>
-        subqueryMap.get(exprId.id).get
+        subqueryMap(exprId.id)
       case expressions.InSubquery(_, ListQuery(_, _, exprId, _)) =>
-        subqueryMap.get(exprId.id).get
+        subqueryMap(exprId.id)
     }
   }
 }
