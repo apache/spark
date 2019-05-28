@@ -180,7 +180,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     def shutdownOnTaskCompletion() {
       assert(context.isCompleted)
       this.interrupt()
-      this.join()
     }
 
     /**
@@ -349,12 +348,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()
       } catch {
-        case _: InterruptedException =>
-          // we deliberately shutdown this write thread immediately when task finished,
-          // in order to avoid hitting AssertionError by releasing lock on un-locked block
-          // at the time when this write thread consumes all element in iterator.
-          // Please see SPARK-25139 & SPARK-18406 for details.
-
         case t: Throwable if (NonFatal(t) || t.isInstanceOf[Exception]) =>
           if (context.isCompleted || context.isInterrupted) {
             logDebug("Exception/NonFatal Error thrown after task completion (likely due to " +
