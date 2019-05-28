@@ -150,16 +150,6 @@ object SQLConf {
     }
   }
 
-  val DETERMINISTIC_UDF_FOLD_ENABLED = buildConf("spark.deterministic.udf.folding.enabled")
-    .doc("When true, it will enable the optimization for a UDF that is deterministic and the " +
-      "inputs are all literals. When your inputs to the UDF are all literal and UDF is " +
-      "deterministic, we can optimize this to evaluate the UDF once and use the output " +
-      "instead of evaluating the UDF each time for every row in the query." +
-      "Ensure that your UDFs are correctly setup with respect to whether they are " +
-      "deterministic or not, before enabling this.")
-    .booleanConf
-    .createWithDefault(false)
-
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -1787,6 +1777,17 @@ object SQLConf {
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
     .createWithDefault(false)
+
+  val DETERMINISTIC_LITERAL_UDF_FOLD_ENABLED =
+    buildConf("spark.sql.deterministic.literal.udf.folding.enabled")
+      .doc("When true, it will enable the optimization for a UDF that is deterministic and the " +
+        "inputs are all literals. When your inputs to the UDF are all literal and UDF is " +
+        "deterministic, we can optimize this to evaluate the UDF once and use the output " +
+        "instead of evaluating the UDF each time for every row in the query." +
+        "Ensure that your UDFs are correctly setup with respect to whether they are " +
+        "deterministic or not, before enabling this.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -2149,8 +2150,6 @@ class SQLConf extends Serializable with Logging {
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
-  def deterministicUdfFoldEnabled: Boolean = getConf(DETERMINISTIC_UDF_FOLD_ENABLED)
-
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
@@ -2246,6 +2245,9 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
+
+  def deterministicLiteralUdfFoldEnabled: Boolean = getConf(DETERMINISTIC_LITERAL_UDF_FOLD_ENABLED)
+
 
   /** ********************** SQLConf functionality methods ************ */
 

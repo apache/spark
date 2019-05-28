@@ -23,7 +23,7 @@ import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
-class UDFOptimizationsSuite extends QueryTest with SharedSQLContext {
+class DeterministicLiteralUDFSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("Deterministic and literal UDF optimization") {
@@ -33,7 +33,7 @@ class UDFOptimizationsSuite extends QueryTest with SharedSQLContext {
       }).length
     }
 
-    withSQLConf(SQLConf.DETERMINISTIC_UDF_FOLD_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.DETERMINISTIC_LITERAL_UDF_FOLD_ENABLED.key -> "true") {
       // Non deterministic
       val foo = udf(() => Math.random())
       spark.udf.register("random0", foo.asNondeterministic())

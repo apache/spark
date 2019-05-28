@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object DeterministicLiteralUDF extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan =
-    if (!SQLConf.get.deterministicUdfFoldEnabled) {
+    if (!SQLConf.get.deterministicLiteralUdfFoldEnabled) {
       plan
     } else plan transformAllExpressions {
       case udf @ ScalaUDF(_, dataType, children, _, _, _, _, udfDeterministic)
