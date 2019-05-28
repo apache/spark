@@ -16,10 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Starts the Mesos Cluster Dispatcher on the machine this script is executed on.
-# The Mesos Cluster Dispatcher is responsible for launching the Mesos framework and
-# Rest server to handle driver requests for Mesos cluster mode.
-# Only one cluster dispatcher is needed per Mesos cluster.
 
 # This script is a basic example script to get resource information about NVIDIA GPUs.
 # It assumes the drivers are properly installed and the nvidia-smi command is available.
