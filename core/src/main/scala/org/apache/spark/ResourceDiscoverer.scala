@@ -135,10 +135,10 @@ private[spark] object ResourceDiscoverer extends Logging {
 
   def parseAllocatedFromJsonFile(resourcesFile: String): Map[String, ResourceInformation] = {
     implicit val formats = DefaultFormats
+    // case class to make json4s parsing easy
+    case class JsonResourceInformation(val name: String, val addresses: Array[String])
     val resourceInput = new BufferedInputStream(new FileInputStream(resourcesFile))
     val resources = try {
-      // case class to make json4s parsing easy
-      case class JsonResourceInformation(val name: String, val addresses: Array[String])
       parse(resourceInput).extract[Seq[JsonResourceInformation]]
     } catch {
       case e@(_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
