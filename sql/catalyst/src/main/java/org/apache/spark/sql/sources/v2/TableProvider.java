@@ -56,6 +56,6 @@ public interface TableProvider {
    */
   default Table getTable(CaseInsensitiveStringMap options, StructType schema) {
     throw new UnsupportedOperationException(
-      this.getClass().getName() + " source does not support user-specified schema");
+      this.getClass().getSimpleName() + " source does not support user-specified schema");
   }
 }
