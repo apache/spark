@@ -39,6 +39,9 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("regEval"))
 
+  @transient private var prevMetrics: RegressionMetrics = _
+  @transient private var prevDataset: Dataset[_] = _
+
   /**
    * Param for metric name in evaluation. Supports:
    *  - `"rmse"` (default): root mean squared error
@@ -78,24 +81,28 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    val schema = dataset.schema
-    SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
-    SchemaUtils.checkNumericType(schema, $(labelCol))
+    if (dataset != prevDataset) {
+      val schema = dataset.schema
+      SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
+      SchemaUtils.checkNumericType(schema, $(labelCol))
 
-    val predictionAndLabelsWithWeights = dataset
-      .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType),
-        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
-      .rdd
-      .map { case Row(prediction: Double, label: Double, weight: Double) =>
-        (prediction, label, weight) }
-    val metrics = new RegressionMetrics(predictionAndLabelsWithWeights)
-    val metric = $(metricName) match {
-      case "rmse" => metrics.rootMeanSquaredError
-      case "mse" => metrics.meanSquaredError
-      case "r2" => metrics.r2
-      case "mae" => metrics.meanAbsoluteError
+      val predictionAndLabelsWithWeights = dataset
+        .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType),
+          if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
+        .rdd
+        .map { case Row(prediction: Double, label: Double, weight: Double) =>
+          (prediction, label, weight) }
+
+      prevMetrics = new RegressionMetrics(predictionAndLabelsWithWeights)
+      prevDataset = dataset
     }
-    metric
+
+    $(metricName) match {
+      case "rmse" => prevMetrics.rootMeanSquaredError
+      case "mse" => prevMetrics.meanSquaredError
+      case "r2" => prevMetrics.r2
+      case "mae" => prevMetrics.meanAbsoluteError
+    }
   }
 
   @Since("1.4.0")
