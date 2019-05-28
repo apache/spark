@@ -58,7 +58,7 @@
     </dependency>
     <dependency>
       <groupId>org.opencypher</groupId>
-      <artifactId>okapi-relational</artifactId>
+      <artifactId>okapi-shade</artifactId>
       <version>${okapi.version}</version>
     </dependency>
 
