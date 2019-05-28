@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -58,6 +59,8 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
   protected override def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException()
   }
+
+  override def setLogicalLink(logicalPlan: LogicalPlan): Unit = {}
 }
 
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
@@ -69,7 +72,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case ReturnAnswer(rootPlan) => rootPlan
         case _ => plan
       }
-      p.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, logicalPlan)
+      p.setLogicalLink(logicalPlan)
       p
     }
   }
