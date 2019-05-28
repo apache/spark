@@ -45,6 +45,16 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @transient private var prevLabelCol: String = _
   @transient private var prevWeightCol: String = _
 
+  private def updateMetrics(dataset: Dataset[_]): Boolean = {
+    if (isDefined(weightCol)) {
+      dataset != prevDataset || $(predictionCol) != prevPredictionCol ||
+        $(labelCol) != prevLabelCol || $(weightCol) != prevWeightCol
+    } else {
+      dataset != prevDataset || $(predictionCol) != prevPredictionCol ||
+        $(labelCol) != prevLabelCol || null != prevWeightCol
+    }
+  }
+
   /**
    * Param for metric name in evaluation. Supports:
    *  - `"rmse"` (default): root mean squared error
@@ -84,12 +94,11 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    if (dataset != prevDataset || $(predictionCol) != prevPredictionCol
-      || $(labelCol) != prevLabelCol || $(weightCol) != prevWeightCol) {
-      val schema = dataset.schema
-      SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
-      SchemaUtils.checkNumericType(schema, $(labelCol))
+    val schema = dataset.schema
+    SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
+    SchemaUtils.checkNumericType(schema, $(labelCol))
 
+    if (updateMetrics(dataset)) {
       val predictionAndLabelsWithWeights = dataset
         .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType),
           if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
@@ -101,7 +110,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       prevDataset = dataset
       prevPredictionCol = $(predictionCol)
       prevLabelCol = $(labelCol)
-      prevWeightCol = $(weightCol)
+      prevWeightCol = if (isDefined(weightCol)) $(weightCol) else null
     }
 
     $(metricName) match {
