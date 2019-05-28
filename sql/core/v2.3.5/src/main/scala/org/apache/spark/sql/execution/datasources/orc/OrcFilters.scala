@@ -122,8 +122,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 
   sealed trait ActionType
-  case object FilterAction extends ActionType
-  case object BuildAction extends ActionType
+  case class TrimUnconvertibleFilters(canPartialPushDownConjuncts: Boolean) extends ActionType {}
+  case object BuildSearchArgument extends ActionType
 
   /**
    * Builds a SearchArgument for a Filter by first trimming the non-convertible nodes, and then
@@ -142,8 +142,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   private def filterAndBuild(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
-      builder: Builder
-  ): Option[Builder] = {
+      builder: Builder): Option[Builder] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
 
@@ -170,12 +169,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     //   remaining nodes are convertible).
     def performAction(
         actionType: ActionType,
-        expression: Filter,
-        canPartialPushDownConjuncts: Boolean): Either[Option[Filter], Unit] = {
+        expression: Filter): Either[Option[Filter], Unit] = {
       expression match {
         case And(left, right) =>
           actionType match {
-            case FilterAction =>
+            case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
               // At here, it is not safe to just keep one side and remove the other side
               // if we do not understand what the parent filters are.
               //
@@ -195,7 +193,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
                 case (None, Some(_)) if canPartialPushDownConjuncts => Left(rhs)
                 case _ => Left(None)
               }
-            case BuildAction =>
+            case BuildSearchArgument =>
               builder.startAnd()
               updateBuilder(left)
               updateBuilder(right)
@@ -205,7 +203,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
         case Or(left, right) =>
           actionType match {
-            case FilterAction =>
+            case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
               // The Or predicate is convertible when both of its children can be pushed down.
               // That is to say, if one/both of the children can be partially pushed down, the Or
               // predicate can be partially pushed down as well.
@@ -221,7 +219,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
                 lhs: Filter <- performFilter(left, canPartialPushDownConjuncts)
                 rhs: Filter <- performFilter(right, canPartialPushDownConjuncts)
               } yield Or(lhs, rhs))
-            case BuildAction =>
+            case BuildSearchArgument =>
               builder.startOr()
               updateBuilder(left)
               updateBuilder(right)
@@ -231,10 +229,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
         case Not(child) =>
           actionType match {
-            case FilterAction =>
+            case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
               val filteredSubtree = performFilter(child, canPartialPushDownConjuncts = false)
               Left(filteredSubtree.map(Not(_)))
-            case BuildAction =>
+            case BuildSearchArgument =>
               builder.startNot()
               updateBuilder(child)
               builder.end()
@@ -247,8 +245,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
         case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               val castedValue = castLiteralValue(value, dataTypeMap(attribute))
               builder.startAnd().equals(quotedName, getType(attribute), castedValue).end()
@@ -256,8 +254,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           }
         case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               val castedValue = castLiteralValue(value, dataTypeMap(attribute))
               builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end()
@@ -265,8 +263,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           }
         case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               val castedValue = castLiteralValue(value, dataTypeMap(attribute))
               builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end()
@@ -274,8 +272,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           }
         case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               val castedValue = castLiteralValue(value, dataTypeMap(attribute))
               builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end()
@@ -283,8 +281,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           }
         case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               val castedValue = castLiteralValue(value, dataTypeMap(attribute))
               builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end()
@@ -292,8 +290,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           }
         case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               val castedValue = castLiteralValue(value, dataTypeMap(attribute))
               builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end()
@@ -301,24 +299,24 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           }
         case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               builder.startAnd().isNull(quotedName, getType(attribute)).end()
               Right(Unit)
           }
         case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               builder.startNot().isNull(quotedName, getType(attribute)).end()
               Right(Unit)
           }
         case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
           actionType match {
-            case FilterAction => Left(Some(expression))
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(Some(expression))
+            case BuildSearchArgument =>
               val quotedName = quoteAttributeNameIfNeeded(attribute)
               val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
               builder.startAnd().in(quotedName, getType(attribute),
@@ -328,18 +326,18 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
         case _ =>
           actionType match {
-            case FilterAction => Left(None)
-            case BuildAction =>
+            case TrimUnconvertibleFilters(_) => Left(None)
+            case BuildSearchArgument =>
               throw new IllegalArgumentException(s"Can't build unsupported filter ${expression}")
           }
       }
     }
 
-    def performFilter(expression: Filter, canPartialPushDownConjuncts: Boolean) =
-      performAction(FilterAction, expression, canPartialPushDownConjuncts).left.get
+    def performFilter(expression: Filter, canPartialPushDownConjuncts: Boolean): Option[Filter] =
+      performAction(TrimUnconvertibleFilters(canPartialPushDownConjuncts), expression).left.get
 
-    def updateBuilder(expression: Filter) =
-      performAction(BuildAction, expression, canPartialPushDownConjuncts = true).right.get
+    def updateBuilder(expression: Filter): Unit =
+      performAction(BuildSearchArgument, expression).right.get
 
     val filteredExpression = performFilter(expression, canPartialPushDownConjuncts = true)
     filteredExpression.foreach(updateBuilder)
