@@ -348,6 +348,10 @@ private class OrcFilterConverter(
         .left
         .get
 
+  /**
+   * Builds a SearchArgument for the given Filter. This method should only be called on Filters
+   * that have previously been trimmed to remove unsupported sub-Filters!
+   */
   private def updateBuilder(
       expression: Filter,
       builder: Builder): Unit =
