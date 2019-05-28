@@ -41,7 +41,8 @@ package object config {
   private[spark] val DRIVER_RESOURCES_FILE =
     ConfigBuilder("spark.driver.resourcesFile")
       .internal()
-      .doc("A file containing the resources allocated to the driver. " +
+      .doc("Path to a file containing the resources allocated to the driver. " +
+        "The file should be formatted as a JSON array of ResourceInformation objects. " +
         "Only used internally in standalone mode.")
       .stringConf
       .createOptional
