@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.evaluation
 
 import scala.collection.Map
+import scala.collection.mutable
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
@@ -32,14 +33,6 @@ import org.apache.spark.sql.{DataFrame, Row}
  */
 @Since("1.1.0")
 class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product]) {
-  val predLabelsWeight: RDD[(Double, Double, Double)] = predictionAndLabels.map {
-    case (prediction: Double, label: Double, weight: Double) =>
-      (prediction, label, weight)
-    case (prediction: Double, label: Double) =>
-      (prediction, label, 1.0)
-    case other =>
-      throw new IllegalArgumentException(s"Expected tuples, got $other")
-  }
 
   /**
    * An auxiliary constructor taking a DataFrame.
@@ -55,46 +48,59 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
     })
 
+
+  private val confusions = predictionAndLabels.map {
+    case (prediction: Double, label: Double, weight: Double) =>
+      (prediction, label, weight)
+    case (prediction: Double, label: Double) =>
+      (prediction, label, 1.0)
+    case other =>
+      throw new IllegalArgumentException(s"Expected tuples, got $other")
+  }.map { case (prediction: Double, label: Double, weight: Double) =>
+    ((label, prediction), weight)
+  }.reduceByKey(_ + _)
+    .collectAsMap()
+
   private lazy val labelCountByClass: Map[Double, Double] = {
-    confusions.toSeq.map {
+    val labelCountByClass = mutable.Map.empty[Double, Double]
+    confusions.iterator.foreach {
       case ((label, _), weight) =>
-        (label, weight)
-    }.groupBy(_._1)
-      .mapValues(_.map(_._2).sum)
+        val w = labelCountByClass.getOrElse(label, 0.0)
+        labelCountByClass.update(label, w + weight)
+    }
+    labelCountByClass.toMap
   }
 
   private lazy val labelCount: Double = labelCountByClass.values.sum
 
   private lazy val tpByClass: Map[Double, Double] = {
-    confusions.toSeq.map {
+    val tpByClass = mutable.Map.empty[Double, Double]
+    confusions.iterator.foreach {
       case ((label, prediction), weight) =>
+        val w = tpByClass.getOrElse(label, 0.0)
         if (label == prediction) {
-          (label, weight)
+          tpByClass.update(label, w + weight)
         } else {
-          (label, 0.0)
+          tpByClass.update(label, w)
         }
-    }.groupBy(_._1)
-      .mapValues(_.map(_._2).sum)
+    }
+    tpByClass.toMap
   }
 
   private lazy val fpByClass: Map[Double, Double] = {
-    confusions.toSeq.map {
+    val fpByClass = mutable.Map.empty[Double, Double]
+    confusions.iterator.foreach {
       case ((label, prediction), weight) =>
+        val w = fpByClass.getOrElse(prediction, 0.0)
         if (label != prediction) {
-          (prediction, weight)
+          fpByClass.update(prediction, w + weight)
         } else {
-          (prediction, 0.0)
+          fpByClass.update(prediction, w)
         }
-    }.groupBy(_._1)
-      .mapValues(_.map(_._2).sum)
+    }
+    fpByClass.toMap
   }
 
-  private lazy val confusions = predLabelsWeight
-    .map {
-      case (prediction: Double, label: Double, weight: Double) =>
-        ((label, prediction), weight)
-    }.reduceByKey(_ + _)
-    .collectAsMap()
 
   /**
    * Returns confusion matrix:

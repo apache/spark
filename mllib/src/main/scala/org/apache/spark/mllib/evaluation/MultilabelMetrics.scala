@@ -44,7 +44,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    * Use MultilabelSummarizer to calculate all summary statistics of predictions
    * and labels on one pass.
    */
-  private lazy val summary: MultilabelSummary = {
+  private val summary: MultilabelSummarizer = {
     predictionAndLabels
       .treeAggregate(new MultilabelSummarizer)(
         (summary, sample) => summary.add(sample._1, sample._2),
@@ -91,20 +91,14 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
   @Since("1.2.0")
   lazy val f1Measure: Double = summary.f1Measure
 
-  private lazy val tpPerClass = summary.tpPerClass
-
-  private lazy val fpPerClass = summary.fpPerClass
-
-  private lazy val fnPerClass = summary.fnPerClass
-
   /**
    * Returns precision for a given label (category)
    * @param label the label.
    */
   @Since("1.2.0")
   def precision(label: Double): Double = {
-    val tp = tpPerClass(label)
-    val fp = fpPerClass.getOrElse(label, 0L)
+    val tp = summary.tpPerClass(label)
+    val fp = summary.fpPerClass.getOrElse(label, 0L)
     if (tp + fp == 0) 0.0 else tp.toDouble / (tp + fp)
   }
 
@@ -114,8 +108,8 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   def recall(label: Double): Double = {
-    val tp = tpPerClass(label)
-    val fn = fnPerClass.getOrElse(label, 0L)
+    val tp = summary.tpPerClass(label)
+    val fn = summary.fnPerClass.getOrElse(label, 0L)
     if (tp + fn == 0) 0.0 else tp.toDouble / (tp + fn)
   }
 
@@ -130,9 +124,9 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
     if((p + r) == 0) 0.0 else 2 * p * r / (p + r)
   }
 
-  private lazy val sumTp = tpPerClass.foldLeft(0L) { case (sum, (_, tp)) => sum + tp }
-  private lazy val sumFpClass = fpPerClass.foldLeft(0L) { case (sum, (_, fp)) => sum + fp }
-  private lazy val sumFnClass = fnPerClass.foldLeft(0L) { case (sum, (_, fn)) => sum + fn }
+  private lazy val sumTp = summary.tpPerClass.foldLeft(0L) { case (sum, (_, tp)) => sum + tp }
+  private lazy val sumFpClass = summary.fpPerClass.foldLeft(0L) { case (sum, (_, fp)) => sum + fp }
+  private lazy val sumFnClass = summary.fnPerClass.foldLeft(0L) { case (sum, (_, fn)) => sum + fn }
 
   /**
    * Returns micro-averaged label-based precision
@@ -140,7 +134,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val microPrecision: Double = {
-    val sumFp = fpPerClass.foldLeft(0L) { case(cum, (_, fp)) => cum + fp}
+    val sumFp = summary.fpPerClass.foldLeft(0L) { case(cum, (_, fp)) => cum + fp}
     sumTp.toDouble / (sumTp + sumFp)
   }
 
@@ -150,7 +144,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val microRecall: Double = {
-    val sumFn = fnPerClass.foldLeft(0.0) { case(cum, (_, fn)) => cum + fn}
+    val sumFn = summary.fnPerClass.foldLeft(0.0) { case(cum, (_, fn)) => cum + fn}
     sumTp.toDouble / (sumTp + sumFn)
   }
 
@@ -165,40 +159,11 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    * Returns the sequence of labels in ascending order
    */
   @Since("1.2.0")
-  lazy val labels: Array[Double] = tpPerClass.keys.toArray.sorted
+  lazy val labels: Array[Double] = summary.tpPerClass.keys.toArray.sorted
 }
 
 
-/**
- * Trait for statistical summary for multi-label metrics.
- */
-private[evaluation] trait MultilabelSummary {
-
-  def numDocs: Long
-
-  def numLabels: Long
-
-  def subsetAccuracy: Double
-
-  def accuracy: Double
-
-  def hammingLoss: Double
-
-  def precision: Double
-
-  def recall: Double
-
-  def f1Measure: Double
-
-  def tpPerClass: Map[Double, Long]
-
-  def fpPerClass: Map[Double, Long]
-
-  def fnPerClass: Map[Double, Long]
-}
-
-
-private[evaluation] class MultilabelSummarizer extends MultilabelSummary with Serializable {
+private[evaluation] class MultilabelSummarizer extends Serializable {
 
   private var docCnt = 0L
   private val labelSet = mutable.Set.empty[Double]
@@ -208,9 +173,9 @@ private[evaluation] class MultilabelSummarizer extends MultilabelSummary with Se
   private var precisionSum = 0.0
   private var recallSum = 0.0
   private var f1MeasureSum = 0.0
-  private val tpPerClass_ = mutable.Map.empty[Double, Long]
-  private val fpPerClass_ = mutable.Map.empty[Double, Long]
-  private val fnPerClass_ = mutable.Map.empty[Double, Long]
+  val tpPerClass = mutable.Map.empty[Double, Long]
+  val fpPerClass = mutable.Map.empty[Double, Long]
+  val fnPerClass = mutable.Map.empty[Double, Long]
 
   /**
    * Add a new sample (predictions and labels) to this summarizer, and update
@@ -223,9 +188,9 @@ private[evaluation] class MultilabelSummarizer extends MultilabelSummary with Se
 
     docCnt += 1L
 
-    labels.foreach(labelSet.add)
+    labelSet ++= labels
 
-    if (predictions.deep == labels.deep) {
+    if (java.util.Arrays.equals(predictions, labels)) {
       subsetAccuracyCnt += 1
     }
 
@@ -243,18 +208,18 @@ private[evaluation] class MultilabelSummarizer extends MultilabelSummary with Se
     f1MeasureSum += 2.0 * intersection.length / (predictions.length + labels.length)
 
     intersection.foreach { k =>
-      val v = tpPerClass_.getOrElse(k, 0L)
-      tpPerClass_.update(k, v + 1)
+      val v = tpPerClass.getOrElse(k, 0L)
+      tpPerClass.update(k, v + 1)
     }
 
     predictions.diff(labels).foreach { k =>
-      val v = fpPerClass_.getOrElse(k, 0L)
-      fpPerClass_.update(k, v + 1)
+      val v = fpPerClass.getOrElse(k, 0L)
+      fpPerClass.update(k, v + 1)
     }
 
     labels.diff(predictions).foreach { k =>
-      val v = fnPerClass_.getOrElse(k, 0L)
-      fnPerClass_.update(k, v + 1)
+      val v = fnPerClass.getOrElse(k, 0L)
+      fnPerClass.update(k, v + 1)
     }
 
     this
@@ -268,59 +233,55 @@ private[evaluation] class MultilabelSummarizer extends MultilabelSummary with Se
    * @return This MultilabelSummarizer object.
    */
   def merge(other: MultilabelSummarizer): this.type = {
-    docCnt += other.docCnt
+    if (other.docCnt > 0) {
+      docCnt += other.docCnt
 
-    other.labelSet.foreach(labelSet.add)
+      labelSet ++= other.labelSet
 
-    subsetAccuracyCnt += other.subsetAccuracyCnt
+      subsetAccuracyCnt += other.subsetAccuracyCnt
 
-    accuracySum += other.accuracySum
+      accuracySum += other.accuracySum
 
-    hammingLossSum += other.hammingLossSum
+      hammingLossSum += other.hammingLossSum
 
-    precisionSum += other.precisionSum
+      precisionSum += other.precisionSum
 
-    recallSum += other.recallSum
+      recallSum += other.recallSum
 
-    f1MeasureSum += other.f1MeasureSum
+      f1MeasureSum += other.f1MeasureSum
 
-    other.tpPerClass_.foreach { case (k, v1) =>
-      val v0 = tpPerClass_.getOrElse(k, 0L)
-      tpPerClass_.update(k, v0 + v1)
-    }
+      other.tpPerClass.foreach { case (k, v1) =>
+        val v0 = tpPerClass.getOrElse(k, 0L)
+        tpPerClass.update(k, v0 + v1)
+      }
 
-    other.fpPerClass_.foreach { case (k, v1) =>
-      val v0 = fpPerClass_.getOrElse(k, 0L)
-      fpPerClass_.update(k, v0 + v1)
-    }
+      other.fpPerClass.foreach { case (k, v1) =>
+        val v0 = fpPerClass.getOrElse(k, 0L)
+        fpPerClass.update(k, v0 + v1)
+      }
 
-    other.fnPerClass_.foreach { case (k, v1) =>
-      val v0 = fnPerClass_.getOrElse(k, 0L)
-      fnPerClass_.update(k, v0 + v1)
+      other.fnPerClass.foreach { case (k, v1) =>
+        val v0 = fnPerClass.getOrElse(k, 0L)
+        fnPerClass.update(k, v0 + v1)
+      }
     }
 
     this
   }
 
-  override def numDocs: Long = docCnt
+  def numDocs: Long = docCnt
 
-  override def numLabels: Long = labelSet.size.toLong
+  def numLabels: Long = labelSet.size.toLong
 
-  override def subsetAccuracy: Double = subsetAccuracyCnt.toDouble / numDocs
+  def subsetAccuracy: Double = subsetAccuracyCnt.toDouble / numDocs
 
-  override def accuracy: Double = accuracySum / numDocs
+  def accuracy: Double = accuracySum / numDocs
 
-  override def hammingLoss: Double = hammingLossSum.toDouble / numDocs / numLabels
+  def hammingLoss: Double = hammingLossSum.toDouble / numDocs / numLabels
 
-  override def precision: Double = precisionSum / numDocs
+  def precision: Double = precisionSum / numDocs
 
-  override def recall: Double = recallSum / numDocs
+  def recall: Double = recallSum / numDocs
 
-  override def f1Measure: Double = f1MeasureSum / numDocs
-
-  override def tpPerClass: Map[Double, Long] = tpPerClass_.toMap
-
-  override def fpPerClass: Map[Double, Long] = fpPerClass_.toMap
-
-  override def fnPerClass: Map[Double, Long] = fnPerClass_.toMap
+  def f1Measure: Double = f1MeasureSum / numDocs
 }
