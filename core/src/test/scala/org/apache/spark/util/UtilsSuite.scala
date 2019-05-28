@@ -1320,9 +1320,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       }
       Utils.tryWithResource(new FileInputStream(testFile)) { inputStream =>
         // deleting the file
-        // the success return value indicates the entry from its directory is removed
-        assert(testFile.delete() === true)
-        assert(testFile.exists() === false)
+        testFile.delete()
         (1 to 1000).foreach { index =>
           assert(inputStream.read() === (index + 42) % 256)
         }
