@@ -185,7 +185,7 @@ of the most common options to set are:
     (e.g YARN, Mesos and Kubernetes.), in MiB unless otherwise specified. This is memory that
     accounts for things like VM overheads, interned strings, other native overheads, etc. 
     This tends to grow with the container size (typically 6-10%). 
-    <em>Note:</em> Non-heap memory including off-heap memory 
+    <em>Note:</em> Non-heap memory includes off-heap memory 
     (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other driver processes
     (e.g python process that goes with a PySpark driver) and memory used by other non-driver 
     processes running in the same container. The maximum memory size of container to running 
@@ -226,7 +226,7 @@ of the most common options to set are:
     things like VM overheads, interned strings, other native overheads, etc. This tends to grow with 
     the executor size (typically 6-10%).This option is currently supported on YARN and Kubernetes.
     <br/>
-    <em>Note:</em> Non-heap memory including off-heap memory 
+    <em>Note:</em> Non-heap memory includes off-heap memory 
     (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other executor processes
     (e.g python process that goes with a PySpark executor) and memory used by other non-executor 
     processes running in the same container. The maximum memory size of container to running executor 
@@ -1247,7 +1247,7 @@ Apart from these, the following properties are also available, and may be useful
     If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory 
     use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
     <em>Note:</em> If off-heap memory use is enabled or off-heap memory size is increased, 
-    recommend raising the non-heap memory size(e.g increase <code>spark.driver.memoryOverhead</code>
+    recommend raise the non-heap memory size(e.g increase <code>spark.driver.memoryOverhead</code>
     or <code>spark.executor.memoryOverhead</code>).
   </td>
 </tr>
