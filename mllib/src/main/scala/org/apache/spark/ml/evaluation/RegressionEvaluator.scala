@@ -41,6 +41,9 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @transient private var prevMetrics: RegressionMetrics = _
   @transient private var prevDataset: Dataset[_] = _
+  @transient private var prevPredictionCol: String = _
+  @transient private var prevLabelCol: String = _
+  @transient private var prevWeightCol: String = _
 
   /**
    * Param for metric name in evaluation. Supports:
@@ -81,7 +84,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    if (dataset != prevDataset) {
+    if (dataset != prevDataset || $(predictionCol) != prevPredictionCol
+      || $(labelCol) != prevLabelCol || $(weightCol) != prevWeightCol) {
       val schema = dataset.schema
       SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
       SchemaUtils.checkNumericType(schema, $(labelCol))
@@ -95,6 +99,9 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
       prevMetrics = new RegressionMetrics(predictionAndLabelsWithWeights)
       prevDataset = dataset
+      prevPredictionCol = $(predictionCol)
+      prevLabelCol = $(labelCol)
+      prevWeightCol = $(weightCol)
     }
 
     $(metricName) match {
