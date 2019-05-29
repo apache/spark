@@ -82,13 +82,15 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE db=identifier                                                #use
-    | CREATE database (IF NOT EXISTS)? identifier
+    | USE db=errorCapturingIdentifier                                         #use
+    | CREATE database (IF NOT EXISTS)? errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
          (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
-    | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
-    | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | ALTER database errorCapturingIdentifier
+        SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
+    | DROP database (IF EXISTS)? db=errorCapturingIdentifier
+        (RESTRICT | CASCADE)?                                          #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
@@ -112,7 +114,7 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+        (errorCapturingIdentifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ALTER TABLE tableIdentifier
         ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -122,7 +124,7 @@ statement
     | ALTER (TABLE | VIEW) tableIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN? identifier colType colPosition?                 #changeColumn
+        CHANGE COLUMN? errorCapturingIdentifier colType colPosition?                 #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -158,20 +160,20 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
-    | SHOW TABLES ((FROM | IN) db=identifier)?
+    | SHOW TABLES ((FROM | IN) db=errorCapturingIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
-    | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
+    | SHOW TABLE EXTENDED ((FROM | IN) db=errorCapturingIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
-        ((FROM | IN) db=identifier)?                                   #showColumns
+        ((FROM | IN) db=errorCapturingIdentifier)?                            #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
-    | SHOW identifier? FUNCTIONS
+    | SHOW errorCapturingIdentifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) database EXTENDED? identifier                  #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? errorCapturingIdentifier           #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
@@ -185,7 +187,7 @@ statement
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
     | MSCK REPAIR TABLE tableIdentifier                                #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | LIST) errorCapturingIdentifier .*?                            #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
@@ -280,7 +282,7 @@ partitionSpec
     ;
 
 partitionVal
-    : identifier (EQ constant)?
+    : errorCapturingIdentifier (EQ constant)?
     ;
 
 database
@@ -297,7 +299,7 @@ describeFuncName
     ;
 
 describeColName
-    : nameParts+=identifier ('.' nameParts+=identifier)*
+    : nameParts+=errorCapturingIdentifier ('.' nameParts+=errorCapturingIdentifier)*
     ;
 
 ctes
@@ -305,7 +307,7 @@ ctes
     ;
 
 namedQuery
-    : name=identifier AS? '(' query ')'
+    : name=errorCapturingIdentifier AS? '(' query ')'
     ;
 
 tableProvider
@@ -321,7 +323,7 @@ tableProperty
     ;
 
 tablePropertyKey
-    : identifier ('.' identifier)*
+    : errorCapturingIdentifier ('.' errorCapturingIdentifier)*
     | STRING
     ;
 
@@ -347,7 +349,7 @@ createFileFormat
 
 fileFormat
     : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING    #tableFileFormat
-    | identifier                                             #genericFileFormat
+    | errorCapturingIdentifier                                      #genericFileFormat
     ;
 
 storageHandler
@@ -355,7 +357,7 @@ storageHandler
     ;
 
 resource
-    : identifier STRING
+    : errorCapturingIdentifier STRING
     ;
 
 dmlStatementNoWith
@@ -432,8 +434,8 @@ hint
     ;
 
 hintStatement
-    : hintName=identifier
-    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
+    : hintName=errorCapturingIdentifier
+    | hintName=errorCapturingIdentifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
     ;
 
 fromClause
@@ -458,16 +460,16 @@ pivotClause
     ;
 
 pivotColumn
-    : identifiers+=identifier
-    | '(' identifiers+=identifier (',' identifiers+=identifier)* ')'
+    : identifiers+=errorCapturingIdentifier
+    | '(' identifiers+=errorCapturingIdentifier (',' identifiers+=errorCapturingIdentifier)* ')'
     ;
 
 pivotValue
-    : expression (AS? identifier)?
+    : expression (AS? errorCapturingIdentifier)?
     ;
 
 lateralView
-    : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)?
+    : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=errorCapturingIdentifier (AS? colName+=errorCapturingIdentifier (',' colName+=errorCapturingIdentifier)*)?
     ;
 
 setQuantifier
@@ -507,7 +509,7 @@ sampleMethod
     : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
     | expression ROWS                                                             #sampleByRows
     | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
-        (ON (identifier | qualifiedName '(' ')'))?                                #sampleByBucket
+        (ON (errorCapturingIdentifier | qualifiedName '(' ')'))?                                #sampleByBucket
     | bytes=expression                                                            #sampleByBytes
     ;
 
@@ -516,7 +518,7 @@ identifierList
     ;
 
 identifierSeq
-    : identifier (',' identifier)*
+    : errorCapturingIdentifier (',' errorCapturingIdentifier)*
     ;
 
 orderedIdentifierList
@@ -524,7 +526,7 @@ orderedIdentifierList
     ;
 
 orderedIdentifier
-    : identifier ordering=(ASC | DESC)?
+    : errorCapturingIdentifier ordering=(ASC | DESC)?
     ;
 
 identifierCommentList
@@ -532,7 +534,7 @@ identifierCommentList
     ;
 
 identifierComment
-    : identifier (COMMENT STRING)?
+    : errorCapturingIdentifier (COMMENT STRING)?
     ;
 
 relationPrimary
@@ -548,7 +550,7 @@ inlineTable
     ;
 
 functionTable
-    : identifier '(' (expression (',' expression)*)? ')' tableAlias
+    : errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
     ;
 
 tableAlias
@@ -566,19 +568,19 @@ rowFormat
     ;
 
 multipartIdentifier
-    : parts+=identifier ('.' parts+=identifier)*
+    : parts+=errorCapturingIdentifier ('.' parts+=errorCapturingIdentifier)*
     ;
 
 tableIdentifier
-    : (db=identifier '.')? table=identifier
+    : (db=errorCapturingIdentifier '.')? table=errorCapturingIdentifier
     ;
 
 functionIdentifier
-    : (db=identifier '.')? function=identifier
+    : (db=errorCapturingIdentifier '.')? function=errorCapturingIdentifier
     ;
 
 namedExpression
-    : expression (AS? (identifier | identifierList))?
+    : expression (AS? (errorCapturingIdentifier | identifierList))?
     ;
 
 namedExpressionSeq
@@ -591,7 +593,7 @@ transformList
 
 transform
     : qualifiedName                                                           #identityTransform
-    | transformName=identifier
+    | transformName=errorCapturingIdentifier
       '(' argument+=transformArgument (',' argument+=transformArgument)* ')'  #applyTransform
     ;
 
@@ -720,14 +722,14 @@ intervalUnit
     ;
 
 colPosition
-    : FIRST | AFTER identifier
+    : FIRST | AFTER errorCapturingIdentifier
     ;
 
 dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
-    | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
+    | errorCapturingIdentifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
 colTypeList
@@ -735,7 +737,7 @@ colTypeList
     ;
 
 colType
-    : identifier dataType (COMMENT STRING)?
+    : errorCapturingIdentifier dataType (COMMENT STRING)?
     ;
 
 complexColTypeList
@@ -743,7 +745,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier ':' dataType (COMMENT STRING)?
+    : errorCapturingIdentifier ':' dataType (COMMENT STRING)?
     ;
 
 whenClause
@@ -755,12 +757,12 @@ windows
     ;
 
 namedWindow
-    : identifier AS windowSpec
+    : errorCapturingIdentifier AS windowSpec
     ;
 
 windowSpec
-    : name=identifier  #windowRef
-    | '('name=identifier')'  #windowRef
+    : name=errorCapturingIdentifier  #windowRef
+    | '('name=errorCapturingIdentifier')'  #windowRef
     | '('
       ( CLUSTER BY partition+=expression (',' partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?
@@ -783,7 +785,12 @@ frameBound
     ;
 
 qualifiedName
-    : identifier ('.' identifier)*
+    : errorCapturingIdentifier ('.' errorCapturingIdentifier)*
+    ;
+
+errorCapturingIdentifier
+    : identifier
+    | identifier MINUS identifier?
     ;
 
 identifier
