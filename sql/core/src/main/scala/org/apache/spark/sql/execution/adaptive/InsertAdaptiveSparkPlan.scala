@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
-import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -41,7 +40,7 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
   private val conf = session.sessionState.conf
 
   // Exchange-reuse is shared across the entire query, including sub-queries.
-  private val stageCache = new TrieMap[StructType, mutable.Buffer[(Exchange, QueryStageExec)]]()
+  private val stageCache = new TrieMap[SparkPlan, QueryStageExec]()
 
   override def apply(plan: SparkPlan): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
