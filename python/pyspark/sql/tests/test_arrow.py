@@ -23,6 +23,7 @@ import unittest
 import warnings
 
 from pyspark.sql import Row
+from pyspark.sql.functions import udf
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -193,7 +194,6 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_propagates_spark_exception(self):
         df = self.spark.range(3).toDF("i")
-        from pyspark.sql.functions import udf
 
         def raise_exception():
             raise Exception("My error")

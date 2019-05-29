@@ -3313,7 +3313,7 @@ class Dataset[T] private[sql](
             }
           }
 
-        var sparkException: Option[SparkException] = Option.empty
+        var sparkException: Option[SparkException] = None
         try {
           val arrowBatchRdd = toArrowBatchRdd(plan)
           sparkSession.sparkContext.runJob(
@@ -3322,7 +3322,7 @@ class Dataset[T] private[sql](
             handlePartitionBatches)
         } catch {
           case e: SparkException =>
-            sparkException = Option.apply(e)
+            sparkException = Some(e)
         }
 
         // After processing all partitions, end the batch stream
@@ -3330,11 +3330,10 @@ class Dataset[T] private[sql](
         sparkException match {
           case Some(exception) =>
             // Signal failure and write error message
-            out.writeBoolean(false)
+            out.writeInt(-1)
             PythonRDD.writeUTF(exception.getMessage, out)
           case None =>
-            // Signal success and write batch order indices
-            out.writeBoolean(true)
+            // Write batch order indices
             out.writeInt(batchOrder.length)
             // Sort by (index of partition, batch index in that partition) tuple to get the
             // overall_batch_index from 0 to N-1 batches, which can be used to put the

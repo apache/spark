@@ -206,19 +206,17 @@ class ArrowCollectSerializer(Serializer):
         for batch in self.serializer.load_stream(stream):
             yield batch
 
-        # check success
-        success = read_bool(stream)
-        if success:
-            # load the batch order indices
-            num = read_int(stream)
-            batch_order = []
-            for i in xrange(num):
-                index = read_int(stream)
-                batch_order.append(index)
-            yield batch_order
-        else:
+        # load the batch order indices
+        num = read_int(stream)
+        if num == -1:
             error_msg = UTF8Deserializer().loads(stream)
-            raise RuntimeError("An error occurred while collecting: {}".format(error_msg))
+            raise RuntimeError("An error occurred while calling "
+                               "ArrowCollectSerializer.load_stream: {}".format(error_msg))
+        batch_order = []
+        for i in xrange(num):
+            index = read_int(stream)
+            batch_order.append(index)
+        yield batch_order
 
     def __repr__(self):
         return "ArrowCollectSerializer(%s)" % self.serializer
