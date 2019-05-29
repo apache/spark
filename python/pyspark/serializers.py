@@ -206,7 +206,7 @@ class ArrowCollectSerializer(Serializer):
         for batch in self.serializer.load_stream(stream):
             yield batch
 
-        # load the batch order indices
+        # load the batch order indices or propagate any error that occurred in the JVM
         num = read_int(stream)
         if num == -1:
             error_msg = UTF8Deserializer().loads(stream)
