@@ -227,7 +227,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
       val sub = findReusedSubquery(adaptivePlan)
-      assert(sub.size == 0)
+      assert(sub.isEmpty)
     }
   }
 
@@ -244,7 +244,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       val ex = findReusedExchange(adaptivePlan)
-      assert(ex.size == 0)
+      assert(ex.isEmpty)
       val sub = findReusedSubquery(adaptivePlan)
       assert(sub.nonEmpty)
     }
@@ -267,9 +267,9 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
       assert(bhj.size == 1)
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
-      assert(ex(0).plan.isInstanceOf[BroadcastQueryStageExec])
+      assert(ex.head.plan.isInstanceOf[BroadcastQueryStageExec])
       val sub = findReusedSubquery(adaptivePlan)
-      assert(sub.size == 0)
+      assert(sub.isEmpty)
     }
   }
 }

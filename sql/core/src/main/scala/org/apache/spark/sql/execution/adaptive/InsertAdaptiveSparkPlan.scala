@@ -55,7 +55,7 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
           session.sessionState.conf, subqueryMap)
         val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preparations)
         logDebug(s"Adaptive execution enabled for plan: $plan")
-        AdaptiveSparkPlanExec(newPlan, session.cloneSession(), subqueryMap, stageCache)
+        AdaptiveSparkPlanExec(newPlan, session, subqueryMap, stageCache)
       } catch {
         case SubqueryAdaptiveNotSupportedException(subquery) =>
           logWarning(s"${SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key} is enabled " +
