@@ -31,7 +31,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 abstract class DataSourceScanRedactionTest extends QueryTest with SharedSQLContext {
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.redaction.string.regex", "file:/[\\w_/]+")
+    .set("spark.redaction.string.regex", "file:/[\\w-_@/]+")
 
   protected def isIncluded(queryExecution: QueryExecution, msg: String): Boolean = {
     queryExecution.toString.contains(msg) ||
