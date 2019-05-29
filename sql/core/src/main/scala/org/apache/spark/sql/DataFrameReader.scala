@@ -207,17 +207,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val useV1Sources =
       sparkSession.sessionState.conf.useV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
     val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
-    val lookupClsInstance = lookupCls.newInstance().asInstanceOf[DataSourceRegister]
-    val useV1 = useV1Sources.contains(lookupClsInstance.shortName()) ||
-      useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT))
-    val cls = lookupClsInstance match {
+    val cls = lookupCls.newInstance() match {
       case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
         useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
         f.fallbackFileFormat
       case _ => lookupCls
     }
+    val clsMustUseV1Source = cls.newInstance() match {
+      case f: DataSourceRegister if useV1Sources.contains(f.shortName()) ||
+        useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        true
+      case _ => false
+    }
 
-    if (classOf[TableProvider].isAssignableFrom(cls) && !useV1) {
+    if (classOf[TableProvider].isAssignableFrom(cls) && !clsMustUseV1Source) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
