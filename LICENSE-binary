@@ -305,7 +305,6 @@ com.google.code.gson:gson
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
 com.twitter:parquet-hadoop-bundle
-commons-beanutils:commons-beanutils-core
 commons-cli:commons-cli
 commons-dbcp:commons-dbcp
 commons-io:commons-io

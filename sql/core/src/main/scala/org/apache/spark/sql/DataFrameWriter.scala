@@ -28,8 +28,9 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, WriteToDataSourceV2}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
@@ -272,6 +273,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveToV1Source(): Unit = {
+    if (SparkSession.active.sessionState.conf.getConf(
+      SQLConf.LEGACY_PASS_PARTITION_BY_AS_OPTIONS)) {
+      partitioningColumns.foreach { columns =>
+        extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
+          DataSourceUtils.encodePartitioningColumns(columns))
+      }
+    }
+
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
       DataSource(
@@ -574,7 +583,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * </ul>
    *
    * @since 1.5.0
-   * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
     format("orc").save(path)

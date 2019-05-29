@@ -21,8 +21,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.Duration
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.streaming.{ProcessingTime, Trigger}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -38,18 +36,7 @@ case class ContinuousTrigger(intervalMs: Long) extends Trigger {
 
 private[sql] object ContinuousTrigger {
   def apply(interval: String): ContinuousTrigger = {
-    if (StringUtils.isBlank(interval)) {
-      throw new IllegalArgumentException(
-        "interval cannot be null or blank.")
-    }
-    val cal = if (interval.startsWith("interval")) {
-      CalendarInterval.fromString(interval)
-    } else {
-      CalendarInterval.fromString("interval " + interval)
-    }
-    if (cal == null) {
-      throw new IllegalArgumentException(s"Invalid interval: $interval")
-    }
+    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
     if (cal.months > 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }

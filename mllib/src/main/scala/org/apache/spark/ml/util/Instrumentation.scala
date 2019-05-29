@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.util
 
+import java.io.{PrintWriter, StringWriter}
 import java.util.UUID
 
 import scala.util.{Failure, Success, Try}
@@ -160,8 +161,9 @@ private[spark] class Instrumentation private () extends Logging {
    * Logs an exception raised during a training session.
    */
   def logFailure(e: Throwable): Unit = {
-    val msg = e.getStackTrace.mkString("\n")
-    super.logError(msg)
+    val msg = new StringWriter()
+    e.printStackTrace(new PrintWriter(msg))
+    super.logError(msg.toString)
   }
 }
 

@@ -607,6 +607,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     // We can return what the children return. Same thing should happen in the codegen path.
     if (DataType.equalsStructurally(from, to)) {
       identity
+    } else if (from == NullType) {
+      // According to `canCast`, NullType can be casted to any type.
+      // For primitive types, we don't reach here because the guard of `nullSafeEval`.
+      // But for nested types like struct, we might reach here for nested null type field.
+      // We won't call the returned function actually, but returns a placeholder.
+      _ => throw new SparkException(s"should not directly cast from NullType to $to.")
     } else {
       to match {
         case dt if dt == from => identity[Any]

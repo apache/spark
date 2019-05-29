@@ -30,7 +30,7 @@ import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
+import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -337,6 +337,32 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     intercept[IllegalArgumentException] {
       conf.validateSettings()
     }
+  }
+
+  test("SPARK-26998: SSL configuration not needed on executors") {
+    val conf = new SparkConf(false)
+    conf.set("spark.ssl.enabled", "true")
+    conf.set("spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.keyStorePassword", "password")
+    conf.set("spark.ssl.trustStorePassword", "password")
+
+    val filtered = conf.getAll.filter { case (k, _) => SparkConf.isExecutorStartupConf(k) }
+    assert(filtered.isEmpty)
+  }
+
+  test("SPARK-27244 toDebugString redacts sensitive information") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set("dummy.password", "dummy-password")
+      .set("spark.hadoop.hive.server2.keystore.password", "1234")
+      .set("spark.hadoop.javax.jdo.option.ConnectionPassword", "1234")
+      .set("spark.regular.property", "regular_value")
+    assert(conf.toDebugString ==
+      s"""
+        |dummy.password=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.hadoop.hive.server2.keystore.password=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.hadoop.javax.jdo.option.ConnectionPassword=${Utils.REDACTION_REPLACEMENT_TEXT}
+        |spark.regular.property=regular_value
+      """.stripMargin.trim)
   }
 
   val defaultIllegalValue = "SomeIllegalValue"

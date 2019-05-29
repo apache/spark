@@ -88,7 +88,7 @@ from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_
 from pyspark.sql.types import _array_unsigned_int_typecode_ctype_mappings
 from pyspark.sql.types import _merge_type
 from pyspark.tests import QuietTest, ReusedPySparkTestCase, PySparkTestCase, SparkSubmitTests
-from pyspark.sql.functions import UserDefinedFunction, sha2, lit
+from pyspark.sql.functions import UserDefinedFunction, sha2, lit, input_file_name
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
@@ -831,6 +831,21 @@ class SQLTests(ReusedSQLTestCase):
         df2 = self.spark.read.json(rdd2).select(input_file_name().alias('file'))
         row2 = df2.select(sameText(df2['file'])).first()
         self.assertTrue(row2[0].find("people.json") != -1)
+
+    def test_input_file_name_reset_for_rdd(self):
+        rdd = self.sc.textFile('python/test_support/hello/hello.txt').map(lambda x: {'data': x})
+        df = self.spark.createDataFrame(rdd, "data STRING")
+        df.select(input_file_name().alias('file')).collect()
+
+        non_file_df = self.spark.range(100).select(input_file_name())
+
+        results = non_file_df.collect()
+        self.assertTrue(len(results) == 100)
+
+        # [SPARK-24605]: if everything was properly reset after the last job, this should return
+        # empty string rather than the file read in the last job.
+        for result in results:
+            self.assertEqual(result[0], '')
 
     def test_udf_defers_judf_initialization(self):
         # This is separate of  UDFInitializationTests

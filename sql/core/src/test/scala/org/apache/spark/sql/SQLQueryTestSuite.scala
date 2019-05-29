@@ -243,7 +243,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
         output.sql
       }
-      assertResult(expected.schema, s"Schema did not match for query #$i\n${expected.sql}") {
+      assertResult(expected.schema,
+        s"Schema did not match for query #$i\n${expected.sql}: $output") {
         output.schema
       }
       assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
