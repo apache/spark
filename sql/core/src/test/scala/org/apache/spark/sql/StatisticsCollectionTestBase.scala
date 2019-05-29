@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.{lang => jl}
+import java.io.File
 import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
@@ -289,6 +290,9 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       }
     }
   }
+
+  def getDataSize(file: File): Long =
+    file.listFiles.filter(!_.getName.endsWith(".crc")).map(_.length).sum
 
   // This test will be run twice: with and without Hive support
   test("SPARK-18856: non-empty partitioned table should not report zero size") {
