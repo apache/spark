@@ -311,7 +311,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         provider.getTable(dsOptions) match {
           case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
-            table.asInstanceOf[BaseStreamingSink]
+            table
           case _ => createV1Sink()
         }
       } else {
@@ -331,7 +331,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def createV1Sink(): BaseStreamingSink = {
+  private def createV1Sink(): Sink = {
     val ds = DataSource(
       df.sparkSession,
       className = source,

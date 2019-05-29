@@ -36,10 +36,9 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private val defaultCacheExpireTimeout = TimeUnit.MINUTES.toMillis(10)
 
-  private lazy val cacheExpireTimeout: Long =
-    Option(SparkEnv.get).map(_.conf.getTimeAsMs(
-      "spark.kafka.producer.cache.timeout",
-      s"${defaultCacheExpireTimeout}ms")).getOrElse(defaultCacheExpireTimeout)
+  private lazy val cacheExpireTimeout: Long = Option(SparkEnv.get)
+    .map(_.conf.get(PRODUCER_CACHE_TIMEOUT))
+    .getOrElse(defaultCacheExpireTimeout)
 
   private val cacheLoader = new CacheLoader[Seq[(String, Object)], Producer] {
     override def load(config: Seq[(String, Object)]): Producer = {
@@ -65,12 +64,8 @@ private[kafka010] object CachedKafkaProducer extends Logging {
       .build[Seq[(String, Object)], Producer](cacheLoader)
 
   private def createKafkaProducer(producerConfiguration: ju.Map[String, Object]): Producer = {
-    val updatedKafkaProducerConfiguration =
-      KafkaConfigUpdater("executor", producerConfiguration.asScala.toMap)
-        .setAuthenticationConfigIfNeeded()
-        .build()
-    val kafkaProducer: Producer = new Producer(updatedKafkaProducerConfiguration)
-    logDebug(s"Created a new instance of KafkaProducer for $updatedKafkaProducerConfiguration.")
+    val kafkaProducer: Producer = new Producer(producerConfiguration)
+    logDebug(s"Created a new instance of KafkaProducer for $producerConfiguration.")
     kafkaProducer
   }
 
@@ -80,7 +75,11 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * one instance per specified kafkaParams.
    */
   private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object]): Producer = {
-    val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParams)
+    val updatedKafkaProducerConfiguration =
+      KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
+        .setAuthenticationConfigIfNeeded()
+        .build()
+    val paramsSeq: Seq[(String, Object)] = paramsToSeq(updatedKafkaProducerConfiguration)
     try {
       guavaCache.get(paramsSeq)
     } catch {

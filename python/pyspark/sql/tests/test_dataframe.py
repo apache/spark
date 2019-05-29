@@ -677,6 +677,34 @@ class DataFrameTests(ReusedSQLTestCase):
                     self.assertEquals(None, df._repr_html_())
                     self.assertEquals(expected, df.__repr__())
 
+    def test_to_local_iterator(self):
+        df = self.spark.range(8, numPartitions=4)
+        expected = df.collect()
+        it = df.toLocalIterator()
+        self.assertEqual(expected, list(it))
+
+        # Test DataFrame with empty partition
+        df = self.spark.range(3, numPartitions=4)
+        it = df.toLocalIterator()
+        expected = df.collect()
+        self.assertEqual(expected, list(it))
+
+    def test_to_local_iterator_not_fully_consumed(self):
+        # SPARK-23961: toLocalIterator throws exception when not fully consumed
+        # Create a DataFrame large enough so that write to socket will eventually block
+        df = self.spark.range(1 << 20, numPartitions=2)
+        it = df.toLocalIterator()
+        self.assertEqual(df.take(1)[0], next(it))
+        with QuietTest(self.sc):
+            it = None  # remove iterator from scope, socket is closed when cleaned up
+            # Make sure normal df operations still work
+            result = []
+            for i, row in enumerate(df.toLocalIterator()):
+                result.append(row)
+                if i == 7:
+                    break
+            self.assertEqual(df.take(8), result)
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
@@ -40,7 +39,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(sql) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableName == Seq("my_tab"))
         assert(create.tableSchema == new StructType()
             .add("a", IntegerType, nullable = true, "test")
             .add("b", StringType))
@@ -67,7 +66,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(sql) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableName == Seq("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
         assert(create.bucketSpec.isEmpty)
@@ -90,7 +89,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(query) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableName == Seq("my_tab"))
         assert(create.tableSchema == new StructType()
             .add("a", IntegerType, nullable = true, "test")
             .add("b", StringType))
@@ -125,7 +124,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(sql) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableName == Seq("my_tab"))
         assert(create.tableSchema == new StructType()
             .add("a", IntegerType)
             .add("b", StringType)
@@ -161,7 +160,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(query) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableName == Seq("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
         assert(create.bucketSpec.contains(BucketSpec(5, Seq("a"), Seq("b"))))
@@ -183,7 +182,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(sql) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableName == Seq("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
         assert(create.bucketSpec.isEmpty)
@@ -205,7 +204,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(sql) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableName == Seq("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
         assert(create.bucketSpec.isEmpty)
@@ -227,7 +226,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(sql) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("my_tab"))
+        assert(create.tableName == Seq("my_tab"))
         assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
         assert(create.partitioning.isEmpty)
         assert(create.bucketSpec.isEmpty)
@@ -249,7 +248,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(sql) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("2g", Some("1m")))
+        assert(create.tableName == Seq("1m", "2g"))
         assert(create.tableSchema == new StructType().add("a", IntegerType))
         assert(create.partitioning.isEmpty)
         assert(create.bucketSpec.isEmpty)
@@ -292,7 +291,7 @@ class DDLParserSuite extends AnalysisTest {
 
     parsePlan(sql) match {
       case create: CreateTableStatement =>
-        assert(create.table == TableIdentifier("table_name"))
+        assert(create.tableName == Seq("table_name"))
         assert(create.tableSchema == new StructType)
         assert(create.partitioning.isEmpty)
         assert(create.bucketSpec.isEmpty)
@@ -347,7 +346,7 @@ class DDLParserSuite extends AnalysisTest {
     def checkParsing(sql: String): Unit = {
       parsePlan(sql) match {
         case create: CreateTableAsSelectStatement =>
-          assert(create.table == TableIdentifier("page_view", Some("mydb")))
+          assert(create.tableName == Seq("mydb", "page_view"))
           assert(create.partitioning.isEmpty)
           assert(create.bucketSpec.isEmpty)
           assert(create.properties == Map("p1" -> "v1", "p2" -> "v2"))

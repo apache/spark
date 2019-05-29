@@ -326,7 +326,7 @@ PIVOT (
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`s`' given input columns: [coursesales.course, coursesales.year, coursesales.earnings]; line 4 pos 15
+cannot resolve '`s`' given input columns: [coursesales.course, coursesales.earnings, coursesales.year]; line 4 pos 15
 
 
 -- !query 22

@@ -158,7 +158,7 @@ case class AggregateExpression(
  * ([[aggBufferAttributes]]) of an aggregation buffer which is used to hold partial aggregate
  * results. At runtime, multiple aggregate functions are evaluated by the same operator using a
  * combined aggregation buffer which concatenates the aggregation buffers of the individual
- * aggregate functions.
+ * aggregate functions. Please note that aggregate functions should be stateless.
  *
  * Code which accepts [[AggregateFunction]] instances should be prepared to handle both types of
  * aggregate functions.

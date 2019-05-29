@@ -268,7 +268,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
         output.sql
       }
-      assertResult(expected.schema, s"Schema did not match for query #$i\n${expected.sql}") {
+      assertResult(expected.schema,
+        s"Schema did not match for query #$i\n${expected.sql}: $output") {
         output.schema
       }
       assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
@@ -355,6 +356,66 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       Tuple1(Map(1 -> "a5")) :: Nil)
       .toDF("mapcol")
       .createOrReplaceTempView("mapdata")
+
+    session
+      .read
+      .format("csv")
+      .options(Map("delimiter" -> "\t", "header" -> "false"))
+      .schema("a int, b float")
+      .load(testFile("test-data/postgresql/agg.data"))
+      .createOrReplaceTempView("aggtest")
+
+    session
+      .read
+      .format("csv")
+      .options(Map("delimiter" -> "\t", "header" -> "false"))
+      .schema(
+        """
+          |unique1 int,
+          |unique2 int,
+          |two int,
+          |four int,
+          |ten int,
+          |twenty int,
+          |hundred int,
+          |thousand int,
+          |twothousand int,
+          |fivethous int,
+          |tenthous int,
+          |odd int,
+          |even int,
+          |stringu1 string,
+          |stringu2 string,
+          |string4 string
+        """.stripMargin)
+      .load(testFile("test-data/postgresql/onek.data"))
+      .createOrReplaceTempView("onek")
+
+    session
+      .read
+      .format("csv")
+      .options(Map("delimiter" -> "\t", "header" -> "false"))
+      .schema(
+        """
+          |unique1 int,
+          |unique2 int,
+          |two int,
+          |four int,
+          |ten int,
+          |twenty int,
+          |hundred int,
+          |thousand int,
+          |twothousand int,
+          |fivethous int,
+          |tenthous int,
+          |odd int,
+          |even int,
+          |stringu1 string,
+          |stringu2 string,
+          |string4 string
+        """.stripMargin)
+      .load(testFile("test-data/postgresql/tenk.data"))
+      .createOrReplaceTempView("tenk1")
   }
 
   private val originalTimeZone = TimeZone.getDefault

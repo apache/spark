@@ -29,7 +29,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
   // is using transformUp rather than resolveOperators.
   def apply(plan: LogicalPlan): LogicalPlan = {
     val pulledUp = plan transformUp {
-      case j: Join =>
+      case j: Join if j.hint == JoinHint.NONE =>
         val (newLeft, leftHints) = extractHintsFromPlan(j.left)
         val (newRight, rightHints) = extractHintsFromPlan(j.right)
         val newJoinHint = JoinHint(mergeHints(leftHints), mergeHints(rightHints))
@@ -56,7 +56,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
    * in this method will be cleaned up later by this rule, and may emit warnings depending on the
    * configurations.
    */
-  private def extractHintsFromPlan(plan: LogicalPlan): (LogicalPlan, Seq[HintInfo]) = {
+  private[sql] def extractHintsFromPlan(plan: LogicalPlan): (LogicalPlan, Seq[HintInfo]) = {
     plan match {
       case h: ResolvedHint =>
         val (plan, hints) = extractHintsFromPlan(h.child)

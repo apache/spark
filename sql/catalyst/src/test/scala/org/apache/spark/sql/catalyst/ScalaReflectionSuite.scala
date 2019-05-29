@@ -81,6 +81,10 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+class FooAnnotation extends scala.annotation.StaticAnnotation
+
+case class FooWithAnnotation(f1: String @FooAnnotation, f2: Option[String] @FooAnnotation)
+
 case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
 
 object TestingUDT {
@@ -398,5 +402,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(schema === Schema(
       StructType(Seq(
         StructField("x", IntegerType, nullable = false))), nullable = true))
+  }
+
+  test("SPARK-27625: annotated data types") {
+    assert(serializerFor[FooWithAnnotation].dataType == StructType(Seq(
+      StructField("f1", StringType),
+      StructField("f2", StringType))))
+    assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
   }
 }
