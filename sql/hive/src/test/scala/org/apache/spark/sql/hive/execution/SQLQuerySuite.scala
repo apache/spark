@@ -1071,7 +1071,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("set hive.exec.dynamic.partition.mode=nonstrict")
       // date
       sql("drop table if exists dynparttest1")
-      sql("create table dynparttest1 (value int) partitioned by (pdate date)")
+      sql("create table dynparttest1 (value long) partitioned by (pdate date)")
       sql(
         """
           |insert into table dynparttest1 partition(pdate)
@@ -1083,7 +1083,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
       // decimal
       sql("drop table if exists dynparttest2")
-      sql("create table dynparttest2 (value int) partitioned by (pdec decimal(5, 1))")
+      sql("create table dynparttest2 (value long) partitioned by (pdec decimal(5, 1))")
       sql(
         """
           |insert into table dynparttest2 partition(pdec)
@@ -1580,8 +1580,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         .select(array($"id", $"id" + 1).as("arr"), $"id")
         .createOrReplaceTempView("source")
       withTable("dest1", "dest2") {
-        sql("CREATE TABLE dest1 (i INT)")
-        sql("CREATE TABLE dest2 (i INT)")
+        sql("CREATE TABLE dest1 (i LONG)")
+        sql("CREATE TABLE dest2 (i LONG)")
         sql(
           """
             |FROM source
@@ -2339,7 +2339,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
         withTable("t") {
-          sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+          sql("CREATE TABLE t (col1 LONG, p1 LONG) USING PARQUET PARTITIONED BY (p1)")
           sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
           if (enableOptimizeMetadataOnlyQuery) {
             // The result is wrong if we enable the configuration.

@@ -376,11 +376,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"Cannot write incompatible data to table '$tblName':\n- ${errors.mkString("\n- ")}")
       } else {
         assert(resolved.length == insert.query.output.length)
-        if (resolved == insert.query.output) {
-          insert.query
-        } else {
-          Project(resolved, insert.query)
-        }
+        Project(resolved, insert.query)
       }
     }
 

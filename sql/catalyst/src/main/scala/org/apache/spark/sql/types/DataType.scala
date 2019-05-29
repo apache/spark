@@ -443,7 +443,7 @@ object DataType {
 
       case _ =>
         if (!Cast.canUpCast(write, read)) {
-          addError(s"Cannot safely cast '$context': $write to $read")
+          addError(s"Cannot safely cast '$context': ${write.simpleString} to ${read.simpleString}")
           false
         } else {
           true

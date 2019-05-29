@@ -374,15 +374,15 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
       sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
-      val analyzedPlan = sql(
+      val optimizedPlan = sql(
         """
         |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
         |SELECT 'a', 'c' from ptest
-      """.stripMargin).queryExecution.analyzed
+      """.stripMargin).queryExecution.optimizedPlan
 
-      assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
+      assertResult(false, "Incorrect cast detected\n" + optimizedPlan) {
       var hasCast = false
-        analyzedPlan.collect {
+        optimizedPlan.collect {
           case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
         }
         hasCast
@@ -984,16 +984,16 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-3810: PreprocessTableInsertion static partitioning support") {
-    val analyzedPlan = {
+    val optimizedPlan = {
       loadTestTable("srcpart")
       sql("DROP TABLE IF EXISTS withparts")
       sql("CREATE TABLE withparts LIKE srcpart")
       sql("INSERT INTO TABLE withparts PARTITION(ds='1', hr='2') SELECT key, value FROM src")
-        .queryExecution.analyzed
+        .queryExecution.optimizedPlan
       }
 
-    assertResult(1, "Duplicated project detected\n" + analyzedPlan) {
-      analyzedPlan.collect {
+    assertResult(0, "Unnecessary project detected\n" + optimizedPlan) {
+      optimizedPlan.collect {
         case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
       }.sum
     }

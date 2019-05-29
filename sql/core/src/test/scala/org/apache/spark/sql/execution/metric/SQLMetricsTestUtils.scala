@@ -117,7 +117,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     withTempPath { dir =>
       spark.sql(
         s"""
-           |CREATE TABLE $tableName(a int, b int)
+           |CREATE TABLE $tableName(a long, b long)
            |USING $provider
            |PARTITIONED BY(a)
            |LOCATION '${dir.toURI}'
