@@ -89,8 +89,6 @@ class TestTableCatalog extends TableCatalog {
   }
 
   override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
-
-  override def toString: String = name
 }
 
 object TestTableCatalog {

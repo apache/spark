@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan, Project, ScriptTransformation}
-import org.apache.spark.sql.catalyst.plans.logical.sql.DropTableStatement
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -901,44 +900,6 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
         "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
     }.getMessage
     assert(e.contains("Found an empty partition key 'b'"))
-  }
-
-  test("drop table") {
-    val tableName1 = "db.tab"
-    val tableName2 = "tab"
-    Seq(
-      (s"DROP TABLE $tableName1",
-        DropTableStatement(Seq("db", "tab"), ifExists = false, isView = false, purge = false)),
-      (s"DROP TABLE IF EXISTS $tableName1",
-        DropTableStatement(Seq("db", "tab"), ifExists = true, isView = false, purge = false)),
-      (s"DROP TABLE $tableName2",
-        DropTableStatement(Seq("tab"), ifExists = false, isView = false, purge = false)),
-      (s"DROP TABLE IF EXISTS $tableName2",
-        DropTableStatement(Seq("tab"), ifExists = true, isView = false, purge = false)),
-      (s"DROP TABLE $tableName2 PURGE",
-        DropTableStatement(Seq("tab"), ifExists = false, isView = false, purge = true)),
-      (s"DROP TABLE IF EXISTS $tableName2 PURGE",
-        DropTableStatement(Seq("tab"), ifExists = true, isView = false, purge = true))).foreach {
-      case (sql, expected) =>
-        comparePlans(parser.parsePlan(sql), expected, checkAnalysis = false)
-    }
-  }
-
-  test("drop view") {
-    val viewName1 = "db.view"
-    val viewName2 = "view"
-    Seq(
-      (s"DROP VIEW $viewName1",
-        DropTableStatement(Seq("db", "view"), ifExists = false, isView = true, purge = false)),
-      (s"DROP VIEW IF EXISTS $viewName1",
-        DropTableStatement(Seq("db", "view"), ifExists = true, isView = true, purge = false)),
-      (s"DROP VIEW $viewName2",
-        DropTableStatement(Seq("view"), ifExists = false, isView = true, purge = false)),
-      (s"DROP VIEW IF EXISTS $viewName2",
-        DropTableStatement(Seq("view"), ifExists = true, isView = true, purge = false))).foreach {
-      case (sql, expected) =>
-        comparePlans(parser.parsePlan(sql), expected, checkAnalysis = false)
-    }
   }
 
   test("show columns") {

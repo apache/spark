@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DropTableCommand
 import org.apache.spark.sql.internal.SQLConf
@@ -85,11 +85,14 @@ case class DataSourceResolution(
           .asTableCatalog
       convertCTAS(catalog, identifier, create)
 
-    case DropTableStatement(CatalogObjectIdentifier(Some(catalog), ident), ifExists, _, _) =>
+    case DropTableStatement(CatalogObjectIdentifier(Some(catalog), ident), ifExists, _) =>
       DropTable(catalog.asTableCatalog, ident, ifExists)
 
-    case DropTableStatement(AsTableIdentifier(tableName), ifExists, isView, purge) =>
-      DropTableCommand(tableName, ifExists, isView, purge)
+    case DropTableStatement(AsTableIdentifier(tableName), ifExists, purge) =>
+      DropTableCommand(tableName, ifExists, false, purge)
+
+    case DropViewStatement(AsTableIdentifier(tableName), ifExists) =>
+      DropTableCommand(tableName, ifExists, true, false)
   }
 
   object V1WriteProvider {

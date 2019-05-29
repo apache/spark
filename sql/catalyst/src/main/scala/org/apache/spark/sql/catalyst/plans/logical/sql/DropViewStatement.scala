@@ -21,12 +21,11 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * A DROP TABLE statement, as parsed from SQL.
+ * A DROP VIEW statement, as parsed from SQL.
  */
-case class DropTableStatement(
+case class DropViewStatement(
     tableName: Seq[String],
-    ifExists: Boolean,
-    purge: Boolean) extends ParsedStatement {
+    ifExists: Boolean) extends ParsedStatement {
 
   override def output: Seq[Attribute] = Seq.empty
 

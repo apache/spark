@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -32,6 +33,10 @@ class DDLParserSuite extends AnalysisTest {
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
+  }
+
+  private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
+    comparePlans(parsePlan(sql), expected, checkAnalysis = false)
   }
 
   test("create table using - schema") {
@@ -361,5 +366,32 @@ class DDLParserSuite extends AnalysisTest {
               s"from query, got ${other.getClass.getName}: $sql")
       }
     }
+  }
+
+  test("drop table") {
+    parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
+      DropTableStatement(Seq("testcat", "ns1", "ns2", "tbl"), ifExists = false, purge = false))
+    parseCompare(s"DROP TABLE db.tab",
+      DropTableStatement(Seq("db", "tab"), ifExists = false, purge = false))
+    parseCompare(s"DROP TABLE IF EXISTS db.tab",
+      DropTableStatement(Seq("db", "tab"), ifExists = true, purge = false))
+    parseCompare(s"DROP TABLE tab",
+      DropTableStatement(Seq("tab"), ifExists = false, purge = false))
+    parseCompare(s"DROP TABLE IF EXISTS tab",
+      DropTableStatement(Seq("tab"), ifExists = true, purge = false))
+    parseCompare(s"DROP TABLE tab PURGE",
+      DropTableStatement(Seq("tab"), ifExists = false, purge = true))
+    parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
+      DropTableStatement(Seq("tab"), ifExists = true, purge = true))
+  }
+
+  test("drop view") {
+    parseCompare(s"DROP VIEW testcat.db.view",
+      DropViewStatement(Seq("testcat", "db", "view"), ifExists = false))
+    parseCompare(s"DROP VIEW db.view", DropViewStatement(Seq("db", "view"), ifExists = false))
+    parseCompare(s"DROP VIEW IF EXISTS db.view",
+      DropViewStatement(Seq("db", "view"), ifExists = true))
+    parseCompare(s"DROP VIEW view", DropViewStatement(Seq("view"), ifExists = false))
+    parseCompare(s"DROP VIEW IF EXISTS view", DropViewStatement(Seq("view"), ifExists = true))
   }
 }
