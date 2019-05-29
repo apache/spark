@@ -205,7 +205,7 @@ private[spark] object KubernetesConf {
    * convention of: vendor-domain/resource. For example, an Nvidia GPU is
    * advertised as nvidia.com/gpu.
    */
-  def buildKubernetesResourceName(vendor: String, resourceName: String): String = {
-    s"${vendor}/${resourceName}"
+  def buildKubernetesResourceName(vendorDomain: String, resourceName: String): String = {
+    s"${vendorDomain}/${resourceName}"
   }
 }
