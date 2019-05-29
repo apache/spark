@@ -29,13 +29,22 @@ export LC_ALL=C
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
 # NOTE: These should match those in the release publishing script
-HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkafka-0-8 -Pkubernetes -Pyarn -Pflume -Phive"
 MVN="build/mvn"
 HADOOP_PROFILES=(
     hadoop-2.6
     hadoop-2.7
     hadoop-3.1
 )
+
+SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ 2>/dev/null\
+    | grep -v "INFO"\
+    | grep -v "WARNING"\
+    | tail -n 1)
+if [ "$SCALA_VERSION" = "2.11" ]; then
+  HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkafka-0-8 -Pkubernetes -Pyarn -Pflume -Phive"
+else
+  HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Pflume -Phive"
+fi
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
 # the old version. We need to do this because the `dependency:build-classpath` task needs to

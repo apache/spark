@@ -989,4 +989,19 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-27671: cast from nested null type in struct") {
+    import DataTypeTestUtils._
+
+    atomicTypes.foreach { atomicType =>
+      val struct = Literal.create(
+        InternalRow(null),
+        StructType(Seq(StructField("a", NullType, nullable = true))))
+
+      val ret = cast(struct, StructType(Seq(
+        StructField("a", atomicType, nullable = true))))
+      assert(ret.resolved)
+      checkEvaluation(ret, InternalRow(null))
+    }
+  }
 }

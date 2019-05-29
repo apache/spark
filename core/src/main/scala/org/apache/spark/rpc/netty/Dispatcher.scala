@@ -224,7 +224,15 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
           }
         }
       } catch {
-        case ie: InterruptedException => // exit
+        case _: InterruptedException => // exit
+        case t: Throwable =>
+          try {
+            // Re-submit a MessageLoop so that Dispatcher will still work if
+            // UncaughtExceptionHandler decides to not kill JVM.
+            threadpool.execute(new MessageLoop)
+          } finally {
+            throw t
+          }
       }
     }
   }

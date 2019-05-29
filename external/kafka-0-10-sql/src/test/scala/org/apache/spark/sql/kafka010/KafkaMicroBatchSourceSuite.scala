@@ -42,6 +42,7 @@ import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
@@ -988,6 +989,10 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       q.stop()
     }
   }
+
+  test("SPARK-27494: read kafka record containing null key/values.") {
+    testNullableKeyValue(Trigger.ProcessingTime(100))
+  }
 }
 
 
@@ -1460,6 +1465,60 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
     )
+  }
+
+  protected def testNullableKeyValue(trigger: Trigger): Unit = {
+    val table = "kafka_null_key_value_source_test"
+    withTable(table) {
+      val topic = newTopic()
+      testUtils.createTopic(topic)
+      testUtils.withTranscationalProducer { producer =>
+        val df = spark
+          .readStream
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("kafka.isolation.level", "read_committed")
+          .option("startingOffsets", "earliest")
+          .option("subscribe", topic)
+          .load()
+          .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+          .as[(String, String)]
+
+        val q = df
+          .writeStream
+          .format("memory")
+          .queryName(table)
+          .trigger(trigger)
+          .start()
+        try {
+          var idx = 0
+          producer.beginTransaction()
+          val expected1 = Seq.tabulate(5) { _ =>
+            producer.send(new ProducerRecord[String, String](topic, null, null)).get()
+            (null, null)
+          }.asInstanceOf[Seq[(String, String)]]
+
+          val expected2 = Seq.tabulate(5) { _ =>
+            idx += 1
+            producer.send(new ProducerRecord[String, String](topic, idx.toString, null)).get()
+            (idx.toString, null)
+          }.asInstanceOf[Seq[(String, String)]]
+
+          val expected3 = Seq.tabulate(5) { _ =>
+            idx += 1
+            producer.send(new ProducerRecord[String, String](topic, null, idx.toString)).get()
+            (null, idx.toString)
+          }.asInstanceOf[Seq[(String, String)]]
+
+          producer.commitTransaction()
+          eventually(timeout(streamingTimeout)) {
+            checkAnswer(spark.table(table), (expected1 ++ expected2 ++ expected3).toDF())
+          }
+        } finally {
+          q.stop()
+        }
+      }
+    }
   }
 }
 

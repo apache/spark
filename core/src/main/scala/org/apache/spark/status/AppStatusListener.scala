@@ -58,6 +58,12 @@ private[spark] class AppStatusListener(
   // operations that we can live without when rapidly processing incoming task events.
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
 
+  /**
+   * Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
+   * task events are not fired frequently.
+   */
+  private val liveUpdateMinFlushPeriod = conf.get(LIVE_ENTITY_UPDATE_MIN_FLUSH_PERIOD)
+
   private val maxTasksPerStage = conf.get(MAX_RETAINED_TASKS_PER_STAGE)
   private val maxGraphRootNodes = conf.get(MAX_RETAINED_ROOT_NODES)
 
@@ -73,6 +79,9 @@ private[spark] class AppStatusListener(
   // around liveExecutors.
   @volatile private var activeExecutorCount = 0
 
+  /** The last time when flushing `LiveEntity`s. This is to avoid flushing too frequently. */
+  private var lastFlushTimeNs = System.nanoTime()
+
   kvstore.addTrigger(classOf[ExecutorSummaryWrapper], conf.get(MAX_RETAINED_DEAD_EXECUTORS))
     { count => cleanupExecutors(count) }
 
@@ -86,7 +95,8 @@ private[spark] class AppStatusListener(
 
   kvstore.onFlush {
     if (!live) {
-      flush()
+      val now = System.nanoTime()
+      flush(update(_, now))
     }
   }
 
@@ -617,6 +627,10 @@ private[spark] class AppStatusListener(
       val now = System.nanoTime()
       stage.info = event.stageInfo
 
+      // We have to update the stage status AFTER we create all the executorSummaries
+      // because stage deletion deletes whatever summaries it finds when the status is completed.
+      stage.executorSummaries.values.foreach(update(_, now))
+
       // Because of SPARK-20205, old event logs may contain valid stages without a submission time
       // in their start event. In those cases, we can only detect whether a stage was skipped by
       // waiting until the completion event, at which point the field would have been set.
@@ -644,8 +658,6 @@ private[spark] class AppStatusListener(
         pool.stageIds = pool.stageIds - event.stageInfo.stageId
         update(pool, now)
       }
-
-      stage.executorSummaries.values.foreach(update(_, now))
 
       val executorIdsForStage = stage.blackListedExecutors
       executorIdsForStage.foreach { executorId =>
@@ -744,6 +756,15 @@ private[spark] class AppStatusListener(
         }
       }
     }
+
+    // Flush updates if necessary. Executor heartbeat is an event that happens periodically. Flush
+    // here to ensure the staleness of Spark UI doesn't last more than
+    // `max(heartbeat interval, liveUpdateMinFlushPeriod)`.
+    if (now - lastFlushTimeNs > liveUpdateMinFlushPeriod) {
+      flush(maybeUpdate(_, now))
+      // Re-get the current system time because `flush` may be slow and `now` is stale.
+      lastFlushTimeNs = System.nanoTime()
+    }
   }
 
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
@@ -755,18 +776,17 @@ private[spark] class AppStatusListener(
     }
   }
 
-  /** Flush all live entities' data to the underlying store. */
-  private def flush(): Unit = {
-    val now = System.nanoTime()
+  /** Go through all `LiveEntity`s and use `entityFlushFunc(entity)` to flush them. */
+  private def flush(entityFlushFunc: LiveEntity => Unit): Unit = {
     liveStages.values.asScala.foreach { stage =>
-      update(stage, now)
-      stage.executorSummaries.values.foreach(update(_, now))
+      entityFlushFunc(stage)
+      stage.executorSummaries.values.foreach(entityFlushFunc)
     }
-    liveJobs.values.foreach(update(_, now))
-    liveExecutors.values.foreach(update(_, now))
-    liveTasks.values.foreach(update(_, now))
-    liveRDDs.values.foreach(update(_, now))
-    pools.values.foreach(update(_, now))
+    liveJobs.values.foreach(entityFlushFunc)
+    liveExecutors.values.foreach(entityFlushFunc)
+    liveTasks.values.foreach(entityFlushFunc)
+    liveRDDs.values.foreach(entityFlushFunc)
+    pools.values.foreach(entityFlushFunc)
   }
 
   /**
@@ -1026,19 +1046,9 @@ private[spark] class AppStatusListener(
       s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
     }
 
-    stages.foreach { s =>
+    val stageIds = stages.map { s =>
       val key = Array(s.info.stageId, s.info.attemptId)
       kvstore.delete(s.getClass(), key)
-
-      val execSummaries = kvstore.view(classOf[ExecutorStageSummaryWrapper])
-        .index("stage")
-        .first(key)
-        .last(key)
-        .asScala
-        .toSeq
-      execSummaries.foreach { e =>
-        kvstore.delete(e.getClass(), e.id)
-      }
 
       // Check whether there are remaining attempts for the same stage. If there aren't, then
       // also delete the RDD graph data.
@@ -1061,16 +1071,14 @@ private[spark] class AppStatusListener(
       }
 
       cleanupCachedQuantiles(key)
+      key
     }
 
+    // Delete summaries in one pass, as deleting them for each stage is slow
+    kvstore.removeAllByIndexValues(classOf[ExecutorStageSummaryWrapper], "stage", stageIds)
+
     // Delete tasks for all stages in one pass, as deleting them for each stage individually is slow
-    val tasks = kvstore.view(classOf[TaskDataWrapper]).asScala
-    val keys = stages.map { s => (s.info.stageId, s.info.attemptId) }.toSet
-    tasks.foreach { t =>
-      if (keys.contains((t.stageId, t.stageAttemptId))) {
-        kvstore.delete(t.getClass(), t.taskId)
-      }
-    }
+    kvstore.removeAllByIndexValues(classOf[TaskDataWrapper], TaskIndexNames.STAGE, stageIds)
   }
 
   private def cleanupTasks(stage: LiveStage): Unit = {

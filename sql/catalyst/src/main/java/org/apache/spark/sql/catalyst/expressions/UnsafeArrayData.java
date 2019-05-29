@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -29,6 +33,8 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
 /**
  * An Unsafe implementation of Array which is backed by raw memory instead of Java objects.
@@ -52,7 +58,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
 
-public final class UnsafeArrayData extends ArrayData {
+public final class UnsafeArrayData extends ArrayData implements Externalizable {
 
   public static int calculateHeaderPortionInBytes(int numFields) {
     return (int)calculateHeaderPortionInBytes((long)numFields);
@@ -522,5 +528,36 @@ public final class UnsafeArrayData extends ArrayData {
 
   public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
     return fromPrimitiveArray(arr, Platform.DOUBLE_ARRAY_OFFSET, arr.length, 8);
+  }
+
+
+  public byte[] getBytes() {
+    if (baseObject instanceof byte[]
+            && baseOffset == Platform.BYTE_ARRAY_OFFSET
+            && (((byte[]) baseObject).length == sizeInBytes)) {
+      return (byte[]) baseObject;
+    } else {
+      byte[] bytes = new byte[sizeInBytes];
+      Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+      return bytes;
+    }
+  }
+
+  @Override
+  public void writeExternal(ObjectOutput out) throws IOException {
+    byte[] bytes = getBytes();
+    out.writeInt(bytes.length);
+    out.writeInt(this.numElements);
+    out.write(bytes);
+  }
+
+  @Override
+  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+    this.baseOffset = BYTE_ARRAY_OFFSET;
+    this.sizeInBytes = in.readInt();
+    this.numElements = in.readInt();
+    this.elementOffset = baseOffset + calculateHeaderPortionInBytes(this.numElements);
+    this.baseObject = new byte[sizeInBytes];
+    in.readFully((byte[]) baseObject);
   }
 }

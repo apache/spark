@@ -39,7 +39,7 @@ import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
-import org.apache.spark.internal.config.MEMORY_OFFHEAP_SIZE
+import org.apache.spark.internal.config.{EXECUTOR_HEARTBEAT_INTERVAL, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
 import org.apache.spark.status.config._
@@ -99,14 +99,18 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
    * Create a test SparkContext with the SparkUI enabled.
    * It is safe to `get` the SparkUI directly from the SparkContext returned here.
    */
-  private def newSparkContext(killEnabled: Boolean = true): SparkContext = {
+  private def newSparkContext(
+      killEnabled: Boolean = true,
+      master: String = "local",
+      additionalConfs: Map[String, String] = Map.empty): SparkContext = {
     val conf = new SparkConf()
-      .setMaster("local")
+      .setMaster(master)
       .setAppName("test")
       .set("spark.ui.enabled", "true")
       .set("spark.ui.port", "0")
       .set("spark.ui.killEnabled", killEnabled.toString)
       .set(MEMORY_OFFHEAP_SIZE.key, "64m")
+    additionalConfs.foreach { case (k, v) => conf.set(k, v) }
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -721,6 +725,31 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       stagesJson.children.size should be (4)
       val stagesStatus = stagesJson.children.map(_ \ "status")
       stagesStatus.count(_ == JString(StageStatus.SKIPPED.name())) should be (1)
+    }
+  }
+
+  test("Staleness of Spark UI should not last minutes or hours") {
+    withSpark(newSparkContext(
+      master = "local[2]",
+      // Set a small heart beat interval to make the test fast
+      additionalConfs = Map(
+        EXECUTOR_HEARTBEAT_INTERVAL.key -> "10ms",
+        LIVE_ENTITY_UPDATE_MIN_FLUSH_PERIOD.key -> "10ms"))) { sc =>
+      sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
+      val f = sc.parallelize(1 to 1000, 1000).foreachAsync { _ =>
+        // Make the task never finish so there won't be any task start/end events after the first 2
+        // tasks start.
+        Thread.sleep(300000)
+      }
+      try {
+        eventually(timeout(10.seconds)) {
+          val jobsJson = getJson(sc.ui.get, "jobs")
+          jobsJson.children.length should be (1)
+          (jobsJson.children.head \ "numActiveTasks").extract[Int] should be (2)
+        }
+      } finally {
+        f.cancel()
+      }
     }
   }
 

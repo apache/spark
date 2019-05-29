@@ -1784,7 +1784,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           """Extended Usage:
             |    Examples:
             |      > SELECT 3 ^ 5;
-            |       2
+            |       6
             |  """.stripMargin) ::
         Row("Function: ^") ::
         Row("Usage: expr1 ^ expr2 - Returns the result of " +

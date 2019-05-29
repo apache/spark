@@ -175,12 +175,15 @@ class BinaryClassificationMetrics @Since("1.3.0") (
             grouping = Int.MaxValue
           }
           counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
-            // The score of the combined point will be just the first one's score
-            val firstScore = pairs.head._1
-            // The point will contain all counts in this chunk
+            // The score of the combined point will be just the last one's score, which is also
+            // the minimal in each chunk since all scores are already sorted in descending.
+            val lastScore = pairs.last._1
+            // The combined point will contain all counts in this chunk. Thus, calculated
+            // metrics (like precision, recall, etc.) on its score (or so-called threshold) are
+            // the same as those without sampling.
             val agg = new BinaryLabelCounter()
             pairs.foreach(pair => agg += pair._2)
-            (firstScore, agg)
+            (lastScore, agg)
           })
         }
       }

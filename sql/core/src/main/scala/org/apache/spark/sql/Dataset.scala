@@ -676,8 +676,14 @@ class Dataset[T] private[sql](
   // defined on a derived column cannot referenced elsewhere in the plan.
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
     val parsedDelay =
-      Option(CalendarInterval.fromString("interval " + delayThreshold))
-        .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
+      try {
+        CalendarInterval.fromCaseInsensitiveString(delayThreshold)
+      } catch {
+        case e: IllegalArgumentException =>
+          throw new AnalysisException(
+            s"Unable to parse time delay '$delayThreshold'",
+            cause = Some(e))
+      }
     require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
