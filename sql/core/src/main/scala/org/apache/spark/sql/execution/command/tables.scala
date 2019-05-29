@@ -268,6 +268,38 @@ case class AlterTableAddColumnsCommand(
 }
 
 /**
+ * A command that replace columns in a table
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   ALTER TABLE table_identifier
+ *   REPLACE COLUMNS (col_name data_type [COMMENT col_comment], ...);
+ * }}}
+ */
+case class AlterTableReplaceColumnsCommand(
+    table: TableIdentifier,
+    colsToReplace: Seq[StructField]) extends AlterTableAddReplaceColumnsCommandsBase {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val catalogTable = verifyAlterTableAddReplaceColumn(
+      sparkSession.sessionState.conf, catalog, table)
+
+    try {
+      sparkSession.catalog.uncacheTable(table.quotedString)
+    } catch {
+      case NonFatal(e) =>
+        log.warn(s"Exception when attempting to uncache table ${table.quotedString}", e)
+    }
+    catalog.refreshTable(table)
+
+    verifyColumnsToAddReplace(table, catalogTable, colsToReplace)
+
+    catalog.alterTableDataSchema(table, StructType(colsToReplace))
+    Seq.empty[Row]
+  }
+}
+
+
+/**
  * A command that loads data into a Hive table.
  *
  * The syntax of this command is:
