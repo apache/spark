@@ -52,11 +52,7 @@ object SimpleAnalyzer extends Analyzer(
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
     override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
   },
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
-
-  override protected def lookupCatalog(name: String): CatalogPlugin =
-    throw new CatalogNotFoundException("No catalog lookup function")
-}
+  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
 /**
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
@@ -97,7 +93,7 @@ object AnalysisContext {
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
-abstract class Analyzer(
+class Analyzer(
     catalog: SessionCatalog,
     conf: SQLConf,
     maxIterations: Int)
@@ -106,6 +102,9 @@ abstract class Analyzer(
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
+
+  override protected def lookupCatalog(name: String): CatalogPlugin =
+    throw new CatalogNotFoundException("No catalog lookup function")
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {

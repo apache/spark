@@ -43,7 +43,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
         CatalogStorageFormat.empty,
         StructType(Seq(StructField("a", IntegerType, nullable = true)))),
       ignoreIfExists = false)
-    new TestAnalyzer(catalog, conf)
+    new Analyzer(catalog, conf)
   }
 
   test("query builtin functions don't call the external catalog") {

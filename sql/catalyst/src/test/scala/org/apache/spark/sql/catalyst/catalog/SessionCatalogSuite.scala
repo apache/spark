@@ -1429,7 +1429,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
       catalog.setCurrentDatabase("db1")
       try {
-        val analyzer = new TestAnalyzer(catalog, conf)
+        val analyzer = new Analyzer(catalog, conf)
 
         // The analyzer should report the undefined function rather than the undefined table first.
         val cause = intercept[AnalysisException] {

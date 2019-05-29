@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, TestAnalyzer}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 class RewriteDistinctAggregatesSuite extends PlanTest {
   override val conf = new SQLConf().copy(CASE_SENSITIVE -> false, GROUP_BY_ORDINAL -> false)
   val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-  val analyzer = new TestAnalyzer(catalog, conf)
+  val analyzer = new Analyzer(catalog, conf)
 
   val nullInt = Literal(null, IntegerType)
   val nullString = Literal(null, StringType)
