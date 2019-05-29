@@ -33,18 +33,20 @@ private[spark] class ExecutorResourceInfo(
   private[scheduler] val idleAddresses: ArrayBuffer[String] = addresses.to[ArrayBuffer]
 
   // Addresses of resources that has been assigned to running tasks.
-  private val allocatedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
+  // Exposed for testing only.
+  private[scheduler] val allocatedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
 
   // Addresses of resources that has been reserved but not assigned out yet.
-  private val reservedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
+  // Exposed for testing only.
+  private[scheduler] val reservedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
 
   def getName(): String = name
 
   def getNumOfIdleResources(): Int = idleAddresses.size
 
   def acquireAddresses(num: Int): Seq[String] = {
-    assert(num <= idleAddresses.size, s"Required to take $num $name addresses but only " +
-      s"${idleAddresses.size} available.")
+    assert(num <= idleAddresses.size, "Required to take more addresses than available. " +
+      s"Required $num $name addresses, but only ${idleAddresses.size} available.")
     val addrs = idleAddresses.take(num)
     idleAddresses --= addrs
     reservedAddresses ++= addrs
@@ -53,8 +55,8 @@ private[spark] class ExecutorResourceInfo(
 
   def releaseAddresses(addrs: Array[String]): Unit = {
     addrs.foreach { address =>
-      assert(allocatedAddresses.contains(address), s"Try to release $name address $address, but " +
-        "it is not allocated.")
+      assert(allocatedAddresses.contains(address), "Try to release address that is not " +
+        s"allocated. $name address $address is not allocated.")
       idleAddresses += address
       allocatedAddresses -= address
     }
@@ -62,8 +64,8 @@ private[spark] class ExecutorResourceInfo(
 
   def assignAddresses(addrs: Array[String]): Unit = {
     addrs.foreach { address =>
-      assert(reservedAddresses.contains(address), s"Try to assign $name address $address, but " +
-        s"it is not reserved.")
+      assert(reservedAddresses.contains(address), "Try to assign address that is not reserved. " +
+        s"$name address $address is not reserved.")
       allocatedAddresses += address
       reservedAddresses -= address
     }
