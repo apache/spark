@@ -441,20 +441,13 @@ object DataType {
 
         fieldCompatible
 
-      case (w: AtomicType, r: AtomicType) =>
-        if (!Cast.canUpCast(w, r)) {
-          addError(s"Cannot safely cast '$context': $w to $r")
+      case _ =>
+        if (!Cast.canUpCast(write, read)) {
+          addError(s"Cannot safely cast '$context': $write to $read")
           false
         } else {
           true
         }
-
-      case (w, r) if w.sameType(r) && !w.isInstanceOf[NullType] =>
-        true
-
-      case (w, r) =>
-        addError(s"Cannot write '$context': $w is incompatible with $r")
-        false
     }
   }
 }

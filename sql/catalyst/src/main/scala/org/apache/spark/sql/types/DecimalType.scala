@@ -75,7 +75,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   private[sql] def isWiderThan(other: DataType): Boolean = other match {
     case dt: DecimalType =>
       (precision - scale) >= (dt.precision - dt.scale) && scale >= dt.scale
-    case dt: IntegralType =>
+    case dt: NumericType =>
       isWiderThan(DecimalType.forType(dt))
     case _ => false
   }
@@ -87,7 +87,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   private[sql] def isTighterThan(other: DataType): Boolean = other match {
     case dt: DecimalType =>
       (precision - scale) <= (dt.precision - dt.scale) && scale <= dt.scale
-    case dt: IntegralType =>
+    case dt: NumericType =>
       isTighterThan(DecimalType.forType(dt))
     case _ => false
   }

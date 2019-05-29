@@ -40,7 +40,7 @@ class PartitionProviderCompatibilitySuite
       .save(dir.getAbsolutePath)
 
     spark.sql(s"""
-      |create table $tableName (fieldOne long, partCol int)
+      |create table $tableName (fieldOne long, partCol long)
       |using ${spark.sessionState.conf.defaultDataSourceName}
       |options (path "${dir.toURI}")
       |partitioned by (partCol)""".stripMargin)
@@ -357,7 +357,7 @@ class PartitionProviderCompatibilitySuite
     val c = Utils.createTempDir(namePrefix = "c")
     try {
       spark.sql(s"""
-        |create table test (id long, P1 int, P2 int)
+        |create table test (id long, P1 long, P2 long)
         |using ${spark.sessionState.conf.defaultDataSourceName}
         |options (path "${base.toURI}")
         |partitioned by (P1, P2)""".stripMargin)

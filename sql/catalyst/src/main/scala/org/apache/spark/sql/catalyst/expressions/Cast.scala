@@ -126,12 +126,15 @@ object Cast {
    */
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
+    case (NullType, _) => true
+
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
-    case (f, t) if legalNumericPrecedence(f, t) => true
+    case (f: NumericType, t: NumericType) if legalNumericPrecedence(f, t) => true
+
     case (DateType, TimestampType) => true
+
     case (_, StringType) => true
-    case (NullType, _) => true
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
     // `timestampToLong` for details.
@@ -154,7 +157,7 @@ object Cast {
     case _ => false
   }
 
-  private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+  private def legalNumericPrecedence(from: NumericType, to: NumericType): Boolean = {
     val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
     val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
     fromPrecedence >= 0 && fromPrecedence < toPrecedence
