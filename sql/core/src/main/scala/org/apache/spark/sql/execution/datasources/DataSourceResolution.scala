@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DropTableCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
-import org.apache.spark.sql.types.{Metadata, StructField, StructType}
+import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, Metadata, MetadataBuilder, StructField, StructType}
 
 case class DataSourceResolution(
     conf: SQLConf,
@@ -118,12 +118,19 @@ case class DataSourceResolution(
         if newColumns.forall(_.name.size == 1) =>
       // only top-level adds are supported using AlterTableAddColumnsCommand
       val newFields = newColumns.map { newCol =>
-        val struct = StructField(
+        val builder = new MetadataBuilder
+        newCol.comment.foreach(builder.putString("comment", _))
+
+        val cleanedDataType = HiveStringType.replaceCharType(newCol.dataType)
+        if (newCol.dataType != cleanedDataType) {
+          builder.putString(HIVE_TYPE_STRING, newCol.dataType.catalogString)
+        }
+
+        StructField(
           newCol.name.head,
-          newCol.dataType,
+          cleanedDataType,
           nullable = true,
-          Metadata.empty)
-        newCol.comment.map(struct.withComment).getOrElse(struct)
+          builder.build())
       }
 
       AlterTableAddColumnsCommand(table, newFields)
