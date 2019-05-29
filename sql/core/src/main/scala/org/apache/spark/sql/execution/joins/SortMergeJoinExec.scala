@@ -648,7 +648,7 @@ case class SortMergeJoinExec(
       (evaluateVariables(leftVars), "")
     }
 
-    val result = s"""
+    s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
        |  ${leftVarDecl.mkString("\n")}
        |  ${beforeLoop.trim}
@@ -662,8 +662,6 @@ case class SortMergeJoinExec(
        |  if (shouldStop()) return;
        |}
      """.stripMargin
-    println(result)
-    result
   }
 }
 
