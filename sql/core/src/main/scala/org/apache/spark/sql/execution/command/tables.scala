@@ -181,6 +181,24 @@ case class AlterTableRenameCommand(
 
 }
 
+abstract class AlterTableAddReplaceColumnsCommandsBase extends RunnableCommand {
+  /**
+   * Ensure the columns to add/replace meet requirements.
+   */
+  protected def verifyColumnsToAddReplace(
+    table: TableIdentifier,
+    catalogTable: CatalogTable,
+    colsToVerify: Seq[StructField]): Unit = {
+
+    SchemaUtils.checkColumnNameDuplication(
+      colsToVerify.map(_.name),
+      "in the table definition of " + table.identifier,
+      conf.caseSensitiveAnalysis)
+
+    DDLUtils.checkDataColNames(catalogTable, colsToVerify.map(_.name))
+  }
+}
+
 /**
  * A command that add columns to a table
  * The syntax of using this command in SQL is:
@@ -188,10 +206,10 @@ case class AlterTableRenameCommand(
  *   ALTER TABLE table_identifier
  *   ADD COLUMNS (col_name data_type [COMMENT col_comment], ...);
  * }}}
-*/
+ */
 case class AlterTableAddColumnsCommand(
     table: TableIdentifier,
-    colsToAdd: Seq[StructField]) extends RunnableCommand {
+    colsToAdd: Seq[StructField]) extends AlterTableAddReplaceColumnsCommandsBase {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
@@ -204,11 +222,7 @@ case class AlterTableAddColumnsCommand(
     }
     catalog.refreshTable(table)
 
-    SchemaUtils.checkColumnNameDuplication(
-      (colsToAdd ++ catalogTable.schema).map(_.name),
-      "in the table definition of " + table.identifier,
-      conf.caseSensitiveAnalysis)
-    DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
+    verifyColumnsToAddReplace(table, catalogTable, colsToAdd ++ catalogTable.schema)
 
     catalog.alterTableDataSchema(table, StructType(catalogTable.dataSchema ++ colsToAdd))
     Seq.empty[Row]
