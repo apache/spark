@@ -39,6 +39,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.ResourceName.GPU
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
@@ -855,8 +856,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val discoveryScript = resourceFile.getPath()
 
       val conf = new SparkConf()
-        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${SPARK_RESOURCE_COUNT_SUFFIX}", "3")
-        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX}",
+        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${SPARK_RESOURCE_COUNT_SUFFIX}", "3")
+        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX}",
           discoveryScript)
         .setMaster("local-cluster[3, 3, 1024]")
         .setAppName("test-cluster")
@@ -870,7 +871,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       val rdd = sc.makeRDD(1 to 10, 9).mapPartitions { it =>
         val context = TaskContext.get()
-        context.resources().get(ResourceInformation.GPU).get.addresses.iterator
+        context.resources().get(GPU).get.addresses.iterator
       }
       val gpus = rdd.collect()
       assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))

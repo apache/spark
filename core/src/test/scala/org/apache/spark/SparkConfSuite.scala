@@ -446,6 +446,29 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       assert(thrown.getMessage.contains(key))
     }
   }
+
+  test("get task resource requirement from config") {
+    val conf = new SparkConf()
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_SUFFIX, "2")
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_COUNT_SUFFIX, "1")
+    var taskResourceRequirement = conf.getTaskResourceRequirements()
+    assert(taskResourceRequirement.size == 2)
+    assert(taskResourceRequirement("gpu") == 2)
+    assert(taskResourceRequirement("fpga") == 1)
+
+    conf.remove(SPARK_TASK_RESOURCE_PREFIX + "fpga" + SPARK_RESOURCE_COUNT_SUFFIX)
+    // Ignore invalid prefix
+    conf.set("spark.invalid.prefix" + "fpga" + SPARK_RESOURCE_COUNT_SUFFIX, "1")
+    taskResourceRequirement = conf.getTaskResourceRequirements()
+    assert(taskResourceRequirement.size == 1)
+    assert(taskResourceRequirement.get("fpga").isEmpty)
+
+    // Ignore invalid suffix
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + "fpga" + "invalid.suffix", "1")
+    taskResourceRequirement = conf.getTaskResourceRequirements()
+    assert(taskResourceRequirement.size == 1)
+    assert(taskResourceRequirement.get("fpga").isEmpty)
+  }
 }
 
 class Class1 {}

@@ -27,7 +27,7 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark._
-import org.apache.spark.ResourceInformation.GPU
+import org.apache.spark.ResourceName.GPU
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.serializer.SerializerInstance
@@ -1646,13 +1646,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     val availableResources = Map(GPU ->
-      new SchedulerResourceInformation(GPU, ArrayBuffer("0", "1", "2", "3")))
+      new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3")))
     val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF, availableResources)
     assert(taskOption.isDefined)
     val allocatedResources = taskOption.get.resources
     assert(allocatedResources.size == 1)
     assert(allocatedResources(GPU).addresses sameElements Array("0", "1"))
     // Allocated resource addresses should no longer be available in `availableResources`.
-    assert(availableResources(GPU).getAvailableAddresses() sameElements Array("2", "3"))
+    assert(availableResources(GPU).idleAddresses sameElements Array("2", "3"))
   }
 }

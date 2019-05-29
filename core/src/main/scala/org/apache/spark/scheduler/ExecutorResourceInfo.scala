@@ -19,30 +19,35 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.Evolving
-
 /**
- * Class to hold information about a type of Resource used by the scheduler. This is a separate
- * class from the ResourceInformation because here its mutable because the scheduler has to update
- * the addresses based on what its assigned and what is available.
+ * Class to hold information about a type of Resource on an Executor. This information is managed
+ * by SchedulerBackend, and TaskScheduler shall schedule tasks on idle Executors based on the
+ * information.
  */
-@Evolving
-private[spark] class SchedulerResourceInformation(
+private[spark] class ExecutorResourceInfo(
     private val name: String,
-    private val availableAddresses: ArrayBuffer[String] = ArrayBuffer.empty) extends Serializable {
+    private val addresses: Seq[String] = Seq.empty) extends Serializable {
 
+  // Addresses of resources that has not been assigned or reserved.
+  // Exposed for testing only.
+  private[scheduler] val idleAddresses: ArrayBuffer[String] = addresses.to[ArrayBuffer]
+
+  // Addresses of resources that has been assigned to running tasks.
   private val allocatedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
+
+  // Addresses of resources that has been reserved but not assigned out yet.
+  private val reservedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
 
   def getName(): String = name
 
-  def getAvailableAddresses(): ArrayBuffer[String] = availableAddresses
+  def getNumOfIdleResources(): Int = idleAddresses.size
 
   def acquireAddresses(num: Int): Seq[String] = {
-    assert(num <= availableAddresses.size, s"Required to take $num $name addresses but only " +
-      s"${availableAddresses.size} available.")
-    val addrs = availableAddresses.take(num)
-    availableAddresses --= addrs
-    allocatedAddresses ++= addrs
+    assert(num <= idleAddresses.size, s"Required to take $num $name addresses but only " +
+      s"${idleAddresses.size} available.")
+    val addrs = idleAddresses.take(num)
+    idleAddresses --= addrs
+    reservedAddresses ++= addrs
     addrs
   }
 
@@ -50,8 +55,17 @@ private[spark] class SchedulerResourceInformation(
     addrs.foreach { address =>
       assert(allocatedAddresses.contains(address), s"Try to release $name address $address, but " +
         "it is not allocated.")
-      availableAddresses += address
+      idleAddresses += address
       allocatedAddresses -= address
+    }
+  }
+
+  def assignAddresses(addrs: Array[String]): Unit = {
+    addrs.foreach { address =>
+      assert(reservedAddresses.contains(address), s"Try to assign $name address $address, but " +
+        s"it is not reserved.")
+      allocatedAddresses += address
+      reservedAddresses -= address
     }
   }
 }

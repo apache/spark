@@ -469,7 +469,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      availableResources: Map[String, SchedulerResourceInformation])
+      availableResources: Map[String, ExecutorResourceInfo])
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -534,8 +534,8 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
-        val extraResources = sched.RESOURCES_PER_TASK.map { case (rName, rNum) =>
-          val allocatedAddresses = availableResources.get(rName).get.acquireAddresses(rNum)
+        val extraResources = sched.resourcesPerTask.map { case (rName, rNum) =>
+          val allocatedAddresses = availableResources(rName).acquireAddresses(rNum)
           (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
         }
 

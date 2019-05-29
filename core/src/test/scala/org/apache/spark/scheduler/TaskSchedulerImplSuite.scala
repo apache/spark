@@ -29,7 +29,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
-import org.apache.spark.ResourceInformation.GPU
+import org.apache.spark.ResourceName.GPU
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
@@ -1246,16 +1246,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val executorGpus = 4
     val executorCpus = 4
     val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString,
-      s"${config.SPARK_TASK_RESOURCE_PREFIX}$GPU${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
+      s"${config.SPARK_TASK_RESOURCE_PREFIX}${GPU}${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
         taskGpus.toString,
-      s"${config.SPARK_EXECUTOR_RESOURCE_PREFIX}$GPU${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
+      s"${config.SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
         executorGpus.toString,
       config.EXECUTOR_CORES.key -> executorCpus.toString)
     val taskSet = FakeTask.createTaskSet(3)
 
     val numFreeCores = 2
     val resources = Map(GPU ->
-      new SchedulerResourceInformation(GPU, ArrayBuffer("0", "1", "2", "3")))
+      new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3")))
     val singleCoreWorkerOffers =
       IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
     val zeroGpuWorkerOffers =

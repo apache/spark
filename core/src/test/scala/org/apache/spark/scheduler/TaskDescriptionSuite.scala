@@ -24,7 +24,7 @@ import java.util.Properties
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.ResourceInformation
-import org.apache.spark.ResourceInformation.GPU
+import org.apache.spark.ResourceName.GPU
 import org.apache.spark.SparkFunSuite
 
 class TaskDescriptionSuite extends SparkFunSuite {

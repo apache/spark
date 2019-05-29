@@ -17,21 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotation.Evolving
-
-/**
- * Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
- * The array of addresses are resource specific and its up to the user to interpret the address.
- *
- * One example is GPUs, where the addresses would be the indices of the GPUs
- *
- * @param name the name of the resource
- * @param addresses an array of strings describing the addresses of the resource
- */
-@Evolving
-class ResourceInformation(
-    val name: String,
-    val addresses: Array[String]) extends Serializable {
-
-  override def toString: String = s"[name: ${name}, addresses: ${addresses.mkString(",")}]"
+private[spark] object ResourceName {
+  // known types of resources
+  final val GPU: String = "gpu"
 }

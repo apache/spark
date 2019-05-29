@@ -31,7 +31,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark._
-import org.apache.spark.ResourceInformation.GPU
+import org.apache.spark.ResourceName.GPU
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
