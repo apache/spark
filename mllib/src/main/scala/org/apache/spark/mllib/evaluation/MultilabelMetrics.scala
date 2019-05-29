@@ -58,38 +58,38 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    * (for equal sets of labels)
    */
   @Since("1.2.0")
-  lazy val subsetAccuracy: Double = summary.subsetAccuracy
+  val subsetAccuracy: Double = summary.subsetAccuracy
 
   /**
    * Returns accuracy
    */
   @Since("1.2.0")
-  lazy val accuracy: Double = summary.accuracy
+  val accuracy: Double = summary.accuracy
 
 
   /**
    * Returns Hamming-loss
    */
   @Since("1.2.0")
-  lazy val hammingLoss: Double = summary.hammingLoss
+  val hammingLoss: Double = summary.hammingLoss
 
   /**
    * Returns document-based precision averaged by the number of documents
    */
   @Since("1.2.0")
-  lazy val precision: Double = summary.precision
+  val precision: Double = summary.precision
 
   /**
    * Returns document-based recall averaged by the number of documents
    */
   @Since("1.2.0")
-  lazy val recall: Double = summary.recall
+  val recall: Double = summary.recall
 
   /**
    * Returns document-based f1-measure averaged by the number of documents
    */
   @Since("1.2.0")
-  lazy val f1Measure: Double = summary.f1Measure
+  val f1Measure: Double = summary.f1Measure
 
   /**
    * Returns precision for a given label (category)
@@ -124,9 +124,9 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
     if((p + r) == 0) 0.0 else 2 * p * r / (p + r)
   }
 
-  private lazy val sumTp = summary.tpPerClass.foldLeft(0L) { case (sum, (_, tp)) => sum + tp }
-  private lazy val sumFpClass = summary.fpPerClass.foldLeft(0L) { case (sum, (_, fp)) => sum + fp }
-  private lazy val sumFnClass = summary.fnPerClass.foldLeft(0L) { case (sum, (_, fn)) => sum + fn }
+  private lazy val sumTp = summary.tpPerClass.values.sum
+  private lazy val sumFpClass = summary.fpPerClass.values.sum
+  private lazy val sumFnClass = summary.fnPerClass.values.sum
 
   /**
    * Returns micro-averaged label-based precision

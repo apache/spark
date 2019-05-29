@@ -59,7 +59,7 @@ class RegressionMetrics @Since("2.0.0") (
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
    */
-  private val summary: MultivariateStatisticalSummary = {
+  private lazy val summary: MultivariateStatisticalSummary = {
     predictionAndObservations.map {
       case (prediction: Double, observation: Double, weight: Double) =>
         (Vectors.dense(observation, observation - prediction, prediction), weight)

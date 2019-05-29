@@ -51,13 +51,11 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
 
   private val confusions = predictionAndLabels.map {
     case (prediction: Double, label: Double, weight: Double) =>
-      (prediction, label, weight)
+      ((label, prediction), weight)
     case (prediction: Double, label: Double) =>
-      (prediction, label, 1.0)
+      ((label, prediction), 1.0)
     case other =>
       throw new IllegalArgumentException(s"Expected tuples, got $other")
-  }.map { case (prediction: Double, label: Double, weight: Double) =>
-    ((label, prediction), weight)
   }.reduceByKey(_ + _)
     .collectAsMap()
 
@@ -80,7 +78,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         val w = tpByClass.getOrElse(label, 0.0)
         if (label == prediction) {
           tpByClass.update(label, w + weight)
-        } else {
+        } else if (w == 0.0) {
           tpByClass.update(label, w)
         }
     }
@@ -94,7 +92,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         val w = fpByClass.getOrElse(prediction, 0.0)
         if (label != prediction) {
           fpByClass.update(prediction, w + weight)
-        } else {
+        } else if (w == 0.0) {
           fpByClass.update(prediction, w)
         }
     }
