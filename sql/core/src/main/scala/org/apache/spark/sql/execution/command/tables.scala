@@ -37,8 +37,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
-import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
-import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
@@ -197,6 +195,45 @@ abstract class AlterTableAddReplaceColumnsCommandsBase extends RunnableCommand {
 
     DDLUtils.checkDataColNames(catalogTable, colsToVerify.map(_.name))
   }
+
+  /**
+   * ALTER TABLE [ADD|REPLACE] COLUMNS command do not support temporary view/table,
+   * view, or datasource table with text, orc formats or external provider.
+   * For datasource table, it currently only supports parquet, json, csv, orc.
+   */
+  protected def verifyAlterTableAddReplaceColumn(
+    conf: SQLConf,
+    catalog: SessionCatalog,
+    table: TableIdentifier): CatalogTable = {
+    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+
+    if (catalogTable.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"""
+           |ALTER [ADD|REPLACE] COLUMNS do not support views.
+           |You must drop and re-create the views for adding the new columns. Views: $table
+         """.stripMargin)
+    }
+
+    if (DDLUtils.isDatasourceTable(catalogTable)) {
+      DataSource.lookupDataSource(catalogTable.provider.get, conf).
+        getConstructor().newInstance() match {
+        // For datasource table, this command can only support the following File format.
+        // TextFileFormat only default to one column "value"
+        // Hive type is already considered as hive serde table, so the logic will not
+        // come in here.
+      case _: JsonDataSourceV2 | _: CSVDataSourceV2 | _: ParquetFileFormat | _: OrcDataSourceV2 =>
+      case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
+      case s =>
+        throw new AnalysisException(
+          s"""
+             |ALTER [ADD|REPLACE] COLUMNS do not support datasource table with type $s.
+             |You must drop and re-create the table for adding the new columns. Tables: $table
+             """.stripMargin)
+      }
+    }
+    catalogTable
+  }
 }
 
 /**
@@ -212,7 +249,8 @@ case class AlterTableAddColumnsCommand(
     colsToAdd: Seq[StructField]) extends AlterTableAddReplaceColumnsCommandsBase {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
+    val catalogTable = verifyAlterTableAddReplaceColumn(
+      sparkSession.sessionState.conf, catalog, table)
 
     try {
       sparkSession.catalog.uncacheTable(table.quotedString)
@@ -227,48 +265,7 @@ case class AlterTableAddColumnsCommand(
     catalog.alterTableDataSchema(table, StructType(catalogTable.dataSchema ++ colsToAdd))
     Seq.empty[Row]
   }
-
-  /**
-   * ALTER TABLE ADD COLUMNS command does not support temporary view/table,
-   * view, or datasource table with text, orc formats or external provider.
-   * For datasource table, it currently only supports parquet, json, csv, orc.
-   */
-  private def verifyAlterTableAddColumn(
-      conf: SQLConf,
-      catalog: SessionCatalog,
-      table: TableIdentifier): CatalogTable = {
-    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
-
-    if (catalogTable.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(
-        s"""
-          |ALTER ADD COLUMNS does not support views.
-          |You must drop and re-create the views for adding the new columns. Views: $table
-         """.stripMargin)
-    }
-
-    if (DDLUtils.isDatasourceTable(catalogTable)) {
-      DataSource.lookupDataSource(catalogTable.provider.get, conf).
-        getConstructor().newInstance() match {
-        // For datasource table, this command can only support the following File format.
-        // TextFileFormat only default to one column "value"
-        // Hive type is already considered as hive serde table, so the logic will not
-        // come in here.
-        case _: CSVFileFormat | _: JsonFileFormat | _: ParquetFileFormat =>
-        case _: JsonDataSourceV2 | _: CSVDataSourceV2 | _: OrcDataSourceV2 =>
-        case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
-        case s =>
-          throw new AnalysisException(
-            s"""
-              |ALTER ADD COLUMNS does not support datasource table with type $s.
-              |You must drop and re-create the table for adding the new columns. Tables: $table
-             """.stripMargin)
-      }
-    }
-    catalogTable
-  }
 }
-
 
 /**
  * A command that loads data into a Hive table.
