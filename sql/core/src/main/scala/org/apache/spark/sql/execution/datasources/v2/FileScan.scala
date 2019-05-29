@@ -45,8 +45,8 @@ abstract class FileScan(
   }
 
   override def description(): String = {
-    def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
-    val locationDesc = fileIndex.getClass.getSimpleName + seqToString(fileIndex.rootPaths)
+    val locationDesc =
+      fileIndex.getClass.getSimpleName + fileIndex.rootPaths.mkString("[", ", ", "]")
     val metadata: Map[String, String] = Map(
       "ReadSchema" -> readDataSchema.catalogString,
       "Location" -> locationDesc)
@@ -55,7 +55,7 @@ abstract class FileScan(
         val redactedValue =
           Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
         key + ": " + StringUtils.abbreviate(redactedValue, 100)
-    }.mkString(",")
+    }.mkString(", ")
     s"${this.getClass.getSimpleName} $metadataStr"
   }
 

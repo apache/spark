@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
- * Suite that tests the redaction of DataSourceScanExec
+ *  Test suite base for testing the redaction of DataSourceScanExec/BatchScanExec.
  */
 abstract class DataSourceScanRedactionTest extends QueryTest with SharedSQLContext {
 
@@ -64,6 +64,9 @@ abstract class DataSourceScanRedactionTest extends QueryTest with SharedSQLConte
   }
 }
 
+/**
+ * Suite that tests the redaction of DataSourceScanExec
+ */
 class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.USE_V1_SOURCE_READER_LIST.key, "orc")

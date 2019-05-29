@@ -51,7 +51,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   }
 
   protected def getTableName(paths: Seq[String]): String = {
-    val name = shortName().capitalize + " " + paths.map(qualifiedPathName).mkString(",")
+    val name = shortName() + " " + paths.map(qualifiedPathName).mkString(",")
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
   }
 
