@@ -223,19 +223,6 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
-   * Asserts that a given [[Dataset]] will be executed using the cache with the given name
-   */
-  def assertCached(query: Dataset[_], cachedName: String): Unit = {
-    val planWithCaching = query.queryExecution.withCachedData
-    val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
-      val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
-      cachedName == cacheBuilder.tableName.get
-    }.getOrElse(false)
-
-    assert(matched, s"Expected query plan to hit cache $cachedName, but it doesn't.")
-  }
-
-  /**
    * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
    */
   def assertEmptyMissingInput(query: Dataset[_]): Unit = {

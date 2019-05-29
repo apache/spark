@@ -60,16 +60,18 @@ public interface WriteBuilder {
    * exception, data sources must overwrite this method to provide an implementation, if the
    * {@link Table} that creates this write returns {@link TableCapability#BATCH_WRITE} support in
    * its {@link Table#capabilities()}.
-   *
-   * Note that, the returned {@link BatchWrite} can be null if the implementation supports SaveMode,
-   * to indicate that no writing is needed. We can clean it up after removing
-   * {@link SupportsSaveMode}.
    */
   default BatchWrite buildForBatch() {
     throw new UnsupportedOperationException(getClass().getName() +
       " does not support batch write");
   }
 
+  /**
+   * Returns a {@link StreamingWrite} to write data to streaming source. By default this method
+   * throws exception, data sources must overwrite this method to provide an implementation, if the
+   * {@link Table} that creates this write returns {@link TableCapability#STREAMING_WRITE} support
+   * in its {@link Table#capabilities()}.
+   */
   default StreamingWrite buildForStreaming() {
     throw new UnsupportedOperationException(getClass().getName() +
       " does not support streaming write");

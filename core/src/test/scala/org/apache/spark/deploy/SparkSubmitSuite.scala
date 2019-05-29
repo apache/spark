@@ -375,8 +375,8 @@ class SparkSubmitSuite
     confMap.keys should contain ("spark.app.name")
     confMap.keys should contain (JARS.key)
     confMap.keys should contain ("spark.driver.memory")
-    confMap.keys should contain ("spark.driver.cores")
-    confMap.keys should contain ("spark.driver.supervise")
+    confMap.keys should contain (DRIVER_CORES.key)
+    confMap.keys should contain (DRIVER_SUPERVISE.key)
     confMap.keys should contain (UI_ENABLED.key)
     confMap.keys should contain (SUBMIT_DEPLOY_MODE.key)
     conf.get(UI_ENABLED) should be (false)
@@ -1325,12 +1325,12 @@ class SparkSubmitSuite
       "--class", "Foo",
       "app.jar")
     val conf = new SparkSubmitArguments(clArgs).toSparkConf()
-     Seq(
-       testConf,
-       masterConf
-     ).foreach { case (k, v) =>
-       conf.get(k) should be (v)
-     }
+    Seq(
+      testConf,
+      masterConf
+    ).foreach { case (k, v) =>
+      conf.get(k) should be (v)
+    }
   }
 }
 

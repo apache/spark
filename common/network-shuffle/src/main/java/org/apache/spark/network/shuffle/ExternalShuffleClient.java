@@ -19,10 +19,15 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
+import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.shuffle.protocol.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,8 +38,6 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.crypto.AuthClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -73,7 +76,10 @@ public class ExternalShuffleClient extends ShuffleClient {
     assert appId != null : "Called before init()";
   }
 
-  @Override
+  /**
+   * Initializes the ShuffleClient, specifying this Executor's appId.
+   * Must be called before any other method on the ShuffleClient.
+   */
   public void init(String appId) {
     this.appId = appId;
     TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true, true);
@@ -139,10 +145,38 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       ExecutorShuffleInfo executorInfo) throws IOException, InterruptedException {
     checkInit();
-    try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
+    try (TransportClient client = clientFactory.createClient(host, port)) {
       ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
       client.sendRpcSync(registerMessage, registrationTimeoutMs);
     }
+  }
+
+  public Future<Integer> removeBlocks(
+      String host,
+      int port,
+      String execId,
+      String[] blockIds) throws IOException, InterruptedException {
+    checkInit();
+    CompletableFuture<Integer> numRemovedBlocksFuture = new CompletableFuture<>();
+    ByteBuffer removeBlocksMessage = new RemoveBlocks(appId, execId, blockIds).toByteBuffer();
+    final TransportClient client = clientFactory.createClient(host, port);
+    client.sendRpc(removeBlocksMessage, new RpcResponseCallback() {
+      @Override
+      public void onSuccess(ByteBuffer response) {
+        BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
+        numRemovedBlocksFuture.complete(((BlocksRemoved)msgObj).numRemovedBlocks);
+        client.close();
+      }
+
+      @Override
+      public void onFailure(Throwable e) {
+        logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
+            " via external shuffle service from executor: " + execId, e);
+        numRemovedBlocksFuture.complete(0);
+        client.close();
+      }
+    });
+    return numRemovedBlocksFuture;
   }
 
   @Override

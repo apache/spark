@@ -47,12 +47,10 @@ import org.apache.spark.util.SerializableConfiguration
  * {{{
  *   // Scala
  *   val df = spark.read.format("binaryFile")
- *     .option("pathGlobFilter", "*.png")
  *     .load("/path/to/fileDir")
  *
  *   // Java
  *   Dataset<Row> df = spark.read().format("binaryFile")
- *     .option("pathGlobFilter", "*.png")
  *     .load("/path/to/fileDir");
  * }}}
  */
@@ -98,44 +96,37 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val binaryFileSourceOptions = new BinaryFileSourceOptions(options)
-    val pathGlobPattern = binaryFileSourceOptions.pathGlobFilter
     val filterFuncs = filters.map(filter => createFilterFunction(filter))
     val maxLength = sparkSession.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
       val path = new Path(file.filePath)
-      // TODO: Improve performance here: each file will recompile the glob pattern here.
-      if (pathGlobPattern.forall(new GlobFilter(_).accept(path))) {
-        val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
-        val status = fs.getFileStatus(path)
-        if (filterFuncs.forall(_.apply(status))) {
-          val writer = new UnsafeRowWriter(requiredSchema.length)
-          writer.resetRowWriter()
-          requiredSchema.fieldNames.zipWithIndex.foreach {
-            case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
-            case (LENGTH, i) => writer.write(i, status.getLen)
-            case (MODIFICATION_TIME, i) =>
-              writer.write(i, DateTimeUtils.fromMillis(status.getModificationTime))
-            case (CONTENT, i) =>
-              if (status.getLen > maxLength) {
-                throw new SparkException(
-                  s"The length of ${status.getPath} is ${status.getLen}, " +
-                    s"which exceeds the max length allowed: ${maxLength}.")
-              }
-              val stream = fs.open(status.getPath)
-              try {
-                writer.write(i, ByteStreams.toByteArray(stream))
-              } finally {
-                Closeables.close(stream, true)
-              }
-            case (other, _) =>
-              throw new RuntimeException(s"Unsupported field name: ${other}")
-          }
-          Iterator.single(writer.getRow)
-        } else {
-          Iterator.empty
+      val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
+      val status = fs.getFileStatus(path)
+      if (filterFuncs.forall(_.apply(status))) {
+        val writer = new UnsafeRowWriter(requiredSchema.length)
+        writer.resetRowWriter()
+        requiredSchema.fieldNames.zipWithIndex.foreach {
+          case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
+          case (LENGTH, i) => writer.write(i, status.getLen)
+          case (MODIFICATION_TIME, i) =>
+            writer.write(i, DateTimeUtils.fromMillis(status.getModificationTime))
+          case (CONTENT, i) =>
+            if (status.getLen > maxLength) {
+              throw new SparkException(
+                s"The length of ${status.getPath} is ${status.getLen}, " +
+                  s"which exceeds the max length allowed: ${maxLength}.")
+            }
+            val stream = fs.open(status.getPath)
+            try {
+              writer.write(i, ByteStreams.toByteArray(stream))
+            } finally {
+              Closeables.close(stream, true)
+            }
+          case (other, _) =>
+            throw new RuntimeException(s"Unsupported field name: ${other}")
         }
+        Iterator.single(writer.getRow)
       } else {
         Iterator.empty
       }
@@ -204,14 +195,3 @@ object BinaryFileFormat {
   }
 }
 
-class BinaryFileSourceOptions(
-    @transient private val parameters: CaseInsensitiveMap[String]) extends Serializable {
-
-  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
-
-  /**
-   * An optional glob pattern to only include files with paths matching the pattern.
-   * The syntax follows [[org.apache.hadoop.fs.GlobFilter]].
-   */
-  val pathGlobFilter: Option[String] = parameters.get("pathGlobFilter")
-}

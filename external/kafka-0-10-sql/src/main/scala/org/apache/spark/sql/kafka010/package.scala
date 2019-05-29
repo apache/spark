@@ -16,9 +16,26 @@
  */
 package org.apache.spark.sql
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.kafka.common.TopicPartition
+
+import org.apache.spark.internal.config.ConfigBuilder
 
 package object kafka010 {   // scalastyle:ignore
   // ^^ scalastyle:ignore is for ignoring warnings about digits in package name
   type PartitionOffsetMap = Map[TopicPartition, Long]
+
+  private[kafka010] val PRODUCER_CACHE_TIMEOUT =
+    ConfigBuilder("spark.kafka.producer.cache.timeout")
+      .doc("The expire time to remove the unused producers.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10m")
+
+  private[kafka010] val CONSUMER_CACHE_CAPACITY =
+    ConfigBuilder("spark.kafka.consumer.cache.capacity")
+      .doc("The maximum number of consumers cached. Please note it's a soft limit" +
+        " (check Structured Streaming Kafka integration guide for further details).")
+      .intConf
+      .createWithDefault(64)
 }

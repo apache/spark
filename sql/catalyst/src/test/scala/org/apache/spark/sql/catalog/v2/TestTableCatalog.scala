@@ -91,7 +91,7 @@ class TestTableCatalog extends TableCatalog {
   override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
 }
 
-private object TestTableCatalog {
+object TestTableCatalog {
   /**
    * Apply properties changes to a map and return the result.
    */
