@@ -240,12 +240,12 @@ class ExecutorAllocationManagerSuite
     val manager = sc.executorAllocationManager.get
 
     // Verify that we're capped at number of tasks including the speculative ones in the stage
-    post(sc.listenerBus, SparkListenerSpeculativeTaskSubmitted(1, 0))
+    post(sc.listenerBus, SparkListenerSpeculativeTaskSubmitted(1))
     assert(numExecutorsTarget(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 1)
-    post(sc.listenerBus, SparkListenerSpeculativeTaskSubmitted(1, 0))
-    post(sc.listenerBus, SparkListenerSpeculativeTaskSubmitted(1, 0))
+    post(sc.listenerBus, SparkListenerSpeculativeTaskSubmitted(1))
+    post(sc.listenerBus, SparkListenerSpeculativeTaskSubmitted(1))
     post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(1, 2)))
     assert(numExecutorsTarget(manager) === 1)
     assert(numExecutorsToAdd(manager) === 2)
