@@ -297,6 +297,17 @@
             </exclusion>
           </exclusions>
         </dependency>
+        <dependency>
+          <groupId>com.datastax.spark</groupId>
+          <artifactId>spark-cassandra-connector_${scala.binary.version}</artifactId>
+          <version>${spark-cassandra-connector.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>*</groupId>
+              <artifactId>*</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
       </dependencies>
     </profile>
     <profile>
