@@ -202,7 +202,7 @@ private[spark] object KubernetesConf {
 
   /**
    * Build a resources name based on the vendor device plugin naming
-   * convention of: vendor-domain/resource. For example, an Nvidia GPU is
+   * convention of: vendor-domain/resource. For example, an NVIDIA GPU is
    * advertised as nvidia.com/gpu.
    */
   def buildKubernetesResourceName(vendorDomain: String, resourceName: String): String = {

@@ -225,7 +225,7 @@ private[spark] object KubernetesUtils extends Logging {
    */
   def buildResourcesQuantities(
       componentName: String,
-      sparkConf: SparkConf): Set[(String, Quantity)] = {
+      sparkConf: SparkConf): Map[String, Quantity] = {
     val allResources = sparkConf.getAllWithPrefix(componentName)
     val vendors = SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_VENDOR_SUFFIX).toMap
     val amounts = SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_COUNT_SUFFIX).toMap
@@ -240,7 +240,7 @@ private[spark] object KubernetesUtils extends Logging {
         .withAmount(amount)
         .build()
       (KubernetesConf.buildKubernetesResourceName(vendorDomain, rName), quantity)
-    }
+    }.toMap
   }
 
   /**

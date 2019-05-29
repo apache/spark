@@ -172,7 +172,7 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("memory", executorMemoryQuantity)
         .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
-        .addToLimits(executorResourceQuantities.toMap.asJava)
+        .addToLimits(executorResourceQuantities.asJava)
         .endResources()
       .addNewEnv()
         .withName(ENV_SPARK_USER)

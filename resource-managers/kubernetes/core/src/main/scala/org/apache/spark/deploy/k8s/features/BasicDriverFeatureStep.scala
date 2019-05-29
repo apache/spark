@@ -132,7 +132,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
         .addToRequests("memory", driverMemoryQuantity)
         .addToLimits("memory", driverMemoryQuantity)
-        .addToLimits(driverResourceQuantities.toMap.asJava)
+        .addToLimits(driverResourceQuantities.asJava)
         .endResources()
       .build()
 

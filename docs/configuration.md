@@ -210,7 +210,10 @@ of the most common options to set are:
  <td><code>spark.driver.resource.{resourceName}.vendor</code></td>
   <td>None</td>
   <td>
-    Vendor of the resources to use for driver. This option is currently supported on Kubernetes.
+    Vendor of the resources to use for the driver. This option is currently
+    only supported on Kubernetes and is actually both the vendor and domain following
+    the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
+    this config would be set to nvidia.com or amd.com)
   </td>
 </tr>
 <tr>
@@ -270,7 +273,10 @@ of the most common options to set are:
  <td><code>spark.executor.resource.{resourceName}.vendor</code></td>
   <td>None</td>
   <td>
-    Vendor of the resources to use for executors. This option is currently supported on Kubernetes.
+    Vendor of the resources to use for the executors. This option is currently
+    only supported on Kubernetes and is actually both the vendor and domain following
+    the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
+    this config would be set to nvidia.com or amd.com)
   </td>
 </tr>
 <tr>
