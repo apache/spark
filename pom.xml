@@ -183,7 +183,7 @@
     <selenium.version>2.52.0</selenium.version>
 
     <!-- Toast Lib Enhancement -->
-    <spark-cassandra-connector.version>2.4.1<spark-cassandra-connector.version>
+    <spark-cassandra-connector.version>2.4.1</spark-cassandra-connector.version>
     <!--
     Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
     -->
