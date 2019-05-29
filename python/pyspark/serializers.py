@@ -874,8 +874,8 @@ class ChunkedStream(object):
             # send buffer [0, current_pos)
             write_int(self.current_pos, self.wrapped)
             self.wrapped.write(self.buffer[:self.current_pos])
-            self.wrapped.flush()
             self.current_pos = 0
+        self.wrapped.flush()
 
     def close(self):
         # if there is anything left in the buffer, write it out first
