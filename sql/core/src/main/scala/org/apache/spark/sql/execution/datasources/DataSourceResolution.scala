@@ -42,7 +42,7 @@ case class DataSourceResolution(
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
-  override protected def lookupCatalog(name: String): CatalogPlugin = findCatalog(name)
+  override def lookupCatalog: Option[String => CatalogPlugin] = Some(findCatalog)
 
   def defaultCatalog: Option[CatalogPlugin] = conf.defaultV2Catalog.map(findCatalog)
 
