@@ -162,8 +162,12 @@ private[spark] class ExecutorMonitor(
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
-    if (executors.remove(event.executorId) != null) {
+    val removed = executors.remove(event.executorId)
+    if (removed != null) {
       logInfo(s"Executor ${event.executorId} removed (new total is ${executors.size()})")
+      if (!removed.pendingRemoval) {
+        nextTimeout.set(Long.MinValue)
+      }
     }
   }
 
