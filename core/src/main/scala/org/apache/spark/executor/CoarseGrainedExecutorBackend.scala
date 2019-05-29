@@ -68,7 +68,8 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   // Map each taskId to the resource informations allocated to it, the resource information
   // includes resource name and resource addresses.
-  private[this] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
+  // Exposed for testing only.
+  private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
   override def onStart() {
     logInfo("Connecting to driver: " + driverUrl)
