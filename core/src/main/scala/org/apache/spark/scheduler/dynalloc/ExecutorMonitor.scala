@@ -64,13 +64,6 @@ private[spark] class ExecutorMonitor(
   private var nextTimeout = new AtomicLong(Long.MaxValue)
   private var timedOutExecs = Seq.empty[String]
 
-  if (idleTimeoutMs < 0) {
-    throw new SparkException(s"${DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key} must be >= 0!")
-  }
-  if (storageTimeoutMs < 0) {
-    throw new SparkException(s"${DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key} must be >= 0!")
-  }
-
   def reset(): Unit = {
     executors.clear()
     nextTimeout.set(Long.MaxValue)
@@ -102,7 +95,7 @@ private[spark] class ExecutorMonitor(
             // the executor to change after it was read above. Check the deadline again,
             // and if it changed, don't consider this executor for removal yet.
             val newDeadline = exec.timeoutAt
-            if (newDeadline > deadline) {
+            if (newDeadline > now) {
               exec.timedOut = false
               newNextTimeout = math.min(newNextTimeout, newDeadline)
               false
@@ -198,7 +191,9 @@ private[spark] class ExecutorMonitor(
         blocks -= blockId.splitIndex
         if (blocks.isEmpty) {
           exec.cachedBlocks -= blockId.rddId
-          exec.updateTimeout()
+          if (exec.cachedBlocks.isEmpty) {
+            exec.updateTimeout()
+          }
         }
       }
     }
@@ -260,6 +255,7 @@ private[spark] class ExecutorMonitor(
     private var idleStart: Long = -1
     private var runningTasks: Int = 0
 
+    // Maps RDD IDs to the partition IDs stored in the executor.
     // This should only be used in the event thread.
     val cachedBlocks = new mutable.HashMap[Int, mutable.BitSet]()
 
