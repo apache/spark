@@ -1119,53 +1119,61 @@ class Dataset[T] private[sql](
       throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
     }
 
-    // For both join side, combine all outputs into a single column and alias it with "_1" or "_2",
-    // to match the schema for the encoder of the join result.
-    // Note that we do this before joining them, to enable the join operator to return null for one
-    // side, in cases like outer-join.
-    val left = {
-      val combined = if (!this.exprEnc.isSerializedAsStructForTopLevel) {
+    implicit val tuple2Encoder: Encoder[(T, U)] =
+      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
+
+    val leftResultExpr = {
+      if (!this.exprEnc.isSerializedAsStructForTopLevel) {
         assert(joined.left.output.length == 1)
         Alias(joined.left.output.head, "_1")()
       } else {
         Alias(CreateStruct(joined.left.output), "_1")()
       }
-      Project(combined :: Nil, joined.left)
     }
 
-    val right = {
-      val combined = if (!other.exprEnc.isSerializedAsStructForTopLevel) {
+    val rightResultExpr = {
+      if (!other.exprEnc.isSerializedAsStructForTopLevel) {
         assert(joined.right.output.length == 1)
         Alias(joined.right.output.head, "_2")()
       } else {
         Alias(CreateStruct(joined.right.output), "_2")()
       }
-      Project(combined :: Nil, joined.right)
     }
 
-    // Rewrites the join condition to make the attribute point to correct column/field, after we
-    // combine the outputs of each join side.
-    val conditionExpr = joined.condition.get transformUp {
-      case a: Attribute if joined.left.outputSet.contains(a) =>
-        if (!this.exprEnc.isSerializedAsStructForTopLevel) {
-          left.output.head
-        } else {
-          val index = joined.left.output.indexWhere(_.exprId == a.exprId)
-          GetStructField(left.output.head, index)
-        }
-      case a: Attribute if joined.right.outputSet.contains(a) =>
-        if (!other.exprEnc.isSerializedAsStructForTopLevel) {
-          right.output.head
-        } else {
-          val index = joined.right.output.indexWhere(_.exprId == a.exprId)
-          GetStructField(right.output.head, index)
-        }
+    if (joined.joinType.isInstanceOf[InnerLike]) {
+      // For inner joins, we can directly perform the join and then can project the join
+      // results into structs. This ensures that data remains flat during shuffles /
+      // exchanges (unlike the outer join path, which nests the data before shuffling).
+      withTypedPlan(Project(Seq(leftResultExpr, rightResultExpr), joined))
+    } else { // outer joins
+      // For both join sides, combine all outputs into a single column and alias it with "_1
+      // or "_2", to match the schema for the encoder of the join result.
+      // Note that we do this before joining them, to enable the join operator to return null
+      // for one side, in cases like outer-join.
+      val left = Project(leftResultExpr :: Nil, joined.left)
+      val right = Project(rightResultExpr :: Nil, joined.right)
+
+      // Rewrites the join condition to make the attribute point to correct column/field,
+      // after we combine the outputs of each join side.
+      val conditionExpr = joined.condition.get transformUp {
+        case a: Attribute if joined.left.outputSet.contains(a) =>
+          if (!this.exprEnc.isSerializedAsStructForTopLevel) {
+            left.output.head
+          } else {
+            val index = joined.left.output.indexWhere(_.exprId == a.exprId)
+            GetStructField(left.output.head, index)
+          }
+        case a: Attribute if joined.right.outputSet.contains(a) =>
+          if (!other.exprEnc.isSerializedAsStructForTopLevel) {
+            right.output.head
+          } else {
+            val index = joined.right.output.indexWhere(_.exprId == a.exprId)
+            GetStructField(right.output.head, index)
+          }
+      }
+
+      withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE))
     }
-
-    implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
-
-    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE))
   }
 
   /**
