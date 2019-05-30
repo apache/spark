@@ -719,7 +719,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
-    val FAIL_REASON = s"${CPUS_PER_TASK.key} must be <="
+    val FAIL_REASON = s"has to be >= the task config: ${CPUS_PER_TASK.key}"
     Seq(
       ("local", 2, None),
       ("local[2]", 3, None),
@@ -834,6 +834,22 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
     assert(error.contains("The executor resource config: " +
       "spark.executor.resource.gpu.count = 1 has to be >= the task config: " +
+      "spark.task.resource.gpu.count = 2"))
+  }
+
+  test("Parse resources executor config not the same multiple numbers of the task requirements") {
+    val conf = new SparkConf()
+      .set(SPARK_TASK_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_SUFFIX, "2")
+      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + "gpu" + SPARK_RESOURCE_COUNT_SUFFIX, "4")
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The value of executor resource config: " +
+      "spark.executor.resource.gpu.count = 4 has to be 1 times the number of the task config: " +
       "spark.task.resource.gpu.count = 2"))
   }
 

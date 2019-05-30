@@ -238,7 +238,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenAnswer((_: InvocationOnMock) => {
       if (numPendingTasks > 0) {
         numPendingTasks -= 1
-        backend.getExecutorAvailableResources("1")(GPU).acquireAddresses(1)
+        backend.getExecutorAvailableResources("1").toMap.get(GPU).get.acquireAddresses(1)
         taskDescs
       }
     })
@@ -314,8 +314,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       new Properties(), taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenAnswer((_: InvocationOnMock) => {
-        backend.getExecutorAvailableResources("1")(GPU).acquireAddresses(1)
-        taskDescs
+      backend.getExecutorAvailableResources("1").toMap.get(GPU).get.acquireAddresses(1)
+      taskDescs
     })
 
     backend.driverEndpoint.send(ReviveOffers)

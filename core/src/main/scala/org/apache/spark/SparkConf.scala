@@ -615,8 +615,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
     // Make sure the executor resources were specified and are large enough if
     // any task resources were specified.
-    val taskResourcesAndCount =
-    getAllWithPrefixAndSuffix(SPARK_TASK_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+    val taskResourcesAndCount = getTaskResourceRequirements()
     val executorResourcesAndCounts =
       getAllWithPrefixAndSuffix(SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_SUFFIX).toMap
 
