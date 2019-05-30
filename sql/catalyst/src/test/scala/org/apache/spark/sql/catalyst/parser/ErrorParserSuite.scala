@@ -88,6 +88,7 @@ class ErrorParserSuite extends SparkFunSuite {
     // special test case: minus in expression shouldn't be treated as hyphen in identifiers
     intercept("SELECT a-b FROM table-with-hyphen", 1, 21, 22, msg, "--------^^^")
     intercept("SELECT a-b FROM table-with-hyphen WHERE a-b = 0", 1, 21, 22, msg, "--------^^^")
+    intercept("SELECT (a - test_func(b-c)) FROM test-table", 1, 37, 38, msg, "--------^^^")
     intercept(
       """
         |SELECT a, b

@@ -1020,7 +1020,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
     UnresolvedStar(Option(ctx.qualifiedName())
-      .map(_.errorCapturingIdentifier.asScala.map(_.getText)))
+      .map(_.identifier.asScala.map(_.getText)))
   }
 
   /**
@@ -1387,7 +1387,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a function database (optional) and name pair.
    */
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
-    ctx.errorCapturingIdentifier.asScala.map(_.getText) match {
+    ctx.identifier.asScala.map(_.getText) match {
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
       case Seq(fn) => FunctionIdentifier(fn, None)
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
@@ -2070,7 +2070,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     ctx.transforms.asScala.map {
       case identityCtx: IdentityTransformContext =>
         IdentityTransform(FieldReference(
-          identityCtx.qualifiedName.errorCapturingIdentifier.asScala.map(_.getText)))
+          identityCtx.qualifiedName.identifier.asScala.map(_.getText)))
 
       case applyCtx: ApplyTransformContext =>
         val arguments = applyCtx.argument.asScala.map(visitTransformArgument)
@@ -2117,7 +2117,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTransformArgument(ctx: TransformArgumentContext): v2.expressions.Expression = {
     withOrigin(ctx) {
       val reference = Option(ctx.qualifiedName)
-          .map(nameCtx => FieldReference(nameCtx.errorCapturingIdentifier.asScala.map(_.getText)))
+          .map(nameCtx => FieldReference(nameCtx.identifier.asScala.map(_.getText)))
       val literal = Option(ctx.constant)
           .map(typedVisit[Literal])
           .map(lit => LiteralValue(lit.value, lit.dataType))

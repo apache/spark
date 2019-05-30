@@ -785,7 +785,7 @@ frameBound
     ;
 
 qualifiedName
-    : errorCapturingIdentifier ('.' errorCapturingIdentifier)*
+    : identifier ('.' identifier)*
     ;
 
 // rule ordering is important here to make the SLL parser happy
