@@ -74,7 +74,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
     assert(e.getMessage.contains("Try to assign address that is not reserved."))
   }
 
-  test("Don't allow release address that is not allocated") {
+  test("Don't allow release address that is not reserved or allocated") {
     // Init Executor Resource.
     val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"))
     // Acquire addresses.
@@ -87,6 +87,6 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
     val e = intercept[AssertionError] {
       info.releaseAddresses(Array("2"))
     }
-    assert(e.getMessage.contains("Try to release address that is not allocated."))
+    assert(e.getMessage.contains("Try to release address that is not reserved or allocated."))
   }
 }

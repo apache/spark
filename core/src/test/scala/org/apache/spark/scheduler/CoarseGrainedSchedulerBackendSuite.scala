@@ -191,23 +191,14 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       .setMaster(
       "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
       .setAppName("test")
-    setTaskResourceRequirement(conf, GPU, 3)
+    setTaskResourceRequirement(conf, GPU, 1)
 
     sc = new SparkContext(conf)
     val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
+    when(mockEndpointRef.send(LaunchTask)).thenAnswer((_: InvocationOnMock) => {})
 
-    val logUrls = Map(
-      "stdout" -> "http://oldhost:8888/logs/dummy/stdout",
-      "stderr" -> "http://oldhost:8888/logs/dummy/stderr")
-    val attributes = Map(
-      "CLUSTER_ID" -> "cl1",
-      "USER" -> "dummy",
-      "CONTAINER_ID" -> "container1",
-      "LOG_FILES" -> "stdout,stderr")
-    val baseUrl = s"http://newhost:9999/logs/clusters/${attributes("CLUSTER_ID")}" +
-      s"/users/${attributes("USER")}/containers/${attributes("CONTAINER_ID")}"
     val resources = Map(GPU -> new ResourceInformation(GPU, Array("0", "1", "3")))
 
     var executorAddedCount: Int = 0
@@ -224,29 +215,32 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc.addSparkListener(listener)
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, logUrls, attributes, resources))
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, logUrls, attributes, resources))
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes, resources))
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources))
 
     val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
-    val bytebuffer = java.nio.ByteBuffer.allocate(frameSize/2)
+    val bytebuffer = java.nio.ByteBuffer.allocate(frameSize - 100)
     val buffer = new SerializableBuffer(bytebuffer)
 
     var execResources = backend.getExecutorAvailableResources("1")
 
     assert(execResources(GPU).idleAddresses === Array("0", "1", "3"))
 
+    val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
-      new Properties(), immutable.Map(GPU -> new ResourceInformation(GPU, Array("0"))),
-      bytebuffer)))
+      new Properties(), taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
-    // resource offer such that gpu address 0 gets removed
+    var numPendingTasks = 1
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenAnswer((_: InvocationOnMock) => {
-      backend.getExecutorAvailableResources("1")(GPU).acquireAddresses(1)
-      taskDescs
+      if (numPendingTasks > 0) {
+        numPendingTasks -= 1
+        backend.getExecutorAvailableResources("1")(GPU).acquireAddresses(1)
+        taskDescs
+      }
     })
 
     backend.driverEndpoint.send(ReviveOffers)
@@ -254,16 +248,84 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")
       assert(execResources(GPU).idleAddresses === Array("1", "3"))
+      assert(execResources(GPU).allocatedAddresses === Array("0"))
+      assert(execResources(GPU).reservedAddresses.isEmpty)
     }
 
-    var finishedTaskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     backend.driverEndpoint.send(
-      StatusUpdate("1", 1, TaskState.FINISHED, buffer, finishedTaskResources))
+      StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")
       assert(execResources(GPU).idleAddresses === Array("1", "3", "0"))
     }
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(executorAddedCount === 3)
+  }
+
+  test("release resources when launch task fails") {
+    import TestUtils._
+
+    val conf = new SparkConf()
+      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_COUNT_SUFFIX, "3")
+      .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
+      .setMaster(
+      "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
+      .setAppName("test")
+    setTaskResourceRequirement(conf, GPU, 1)
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]
+    val mockEndpointRef = mock[RpcEndpointRef]
+    val mockAddress = mock[RpcAddress]
+    val resources = Map(GPU -> new ResourceInformation(GPU, Array("0", "1", "3")))
+
+    var executorAddedCount: Int = 0
+    val listener = new SparkListener() {
+      override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
+        executorAddedCount += 1
+        assert(executorAdded.executorInfo.totalResources.get(GPU).nonEmpty)
+        val totalResources = executorAdded.executorInfo.totalResources(GPU)
+        assert(totalResources.addresses === Array("0", "1", "3"))
+        assert(totalResources.name == GPU)
+      }
+    }
+
+    sc.addSparkListener(listener)
+
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources))
+
+    val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
+    val bytebuffer = java.nio.ByteBuffer.allocate(frameSize * 2)
+    val buffer = new SerializableBuffer(bytebuffer)
+
+    var execResources = backend.getExecutorAvailableResources("1")
+
+    assert(execResources(GPU).idleAddresses === Array("0", "1", "3"))
+
+    val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
+    var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
+      "t1", 0, 1, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
+      new Properties(), taskResources, bytebuffer)))
+    val ts = backend.getTaskSchedulerImpl()
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenAnswer((_: InvocationOnMock) => {
+        backend.getExecutorAvailableResources("1")(GPU).acquireAddresses(1)
+        taskDescs
+    })
+
+    backend.driverEndpoint.send(ReviveOffers)
+
+    // The task fail to launch, should release reserved resources.
+    eventually(timeout(5 seconds)) {
+      execResources = backend.getExecutorAvailableResources("1")
+      assert(execResources(GPU).idleAddresses === Array("1", "3", "0"))
+    }
+
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(executorAddedCount === 3)
   }

@@ -317,8 +317,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
+        val executorData = executorDataMap(task.executorId)
         val serializedTask = TaskDescription.encode(task)
         if (serializedTask.limit() >= maxRpcMessageSize) {
+          // We skip launch the task, should release all the reserved resources.
+          task.resources.foreach { case (rName, rInfo) =>
+            assert(executorData.availableResources.contains(rName))
+            executorData.availableResources(rName).releaseAddresses(rInfo.addresses)
+          }
           Option(scheduler.taskIdToTaskSetManager.get(task.taskId)).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
@@ -332,11 +338,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
         else {
-          val executorData = executorDataMap(task.executorId)
+          // Do resources allocation here. The allocated resources will get released after the task
+          // finishes.
           executorData.freeCores -= scheduler.CPUS_PER_TASK
           task.resources.foreach { case (rName, rInfo) =>
-              assert(executorData.availableResources.contains(rName))
-              executorData.availableResources(rName).assignAddresses(rInfo.addresses)
+            assert(executorData.availableResources.contains(rName))
+            executorData.availableResources(rName).assignAddresses(rInfo.addresses)
           }
 
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +

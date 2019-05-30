@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
  */
 private[spark] class ExecutorResourceInfo(
     private val name: String,
-    private val addresses: Seq[String] = Seq.empty) extends Serializable {
+    private val addresses: Seq[String]) extends Serializable {
 
   // Addresses of resources that has not been assigned or reserved.
   // Exposed for testing only.
@@ -44,6 +44,8 @@ private[spark] class ExecutorResourceInfo(
 
   def getNumOfIdleResources(): Int = idleAddresses.size
 
+  // Reserve given number of resource addresses, these addresses can be assigned to a future
+  // launched task.
   def acquireAddresses(num: Int): Seq[String] = {
     assert(num <= idleAddresses.size, "Required to take more addresses than available. " +
       s"Required $num $name addresses, but only ${idleAddresses.size} available.")
@@ -53,15 +55,24 @@ private[spark] class ExecutorResourceInfo(
     addrs
   }
 
+  // Give back a sequence of resource addresses, these addresses must have been reserved or
+  // assigned. Resource addresses are released when a task has finished, or the task launch is
+  // skipped.
   def releaseAddresses(addrs: Array[String]): Unit = {
     addrs.foreach { address =>
-      assert(allocatedAddresses.contains(address), "Try to release address that is not " +
-        s"allocated. $name address $address is not allocated.")
+      assert((allocatedAddresses ++ reservedAddresses).contains(address), "Try to release " +
+        s"address that is not reserved or allocated. $name address $address is not allocated.")
       idleAddresses += address
-      allocatedAddresses -= address
+      if (allocatedAddresses.contains(address)) {
+        allocatedAddresses -= address
+      } else if (reservedAddresses.contains(address)) {
+        reservedAddresses -= address
+      }
     }
   }
 
+  // Assign a sequence of resource addresses (to a launched task), these addresses must have been
+  // reserved.
   def assignAddresses(addrs: Array[String]): Unit = {
     addrs.foreach { address =>
       assert(reservedAddresses.contains(address), "Try to assign address that is not reserved. " +
