@@ -240,7 +240,7 @@ final class ShuffleBlockFetcherIterator(
 
     val blockIds = if (shuffleFetchSplit) {
       req.blocks.flatMap { case (blockId, (_, segments)) => (0 until segments).map(
-            i => blockId.asInstanceOf[ShuffleBlockId].getShuffleBlockSegmentId(i).toString) }
+        i => blockId.asInstanceOf[ShuffleBlockId].getShuffleBlockSegmentId(i).toString) }
     } else {
       req.blocks.map(_._1.toString)
     }

@@ -734,4 +734,57 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val e = intercept[FetchFailedException] { iterator.next() }
     assert(e.getMessage.contains("Received a zero-size buffer"))
   }
+
+  test("SPARK-27876: test fetch data with shuffle fetch split enabled") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+
+    // Make sure blockManager.getBlockData would return the blocks
+    val localBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer())
+    localBlocks.foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager).getBlockData(meq(blockId))
+    }
+
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val remoteBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockSegmentId(0, 3, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockSegmentId(0, 4, 0, 0) -> createMockManagedBuffer())
+    val remoteBlockIds = Seq(ShuffleBlockId(0, 3, 0), ShuffleBlockId(0, 4, 0))
+
+    val transfer = createMockTransfer(remoteBlocks)
+
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, (Long, Int))])](
+      (localBmId, localBlocks.keys.map(blockId => (blockId, (1.asInstanceOf[Long], 1))).toSeq),
+      (remoteBmId, remoteBlockIds.map(blockId => (blockId, (1.asInstanceOf[Long], 1))))).toIterator
+
+    val taskContext = TaskContext.empty()
+    val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => in,
+      48 * 1024 * 1024,
+      Int.MaxValue,
+      Int.MaxValue,
+      Int.MaxValue,
+      true,
+      false,
+      metrics,
+      true)
+
+    // 3 local blocks fetched in initialization
+    verify(blockManager, times(3)).getBlockData(any())
+
+    // 3 local blocks, and 2 remote blocks
+    // (but from the same block manager so one call to fetchBlocks)
+    verify(blockManager, times(3)).getBlockData(any())
+    verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
+  }
 }
