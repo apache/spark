@@ -61,6 +61,8 @@ public class OneForOneBlockFetcher {
 
   private StreamHandle streamHandle = null;
 
+  private boolean shuffleFetchSplit = false;
+
   public OneForOneBlockFetcher(
     TransportClient client,
     String appId,
@@ -111,8 +113,10 @@ public class OneForOneBlockFetcher {
    */
   private FetchShuffleBlocks createFetchShuffleBlocksMsg(
       String appId, String execId, String[] blockIds) {
+    shuffleFetchSplit = blockIds[0].split("_").length == 5;
     int shuffleId = splitBlockId(blockIds[0])[0];
     HashMap<Integer, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
+    HashMap<Integer, ArrayList<Integer>> mapIdReduceIdToSegments = new HashMap<>();
     for (String blockId : blockIds) {
       int[] blockIdParts = splitBlockId(blockId);
       if (blockIdParts[0] != shuffleId) {
@@ -122,28 +126,34 @@ public class OneForOneBlockFetcher {
       int mapId = blockIdParts[1];
       if (!mapIdToReduceIds.containsKey(mapId)) {
         mapIdToReduceIds.put(mapId, new ArrayList<>());
+        mapIdReduceIdToSegments.put(mapId, new ArrayList<>());
       }
       mapIdToReduceIds.get(mapId).add(blockIdParts[2]);
+      mapIdReduceIdToSegments.get(mapId).add(blockIdParts[3]);
     }
     int[] mapIds = Ints.toArray(mapIdToReduceIds.keySet());
     int[][] reduceIdArr = new int[mapIds.length][];
+    int[][] segmentsArr = new int[mapIds.length][];
     for (int i = 0; i < mapIds.length; i++) {
       reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
+      segmentsArr[i] = Ints.toArray(mapIdReduceIdToSegments.get(mapIds[i]));
     }
-    return new FetchShuffleBlocks(appId, execId, shuffleId, mapIds, reduceIdArr);
+    return new FetchShuffleBlocks(appId, execId, shuffleId, mapIds, reduceIdArr, shuffleFetchSplit,
+      segmentsArr);
   }
 
   /** Split the shuffleBlockId and return shuffleId, mapId and reduceId. */
   private int[] splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
-    if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
+    if (blockIdParts.length != (shuffleFetchSplit ? 5 : 4) || !blockIdParts[0].equals("shuffle")) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }
     return new int[] {
       Integer.parseInt(blockIdParts[1]),
       Integer.parseInt(blockIdParts[2]),
-      Integer.parseInt(blockIdParts[3])
+      Integer.parseInt(blockIdParts[3]),
+      shuffleFetchSplit ? Integer.parseInt(blockIdParts[4]) : 1
     };
   }
 

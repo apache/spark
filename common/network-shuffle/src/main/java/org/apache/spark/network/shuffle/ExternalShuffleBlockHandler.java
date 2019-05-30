@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -32,6 +33,7 @@ import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.primitives.Ints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -321,18 +323,37 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     }
 
     ManagedBufferIterator(FetchShuffleBlocks msg, int numBlockIds) {
-      final int[] mapIdAndReduceIds = new int[2 * numBlockIds];
-      int idx = 0;
-      for (int i = 0; i < msg.mapIds.length; i++) {
-        for (int reduceId : msg.reduceIds[i]) {
-          mapIdAndReduceIds[idx++] = msg.mapIds[i];
-          mapIdAndReduceIds[idx++] = reduceId;
+      shuffleFetchSplit = msg.shuffleFetchSplit;
+      if (!shuffleFetchSplit) {
+        final int[] mapIdAndReduceIds = new int[2 * numBlockIds];
+        int idx = 0;
+        for (int i = 0; i < msg.mapIds.length; i++) {
+          for (int reduceId : msg.reduceIds[i]) {
+            mapIdAndReduceIds[idx++] = msg.mapIds[i];
+            mapIdAndReduceIds[idx++] = reduceId;
+          }
         }
+        assert(idx == 2 * numBlockIds);
+        size = mapIdAndReduceIds.length;
+        blockDataForIndexFn = index -> blockManager.getBlockData(msg.appId, msg.execId,
+          msg.shuffleId, mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
+      } else {
+        ArrayList<Integer> mapIdReduceIdAndSegmentIdList = new ArrayList<>();
+        for(int i = 0; i < msg.mapIds.length; i++) {
+          for (int j = 0; j < msg.reduceIds[i].length; j++) {
+            for (int k = 0; k < msg.segments[i][j]; k++) {
+              mapIdReduceIdAndSegmentIdList.add(msg.mapIds[i]);
+              mapIdReduceIdAndSegmentIdList.add(msg.reduceIds[i][j]);
+              mapIdReduceIdAndSegmentIdList.add(k);
+            }
+          }
+        }
+        final int[] mapIdReduceIdAndSegmentIds = Ints.toArray(mapIdReduceIdAndSegmentIdList);
+        size = mapIdReduceIdAndSegmentIds.length;
+        blockDataForIndexFn = index -> blockManager.getBlockSegmentData(msg.appId, msg.execId,
+          msg.shuffleId, mapIdReduceIdAndSegmentIds[index], mapIdReduceIdAndSegmentIds[index + 1],
+          mapIdReduceIdAndSegmentIds[index + 2]);
       }
-      assert(idx == 2 * numBlockIds);
-      size = mapIdAndReduceIds.length;
-      blockDataForIndexFn = index -> blockManager.getBlockData(msg.appId, msg.execId,
-        msg.shuffleId, mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
     }
 
     @Override

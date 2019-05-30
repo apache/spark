@@ -29,7 +29,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithI
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, ShuffleBlockId, ShuffleBlockSegmentId, StorageLevel}
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.
@@ -64,10 +64,22 @@ class NettyBlockRpcServer(
         responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
 
       case fetchShuffleBlocks: FetchShuffleBlocks =>
+        val shuffleFetchSplit = fetchShuffleBlocks.shuffleFetchSplit;
         val blocks = fetchShuffleBlocks.mapIds.zipWithIndex.flatMap { case (mapId, index) =>
-          fetchShuffleBlocks.reduceIds.apply(index).map { reduceId =>
-            blockManager.getBlockData(
-              ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapId, reduceId))
+          if (shuffleFetchSplit) {
+            fetchShuffleBlocks.reduceIds.apply(index).zip(fetchShuffleBlocks.segments.apply(index))
+              .flatMap { kv =>
+                val reduceId = kv._1
+                val segments = kv._2
+                for (i <- (0 until segments))
+                  yield blockManager.getBlockData(ShuffleBlockSegmentId(
+                    fetchShuffleBlocks.shuffleId, mapId, reduceId, i))
+              }
+          } else {
+            fetchShuffleBlocks.reduceIds.apply(index).map { reduceId =>
+              blockManager.getBlockData(
+                ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapId, reduceId))
+            }
           }
         }
         val numBlockIds = fetchShuffleBlocks.reduceIds.map(_.length).sum
