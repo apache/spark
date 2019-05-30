@@ -45,9 +45,8 @@ private[spark] sealed trait MapStatus {
   def getSizeForBlock(reduceId: Int): Long
 
   /**
-   * If a partition's size is large than [[MapStatus.SHUFFLE_FETCH_THRESHOLD]],
-   * it should be fetched more than one time, this method return how many segments
-   * this partition should be split to fetch.
+   * If a partition's size is large than SHUFFLE_FETCH_THRESHOLD, it should be fetched more than
+   * one time, this method return how many segments this partition should be split to fetch.
    */
   def getBlockSegments(reduceId: Int): Short
 }
@@ -113,6 +112,7 @@ private[spark] object MapStatus {
  *
  * @param loc location where the task is being executed.
  * @param compressedSizes size of the blocks, indexed by reduce partition id.
+ * @param patitionSegments segments of partition blocks.
  */
 private[spark] class CompressedMapStatus(
     private[this] var loc: BlockManagerId,
@@ -177,6 +177,7 @@ private[spark] class CompressedMapStatus(
  * @param emptyBlocks a bitmap tracking which blocks are empty
  * @param avgSize average size of the non-empty and non-huge blocks
  * @param hugeBlockSizes sizes of huge blocks by their reduceId.
+ * @param partitionSegments segments of partition blocks.
  */
 private[spark] class HighlyCompressedMapStatus private (
     private[this] var loc: BlockManagerId,
