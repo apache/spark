@@ -202,7 +202,7 @@ public class ExternalShuffleBlockResolver {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
-              String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
+        String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
     return getSortBasedShuffleBlockSegmentData(executor, shuffleId, mapId, reduceId, segmentId);
   }
@@ -347,7 +347,7 @@ public class ExternalShuffleBlockResolver {
   private ManagedBuffer getSortBasedShuffleBlockSegmentData(
           ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId, int segmentId) {
     File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
-            "shuffle_" + shuffleId + "_" + mapId + "_0.index");
+      "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 
     try {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
