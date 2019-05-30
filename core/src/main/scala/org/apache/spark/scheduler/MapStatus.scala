@@ -137,7 +137,7 @@ private[spark] class CompressedMapStatus(
   }
 
   override def getBlockSegments(reduceId: Int): Short = {
-    patitionSegments.getOrElse(reduceId, 1)
+    Option(patitionSegments).map(_.getOrElse(reduceId, 1.toShort)).getOrElse(1)
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
@@ -210,7 +210,7 @@ private[spark] class HighlyCompressedMapStatus private (
   }
 
   override def getBlockSegments(reduceId: Int): Short = {
-    partitionSegments.getOrElse(reduceId, 1)
+    Option(partitionSegments).map(_.getOrElse(reduceId, 1.toShort)).getOrElse(1)
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {

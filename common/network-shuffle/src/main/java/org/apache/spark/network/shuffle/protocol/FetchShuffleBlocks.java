@@ -56,10 +56,10 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     this.shuffleFetchSplit = shuffleFetchSplit;
     if (shuffleFetchSplit) {
       this.segments = segments;
+      assert(mapIds.length == segments.length);
     } else {
-      this.segments = new int[mapIds.length][];
+      this.segments = new int[][] {{ 0 }};
     }
-    assert(mapIds.length == segments.length);
   }
 
   @Override
