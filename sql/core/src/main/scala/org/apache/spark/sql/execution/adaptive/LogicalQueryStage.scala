@@ -40,7 +40,6 @@ case class LogicalQueryStage(
   override def output: Seq[Attribute] = logicalPlan.output
   override val isStreaming: Boolean = logicalPlan.isStreaming
   override val outputOrdering: Seq[SortOrder] = physicalPlan.outputOrdering
-  def outputPartitioning: Partitioning = physicalPlan.outputPartitioning
 
   override def computeStats(): Statistics = {
     // TODO this is not accurate when there is other physical nodes above QueryStageExec.

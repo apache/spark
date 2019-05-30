@@ -70,7 +70,7 @@ abstract class QueryStageExec extends LeafExecNode {
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
    * stage is ready.
    */
-  def materialize(): Future[Any] = executeQuery {
+  final def materialize(): Future[Any] = executeQuery {
     doMaterialize()
   }
 
@@ -78,6 +78,7 @@ abstract class QueryStageExec extends LeafExecNode {
    * Compute the statistics of the query stage if executed, otherwise None.
    */
   def computeStats(): Option[Statistics] = resultOption.map { _ =>
+    // Metrics `dataSize` are available in both `ShuffleExchangeExec` and `BroadcastExchangeExec`.
     Statistics(sizeInBytes = plan.metrics("dataSize").value)
   }
 
