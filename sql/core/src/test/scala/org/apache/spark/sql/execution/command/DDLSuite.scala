@@ -2720,14 +2720,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("Refresh table before drop database cascade") {
     withTempDir { tempDir =>
       val file1 = new File(tempDir + "/first.csv")
-      val writer1 = new PrintWriter(file1)
-      writer1.write("first")
-      writer1.close()
+      Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+        writer.write("first")
+      }
 
       val file2 = new File(tempDir + "/second.csv")
-      val writer2 = new PrintWriter(file2)
-      writer2.write("second")
-      writer2.close()
+      Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+        writer.write("second")
+      }
 
       withDatabase("foo") {
         withTable("foo.first") {
