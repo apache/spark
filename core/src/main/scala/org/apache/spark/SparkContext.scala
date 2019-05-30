@@ -365,29 +365,24 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Checks to see if any resources (GPU/FPGA/etc) are available to the driver by looking
-   * at and processing the spark.driver.resource.resourceName.addresses and
+   * at and processing the spark.driver.resourcesFile and
    * spark.driver.resource.resourceName.discoveryScript configs. The configs have to be
    * present when the driver starts, setting them after startup does not work.
    *
-   * If any resource addresses configs were specified then assume all resources will be specified
-   * in that way. Otherwise use the discovery scripts to find the resources. Users should
-   * not really be setting the addresses config directly and should not be mixing methods
-   * for different types of resources since the addresses config is meant for Standalone mode
+   * If a resources file was specified then assume all resources will be specified
+   * in that file. Otherwise use the discovery scripts to find the resources. Users should
+   * not be setting the resources file config directly and should not be mixing methods
+   * for different types of resources since the resources file config is meant for Standalone mode
    * and other cluster managers should use the discovery scripts.
    */
   private def setupDriverResources(): Unit = {
     // Only call getAllWithPrefix once and filter on those since there could be a lot of spark
     // configs.
     val allDriverResourceConfs = _conf.getAllWithPrefix(SPARK_DRIVER_RESOURCE_PREFIX)
-    val resourcesWithAddrsInConfs =
-      SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_ADDRESSES_SUFFIX)
-
-    _resources = if (resourcesWithAddrsInConfs.nonEmpty) {
-      resourcesWithAddrsInConfs.map { case (rName, addrString) =>
-        val addrsArray = addrString.split(",").map(_.trim())
-        (rName -> new ResourceInformation(rName, addrsArray))
-      }.toMap
-    } else {
+    val resourcesFile = _conf.get(DRIVER_RESOURCES_FILE)
+    _resources = resourcesFile.map { rFile => {
+      ResourceDiscoverer.parseAllocatedFromJsonFile(rFile)
+    }}.getOrElse {
       // we already have the resources confs here so just pass in the unique resource names
       // rather then having the resource discoverer reparse all the configs.
       val uniqueResources = SparkConf.getBaseOfConfigs(allDriverResourceConfs)
