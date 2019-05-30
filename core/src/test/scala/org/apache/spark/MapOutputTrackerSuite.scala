@@ -68,10 +68,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
         Array(10000L, 1000L)))
     val statuses = tracker.getMapSizesByExecutorId(10, 0)
-    assert(statuses.toSet ===
-      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000))),
-          (BlockManagerId("b", "hostB", 1000), ArrayBuffer((ShuffleBlockId(10, 1, 0), size10000))))
-        .toSet)
+    assert(statuses.toSet === Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer(
+      (ShuffleBlockId(10, 0, 0), (size1000, 1)))), (BlockManagerId("b", "hostB", 1000),
+      ArrayBuffer((ShuffleBlockId(10, 1, 0), (size10000, 1))))).toSet)
     assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.stop()
     rpcEnv.shutdown()
@@ -149,8 +148,8 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(1000L)))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
-      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq === Seq((BlockManagerId("a", "hostA",
+      1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), (size1000, 1))))))
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
     val masterTrackerEpochBeforeLossOfMapOutput = masterTracker.getEpoch
@@ -317,10 +316,10 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     assert(tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0, 4).toSeq ===
         Seq(
-          (BlockManagerId("a", "hostA", 1000),
-              Seq((ShuffleBlockId(10, 0, 1), size1000), (ShuffleBlockId(10, 0, 3), size10000))),
-          (BlockManagerId("b", "hostB", 1000),
-              Seq((ShuffleBlockId(10, 1, 0), size10000), (ShuffleBlockId(10, 1, 2), size1000)))
+          (BlockManagerId("a", "hostA", 1000), Seq((ShuffleBlockId(10, 0, 1), (size1000, 1)),
+            (ShuffleBlockId(10, 0, 3), (size10000, 1)))),
+          (BlockManagerId("b", "hostB", 1000), Seq((ShuffleBlockId(10, 1, 0), (size10000, 1)),
+            (ShuffleBlockId(10, 1, 2), (size1000, 1))))
         )
     )
 
