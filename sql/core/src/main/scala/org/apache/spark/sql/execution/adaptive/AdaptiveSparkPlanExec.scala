@@ -63,6 +63,8 @@ case class AdaptiveSparkPlanExec(
 
   def executedPlan: SparkPlan = currentPhysicalPlan
 
+  override def conf: SQLConf = session.sessionState.conf
+
   override def output: Seq[Attribute] = initialPlan.output
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
@@ -84,7 +86,7 @@ case class AdaptiveSparkPlanExec(
           } else {
             events.offer(StageFailure(stage, res.failed.get))
           }
-        }
+        }(AdaptiveSparkPlanExec.executionContext)
       }
 
       // Wait on the next completed stage, which indicates new stats are available and probably
@@ -96,7 +98,6 @@ case class AdaptiveSparkPlanExec(
       (Seq(nextMsg) ++ rem.asScala).foreach {
         case StageSuccess(stage, res) =>
           stage.resultOption = Some(res)
-          completedStages += stage.id
         case StageFailure(stage, ex) =>
           errors.append(
             new SparkException(s"Fail to materialize query stage: ${stage.treeString}", ex))
@@ -147,9 +148,7 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
-  @transient private val completedStages = mutable.HashSet.empty[Int]
-
-  @volatile private var currentStageId = 0
+  private var currentStageId = 0
 
   @volatile private var currentPhysicalPlan = initialPlan
 
@@ -174,14 +173,10 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages(conf)
   )
 
-  // The execution context for stage completion callbacks.
-  private implicit def executionContext: ExecutionContextExecutorService =
-    AdaptiveSparkPlanExec.executionContext
-
   /**
    * Return type for `createQueryStages`
-   * @param newPlan   the new plan with created query stages.
-   * @param allChildStagesMaterialized    whether all child stages have been materialized.
+   * @param newPlan the new plan with created query stages.
+   * @param allChildStagesMaterialized whether all child stages have been materialized.
    * @param newStages the newly created query stages, including new reused query stages.
    */
   private case class CreateStageResult(
@@ -237,7 +232,7 @@ case class AdaptiveSparkPlanExec(
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
-        allChildStagesMaterialized = completedStages.contains(q.id), newStages = Seq.empty)
+        allChildStagesMaterialized = q.resultOption.isDefined, newStages = Seq.empty)
 
     case _ =>
       if (plan.children.isEmpty) {
