@@ -646,17 +646,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[DropTableCommand]] command.
-   */
-  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    DropTableCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      ctx.EXISTS != null,
-      ctx.VIEW != null,
-      ctx.PURGE != null)
-  }
-
-  /**
    * Create a [[AlterTableRenameCommand]] command.
    *
    * For example:

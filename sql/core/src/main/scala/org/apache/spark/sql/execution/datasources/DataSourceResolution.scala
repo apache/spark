@@ -27,9 +27,10 @@ import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.DropTableCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.StructType
@@ -83,6 +84,20 @@ case class DataSourceResolution(
             s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
           .asTableCatalog
       convertCTAS(catalog, identifier, create)
+
+    case DropTableStatement(CatalogObjectIdentifier(Some(catalog), ident), ifExists, _) =>
+      DropTable(catalog.asTableCatalog, ident, ifExists)
+
+    case DropTableStatement(AsTableIdentifier(tableName), ifExists, purge) =>
+      DropTableCommand(tableName, ifExists, isView = false, purge)
+
+    case DropViewStatement(CatalogObjectIdentifier(Some(catalog), ident), _) =>
+      throw new AnalysisException(
+        s"Can not specify catalog `${catalog.name}` for view $ident " +
+          s"because view support in catalog has not been implemented yet")
+
+    case DropViewStatement(AsTableIdentifier(tableName), ifExists) =>
+      DropTableCommand(tableName, ifExists, isView = true, purge = false)
   }
 
   object V1WriteProvider {
