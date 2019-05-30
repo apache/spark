@@ -821,6 +821,13 @@ Apart from these, the following properties are also available, and may be useful
     When we fail to register to the external shuffle service, we will retry for maxAttempts times.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.fetch.split</code></td>
+  <td>false</td>
+  <td>
+    Whether split large partition blocks to enable transfer oversize shuffle blocks.
+  </td>
+</tr>
 </table>
 
 ### Spark UI
