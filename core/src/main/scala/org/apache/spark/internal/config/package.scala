@@ -867,6 +867,13 @@ package object config {
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(10000000)
 
+  private[spark] val SHUFFLE_FETCH_SPLIT_ENABLED =
+    ConfigBuilder("spark.shuffle.fetch.split")
+      .internal()
+      .doc("Whether split large partition blocks to enable transfer oversize shuffle blocks.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val MAX_RESULT_SIZE = ConfigBuilder("spark.driver.maxResultSize")
     .doc("Size limit for results.")
     .bytesConf(ByteUnit.BYTE)

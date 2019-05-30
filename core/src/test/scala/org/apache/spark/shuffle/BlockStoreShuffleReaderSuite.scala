@@ -107,7 +107,7 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
       // for the code to read data over the network.
       val shuffleBlockIdsAndSizes = (0 until numMaps).map { mapId =>
         val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
-        (shuffleBlockId, byteOutputStream.size().toLong)
+        (shuffleBlockId, (byteOutputStream.size().toLong, 1))
       }
       Seq((localBlockManagerId, shuffleBlockIdsAndSizes)).toIterator
     }

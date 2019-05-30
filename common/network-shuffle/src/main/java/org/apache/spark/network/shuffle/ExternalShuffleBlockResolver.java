@@ -93,6 +93,11 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final DB db;
 
+  /** The threshold to fetch shuffle block one time, should be consistent
+   *  with [[MapStatus.SHUFFLE_FETCH_THRESHOLD]]
+   */
+  private final long SHUFFLE_FETCH_THRESHOLD = Integer.MAX_VALUE;
+
   private final List<String> knownManagers = Arrays.asList(
     "org.apache.spark.shuffle.sort.SortShuffleManager",
     "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager");
@@ -181,6 +186,25 @@ public class ExternalShuffleBlockResolver {
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
     return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
+  }
+
+  /**
+   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId, segmentId). We make
+   * assumptions about how the hash and sort based shuffles store their data.
+   */
+  public ManagedBuffer getBlockSegmentData(
+      String appId,
+      String execId,
+      int shuffleId,
+      int mapId,
+      int reduceId,
+      int segmentId) {
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    if (executor == null) {
+      throw new RuntimeException(
+              String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
+    }
+    return getSortBasedShuffleBlockSegmentData(executor, shuffleId, mapId, reduceId, segmentId);
   }
 
   public ManagedBuffer getRddBlockData(
@@ -310,6 +334,33 @@ public class ExternalShuffleBlockResolver {
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.getOffset(),
         shuffleIndexRecord.getLength());
+    } catch (ExecutionException e) {
+      throw new RuntimeException("Failed to open file: " + indexFile, e);
+    }
+  }
+
+  /**
+   * Sort-based shuffle segment data uses an index called "shuffle_ShuffleId_MapId_0.index" and segmentId
+   * into a data file called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockResolver,
+   * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
+   */
+  private ManagedBuffer getSortBasedShuffleBlockSegmentData(
+          ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId, int segmentId) {
+    File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
+            "shuffle_" + shuffleId + "_" + mapId + "_0.index");
+
+    try {
+      ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
+      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId);
+      long offset = shuffleIndexRecord.getOffset() + segmentId * SHUFFLE_FETCH_THRESHOLD;
+      long length = Math.min(shuffleIndexRecord.getLength() -
+              (segmentId * SHUFFLE_FETCH_THRESHOLD), SHUFFLE_FETCH_THRESHOLD);
+      return new FileSegmentManagedBuffer(
+        conf,
+        getFile(executor.localDirs, executor.subDirsPerLocalDir,
+          "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
+        offset,
+        length);
     } catch (ExecutionException e) {
       throw new RuntimeException("Failed to open file: " + indexFile, e);
     }

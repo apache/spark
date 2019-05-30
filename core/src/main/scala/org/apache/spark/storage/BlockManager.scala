@@ -544,6 +544,9 @@ private[spark] class BlockManager(
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
       shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+    } else if (blockId.isShuffleSegment) {
+      shuffleManager.shuffleBlockResolver.getBlockSegmentData(
+        blockId.asInstanceOf[ShuffleBlockSegmentId])
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>

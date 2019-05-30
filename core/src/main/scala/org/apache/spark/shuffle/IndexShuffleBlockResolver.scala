@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.scheduler.MapStatus.SHUFFLE_FETCH_THRESHOLD
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -218,6 +219,42 @@ private[spark] class IndexShuffleBlockResolver(
         getDataFile(blockId.shuffleId, blockId.mapId),
         offset,
         nextOffset - offset)
+    } finally {
+      in.close()
+    }
+  }
+
+  override def getBlockSegmentData(blockId: ShuffleBlockSegmentId): ManagedBuffer = {
+    // The block is actually going to be a range of a single map output file for this map, so
+    // find out the consolidated file, then the offset within that from our index
+    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
+    val segmentId = blockId.segmentId
+
+    // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
+    // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
+    // (which may cause a reducer to be sent a different reducer's data). The explicit position
+    // checks added here were a useful debugging aid during SPARK-22982 and may help prevent this
+    // class of issue from re-occurring in the future which is why they are left here even though
+    // SPARK-22982 is fixed.
+    val channel = Files.newByteChannel(indexFile.toPath)
+    channel.position(blockId.reduceId * 8L)
+    val in = new DataInputStream(Channels.newInputStream(channel))
+    try {
+      val offset = in.readLong()
+      val nextOffset = in.readLong()
+      val actualPosition = channel.position()
+      val expectedPosition = blockId.reduceId * 8L + 16
+      if (actualPosition != expectedPosition) {
+        throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
+          s"expected $expectedPosition but actual position was $actualPosition.")
+      }
+      val segmentOffset = offset + segmentId * SHUFFLE_FETCH_THRESHOLD
+      val length = math.min(nextOffset - segmentOffset, SHUFFLE_FETCH_THRESHOLD)
+      new FileSegmentManagedBuffer(
+        transportConf,
+        getDataFile(blockId.shuffleId, blockId.mapId),
+        segmentOffset,
+        length)
     } finally {
       in.close()
     }
