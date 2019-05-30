@@ -949,9 +949,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
             |}
           """.stripMargin
         val schemaFile = new File(dir, "avroDecimal.avsc")
-        val writer = new PrintWriter(schemaFile)
-        writer.write(avroSchema)
-        writer.close()
+        Utils.tryWithResource(new PrintWriter(schemaFile)) { writer =>
+          writer.write(avroSchema)
+        }
         val schemaPath = schemaFile.toURI.toString
 
         val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
