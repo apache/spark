@@ -21,16 +21,19 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkException, _}
-import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
-import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.{count, window}
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest, StreamingQueryException}
-import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
-import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{spy, when}
 import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.{SparkException, _}
+import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
+import org.apache.spark.sql.{ForeachWriter, SparkSession}
+import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
+import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
+
+
 
 class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
 
