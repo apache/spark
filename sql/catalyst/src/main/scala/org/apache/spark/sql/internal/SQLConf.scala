@@ -1778,7 +1778,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val DETERMINISTIC_LITERAL_UDF_FOLD_ENABLED =
+  val DETERMINISTIC_LITERAL_UDF_FOLDING_ENABLED =
     buildConf("spark.sql.deterministic.literal.udf.folding.enabled")
       .doc("When true, it will enable the optimization for a UDF that is deterministic and the " +
         "inputs are all literals. When your inputs to the UDF are all literal and UDF is " +
@@ -2246,7 +2246,8 @@ class SQLConf extends Serializable with Logging {
 
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
-  def deterministicLiteralUdfFoldEnabled: Boolean = getConf(DETERMINISTIC_LITERAL_UDF_FOLD_ENABLED)
+  def deterministicLiteralUdfFoldingEnabled: Boolean =
+    getConf(DETERMINISTIC_LITERAL_UDF_FOLDING_ENABLED)
 
 
   /** ********************** SQLConf functionality methods ************ */

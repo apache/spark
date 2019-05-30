@@ -78,7 +78,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         CombineLimits,
         CombineUnions,
         // Constant folding and strength reduction
-        DeterministicLiteralUDF,
+        DeterministicLiteralUDFFolding,
         TransposeWindow,
         NullPropagation,
         ConstantPropagation,
