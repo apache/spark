@@ -147,7 +147,8 @@ public final class CalendarInterval implements Serializable {
     } else {
       try {
         int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
-        long days = m.group(2) == null ? 0 : toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE);
+        long days = m.group(2) == null ? 0 : toLongWithRange("day", m.group(3),
+          0, Integer.MAX_VALUE);
         long hours = toLongWithRange("hour", m.group(4), 0, 23);
         long minutes = toLongWithRange("minute", m.group(5), 0, 59);
         long seconds = toLongWithRange("second", m.group(6), 0, 59);
