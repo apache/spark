@@ -18,7 +18,7 @@
 package org.apache.spark.executor
 
 
-import java.io.{File, PrintWriter}
+import java.io.File
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JavaFiles}
@@ -26,7 +26,7 @@ import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, O
 import java.util.EnumSet
 
 import com.google.common.io.Files
-import org.json4s.JsonAST.{JArray, JObject, JString}
+import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 import org.mockito.Mockito.when
