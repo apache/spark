@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
+import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, Identifier, TableCatalog, TestTableCatalog}
@@ -462,7 +463,7 @@ class PlanResolutionSuite extends AnalysisTest {
       DropTableCommand(tableIdent2, ifExists = true, isView = false, purge = true))
   }
 
-  test("drop table v2") {
+  test("drop table in v2 catalog") {
     val tableName1 = "testcat.db.tab"
     val tableIdent1 = Identifier.of(Array("db"), "tab")
     val tableName2 = "testcat.tab"
@@ -494,10 +495,10 @@ class PlanResolutionSuite extends AnalysisTest {
       DropTableCommand(viewIdent2, ifExists = true, isView = true, purge = false))
   }
 
-  test("drop view v2") {
-    assertAnalysisError(
-      parseAndResolve("DROP VIEW testcat.db.view"),
-      Seq("unresolved operator 'DropViewStatement"),
-      caseSensitive = false)
+  test("drop view in v2 catalog") {
+    intercept[AnalysisException] {
+      parseAndResolve("DROP VIEW testcat.db.view")
+    }.getMessage.toLowerCase(Locale.ROOT).contains(
+      "view support in catalog has not been implemented")
   }
 }

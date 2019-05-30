@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * A DROP VIEW statement, as parsed from SQL.
  */
 case class DropViewStatement(
-    tableName: Seq[String],
+    viewName: Seq[String],
     ifExists: Boolean) extends ParsedStatement {
 
   override def output: Seq[Attribute] = Seq.empty

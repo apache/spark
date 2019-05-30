@@ -89,10 +89,15 @@ case class DataSourceResolution(
       DropTable(catalog.asTableCatalog, ident, ifExists)
 
     case DropTableStatement(AsTableIdentifier(tableName), ifExists, purge) =>
-      DropTableCommand(tableName, ifExists, false, purge)
+      DropTableCommand(tableName, ifExists, isView = false, purge)
+
+    case DropViewStatement(CatalogObjectIdentifier(Some(catalog), ident), _) =>
+      throw new AnalysisException(
+        s"Can not specify catalog `${catalog.name}` for view $ident " +
+          s"because view support in catalog has not been implemented yet")
 
     case DropViewStatement(AsTableIdentifier(tableName), ifExists) =>
-      DropTableCommand(tableName, ifExists, true, false)
+      DropTableCommand(tableName, ifExists, isView = true, purge = false)
   }
 
   object V1WriteProvider {
