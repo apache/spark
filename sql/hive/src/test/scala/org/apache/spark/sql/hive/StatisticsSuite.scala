@@ -78,13 +78,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
           val file1 = new File(tempDir + "/data1")
-          Utils.tryWithResource(new PrintWriter(file1)) { writer1 =>
-            writer1.write("1,2")
+          Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+            writer.write("1,2")
           }
 
           val file2 = new File(tempDir + "/data2")
-          Utils.tryWithResource(new PrintWriter(file2)) { writer2 =>
-            writer2.write("1,2")
+          Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+            writer.write("1,2")
           }
 
           sql(
@@ -995,13 +995,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
             val file1 = new File(dir1 + "/data")
-            Utils.tryWithResource(new PrintWriter(file1)) { writer1 =>
-              writer1.write("1,a")
+            Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+              writer.write("1,a")
             }
 
             val file2 = new File(dir2 + "/data")
-            Utils.tryWithResource(new PrintWriter(file2)) { writer2 =>
-              writer2.write("1,a")
+            Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+              writer.write("1,a")
             }
 
             // add partition command

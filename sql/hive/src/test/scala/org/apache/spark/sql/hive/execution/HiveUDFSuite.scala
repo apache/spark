@@ -454,13 +454,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       // EXTERNAL OpenCSVSerde table pointing to LOCATION
 
       val file1 = new File(tempDir + "/data1")
-      Utils.tryWithResource(new PrintWriter(file1)) { writer1 =>
-        writer1.write("1,2")
+      Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+        writer.write("1,2")
       }
 
       val file2 = new File(tempDir + "/data2")
-      Utils.tryWithResource(new PrintWriter(file2)) { writer2 =>
-        writer2.write("1,2")
+      Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+        writer.write("1,2")
       }
 
       sql(

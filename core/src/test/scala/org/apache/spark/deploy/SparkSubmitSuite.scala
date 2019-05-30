@@ -749,9 +749,9 @@ class SparkSubmitSuite
     withTempDir { tmpDir =>
       // Test jars and files
       val f1 = File.createTempFile("test-submit-jars-files", "", tmpDir)
-      Utils.tryWithResource(new PrintWriter(f1)) { writer1 =>
-        writer1.println("spark.jars " + jars)
-        writer1.println("spark.files " + files)
+      Utils.tryWithResource(new PrintWriter(f1)) { writer =>
+        writer.println("spark.jars " + jars)
+        writer.println("spark.files " + files)
       }
       val clArgs = Seq(
         "--master", "local",
@@ -766,9 +766,9 @@ class SparkSubmitSuite
 
       // Test files and archives (Yarn)
       val f2 = File.createTempFile("test-submit-files-archives", "", tmpDir)
-      Utils.tryWithResource(new PrintWriter(f2)) { writer2 =>
-        writer2.println("spark.yarn.dist.files " + files)
-        writer2.println("spark.yarn.dist.archives " + archives)
+      Utils.tryWithResource(new PrintWriter(f2)) { writer =>
+        writer.println("spark.yarn.dist.files " + files)
+        writer.println("spark.yarn.dist.archives " + archives)
       }
       val clArgs2 = Seq(
         "--master", "yarn",
@@ -783,8 +783,8 @@ class SparkSubmitSuite
 
       // Test python files
       val f3 = File.createTempFile("test-submit-python-files", "", tmpDir)
-      Utils.tryWithResource(new PrintWriter(f3)) { writer3 =>
-        writer3.println("spark.submit.pyFiles " + pyFiles)
+      Utils.tryWithResource(new PrintWriter(f3)) { writer =>
+        writer.println("spark.submit.pyFiles " + pyFiles)
       }
       val clArgs3 = Seq(
         "--master", "local",
@@ -803,8 +803,8 @@ class SparkSubmitSuite
       val pyFile1 = File.createTempFile("file1", ".py", tmpDir)
       val pyFile2 = File.createTempFile("file2", ".py", tmpDir)
       val remotePyFiles = s"s3a://${pyFile1.getAbsolutePath},s3a://${pyFile2.getAbsolutePath}"
-      Utils.tryWithResource(new PrintWriter(f4)) { writer4 =>
-        writer4.println("spark.submit.pyFiles " + remotePyFiles)
+      Utils.tryWithResource(new PrintWriter(f4)) { writer =>
+        writer.println("spark.submit.pyFiles " + remotePyFiles)
       }
       val clArgs4 = Seq(
         "--master", "yarn",
