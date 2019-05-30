@@ -991,18 +991,17 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Release a lock on the given block with explicit TID.
-   * The param `taskContext` should be passed in case we can't get the correct TaskContext
+   * Release a lock on the given block with explicit TaskContext.
+   * The param `taskContext` should be passed in case we can't get the correct TaskContext,
    * for example, the input iterator of a cached RDD iterates to the end in a child
    * thread.
    */
   def releaseLock(blockId: BlockId, taskContext: Option[TaskContext] = None): Unit = {
     val taskAttemptId = taskContext.map(_.taskAttemptId())
-    // SPARK-27666. Child thread spawned from task thread could produce race condition
-    // on block lock releasing. We should prevent child thread from releasing un-locked
-    // block when task thread has already finished.
-    if (taskContext.isDefined && taskContext.map(_.isCompleted()).get) {
-      logWarning(s"Task $taskAttemptId already completed, not releasing lock for $blockId")
+    // SPARK-27666. When a task completes, Spark automatically releases all the blocks locked
+    // by this task. We should not release any locks for a task that is already completed.
+    if (taskContext.isDefined && taskContext.get.isCompleted) {
+      logWarning(s"Task ${taskAttemptId.get} already completed, not releasing lock for $blockId")
     } else {
       blockInfoManager.unlock(blockId, taskAttemptId)
     }
