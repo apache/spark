@@ -1326,7 +1326,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[Cast]] expression.
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
-    Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType))
+    Cast(expression(ctx.expression()), visitSparkDataType(ctx.dataType),
+      format = Option(ctx.STRING()).map(string))
   }
 
   /**
