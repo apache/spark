@@ -788,9 +788,10 @@ qualifiedName
     : errorCapturingIdentifier ('.' errorCapturingIdentifier)*
     ;
 
+// rule ordering is important here to make the SLL parser happy
 errorCapturingIdentifier
-    : identifier MINUS identifier? { throw new Exception("TEST"); /*notifyErrorListeners("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"); */}
-    | identifier { throw new Exception("TEST"); }
+    : identifier { notifyErrorListeners("Possibly missing backquotes for identifiers with hyphen"); } MINUS identifier?
+    | identifier
     ;
 
 identifier

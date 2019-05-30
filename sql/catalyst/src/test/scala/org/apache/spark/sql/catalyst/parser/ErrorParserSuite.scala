@@ -64,7 +64,45 @@ class ErrorParserSuite extends SparkFunSuite {
       "^^^")
   }
 
-  test("hyphen in identifier") {
-    CatalystSqlParser.parsePlan("use test-test")
+  test("hyphen in identifier - DDL tests") {
+    val msg = "Possibly missing backquotes for identifiers with hyphen"
+    // ddl tests
+    intercept("use test-test", 1, 8, 9, msg, "--------^^^")
+    intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg, "--------^^^")
+    intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg, "--------^^^")
+    intercept("ALTER TABLE test ADD COLUMNS (h-col BIGINT)", 1, 31, 32, msg, "--------^^^")
+    intercept(
+      """
+        |CREATE TABLE IF NOT EXISTS mydb.page-view
+        |USING parquet
+        |COMMENT 'This is the staging page view table'
+        |LOCATION '/user/external/page_view'
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |AS SELECT * FROM src""".stripMargin, 2, 36, 37, msg, "--------^^^")
+  }
+
+  test("hyphen in identifier - DML tests") {
+    val msg = "Possibly missing backquotes for identifiers with hyphen"
+    // dml tests
+    intercept("SELECT * FROM table-with-hyphen", 1, 19, 20, msg, "--------^^^")
+    // special test case: minus in expression shouldn't be treated as hyphen in identifiers
+    intercept("SELECT a-b FROM table-with-hyphen", 1, 21, 22, msg, "--------^^^")
+    intercept("SELECT a-b FROM table-with-hyphen WHERE a-b = 0", 1, 21, 22, msg, "--------^^^")
+    intercept(
+      """
+        |SELECT a, b
+        |FROM grammar-breaker
+        |WHERE a-b > 10
+        |GROUP BY fake-breaker
+        |ORDER BY c
+      """.stripMargin, 3, 12, 13, msg, "--------^^^"
+    )
+    intercept(
+      """
+        |SELECT * FROM tab
+        |window hyphen-window as
+        |  (partition by a, b order by c rows between 1 preceding and 1 following)
+      """.stripMargin, 3, 13, 14, msg, "--------^^^"
+    )
   }
 }
