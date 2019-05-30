@@ -22,6 +22,8 @@ import org.apache.spark.annotation.Experimental;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  *  An {@link Identifier} implementation.
@@ -47,6 +49,21 @@ class IdentifierImpl implements Identifier {
   @Override
   public String name() {
     return name;
+  }
+
+  private String escapeQuote(String part) {
+    if (part.contains("`")) {
+      return part.replace("`", "``");
+    } else {
+      return part;
+    }
+  }
+
+  @Override
+  public String toString() {
+    return Stream.concat(Stream.of(namespace), Stream.of(name))
+        .map(part -> '`' + escapeQuote(part) + '`')
+        .collect(Collectors.joining("."));
   }
 
   @Override
