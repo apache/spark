@@ -340,9 +340,10 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Sort-based shuffle segment data uses an index called "shuffle_ShuffleId_MapId_0.index" and segmentId
-   * into a data file called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockResolver,
-   * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
+   * Sort-based shuffle segment data uses an index called "shuffle_ShuffleId_MapId_0.index" and
+   * segmentId into a data file called "shuffle_ShuffleId_MapId_0.data". This logic is from
+   * IndexShuffleBlockResolver, and the block id format is from ShuffleDataBlockId and
+   * ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockSegmentData(
           ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId, int segmentId) {
@@ -354,7 +355,7 @@ public class ExternalShuffleBlockResolver {
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId);
       long offset = shuffleIndexRecord.getOffset() + segmentId * SHUFFLE_FETCH_THRESHOLD;
       long length = Math.min(shuffleIndexRecord.getLength() -
-              (segmentId * SHUFFLE_FETCH_THRESHOLD), SHUFFLE_FETCH_THRESHOLD);
+        (segmentId * SHUFFLE_FETCH_THRESHOLD), SHUFFLE_FETCH_THRESHOLD);
       return new FileSegmentManagedBuffer(
         conf,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,

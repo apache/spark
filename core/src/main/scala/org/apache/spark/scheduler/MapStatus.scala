@@ -120,7 +120,7 @@ private[spark] class CompressedMapStatus(
   extends MapStatus with Externalizable {
 
   protected def this() = this(null, null.asInstanceOf[Array[Byte]],
-    null.asInstanceOf[Map[Int, Short]])  // For deserialization only
+    null.asInstanceOf[scala.collection.Map[Int, Short]])  // For deserialization only
 
   def this(loc: BlockManagerId, uncompressedSizes: Array[Long]) {
     this(loc, uncompressedSizes.map(MapStatus.compressSize),

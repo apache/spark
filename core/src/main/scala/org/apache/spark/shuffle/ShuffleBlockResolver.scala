@@ -42,6 +42,5 @@ trait ShuffleBlockResolver {
    */
   def getBlockSegmentData(blockId: ShuffleBlockSegmentId): ManagedBuffer
 
-
   def stop(): Unit
 }
