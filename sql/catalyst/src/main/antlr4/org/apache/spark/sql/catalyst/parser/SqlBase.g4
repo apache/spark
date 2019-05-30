@@ -790,8 +790,8 @@ qualifiedName
 
 // rule ordering is important here to make the SLL parser happy
 errorCapturingIdentifier
-    : identifier { notifyErrorListeners("Possibly missing backquotes for identifiers with hyphen"); } MINUS identifier?
-    | identifier
+    : identifier (MINUS identifier?)+           #errorIdent
+    | identifier                                #realIdent
     ;
 
 identifier

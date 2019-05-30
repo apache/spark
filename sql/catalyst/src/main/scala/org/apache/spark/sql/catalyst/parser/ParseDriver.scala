@@ -74,7 +74,8 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    astBuilder.visitSingleStatement(parser.singleStatement()) match {
+    val ast = parser.singleStatement()
+    astBuilder.visitSingleStatement(ast) match {
       case plan: LogicalPlan => plan
       case _ =>
         val position = Origin(None, None)
@@ -264,6 +265,13 @@ class ParseException(
  * The post-processor validates & cleans-up the parse tree during the parse process.
  */
 case object PostProcessor extends SqlBaseBaseListener {
+
+  /** Throws error message when exiting a explicitly captured wrong identifier rule */
+  override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
+    val ident = ctx.getText
+    throw new ParseException(s"Possibly unquoted identifier $ident detected. " +
+      s"Please consider quoting it with back-quotes as `$ident`", ctx)
+  }
 
   /** Remove the back ticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: SqlBaseParser.QuotedIdentifierContext): Unit = {
