@@ -242,8 +242,31 @@ object ReassignLambdaVariableID extends Rule[LogicalPlan] {
     var newId = 0L
     val oldIdToNewId = scala.collection.mutable.Map.empty[Long, Long]
 
+    // The `LambdaVariable` IDs in a query should be all positive or negative. Otherwise it's a bug
+    // and we should fail earlier.
+    var hasNegativeIds = false
+    var hasPositiveIds = false
+
     plan.transformAllExpressions {
+      case lr: LambdaVariable if lr.id == 0 =>
+        throw new IllegalStateException("LambdaVariable should never has 0 as its ID.")
+
+      case lr: LambdaVariable if lr.id < 0 =>
+        hasNegativeIds = true
+        if (hasPositiveIds) {
+          throw new IllegalStateException(
+            "LambdaVariable IDs in a query should be all positive or negative.")
+
+        }
+        lr
+
       case lr: LambdaVariable if lr.id > 0 =>
+        hasPositiveIds = true
+        if (hasNegativeIds) {
+          throw new IllegalStateException(
+            "LambdaVariable IDs in a query should be all positive or negative.")
+        }
+
         if (oldIdToNewId.contains(lr.id)) {
           // This `LambdaVariable` has appeared before, reuse the newly generated ID.
           lr.copy(id = oldIdToNewId(lr.id))
