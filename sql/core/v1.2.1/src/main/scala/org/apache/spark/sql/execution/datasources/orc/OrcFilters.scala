@@ -139,7 +139,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
   private[sql] def buildSearchArgument(
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    performFilter(expression, canPartialPushDownConjuncts = true).map { filter =>
+    trimUnconvertibleFilters(expression).map { filter =>
       updateBuilder(filter, builder)
       builder
     }
@@ -201,7 +201,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
 
       case Or(left, right) =>
         actionType match {
-          case t @ TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
+          case t: TrimUnconvertibleFilters =>
             // The Or predicate is convertible when both of its children can be pushed down.
             // That is to say, if one/both of the children can be partially pushed down, the Or
             // predicate can be partially pushed down as well.
@@ -227,8 +227,8 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
 
       case Not(child) =>
         actionType match {
-          case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
-            performFilter(child, canPartialPushDownConjuncts = false).map(Not)
+          case t: TrimUnconvertibleFilters =>
+            performAction(t.copy(canPartialPushDownConjuncts = false), child).map(Not)
           case BuildSearchArgument(builder) =>
             builder.startNot()
             updateBuilder(child, builder)
@@ -242,7 +242,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             val castedValue = castLiteralValue(value, dataTypeMap(attribute))
@@ -251,7 +251,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             val castedValue = castLiteralValue(value, dataTypeMap(attribute))
@@ -260,7 +260,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             val castedValue = castLiteralValue(value, dataTypeMap(attribute))
@@ -269,7 +269,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             val castedValue = castLiteralValue(value, dataTypeMap(attribute))
@@ -278,7 +278,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             val castedValue = castLiteralValue(value, dataTypeMap(attribute))
@@ -287,7 +287,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             val castedValue = castLiteralValue(value, dataTypeMap(attribute))
@@ -296,7 +296,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             builder.startAnd().isNull(quotedName, getType(attribute)).end()
@@ -304,7 +304,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             builder.startNot().isNull(quotedName, getType(attribute)).end()
@@ -312,7 +312,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => Some(expression)
+          case _: TrimUnconvertibleFilters => Some(expression)
           case BuildSearchArgument(builder) =>
             val quotedName = quoteAttributeNameIfNeeded(attribute)
             val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
@@ -323,7 +323,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
 
       case _ =>
         actionType match {
-          case TrimUnconvertibleFilters(_) => None
+          case _: TrimUnconvertibleFilters => None
           case BuildSearchArgument(builder) =>
             throw new IllegalArgumentException(s"Can't build unsupported filter ${expression}")
         }
