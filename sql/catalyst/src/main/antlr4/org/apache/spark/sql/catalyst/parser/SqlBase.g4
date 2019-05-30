@@ -789,8 +789,8 @@ qualifiedName
     ;
 
 errorCapturingIdentifier
-    : identifier
-    | identifier MINUS identifier?
+    : identifier MINUS identifier? { throw new Exception("TEST"); /*notifyErrorListeners("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"); */}
+    | identifier { throw new Exception("TEST"); }
     ;
 
 identifier

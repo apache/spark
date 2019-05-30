@@ -63,4 +63,8 @@ class ErrorParserSuite extends SparkFunSuite {
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
       "^^^")
   }
+
+  test("hyphen in identifier") {
+    CatalystSqlParser.parsePlan("use test-test")
+  }
 }
