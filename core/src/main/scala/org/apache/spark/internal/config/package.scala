@@ -869,7 +869,6 @@ package object config {
 
   private[spark] val SHUFFLE_FETCH_SPLIT_ENABLED =
     ConfigBuilder("spark.shuffle.fetch.split")
-      .internal()
       .doc("Whether split large partition blocks to enable transfer oversize shuffle blocks.")
       .booleanConf
       .createWithDefault(false)
