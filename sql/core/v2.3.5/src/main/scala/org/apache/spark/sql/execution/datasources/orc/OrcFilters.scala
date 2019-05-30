@@ -66,8 +66,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
     val orcFilterConverter = new OrcFilterConverter(dataTypeMap)
     for {
-      // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- buildTree(filters.flatMap(orcFilterConverter.trimUnconvertibleFilters))
+      // Combines all filters using `And` to produce a single conjunction
+      conjunction <- buildTree(filters)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- orcFilterConverter.buildSearchArgument(conjunction, newBuilder)
     } yield builder.build()
@@ -139,11 +139,10 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
   private[sql] def buildSearchArgument(
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    val filteredExpression: Option[Filter] = performFilter(
-      expression,
-      canPartialPushDownConjuncts = true)
-    filteredExpression.foreach(updateBuilder(_, builder))
-    filteredExpression.map(_ => builder)
+    performFilter(expression, canPartialPushDownConjuncts = true).map { filter =>
+      updateBuilder(filter, builder)
+      builder
+    }
   }
 
   sealed trait ActionType[ReturnType]
@@ -172,7 +171,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
     expression match {
       case And(left, right) =>
         actionType match {
-          case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
+          case t @ TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
             // At here, it is not safe to just keep one side and remove the other side
             // if we do not understand what the parent filters are.
             //
@@ -184,8 +183,8 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
             // Pushing one side of AND down is only safe to do at the top level or in the child
             // AND before hitting NOT or OR conditions, and in this case, the unsupported
             // predicate can be safely removed.
-            val lhs = performFilter(left, canPartialPushDownConjuncts)
-            val rhs = performFilter(right, canPartialPushDownConjuncts)
+            val lhs = performAction(t, left)
+            val rhs = performAction(t, right)
             (lhs, rhs) match {
               case (Some(l), Some(r)) => Some(And(l, r))
               case (Some(_), None) if canPartialPushDownConjuncts => lhs
@@ -202,7 +201,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
 
       case Or(left, right) =>
         actionType match {
-          case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
+          case t @ TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
             // The Or predicate is convertible when both of its children can be pushed down.
             // That is to say, if one/both of the children can be partially pushed down, the Or
             // predicate can be partially pushed down as well.
@@ -215,8 +214,8 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
             // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
             // As per the logical in And predicate, we can push down (a1 OR b1).
             for {
-              lhs: Filter <- performFilter(left, canPartialPushDownConjuncts)
-              rhs: Filter <- performFilter(right, canPartialPushDownConjuncts)
+              lhs: Filter <- performAction(t, left)
+              rhs: Filter <- performAction(t, right)
             } yield Or(lhs, rhs)
           case BuildSearchArgument(builder) =>
             builder.startOr()
@@ -229,9 +228,7 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
       case Not(child) =>
         actionType match {
           case TrimUnconvertibleFilters(canPartialPushDownConjuncts) =>
-            val filteredSubtree =
-              performFilter(child, canPartialPushDownConjuncts = false)
-            filteredSubtree.map(Not(_))
+            performFilter(child, canPartialPushDownConjuncts = false).map(Not)
           case BuildSearchArgument(builder) =>
             builder.startNot()
             updateBuilder(child, builder)
@@ -342,8 +339,6 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
    * Builds a SearchArgument for the given Filter. This method should only be called on Filters
    * that have previously been trimmed to remove unsupported sub-Filters!
    */
-  private def updateBuilder(
-      expression: Filter,
-      builder: Builder): Unit =
+  private def updateBuilder(expression: Filter, builder: Builder): Unit =
     performAction(BuildSearchArgument(builder), expression)
 }
