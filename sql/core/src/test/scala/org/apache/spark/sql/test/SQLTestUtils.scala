@@ -33,7 +33,6 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -255,61 +254,41 @@ private[sql] trait SQLTestUtilsBase
    * Drops temporary view `viewNames` after calling `f`.
    */
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      // If the test failed part way, we don't want to mask the failure by failing to remove
-      // temp views that never got created.
-      try viewNames.foreach(spark.catalog.dropTempView) catch {
-        case _: NoSuchTableException =>
-      }
-    }
+    Utils.tryWithSafeFinally(f)(viewNames.foreach(spark.catalog.dropTempView))
   }
 
   /**
    * Drops global temporary view `viewNames` after calling `f`.
    */
   protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      // If the test failed part way, we don't want to mask the failure by failing to remove
-      // global temp views that never got created.
-      try viewNames.foreach(spark.catalog.dropGlobalTempView) catch {
-        case _: NoSuchTableException =>
-      }
-    }
+    Utils.tryWithSafeFinally(f)(viewNames.foreach(spark.catalog.dropGlobalTempView))
   }
 
   /**
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      tableNames.foreach { name =>
-        spark.sql(s"DROP TABLE IF EXISTS $name")
-      }
-    }
+    Utils.tryWithSafeFinally(f)(tableNames.foreach { name =>
+      spark.sql(s"DROP TABLE IF EXISTS $name")
+    })
   }
 
   /**
    * Drops view `viewName` after calling `f`.
    */
   protected def withView(viewNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    Utils.tryWithSafeFinally(f)(
       viewNames.foreach { name =>
         spark.sql(s"DROP VIEW IF EXISTS $name")
       }
-    }
+    )
   }
 
   /**
    * Drops cache `cacheName` after calling `f`.
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
-    try f finally {
-      cacheNames.foreach { cacheName =>
-        try uncacheTable(cacheName) catch {
-          case _: AnalysisException =>
-        }
-      }
-    }
+    Utils.tryWithSafeFinally(f)(cacheNames.foreach(uncacheTable))
   }
 
   // Blocking uncache table for tests
@@ -350,7 +329,7 @@ private[sql] trait SQLTestUtilsBase
    * Drops database `dbName` after calling `f`.
    */
   protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
-    try f finally {
+    Utils.tryWithSafeFinally(f) {
       dbNames.foreach { name =>
         spark.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
       }
@@ -379,7 +358,7 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
     spark.sessionState.catalog.setCurrentDatabase(db)
-    try f finally spark.sessionState.catalog.setCurrentDatabase("default")
+    Utils.tryWithSafeFinally(f)(spark.sessionState.catalog.setCurrentDatabase("default"))
   }
 
   /**
