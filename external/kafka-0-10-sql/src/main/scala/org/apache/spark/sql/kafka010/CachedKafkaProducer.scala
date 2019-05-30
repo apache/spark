@@ -66,7 +66,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
       .build[Seq[(String, Object)], Producer](cacheLoader)
 
   private def createKafkaProducer(paramsSeq: Seq[(String, Object)]): Producer = {
-    val kafkaProducer: Producer = new Producer(paramsSeq.map(x => x._1 -> x._2).toMap.asJava)
+    val kafkaProducer: Producer = new Producer(paramsSeq.toMap.asJava)
     if (log.isDebugEnabled()) {
       val redactedParamsSeq = KafkaRedactionUtil.redactParams(paramsSeq)
       logDebug(s"Created a new instance of KafkaProducer for $redactedParamsSeq.")

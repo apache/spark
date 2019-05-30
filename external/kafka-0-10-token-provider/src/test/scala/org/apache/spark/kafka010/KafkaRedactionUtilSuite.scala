@@ -22,6 +22,7 @@ import java.{util => ju}
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
 import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_SSL
+import org.apache.kafka.common.serialization.StringDeserializer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
@@ -30,6 +31,15 @@ class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTes
   test("redactParams should give back empty parameters") {
     setSparkEnv(Map())
     assert(KafkaRedactionUtil.redactParams(Seq()) === Seq())
+  }
+
+  test("redactParams should give back non String parameters") {
+    setSparkEnv(Map())
+    val kafkaParams = Seq(
+      ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> classOf[StringDeserializer]
+    )
+
+    assert(KafkaRedactionUtil.redactParams(kafkaParams) === kafkaParams)
   }
 
   test("redactParams should redact token password from parameters") {
