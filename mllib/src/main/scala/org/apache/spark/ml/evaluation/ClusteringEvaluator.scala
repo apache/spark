@@ -153,20 +153,20 @@ private[evaluation] abstract class Silhouette {
     val otherClusterIds = clusterIds.filter(_ != pointClusterId)
     val neighboringClusterDissimilarity = otherClusterIds.map(averageDistanceToCluster).min
 
-    // adjustment for excluding the node itself from the computation of the average dissimilarity
-    val currentClusterDissimilarity = if (pointClusterNumOfPoints == 1) {
+    if (pointClusterNumOfPoints == 1) {
       0.0
     } else {
-      averageDistanceToCluster(pointClusterId) * pointClusterNumOfPoints /
-        (pointClusterNumOfPoints - 1)
-    }
-
-    if (currentClusterDissimilarity < neighboringClusterDissimilarity) {
-      1 - (currentClusterDissimilarity / neighboringClusterDissimilarity)
-    } else if (currentClusterDissimilarity > neighboringClusterDissimilarity) {
-      (neighboringClusterDissimilarity / currentClusterDissimilarity) - 1
-    } else {
-      0.0
+      // adjustment for excluding the node itself from the computation of the average dissimilarity
+      val currentClusterDissimilarity =
+        averageDistanceToCluster(pointClusterId) * pointClusterNumOfPoints /
+          (pointClusterNumOfPoints - 1)
+      if (currentClusterDissimilarity < neighboringClusterDissimilarity) {
+        1 - (currentClusterDissimilarity / neighboringClusterDissimilarity)
+      } else if (currentClusterDissimilarity > neighboringClusterDissimilarity) {
+        (neighboringClusterDissimilarity / currentClusterDissimilarity) - 1
+      } else {
+        0.0
+      }
     }
   }
 
