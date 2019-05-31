@@ -566,13 +566,13 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
 
   private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
 
-  private lazy val isPySparkAvailable: Boolean = isPythonAvailable && {
+  private lazy val isPySparkAvailable: Boolean = isPythonAvailable && Try {
     Process(
       Seq(pythonExec, "-c", "import pyspark"),
       None,
       "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
     true
-  }
+  }.getOrElse(false)
 
   private val pythonPath = sys.env.getOrElse("PYTHONPATH", "")
   private val sparkHome = if (sys.props.contains(Tests.IS_TESTING.key)) {
