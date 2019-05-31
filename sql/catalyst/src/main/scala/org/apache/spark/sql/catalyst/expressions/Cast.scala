@@ -216,7 +216,7 @@ case class Cast(
   def this(child: Expression, dataType: DataType) = this(child, dataType, None)
 
   override def toString: String =
-    s"cast($child as ${dataType.simpleString}${format.map(" FORMAT " + _).getOrElse("")})"
+    s"cast($child as ${dataType.simpleString}${format.map(" format " + _).getOrElse("")})"
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Cast.canCast(child.dataType, dataType)) {
@@ -242,55 +242,29 @@ case class Cast(
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
-  private lazy val dateFormatter = DateFormatter()
-  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-
-  private lazy val customDateFormatter: DateFormatter = format.map { f =>
-    try {
-      DateFormatter(f)
-    } catch {
-      case NonFatal(_) => null
-    }
-  }.orNull
-
-  private lazy val customTimestampFormatter: TimestampFormatter = format.map { f =>
-    try {
-      TimestampFormatter(f, zoneId)
-    } catch {
-      case NonFatal(_) => null
-    }
-  }.orNull
+  private lazy val dateFormatter = format.map(DateFormatter(_)).getOrElse(DateFormatter())
+  private lazy val timestampFormatter =
+    format
+      .map(TimestampFormatter(_, zoneId))
+      .getOrElse(TimestampFormatter.getFractionFormatter(zoneId))
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
-    case DateType if format.isDefined =>
-      buildCast[Int](_, t =>
-        if (customDateFormatter == null) {
-          null
-        } else {
-          try {
-            UTF8String.fromString(customDateFormatter.format(t))
-          } catch {
-            case NonFatal(_) => null
-          }
-        }
-      )
-    case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
-    case TimestampType if format.isDefined =>
-      buildCast[Long](_, t =>
-        if (customTimestampFormatter == null) {
-          null
-        } else {
-          try {
-            UTF8String.fromString(customTimestampFormatter.format(t))
-          } catch {
-            case NonFatal(_) => null
-          }
-        }
-      )
-    case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(DateTimeUtils.timestampToString(timestampFormatter, t)))
+    case DateType => buildCast[Int](_, d =>
+      try {
+        UTF8String.fromString(dateFormatter.format(d))
+      } catch {
+        case NonFatal(_) => null
+      }
+    )
+    case TimestampType => buildCast[Long](_, t =>
+      try {
+        UTF8String.fromString(timestampFormatter.format(t))
+      } catch {
+        case NonFatal(_) => null
+      }
+    )
     case ArrayType(et, _) =>
       buildCast[ArrayData](_, array => {
         val builder = new UTF8StringBuilder
@@ -419,14 +393,10 @@ case class Cast(
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType if format.isDefined =>
       buildCast[UTF8String](_, utfs =>
-        if (customTimestampFormatter == null) {
-          null
-        } else {
-          try {
-            customTimestampFormatter.parse(utfs.toString)
-          } catch {
-            case NonFatal(_) => null
-          }
+        try {
+          timestampFormatter.parse(utfs.toString)
+        } catch {
+          case NonFatal(_) => null
         }
       )
     case StringType =>
@@ -476,14 +446,10 @@ case class Cast(
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType if format.isDefined =>
       buildCast[UTF8String](_, utfs =>
-        if (customDateFormatter == null) {
-          null
-        } else {
-          try {
-            customDateFormatter.parse(utfs.toString)
-          } catch {
-            case NonFatal(_) => null
-          }
+        try {
+          dateFormatter.parse(utfs.toString)
+        } catch {
+          case NonFatal(_) => null
         }
       )
     case StringType =>
@@ -933,51 +899,36 @@ case class Cast(
     from match {
       case BinaryType =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
-      case DateType if format.isDefined =>
-        (c, evPrim, evNull) =>
-          if (customDateFormatter == null) {
-            code"""$evNull = true;"""
-          } else {
-            val formatterClass = classOf[DateFormatter]
-            val fmtr = JavaCode.global(
-              ctx.addReferenceObj("formatter", customDateFormatter, formatterClass.getName),
-              formatterClass)
-            code"""
-               |try {
-               |  $evPrim = UTF8String.fromString($fmtr.format($c));
-               |} catch (java.lang.IllegalArgumentException e) {
-               |  $evNull = true;
-               |}
-             """.stripMargin
-          }
       case DateType =>
         val df = JavaCode.global(
           ctx.addReferenceObj("dateFormatter", dateFormatter),
           dateFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(${df}.format($c));"""
-      case TimestampType if format.isDefined =>
         (c, evPrim, evNull) =>
-          if (customTimestampFormatter == null) {
-            code"""$evNull = true;"""
-          } else {
-            val formatterClass = classOf[TimestampFormatter]
-            val fmtr = JavaCode.global(
-              ctx.addReferenceObj("formatter", customTimestampFormatter, formatterClass.getName),
-              formatterClass)
-            code"""
-               |try {
-               |  $evPrim = UTF8String.fromString($fmtr.format($c));
-               |} catch (java.lang.IllegalArgumentException e) {
-               |  $evNull = true;
-               |}
+          code"""
+                |try {
+                |  $evPrim = UTF8String.fromString($df.format($c));
+                |} catch (java.lang.IllegalArgumentException e) {
+                |  $evNull = true;
+                } catch (java.time.DateTimeException e) {
+                |  $evNull = true;
+                |}
              """.stripMargin
-          }
       case TimestampType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),
           timestampFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($tf, $c));"""
+        (c, evPrim, evNull) =>
+          code"""
+                |try {
+                |  $evPrim = UTF8String.fromString($tf.format($c));
+                |} catch (java.lang.IllegalArgumentException e) {
+                |  $evNull = true;
+                |} catch (java.time.DateTimeException e) {
+                |  $evNull = true;
+                |} catch (ArithmeticException e) {
+                |  $evNull = true;
+                |}
+             """.stripMargin
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
@@ -1037,24 +988,23 @@ case class Cast(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType if format.isDefined =>
-      (c, evPrim, evNull) =>
-        if (customDateFormatter == null) {
-          code"""$evNull = true;"""
-        } else {
-          val formatterClass = classOf[DateFormatter]
-          val fmtr = JavaCode.global(
-            ctx.addReferenceObj("formatter", customDateFormatter, formatterClass.getName),
-            formatterClass)
-          code"""
-             |try {
-             |  $evPrim = $fmtr.parse($c.toString());
-             |} catch (java.lang.IllegalArgumentException e) {
-             |  $evNull = true;
-             |} catch (java.time.format.DateTimeParseException e) {
-             |  $evNull = true;
-             |}
-           """.stripMargin
-        }
+      (c, evPrim, evNull) => {
+        val formatterClass = classOf[DateFormatter]
+        val fmtr = JavaCode.global(
+          ctx.addReferenceObj("formatter", dateFormatter, formatterClass.getName),
+          formatterClass)
+        code"""
+           |try {
+           |  $evPrim = $fmtr.parse($c.toString());
+           |} catch (java.lang.IllegalArgumentException e) {
+           |  $evNull = true;
+           |} catch (java.time.format.DateTimeParseException e) {
+           |  $evNull = true;
+           |} catch (ArithmeticException e) {
+           |  $evNull = true;
+           |}
+         """.stripMargin
+      }
     case StringType =>
       val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
       (c, evPrim, evNull) => code"""
@@ -1160,28 +1110,27 @@ case class Cast(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType if format.isDefined =>
-      (c, evPrim, evNull) =>
-        if (customTimestampFormatter == null) {
-          code"""$evNull = true;"""
-        } else {
-          val formatterClass = classOf[TimestampFormatter]
-          val fmtr = JavaCode.global(
-            ctx.addReferenceObj("formatter", customTimestampFormatter, formatterClass.getName),
-            formatterClass)
-          code"""
-             |try {
-             |  $evPrim = $fmtr.parse($c.toString());
-             |} catch (java.lang.IllegalArgumentException e) {
-             |  $evNull = true;
-             |} catch (java.text.ParseException e) {
-             |  $evNull = true;
-             |} catch (java.time.format.DateTimeParseException e) {
-             |  $evNull = true;
-             |} catch (java.time.DateTimeException e) {
-             |  $evNull = true;
-             |}
-           """.stripMargin
-        }
+      (c, evPrim, evNull) => {
+        val formatterClass = classOf[TimestampFormatter]
+        val fmtr = JavaCode.global(
+          ctx.addReferenceObj("formatter", timestampFormatter, formatterClass.getName),
+          formatterClass)
+        code"""
+           |try {
+           |  $evPrim = $fmtr.parse($c.toString());
+           |} catch (java.lang.IllegalArgumentException e) {
+           |  $evNull = true;
+           |} catch (java.text.ParseException e) {
+           |  $evNull = true;
+           |} catch (java.time.format.DateTimeParseException e) {
+           |  $evNull = true;
+           |} catch (java.time.DateTimeException e) {
+           |  $evNull = true;
+           |} catch (ArithmeticException e) {
+           |  $evNull = true;
+           |}
+         """.stripMargin
+      }
     case StringType =>
       val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
