@@ -794,7 +794,7 @@ errorCapturingIdentifier
     : identifier errorCapturingIdentifierExtra
     ;
 
-// extra grammer for left factoring
+// extra left-factoring grammar
 errorCapturingIdentifierExtra
     : (MINUS identifier)+    #errorIdent
     |                        #realIdent
