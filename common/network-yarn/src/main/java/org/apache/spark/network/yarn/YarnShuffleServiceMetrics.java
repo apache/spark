@@ -96,13 +96,17 @@ class YarnShuffleServiceMetrics implements MetricsSource {
     } else if (metric instanceof Gauge) {
       final Object gaugeValue = ((Gauge) metric).getValue();
       if (gaugeValue instanceof Integer) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), (Integer) gaugeValue);
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGauge(name), (Integer) gaugeValue);
       } else if (gaugeValue instanceof Long) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), (Long) gaugeValue);
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGauge(name), (Long) gaugeValue);
       } else if (gaugeValue instanceof Float) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), (Float) gaugeValue);
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGauge(name), (Float) gaugeValue);
       } else if (gaugeValue instanceof Double) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), (Double) gaugeValue);
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGauge(name), (Double) gaugeValue);
       } else {
         throw new IllegalStateException(
                 "Not supported class type of metric[" + name + "] for value " + gaugeValue);
