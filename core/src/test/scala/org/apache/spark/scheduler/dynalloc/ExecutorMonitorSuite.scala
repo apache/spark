@@ -155,8 +155,12 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
     assert(monitor.timedOutExecutors(storageDeadline) === Seq("1"))
 
+    // Make sure that if we get an unpersist event much later, which moves an executor from having
+    // cached blocks to no longer having cached blocks, it will time out based on the time it
+    // originally went idle.
+    clock.setTime(idleDeadline)
     monitor.onUnpersistRDD(SparkListenerUnpersistRDD(2))
-    assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
+    assert(monitor.timedOutExecutors(clock.getTimeMillis()) === Seq("1"))
   }
 
   test("handle timeouts correctly with multiple executors") {
