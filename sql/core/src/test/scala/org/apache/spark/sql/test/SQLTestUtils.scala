@@ -24,6 +24,7 @@ import java.util.{Locale, UUID}
 
 import scala.concurrent.duration._
 import scala.language.implicitConversions
+import scala.util.{Failure, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -42,6 +43,7 @@ import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
+
 
 /**
  * Helper trait that should be extended by all SQL test suites within the Spark
@@ -254,14 +256,32 @@ private[sql] trait SQLTestUtilsBase
    * Drops temporary view `viewNames` after calling `f`.
    */
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(viewNames.foreach(spark.catalog.dropTempView))
+    Utils.tryWithSafeFinally(f) {
+      val suppressed = viewNames.map(viewName => Try(spark.catalog.dropTempView(viewName))).map {
+        case Failure(t) => t
+      }
+      if (suppressed.nonEmpty) {
+        suppressed.tail.foreach(suppressed.head.addSuppressed)
+        throw suppressed.head
+      }
+    }
   }
 
   /**
    * Drops global temporary view `viewNames` after calling `f`.
    */
   protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(viewNames.foreach(spark.catalog.dropGlobalTempView))
+    Utils.tryWithSafeFinally(f) {
+      val suppressed = viewNames.map(viewName =>
+        Try(spark.catalog.dropGlobalTempView(viewName))
+      ).map {
+        case Failure(t) => t
+      }
+      if (suppressed.nonEmpty) {
+        suppressed.tail.foreach(suppressed.head.addSuppressed)
+        throw suppressed.head
+      }
+    }
   }
 
   /**
@@ -288,7 +308,16 @@ private[sql] trait SQLTestUtilsBase
    * Drops cache `cacheName` after calling `f`.
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(cacheNames.foreach(uncacheTable))
+    Utils.tryWithSafeFinally(f) {
+      val suppressed = cacheNames.map(cacheName => Try(uncacheTable(cacheName)))
+        .map {
+        case Failure(t) => t
+      }
+      if (suppressed.nonEmpty) {
+        suppressed.tail.foreach(suppressed.head.addSuppressed)
+        throw suppressed.head
+      }
+    }
   }
 
   // Blocking uncache table for tests
