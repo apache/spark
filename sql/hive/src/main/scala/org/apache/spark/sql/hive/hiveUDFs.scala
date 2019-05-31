@@ -470,7 +470,7 @@ private[hive] case class HiveUDAFFunction(
   override def eval(buffer: HiveUDAFBuffer): Any = {
     resultUnwrapper(finalHiveEvaluator.evaluator.terminate(
       if (buffer == null) {
-        HiveUDAFBuffer(finalHiveEvaluator.evaluator.getNewAggregationBuffer, false).buf
+        finalHiveEvaluator.evaluator.getNewAggregationBuffer
       } else {
         buffer.buf
       }
