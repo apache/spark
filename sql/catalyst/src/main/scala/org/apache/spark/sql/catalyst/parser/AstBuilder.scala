@@ -2036,6 +2036,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Parse a qualified name to a multipart name.
+   */
+  override def visitQualifiedName(ctx: QualifiedNameContext): Seq[String] = withOrigin(ctx) {
+    ctx.identifier.asScala.map(_.getText)
+  }
+
+  /**
    * Parse a list of transforms.
    */
   override def visitTransformList(ctx: TransformListContext): Seq[Transform] = withOrigin(ctx) {
@@ -2067,8 +2074,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     ctx.transforms.asScala.map {
       case identityCtx: IdentityTransformContext =>
-        IdentityTransform(FieldReference(
-          identityCtx.qualifiedName.identifier.asScala.map(_.getText)))
+        IdentityTransform(FieldReference(typedVisit[Seq[String]](identityCtx.qualifiedName)))
 
       case applyCtx: ApplyTransformContext =>
         val arguments = applyCtx.argument.asScala.map(visitTransformArgument)
@@ -2115,7 +2121,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTransformArgument(ctx: TransformArgumentContext): v2.expressions.Expression = {
     withOrigin(ctx) {
       val reference = Option(ctx.qualifiedName)
-          .map(nameCtx => FieldReference(nameCtx.identifier.asScala.map(_.getText)))
+          .map(typedVisit[Seq[String]])
+          .map(FieldReference(_))
       val literal = Option(ctx.constant)
           .map(typedVisit[Literal])
           .map(lit => LiteralValue(lit.value, lit.dataType))
@@ -2217,7 +2224,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Parse new column info from ADD COLUMN into a NewColumn.
    */
-  override def visitNewColumn(ctx: NewColumnContext): AnyRef = withOrigin(ctx) {
+  override def visitNewColumn(ctx: NewColumnContext): NewColumn = withOrigin(ctx) {
     NewColumn(
       ctx.name.identifier.asScala.map(_.getText),
       typedVisit[DataType](ctx.dataType),
@@ -2252,7 +2259,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *   ALTER TABLE table1 RENAME COLUMN a.b.c TO x
    * }}}
    */
-  override def visitRenameTableColumn(ctx: RenameTableColumnContext): AnyRef = withOrigin(ctx) {
+  override def visitRenameTableColumn(
+      ctx: RenameTableColumnContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRenameColumnStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
       ctx.from.identifier.asScala.map(_.getText),
@@ -2270,20 +2278,24 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitAlterTableColumn(
-      ctx: AlterTableColumnContext): AnyRef = withOrigin(ctx) {
+      ctx: AlterTableColumnContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.colPosition != null) {
       operationNotAllowed("ALTER TABLE table CHANGE COLUMN ... FIRST | AFTER otherCol", ctx)
     }
 
+    if (ctx.dataType == null && ctx.comment == null) {
+      operationNotAllowed("ALTER TABLE table CHANGE COLUMN requires a TYPE or a COMMENT", ctx)
+    }
+
     AlterTableAlterColumnStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
-      ctx.qualifiedName.identifier.asScala.map(_.getText),
+      typedVisit[Seq[String]](ctx.qualifiedName),
       Option(ctx.dataType).map(typedVisit[DataType]),
       Option(ctx.comment).map(string))
   }
 
   /**
-   * Parse a [[AlterTableAlterColumnStatement]] command.
+   * Parse a [[AlterTableDropColumnsStatement]] command.
    *
    * For example:
    * {{{
@@ -2292,8 +2304,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitDropTableColumns(
-      ctx: DropTableColumnsContext): AnyRef = withOrigin(ctx) {
-    val columnsToDrop = ctx.columns.qualifiedName.asScala.map(_.identifier.asScala.map(_.getText))
+      ctx: DropTableColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val columnsToDrop = ctx.columns.qualifiedName.asScala.map(typedVisit[Seq[String]])
     AlterTableDropColumnsStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
       columnsToDrop)

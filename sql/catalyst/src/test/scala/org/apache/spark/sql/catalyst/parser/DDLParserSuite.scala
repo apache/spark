@@ -411,20 +411,15 @@ class DDLParserSuite extends AnalysisTest {
     val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
     val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
-    val parsed1_view = parsePlan(sql1_view)
-    val parsed2_view = parsePlan(sql2_view)
-    val parsed3_view = parsePlan(sql3_view)
-
-    val expected1_view = AlterViewSetPropertiesStatement(
-      Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment"))
-    val expected2_view = AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = false)
-    val expected3_view = AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = true)
-
-    comparePlans(parsed1_view, expected1_view)
-    comparePlans(parsed2_view, expected2_view)
-    comparePlans(parsed3_view, expected3_view)
+    comparePlans(parsePlan(sql1_view),
+      AlterViewSetPropertiesStatement(
+      Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+    comparePlans(parsePlan(sql2_view),
+      AlterViewUnsetPropertiesStatement(
+      Seq("table_name"), Seq("comment", "test"), ifExists = false))
+    comparePlans(parsePlan(sql3_view),
+      AlterViewUnsetPropertiesStatement(
+      Seq("table_name"), Seq("comment", "test"), ifExists = true))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -435,20 +430,18 @@ class DDLParserSuite extends AnalysisTest {
     val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
     val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
-    val parsed1_table = parsePlan(sql1_table)
-    val parsed2_table = parsePlan(sql2_table)
-    val parsed3_table = parsePlan(sql3_table)
-
-    val expected1_table = AlterTableSetPropertiesStatement(
-      Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment"))
-    val expected2_table = AlterTableUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = false)
-    val expected3_table = AlterTableUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = true)
-
-    comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed3_table, expected3_table)
+    comparePlans(
+      parsePlan(sql1_table),
+      AlterTableSetPropertiesStatement(
+        Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+    comparePlans(
+      parsePlan(sql2_table),
+      AlterTableUnsetPropertiesStatement(
+        Seq("table_name"), Seq("comment", "test"), ifExists = false))
+    comparePlans(
+      parsePlan(sql3_table),
+      AlterTableUnsetPropertiesStatement(
+        Seq("table_name"), Seq("comment", "test"), ifExists = true))
   }
 
   test("alter table: add column") {

@@ -132,10 +132,7 @@ statement
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE multipartIdentifier
         (ALTER | CHANGE) COLUMN? qualifiedName
-        TYPE dataType (COMMENT comment=STRING)? colPosition?           #alterTableColumn
-    | ALTER TABLE multipartIdentifier
-        (ALTER | CHANGE) COLUMN? qualifiedName
-        COMMENT comment=STRING colPosition?                            #alterTableColumn
+        (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
     | ALTER TABLE tableIdentifier partitionSpec?
         CHANGE COLUMN? identifier colType colPosition?                 #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?
