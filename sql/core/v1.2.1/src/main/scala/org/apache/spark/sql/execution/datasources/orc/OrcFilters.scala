@@ -118,10 +118,6 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
   import org.apache.spark.sql.sources._
   import OrcFilters._
 
-  private[sql] def trimUnconvertibleFilters(expression: Filter): Option[Filter] = {
-    performFilter(expression, canPartialPushDownConjuncts = true)
-  }
-
   /**
    * Builds a SearchArgument for a Filter by first trimming the non-convertible nodes, and then
    * only building the remaining convertible nodes.
@@ -144,6 +140,17 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
       builder
     }
   }
+
+  private[sql] def trimUnconvertibleFilters(expression: Filter): Option[Filter] = {
+    performAction(TrimUnconvertibleFilters(canPartialPushDownConjuncts = true), expression)
+  }
+
+  /**
+   * Builds a SearchArgument for the given Filter. This method should only be called on Filters
+   * that have previously been trimmed to remove unsupported sub-Filters!
+   */
+  private def updateBuilder(expression: Filter, builder: Builder): Unit =
+    performAction(BuildSearchArgument(builder), expression)
 
   sealed trait ActionType[ReturnType]
   case class TrimUnconvertibleFilters(canPartialPushDownConjuncts: Boolean)
@@ -191,10 +198,10 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
               case (None, Some(_)) if canPartialPushDownConjuncts => rhs
               case _ => None
             }
-          case BuildSearchArgument(builder) =>
+          case b @ BuildSearchArgument(builder) =>
             builder.startAnd()
-            updateBuilder(left, builder)
-            updateBuilder(right, builder)
+            performAction(b, left)
+            performAction(b, right)
             builder.end()
             ()
         }
@@ -217,10 +224,10 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
               lhs: Filter <- performAction(t, left)
               rhs: Filter <- performAction(t, right)
             } yield Or(lhs, rhs)
-          case BuildSearchArgument(builder) =>
+          case b @ BuildSearchArgument(builder) =>
             builder.startOr()
-            updateBuilder(left, builder)
-            updateBuilder(right, builder)
+            performAction(b, left)
+            performAction(b, right)
             builder.end()
             ()
         }
@@ -229,9 +236,9 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         actionType match {
           case t: TrimUnconvertibleFilters =>
             performAction(t.copy(canPartialPushDownConjuncts = false), child).map(Not)
-          case BuildSearchArgument(builder) =>
+          case b @ BuildSearchArgument(builder) =>
             builder.startNot()
-            updateBuilder(child, builder)
+            performAction(b, child)
             builder.end()
             ()
         }
@@ -329,17 +336,5 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
         }
     }
   }
-
-  private def performFilter(
-      expression: Filter,
-      canPartialPushDownConjuncts: Boolean): Option[Filter] =
-    performAction(TrimUnconvertibleFilters(canPartialPushDownConjuncts), expression)
-
-  /**
-   * Builds a SearchArgument for the given Filter. This method should only be called on Filters
-   * that have previously been trimmed to remove unsupported sub-Filters!
-   */
-  private def updateBuilder(expression: Filter, builder: Builder): Unit =
-    performAction(BuildSearchArgument(builder), expression)
 }
 
