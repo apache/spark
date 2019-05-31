@@ -67,10 +67,10 @@ class ErrorParserSuite extends SparkFunSuite {
   test("hyphen in identifier - DDL tests") {
     val msg = "unquoted identifier"
     // ddl tests
-    intercept("use test-test", 1, 4, 9, msg, "^^^")
-    intercept("CREATE TABLE test (attri-bute INT)", 1, 19, 25, msg, "^^^")
-    intercept("CREATE TABLE test (attri-bute INT)", 1, 19, 25, msg, "^^^")
-    intercept("ALTER TABLE test ADD COLUMNS (h-col BIGINT)", 1, 30, 32, msg, "^^^")
+    intercept("use test-test", 1, 8, 9, msg + " test-test", "^^^")
+    intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute", "^^^")
+    intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute", "^^^")
+    intercept("ALTER TABLE test ADD COLUMNS (h-col BIGINT)", 1, 31, 32, msg + " h-col", "^^^")
     intercept(
       """
         |CREATE TABLE IF NOT EXISTS mydb.page-view
@@ -78,17 +78,17 @@ class ErrorParserSuite extends SparkFunSuite {
         |COMMENT 'This is the staging page view table'
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src""".stripMargin, 2, 32, 37, msg, "^^^")
+        |AS SELECT * FROM src""".stripMargin, 2, 36, 37, msg + " page-view", "^^^")
   }
 
   test("hyphen in identifier - DML tests") {
     val msg = "unquoted identifier"
     // dml tests
-    intercept("SELECT * FROM table-with-hyphen", 1, 14, 25, msg, "^^^")
+    intercept("SELECT * FROM table-with-hyphen", 1, 19, 25, msg + " table-with-hyphen", "^^^")
     // special test case: minus in expression shouldn't be treated as hyphen in identifiers
-    intercept("SELECT a-b FROM table-with-hyphen", 1, 16, 27, msg, "^^^")
-    intercept("SELECT a-b FROM table-with-hyphen WHERE a-b = 0", 1, 16, 27, msg, "^^^")
-    intercept("SELECT (a - test_func(b-c)) FROM test-table", 1, 33, 38, msg, "^^^")
+    intercept("SELECT a-b FROM table-with-hyphen", 1, 21, 27, msg + " table-with-hyphen", "^^^")
+    intercept("SELECT a-b FROM table-hyphen WHERE a-b = 0", 1, 21, 22, msg + " table-hyphen", "^^^")
+    intercept("SELECT (a - test_func(b-c)) FROM test-table", 1, 37, 38, msg + " test-table", "^^^")
     intercept(
       """
         |SELECT a, b
@@ -96,14 +96,14 @@ class ErrorParserSuite extends SparkFunSuite {
         |WHERE a-b > 10
         |GROUP BY fake-breaker
         |ORDER BY c
-      """.stripMargin, 3, 5, 13, msg, "^^^"
+      """.stripMargin, 3, 12, 13, msg + " grammar-breaker", "^^^"
     )
     intercept(
       """
         |SELECT * FROM tab
         |window hyphen-window as
         |  (partition by a, b order by c rows between 1 preceding and 1 following)
-      """.stripMargin, 3, 7, 14, msg, "^^^"
+      """.stripMargin, 3, 13, 14, msg + " hyphen-window", "^^^"
     )
   }
 }

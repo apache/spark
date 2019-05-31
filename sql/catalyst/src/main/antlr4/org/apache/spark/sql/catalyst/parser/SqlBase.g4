@@ -82,7 +82,7 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE db=errorCapturingIdentifier                                         #use
+    | USE db=errorCapturingIdentifier                                  #use
     | CREATE database (IF NOT EXISTS)? errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
@@ -114,7 +114,9 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (errorCapturingIdentifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+        (errorCapturingIdentifier |
+        FOR COLUMNS identifierSeq |
+        FOR ALL COLUMNS)?                                              #analyze
     | ALTER TABLE tableIdentifier
         ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -124,7 +126,7 @@ statement
     | ALTER (TABLE | VIEW) tableIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN? errorCapturingIdentifier colType colPosition?                 #changeColumn
+        CHANGE COLUMN? errorCapturingIdentifier colType colPosition?   #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -167,13 +169,13 @@ statement
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
-        ((FROM | IN) db=errorCapturingIdentifier)?                            #showColumns
+        ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW errorCapturingIdentifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) database EXTENDED? errorCapturingIdentifier           #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? errorCapturingIdentifier    #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
@@ -187,7 +189,7 @@ statement
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
     | MSCK REPAIR TABLE tableIdentifier                                #repairTable
-    | op=(ADD | LIST) errorCapturingIdentifier .*?                            #manageResource
+    | op=(ADD | LIST) errorCapturingIdentifier .*?                     #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
@@ -349,7 +351,7 @@ createFileFormat
 
 fileFormat
     : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING    #tableFileFormat
-    | errorCapturingIdentifier                                      #genericFileFormat
+    | errorCapturingIdentifier                               #genericFileFormat
     ;
 
 storageHandler
@@ -509,7 +511,7 @@ sampleMethod
     : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
     | expression ROWS                                                             #sampleByRows
     | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
-        (ON (errorCapturingIdentifier | qualifiedName '(' ')'))?                                #sampleByBucket
+        (ON (errorCapturingIdentifier | qualifiedName '(' ')'))?                  #sampleByBucket
     | bytes=expression                                                            #sampleByBytes
     ;
 
@@ -788,10 +790,14 @@ qualifiedName
     : identifier ('.' identifier)*
     ;
 
-// rule ordering is important here to make the SLL parser happy
 errorCapturingIdentifier
-    : identifier (MINUS identifier?)+           #errorIdent
-    | identifier                                #realIdent
+    : identifier errorCapturingIdentifierExtra
+    ;
+
+// extrq grammer for left refactoring
+errorCapturingIdentifierExtra
+    : (MINUS identifier)+    #errorIdent
+    |                        #realIdent
     ;
 
 identifier
