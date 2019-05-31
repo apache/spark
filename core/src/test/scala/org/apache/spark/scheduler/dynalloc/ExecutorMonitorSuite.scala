@@ -227,6 +227,32 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
   }
 
+  test("track executors pending for removal") {
+    knownExecs ++= Set("1", "2", "3")
+
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", null))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", null))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "3", null))
+    clock.setTime(idleDeadline)
+    assert(monitor.timedOutExecutors().toSet === Set("1", "2", "3"))
+    assert(monitor.pendingRemovalCount === 0)
+
+    monitor.executorsKilled(Seq("1"))
+    assert(monitor.timedOutExecutors().toSet === Set("2", "3"))
+    assert(monitor.pendingRemovalCount === 1)
+
+    monitor.onTaskStart(SparkListenerTaskStart(1, 1, taskInfo("2", 1)))
+    assert(monitor.timedOutExecutors().toSet === Set("3"))
+
+    monitor.executorsKilled(Seq("3"))
+    assert(monitor.pendingRemovalCount === 2)
+
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("2", 1), null))
+    assert(monitor.timedOutExecutors().isEmpty)
+    clock.advance(idleDeadline)
+    assert(monitor.timedOutExecutors().toSet === Set("2"))
+  }
+
   private def idleDeadline: Long = clock.getTimeMillis() + idleTimeoutMs + 1
   private def storageDeadline: Long = clock.getTimeMillis() + storageTimeoutMs + 1
 
