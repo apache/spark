@@ -47,14 +47,11 @@ private[spark] class ExecutorMonitor(
 
   private val executors = new ConcurrentHashMap[String, Tracker]()
 
-  // The following fields are an optimization to avoid having to scan all executors on every EAM
-  // schedule interval to find out which ones are timed out. They keep track of when the next
-  // executor timeout is expected to happen, and the current list of timed out executors. There's
-  // also a flag that forces the EAM task to recompute the timed out executors, in case some event
-  // arrives on the listener bus that may cause the current list of timed out executors to change.
+  // Keep track of the time the next executor is expected to time out. This is an optimization to
+  // avoid having to scan all executors on every EAM schedule interval.
   //
-  // There's also per-executor state used for this purpose, so that recomputations can be triggered
-  // only when really necessary.
+  // There's also some per-executor state used to decide when to update this value, so that
+  // recomputations can be triggered only when really necessary.
   //
   // Note that this isn't meant to, and cannot, always make the right decision about which executors
   // are indeed timed out. For example, the EAM thread may detect a timed out executor while a new
@@ -62,12 +59,10 @@ private[spark] class ExecutorMonitor(
   // this listener. There are safeguards in other parts of the code that would prevent that executor
   // from being removed.
   private var nextTimeout = new AtomicLong(Long.MaxValue)
-  private var timedOutExecs = Seq.empty[String]
 
   def reset(): Unit = {
     executors.clear()
     nextTimeout.set(Long.MaxValue)
-    timedOutExecs = Nil
   }
 
   /**
@@ -84,7 +79,7 @@ private[spark] class ExecutorMonitor(
       nextTimeout.set(Long.MaxValue)
 
       var newNextTimeout = Long.MaxValue
-      timedOutExecs = executors.asScala
+      val timedOutExecs = executors.asScala
         .filter { case (_, exec) => !exec.pendingRemoval }
         .filter { case (_, exec) =>
           val deadline = exec.timeoutAt
@@ -99,9 +94,12 @@ private[spark] class ExecutorMonitor(
         }
         .keys
         .toSeq
+
       updateNextTimeout(newNextTimeout)
+      timedOutExecs
+    } else {
+      Nil
     }
-    timedOutExecs
   }
 
   /**
@@ -115,8 +113,8 @@ private[spark] class ExecutorMonitor(
       }
     }
 
-    // Recompute timed out executors in the next EAM callback, since this call invalidates
-    // the current list.
+    // Recompute timed out executors in the next EAM callback, since in the case where the CGSB
+    // does not kill a timed out executor, the next timeout value becomes invalid.
     nextTimeout.set(Long.MinValue)
   }
 
