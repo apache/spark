@@ -468,7 +468,13 @@ private[hive] case class HiveUDAFFunction(
   }
 
   override def eval(buffer: HiveUDAFBuffer): Any = {
-    resultUnwrapper(finalHiveEvaluator.evaluator.terminate(buffer.buf))
+    resultUnwrapper(finalHiveEvaluator.evaluator.terminate(
+      if (buffer == null) {
+        HiveUDAFBuffer(partial1HiveEvaluator.evaluator.getNewAggregationBuffer, false).buf
+      } else {
+        buffer.buf
+      }
+    ))
   }
 
   override def serialize(buffer: HiveUDAFBuffer): Array[Byte] = {
