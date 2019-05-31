@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
@@ -27,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
@@ -44,6 +46,30 @@ case class SortMergeJoinExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  override def simpleString(maxFields: Int): String = {
+    s"$nodeName $joinType"
+  }
+
+  override def simpleString(planLabelMap: mutable.LinkedHashMap[TreeNode[_], Int]): String = {
+    val label = planLabelMap.get(this).getOrElse(-1)
+    s"$nodeName $joinType ($label)".trim
+  }
+
+  override def verboseString(
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      codegenId: Option[Int]): String = {
+    val joinCondStr = if (condition.isDefined) {
+      s"${condition.get}"
+    } else "None"
+
+    s"""
+       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |Left keys : ${leftKeys}
+       |Right keys: ${rightKeys}
+       |Join condition : ${joinCondStr}
+     """.stripMargin
+  }
 
   override def output: Seq[Attribute] = {
     joinType match {

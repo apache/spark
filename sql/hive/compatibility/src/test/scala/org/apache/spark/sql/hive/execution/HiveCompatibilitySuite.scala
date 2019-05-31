@@ -41,6 +41,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
   private val originalSessionLocalTimeZone = TestHive.conf.sessionLocalTimeZone
+  private val originalExplainSetting = TestHive.conf.sqlExplainLegacyFormat
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -62,6 +63,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
     // (timestamp_*)
     TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "America/Los_Angeles")
+    TestHive.setConf(SQLConf.SQL_EXPLAIN_LEGACY_FORMAT, true)
     RuleExecutor.resetMetrics()
   }
 
@@ -74,6 +76,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
+      TestHive.setConf(SQLConf.SQL_EXPLAIN_LEGACY_FORMAT, originalExplainSetting)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())

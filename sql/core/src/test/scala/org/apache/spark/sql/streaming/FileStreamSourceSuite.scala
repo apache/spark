@@ -1145,38 +1145,40 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("explain") {
-    withTempDirs { case (src, tmp) =>
-      src.mkdirs()
+    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
+      withTempDirs { case (src, tmp) =>
+        src.mkdirs()
 
-      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
-      // Test `explain` not throwing errors
-      df.explain()
+        val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+        // Test `explain` not throwing errors
+        df.explain()
 
-      val q = df.writeStream.queryName("file_explain").format("memory").start()
-        .asInstanceOf[StreamingQueryWrapper]
-        .streamingQuery
-      try {
-        assert("No physical plan. Waiting for data." === q.explainInternal(false))
-        assert("No physical plan. Waiting for data." === q.explainInternal(true))
+        val q = df.writeStream.queryName("file_explain").format("memory").start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+        try {
+          assert("No physical plan. Waiting for data." === q.explainInternal(false))
+          assert("No physical plan. Waiting for data." === q.explainInternal(true))
 
-        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
-        val finalFile = new File(src, tempFile.getName)
-        require(stringToFile(tempFile, "foo").renameTo(finalFile))
+          val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+          val finalFile = new File(src, tempFile.getName)
+          require(stringToFile(tempFile, "foo").renameTo(finalFile))
 
-        q.processAllAvailable()
+          q.processAllAvailable()
 
-        val explainWithoutExtended = q.explainInternal(false)
-        // `extended = false` only displays the physical plan.
-        assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
-        assert(": Text".r.findAllMatchIn(explainWithoutExtended).size === 1)
+          val explainWithoutExtended = q.explainInternal(false)
+          // `extended = false` only displays the physical plan.
+          assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
+          assert(": Text".r.findAllMatchIn(explainWithoutExtended).size === 1)
 
-        val explainWithExtended = q.explainInternal(true)
-        // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
-        // plan.
-        assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
-        assert(": Text".r.findAllMatchIn(explainWithExtended).size === 1)
-      } finally {
-        q.stop()
+          val explainWithExtended = q.explainInternal(true)
+          // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+          // plan.
+          assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
+          assert(": Text".r.findAllMatchIn(explainWithExtended).size === 1)
+        } finally {
+          q.stop()
+        }
       }
     }
   }

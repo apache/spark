@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.ThreadUtils
@@ -80,6 +82,16 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def verboseString(
+    planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+    codegenId: Option[Int]): String = {
+    s"""
+       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |Output    : ${projectList.mkString("[", ", ", "]")}
+       |Input     : ${child.output.mkString("[", ", ", "]")}
+     """.stripMargin
+  }
 }
 
 
@@ -226,6 +238,16 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def verboseString(
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      codegenId: Option[Int]): String = {
+    s"""
+       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |Input     : ${child.output.mkString("[", ", ", "]")}
+       |Condition : ${condition}
+     """.stripMargin
+  }
 }
 
 /**
@@ -682,6 +704,28 @@ abstract class BaseSubqueryExec extends SparkPlan {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def generateTreeString(
+    depth: Int,
+    lastChildren: Seq[Boolean],
+    append: String => Unit,
+    verbose: Boolean,
+    prefix: String = "",
+    addSuffix: Boolean = false,
+    maxFields: Int,
+    planLabelMap: mutable.LinkedHashMap[TreeNode[_], Int]): Unit = {
+    if (planLabelMap.isEmpty) {
+      super.generateTreeString(
+        depth,
+        lastChildren,
+        append,
+        verbose,
+        "",
+        false,
+        maxFields,
+        planLabelMap)
+    }
+  }
 }
 
 /**

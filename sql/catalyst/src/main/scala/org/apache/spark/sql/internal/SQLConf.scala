@@ -1529,6 +1529,16 @@ object SQLConf {
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
 
+  val SQL_EXPLAIN_LEGACY_FORMAT =
+    buildConf("spark.sql.explain.legacy.format")
+      .doc("When this option is set to true, explain command outputs the physical plan" +
+        "where each operator is displayed with its argument information. When set to false " +
+        "the physical plan is displayed in two parts. First part describes the main layout of  " +
+        "the plan in tree form with minimalistic information about each operator. The second part" +
+        "describes each operator in a verbose way with its arguments")
+      .booleanConf
+      .createWithDefault(false)
+
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
       "an output as binary. Otherwise, it returns as a string. ")
@@ -2419,6 +2429,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
+
+  def sqlExplainLegacyFormat: Boolean = getConf(SQLConf.SQL_EXPLAIN_LEGACY_FORMAT)
 
   /** ********************** SQLConf functionality methods ************ */
 

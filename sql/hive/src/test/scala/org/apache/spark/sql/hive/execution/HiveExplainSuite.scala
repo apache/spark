@@ -65,87 +65,93 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("explain extended command") {
-    checkKeywordsExist(sql(" explain   select * from src where key=123 "),
-                   "== Physical Plan ==",
-                   "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
+      checkKeywordsExist(sql(" explain   select * from src where key=123 "),
+        "== Physical Plan ==",
+        "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
 
-    checkKeywordsNotExist(sql(" explain   select * from src where key=123 "),
-                   "== Parsed Logical Plan ==",
-                   "== Analyzed Logical Plan ==",
-                   "== Optimized Logical Plan ==",
-                   "Owner",
-                   "Database",
-                   "Created",
-                   "Last Access",
-                   "Type",
-                   "Provider",
-                   "Properties",
-                   "Statistics",
-                   "Location",
-                   "Serde Library",
-                   "InputFormat",
-                   "OutputFormat",
-                   "Partition Provider",
-                   "Schema"
-    )
+      checkKeywordsNotExist(sql(" explain   select * from src where key=123 "),
+        "== Parsed Logical Plan ==",
+        "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==",
+        "Owner",
+        "Database",
+        "Created",
+        "Last Access",
+        "Type",
+        "Provider",
+        "Properties",
+        "Statistics",
+        "Location",
+        "Serde Library",
+        "InputFormat",
+        "OutputFormat",
+        "Partition Provider",
+        "Schema"
+      )
 
-    checkKeywordsExist(sql(" explain   extended select * from src where key=123 "),
-                   "== Parsed Logical Plan ==",
-                   "== Analyzed Logical Plan ==",
-                   "== Optimized Logical Plan ==",
-                   "== Physical Plan ==")
+      checkKeywordsExist(sql(" explain   extended select * from src where key=123 "),
+        "== Parsed Logical Plan ==",
+        "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==",
+        "== Physical Plan ==")
+    }
   }
 
   test("explain create table command") {
-    checkKeywordsExist(sql("explain create table temp__b as select * from src limit 2"),
-                   "== Physical Plan ==",
-                   "InsertIntoHiveTable",
-                   "Limit",
-                   "src")
+    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
+      checkKeywordsExist(sql("explain create table temp__b as select * from src limit 2"),
+        "== Physical Plan ==",
+        "InsertIntoHiveTable",
+        "Limit",
+        "src")
 
-    checkKeywordsExist(sql("explain extended create table temp__b as select * from src limit 2"),
-      "== Parsed Logical Plan ==",
-      "== Analyzed Logical Plan ==",
-      "== Optimized Logical Plan ==",
-      "== Physical Plan ==",
-      "CreateHiveTableAsSelect",
-      "InsertIntoHiveTable",
-      "Limit",
-      "src")
+      checkKeywordsExist(sql("explain extended create table temp__b as select * from src limit 2"),
+        "== Parsed Logical Plan ==",
+        "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==",
+        "== Physical Plan ==",
+        "CreateHiveTableAsSelect",
+        "InsertIntoHiveTable",
+        "Limit",
+        "src")
 
-    checkKeywordsExist(sql(
-      """
-        | EXPLAIN EXTENDED CREATE TABLE temp__b
-        | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
-        | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
-        | STORED AS RCFile
-        | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-        | AS SELECT * FROM src LIMIT 2
-      """.stripMargin),
-      "== Parsed Logical Plan ==",
-      "== Analyzed Logical Plan ==",
-      "== Optimized Logical Plan ==",
-      "== Physical Plan ==",
-      "CreateHiveTableAsSelect",
-      "InsertIntoHiveTable",
-      "Limit",
-      "src")
+      checkKeywordsExist(sql(
+        """
+          | EXPLAIN EXTENDED CREATE TABLE temp__b
+          | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+          | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+          | STORED AS RCFile
+          | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+          | AS SELECT * FROM src LIMIT 2
+        """.stripMargin),
+        "== Parsed Logical Plan ==",
+        "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==",
+        "== Physical Plan ==",
+        "CreateHiveTableAsSelect",
+        "InsertIntoHiveTable",
+        "Limit",
+        "src")
+    }
   }
 
   test("explain output of physical plan should contain proper codegen stage ID") {
-    checkKeywordsExist(sql(
-      """
-        |EXPLAIN SELECT t1.id AS a, t2.id AS b FROM
-        |(SELECT * FROM range(3)) t1 JOIN
-        |(SELECT * FROM range(10)) t2 ON t1.id == t2.id % 3
-      """.stripMargin),
-      "== Physical Plan ==",
-      "*(2) Project ",
-      "+- *(2) BroadcastHashJoin ",
-      "   :- BroadcastExchange ",
-      "   :  +- *(1) Range ",
-      "   +- *(2) Range "
-    )
+    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
+      checkKeywordsExist(sql(
+        """
+          |EXPLAIN SELECT t1.id AS a, t2.id AS b FROM
+          |(SELECT * FROM range(3)) t1 JOIN
+          |(SELECT * FROM range(10)) t2 ON t1.id == t2.id % 3
+        """.stripMargin),
+        "== Physical Plan ==",
+        "*(2) Project ",
+        "+- *(2) BroadcastHashJoin ",
+        "   :- BroadcastExchange ",
+        "   :  +- *(1) Range ",
+        "   +- *(2) Range "
+      )
+    }
   }
 
   test("EXPLAIN CODEGEN command") {
@@ -188,22 +194,24 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("SPARK-26661: Show actual class name of the writing command in CTAS explain") {
-    Seq(true, false).foreach { convertCTAS =>
-      withSQLConf(
+    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
+      Seq(true, false).foreach { convertCTAS =>
+        withSQLConf(
           HiveUtils.CONVERT_METASTORE_CTAS.key -> convertCTAS.toString,
           HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertCTAS.toString) {
 
-        val df = sql(s"EXPLAIN CREATE TABLE tab1 STORED AS PARQUET AS SELECT * FROM range(2)")
-        val keywords = if (convertCTAS) {
-          Seq(
-            s"Execute ${Utils.getSimpleName(classOf[OptimizedCreateHiveTableAsSelectCommand])}",
-            Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand]))
-        } else {
-          Seq(
-            s"Execute ${Utils.getSimpleName(classOf[CreateHiveTableAsSelectCommand])}",
-            Utils.getSimpleName(classOf[InsertIntoHiveTable]))
+          val df = sql(s"EXPLAIN CREATE TABLE tab1 STORED AS PARQUET AS SELECT * FROM range(2)")
+          val keywords = if (convertCTAS) {
+            Seq(
+              s"Execute ${Utils.getSimpleName(classOf[OptimizedCreateHiveTableAsSelectCommand])}",
+              Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand]))
+          } else {
+            Seq(
+              s"Execute ${Utils.getSimpleName(classOf[CreateHiveTableAsSelectCommand])}",
+              Utils.getSimpleName(classOf[InsertIntoHiveTable]))
+          }
+          checkKeywordsExist(df, keywords: _*)
         }
-        checkKeywordsExist(df, keywords: _*)
       }
     }
   }

@@ -534,11 +534,26 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     s"$nodeName ${argString(maxFields)}".trim
   }
 
+  def simpleString(planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int]): String = {
+    val operatorID = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
+    s"$nodeName ($operatorID)".trim
+  }
+
   /** ONE line description of this node with more information */
   def verboseString(maxFields: Int): String
 
   /** ONE line description of this node with some suffix information */
   def verboseStringWithSuffix(maxFields: Int): String = verboseString(maxFields)
+
+  def verboseString(
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      wholeStageCodegenId: Option[Int]): String = {
+    val codegenIdStr = wholeStageCodegenId.map("[codegen id : " + _ + "]").getOrElse("")
+    val opId = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
+    s"""
+       |($opId) $nodeName $codegenIdStr
+     """.stripMargin
+  }
 
   override def toString: String = treeString
 
@@ -551,7 +566,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       maxFields: Int = SQLConf.get.maxToStringFields): String = {
     val concat = new PlanStringConcat()
 
-    treeString(concat.append, verbose, addSuffix, maxFields)
+    treeString(concat.append, verbose, addSuffix, maxFields, mutable.LinkedHashMap.empty)
     concat.toString
   }
 
@@ -559,8 +574,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       append: String => Unit,
       verbose: Boolean,
       addSuffix: Boolean,
-      maxFields: Int): Unit = {
-    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields)
+      maxFields: Int,
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int] ): Unit = {
+    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, planToOperatorID)
   }
 
   /**
@@ -609,7 +625,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * All the nodes that should be shown as a inner nested tree of this node.
    * For example, this can be used to show sub-queries.
    */
-  protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
+  def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
   /**
    * Appends the string representation of this node and its children to the given Writer.
@@ -627,7 +643,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
+      maxFields: Int,
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int]): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -639,7 +656,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val str = if (verbose) {
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
     } else {
-      simpleString(maxFields)
+      if (planToOperatorID.isEmpty) {
+        simpleString(maxFields)
+      } else {
+        simpleString(planToOperatorID)
+      }
     }
     append(prefix)
     append(str)
@@ -648,17 +669,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields))
+        addSuffix = addSuffix, maxFields = maxFields, planToOperatorID = planToOperatorID))
       innerChildren.last.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields)
+        addSuffix = addSuffix, maxFields = maxFields, planToOperatorID = planToOperatorID)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix, maxFields))
+        depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix,
+        maxFields, planToOperatorID)
+      )
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, append, verbose, prefix, addSuffix, maxFields)
+        depth + 1, lastChildren :+ true, append, verbose, prefix,
+        addSuffix, maxFields, planToOperatorID)
     }
   }
 

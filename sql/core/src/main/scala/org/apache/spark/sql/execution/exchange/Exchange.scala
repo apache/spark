@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -85,6 +86,22 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
 
   override def outputOrdering: Seq[SortOrder] = {
     child.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
+  }
+
+  override def verboseString(
+    planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+    codegenId: Option[Int]): String = {
+    val cdgen = wholestageCodegenIdStr(codegenId)
+    val reuse_op = planToOperatorID.get(child)
+    val reuse_op_str = if (reuse_op.isDefined) {
+      s"${reuse_op.get}"
+    } else {
+      "unknown"
+    }
+    s"""
+       |(${operatorIdStr(planToOperatorID)}) $nodeName ${cdgen} [Reuses operator id: $reuse_op_str]
+       |Output : ${output}
+     """.stripMargin
   }
 }
 

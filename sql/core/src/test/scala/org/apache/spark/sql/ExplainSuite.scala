@@ -23,6 +23,17 @@ import org.apache.spark.sql.types.StructType
 
 class ExplainSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+  var savedExplanFormat = "true"
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    savedExplanFormat = spark.sqlContext.getConf("spark.sql.explain.legacy.format")
+    spark.sqlContext.setConf("spark.sql.explain.legacy.format", "true")
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.sqlContext.setConf("spark.sql.explain.legacy.format", savedExplanFormat)
+    super.afterAll()
+  }
 
   /**
    * Get the explain from a DataFrame and run the specified action on it.

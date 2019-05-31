@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
@@ -36,6 +39,26 @@ trait HashJoin {
   val condition: Option[Expression]
   val left: SparkPlan
   val right: SparkPlan
+
+  override def simpleString(planLabelMap: mutable.LinkedHashMap[TreeNode[_], Int]): String = {
+    val label = planLabelMap.get(this).getOrElse(-1)
+    s"$nodeName $joinType ${buildSide} ($label)".trim
+  }
+
+  override def verboseString(
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      codegenId: Option[Int]): String = {
+    val joinCondStr = if (condition.isDefined) {
+      s"${condition.get}"
+    } else "None"
+
+    s"""
+       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |Left keys: ${leftKeys}
+       |Right keys: ${rightKeys}
+       |Join condition: ${joinCondStr}
+     """.stripMargin
+  }
 
   override def output: Seq[Attribute] = {
     joinType match {

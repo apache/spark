@@ -70,7 +70,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
     cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
+  override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 

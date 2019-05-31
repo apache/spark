@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredic
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
@@ -71,6 +73,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   val id: Int = SparkPlan.newPlanId()
+
+  /**
+   * ONE line description of this node.
+   */
+  override def simpleString(planLabelMap: mutable.LinkedHashMap[TreeNode[_], Int]): String = {
+    s"$nodeName (${operatorIdStr(planLabelMap)})".trim
+  }
+
+  protected def wholestageCodegenIdStr(codegenId: Option[Int]): String = {
+    codegenId.map("[codegen id : " + _ + "]").getOrElse("")
+  }
+
+  protected def operatorIdStr(
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int]): String = {
+    planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
+  }
 
   // sqlContext will be null when SparkPlan nodes are created without the active sessions.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
@@ -511,6 +529,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 trait LeafExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
+  override def verboseString(
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      codegenId: Option[Int]): String = {
+    s"""
+       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+     """.stripMargin
+  }
 }
 
 object UnaryExecNode {
@@ -524,6 +550,14 @@ trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override final def children: Seq[SparkPlan] = child :: Nil
+  override def verboseString(
+      planToOperatorID : mutable.LinkedHashMap[TreeNode[_], Int],
+      codegenId: Option[Int]): String = {
+    s"""
+       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |Input: ${child.output.mkString("[", ", ", "]")}
+     """.stripMargin
+  }
 }
 
 trait BinaryExecNode extends SparkPlan {
@@ -531,4 +565,13 @@ trait BinaryExecNode extends SparkPlan {
   def right: SparkPlan
 
   override final def children: Seq[SparkPlan] = Seq(left, right)
+  override def verboseString(
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      codegenId: Option[Int]): String = {
+    s"""
+       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |Left output: ${left.output.mkString("[", ", ", "]")}
+       |Right output: ${right.output.mkString("[", ", ", "]")}
+     """.stripMargin
+  }
 }
