@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.StructType
  * Common functions for parsing CSV files
  */
 abstract class CSVDataSource extends Serializable {
-  def isSplitable: Boolean
+  def isSplittable: Boolean
 
   /**
    * Parse a [[PartitionedFile]] into [[InternalRow]] instances.
@@ -87,7 +87,7 @@ object CSVDataSource extends Logging {
 }
 
 object TextInputCSVDataSource extends CSVDataSource {
-  override val isSplitable: Boolean = true
+  override val isSplittable: Boolean = true
 
   override def readFile(
       conf: Configuration,
@@ -170,7 +170,7 @@ object TextInputCSVDataSource extends CSVDataSource {
 }
 
 object MultiLineCSVDataSource extends CSVDataSource {
-  override val isSplitable: Boolean = false
+  override val isSplittable: Boolean = false
 
   override def readFile(
       conf: Configuration,

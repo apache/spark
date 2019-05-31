@@ -35,7 +35,7 @@ abstract class TextBasedFileScan(
   extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
   private var codecFactory: CompressionCodecFactory = _
 
-  override def isSplitable(path: Path): Boolean = {
+  override def isSplittable(path: Path): Boolean = {
     if (codecFactory == null) {
       codecFactory = new CompressionCodecFactory(
         sparkSession.sessionState.newHadoopConfWithOptions(options.asScala.toMap))

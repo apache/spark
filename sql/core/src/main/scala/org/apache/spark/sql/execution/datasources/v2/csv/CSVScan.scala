@@ -46,8 +46,8 @@ case class CSVScan(
     sparkSession.sessionState.conf.sessionLocalTimeZone,
     sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-  override def isSplitable(path: Path): Boolean = {
-    CSVDataSource(parsedOptions).isSplitable && super.isSplitable(path)
+  override def isSplittable(path: Path): Boolean = {
+    CSVDataSource(parsedOptions).isSplittable && super.isSplittable(path)
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {

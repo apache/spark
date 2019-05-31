@@ -94,7 +94,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
   test("BinaryFileFormat methods") {
     val format = new BinaryFileFormat
     assert(format.shortName() === "binaryFile")
-    assert(format.isSplitable(spark, Map.empty, new Path("any")) === false)
+    assert(format.isSplittable(spark, Map.empty, new Path("any")) === false)
     assert(format.inferSchema(spark, Map.empty, Seq.empty) === Some(BinaryFileFormat.schema))
     assert(BinaryFileFormat.schema === StructType(Seq(
       StructField("path", StringType, false),

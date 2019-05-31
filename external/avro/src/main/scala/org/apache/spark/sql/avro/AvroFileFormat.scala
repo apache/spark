@@ -130,7 +130,7 @@ private[avro] class AvroFileFormat extends FileFormat
 
   override def toString(): String = "Avro"
 
-  override def isSplitable(
+  override def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = true

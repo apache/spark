@@ -71,7 +71,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
     throw new UnsupportedOperationException("Write is not supported for binary file data source")
   }
 
-  override def isSplitable(
+  override def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {

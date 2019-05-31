@@ -46,8 +46,8 @@ case class JsonScan(
     sparkSession.sessionState.conf.sessionLocalTimeZone,
     sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-  override def isSplitable(path: Path): Boolean = {
-    JsonDataSource(parsedOptions).isSplitable && super.isSplitable(path)
+  override def isSplittable(path: Path): Boolean = {
+    JsonDataSource(parsedOptions).isSplittable && super.isSplittable(path)
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {

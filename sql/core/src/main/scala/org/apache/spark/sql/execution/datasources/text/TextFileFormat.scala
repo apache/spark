@@ -49,12 +49,12 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
   }
 
-  override def isSplitable(
+  override def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
     val textOptions = new TextOptions(options)
-    super.isSplitable(sparkSession, options, path) && !textOptions.wholeText
+    super.isSplittable(sparkSession, options, path) && !textOptions.wholeText
   }
 
   override def inferSchema(

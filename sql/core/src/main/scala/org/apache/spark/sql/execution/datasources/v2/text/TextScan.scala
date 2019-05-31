@@ -40,8 +40,8 @@ case class TextScan(
   private val optionsAsScala = options.asScala.toMap
   private lazy val textOptions: TextOptions = new TextOptions(optionsAsScala)
 
-  override def isSplitable(path: Path): Boolean = {
-    super.isSplitable(path) && !textOptions.wholeText
+  override def isSplittable(path: Path): Boolean = {
+    super.isSplittable(path) && !textOptions.wholeText
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {

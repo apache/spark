@@ -79,7 +79,7 @@ trait FileFormat {
   /**
    * Returns whether a file with `path` could be split or not.
    */
-  def isSplitable(
+  def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
@@ -170,7 +170,7 @@ trait FileFormat {
 abstract class TextBasedFileFormat extends FileFormat {
   private var codecFactory: CompressionCodecFactory = _
 
-  override def isSplitable(
+  override def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {

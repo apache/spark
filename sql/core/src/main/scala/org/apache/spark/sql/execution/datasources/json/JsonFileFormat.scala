@@ -37,7 +37,7 @@ import org.apache.spark.util.SerializableConfiguration
 class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override val shortName: String = "json"
 
-  override def isSplitable(
+  override def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
@@ -46,7 +46,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val jsonDataSource = JsonDataSource(parsedOptions)
-    jsonDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
+    jsonDataSource.isSplittable && super.isSplittable(sparkSession, options, path)
   }
 
   override def inferSchema(

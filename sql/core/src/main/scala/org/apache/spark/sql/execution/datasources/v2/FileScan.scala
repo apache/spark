@@ -40,7 +40,7 @@ abstract class FileScan(
   /**
    * Returns whether a file with `path` could be split or not.
    */
-  def isSplitable(path: Path): Boolean = {
+  def isSplittable(path: Path): Boolean = {
     false
   }
 
@@ -85,7 +85,7 @@ abstract class FileScan(
           sparkSession = sparkSession,
           file = file,
           filePath = filePath,
-          isSplitable = isSplitable(filePath),
+          isSplittable = isSplittable(filePath),
           maxSplitBytes = maxSplitBytes,
           partitionValues = partitionValues
         )

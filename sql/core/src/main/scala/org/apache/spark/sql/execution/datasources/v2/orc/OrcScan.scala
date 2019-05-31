@@ -38,7 +38,7 @@ case class OrcScan(
     options: CaseInsensitiveStringMap,
     pushedFilters: Array[Filter])
   extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
-  override def isSplitable(path: Path): Boolean = true
+  override def isSplittable(path: Path): Boolean = true
 
   override def createReaderFactory(): PartitionReaderFactory = {
     val broadcastedConf = sparkSession.sparkContext.broadcast(

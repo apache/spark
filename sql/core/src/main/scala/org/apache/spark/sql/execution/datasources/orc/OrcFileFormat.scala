@@ -139,7 +139,7 @@ class OrcFileFormat
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
-  override def isSplitable(
+  override def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {

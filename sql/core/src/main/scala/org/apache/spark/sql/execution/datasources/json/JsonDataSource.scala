@@ -46,7 +46,7 @@ import org.apache.spark.util.Utils
  * Common functions for parsing JSON files
  */
 abstract class JsonDataSource extends Serializable {
-  def isSplitable: Boolean
+  def isSplittable: Boolean
 
   /**
    * Parse a [[PartitionedFile]] into 0 or more [[InternalRow]] instances
@@ -85,7 +85,7 @@ object JsonDataSource {
 }
 
 object TextInputJsonDataSource extends JsonDataSource {
-  override val isSplitable: Boolean = {
+  override val isSplittable: Boolean = {
     // splittable if the underlying source is
     true
   }
@@ -150,7 +150,7 @@ object TextInputJsonDataSource extends JsonDataSource {
 }
 
 object MultiLineJsonDataSource extends JsonDataSource {
-  override val isSplitable: Boolean = {
+  override val isSplittable: Boolean = {
     false
   }
 

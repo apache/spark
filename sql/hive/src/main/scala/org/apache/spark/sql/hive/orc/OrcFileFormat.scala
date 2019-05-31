@@ -115,7 +115,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     }
   }
 
-  override def isSplitable(
+  override def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {

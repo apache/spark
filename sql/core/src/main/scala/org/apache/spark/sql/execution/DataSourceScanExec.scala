@@ -429,13 +429,13 @@ case class FileSourceScanExec(
       partition.files.flatMap { file =>
         // getPath() is very expensive so we only want to call it once in this block:
         val filePath = file.getPath
-        val isSplitable = relation.fileFormat.isSplitable(
+        val isSplittable = relation.fileFormat.isSplittable(
           relation.sparkSession, relation.options, filePath)
         PartitionedFileUtil.splitFiles(
           sparkSession = relation.sparkSession,
           file = file,
           filePath = filePath,
-          isSplitable = isSplitable,
+          isSplittable = isSplittable,
           maxSplitBytes = maxSplitBytes,
           partitionValues = partition.values
         )

@@ -41,7 +41,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "csv"
 
-  override def isSplitable(
+  override def isSplittable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
@@ -50,7 +50,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
     val csvDataSource = CSVDataSource(parsedOptions)
-    csvDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
+    csvDataSource.isSplittable && super.isSplittable(sparkSession, options, path)
   }
 
   override def inferSchema(
