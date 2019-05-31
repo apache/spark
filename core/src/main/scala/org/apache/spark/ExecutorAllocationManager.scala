@@ -637,6 +637,10 @@ private[spark] class ExecutorAllocationManager(
     removeTimes.remove(executorId)
   }
 
+  private case class StageAttempt(stageId: Int, stageAttemptId: Int) {
+    override def toString: String = s"Stage $stageId (Attempt $stageAttemptId)"
+  }
+
   /**
    * A listener that notifies the given allocation manager of when to add and remove executors.
    *
@@ -645,30 +649,30 @@ private[spark] class ExecutorAllocationManager(
    */
   private[spark] class ExecutorAllocationListener extends SparkListener {
 
-    private val stageIdToNumTasks = new mutable.HashMap[(Int, Int), Int]
-    private val stageIdToTaskIndices = new mutable.HashMap[(Int, Int), mutable.HashSet[Int]]
+    private val stageAttemptToNumTasks = new mutable.HashMap[StageAttempt, Int]
+    private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
     // Number of speculative tasks to be scheduled in each stage
-    private val stageIdToNumSpeculativeTasks = new mutable.HashMap[(Int, Int), Int]
+    private val stageAttemptToNumSpeculativeTasks = new mutable.HashMap[StageAttempt, Int]
     // The speculative tasks started in each stage
-    private val stageIdToSpeculativeTaskIndices =
-      new mutable.HashMap[(Int, Int), mutable.HashSet[Int]]
+    private val stageAttemptToSpeculativeTaskIndices =
+      new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
 
-    // stageId to tuple (the number of task with locality preferences, a map where each pair is a
-    // node and the number of tasks that would like to be scheduled on that node) map,
+    // stageAttempt to tuple (the number of task with locality preferences, a map where each pair
+    // is a node and the number of tasks that would like to be scheduled on that node) map,
     // maintain the executor placement hints for each stage Id used by resource framework to better
     // place the executors.
-    private val stageIdToExecutorPlacementHints =
-      new mutable.HashMap[(Int, Int), (Int, Map[String, Int])]
+    private val stageAttemptToExecutorPlacementHints =
+      new mutable.HashMap[StageAttempt, (Int, Map[String, Int])]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
       val stageAttemptId = stageSubmitted.stageInfo.attemptNumber()
-      val stageAttempt = (stageId, stageAttemptId)
+      val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {
-        stageIdToNumTasks((stageId, stageAttemptId)) = numTasks
+        stageAttemptToNumTasks(stageAttempt) = numTasks
         allocationManager.onSchedulerBacklogged()
 
         // Compute the number of tasks requested by the stage on each host
@@ -683,7 +687,7 @@ private[spark] class ExecutorAllocationManager(
             }
           }
         }
-        stageIdToExecutorPlacementHints.put(stageAttempt,
+        stageAttemptToExecutorPlacementHints.put(stageAttempt,
           (numTasksPending, hostToLocalTaskCountPerStage.toMap))
 
         // Update the executor placement hints
@@ -694,20 +698,20 @@ private[spark] class ExecutorAllocationManager(
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
       val stageId = stageCompleted.stageInfo.stageId
       val stageAttemptId = stageCompleted.stageInfo.attemptNumber()
-      val stageAttempt = (stageId, stageAttemptId)
+      val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
-        stageIdToNumTasks -= stageAttempt
-        stageIdToNumSpeculativeTasks -= stageAttempt
-        stageIdToTaskIndices -= stageAttempt
-        stageIdToSpeculativeTaskIndices -= stageAttempt
-        stageIdToExecutorPlacementHints -= stageAttempt
+        stageAttemptToNumTasks -= stageAttempt
+        stageAttemptToNumSpeculativeTasks -= stageAttempt
+        stageAttemptToTaskIndices -= stageAttempt
+        stageAttemptToSpeculativeTaskIndices -= stageAttempt
+        stageAttemptToExecutorPlacementHints -= stageAttempt
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
-        if (stageIdToNumTasks.isEmpty && stageIdToNumSpeculativeTasks.isEmpty) {
+        if (stageAttemptToNumTasks.isEmpty && stageAttemptToNumSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }
@@ -716,7 +720,7 @@ private[spark] class ExecutorAllocationManager(
     override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
       val stageId = taskStart.stageId
       val stageAttemptId = taskStart.stageAttemptId
-      val stageAttempt = (stageId, stageAttemptId)
+      val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskId = taskStart.taskInfo.taskId
       val taskIndex = taskStart.taskInfo.index
       val executorId = taskStart.taskInfo.executorId
@@ -737,10 +741,11 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last pending task, mark the scheduler queue as empty
         if (taskStart.taskInfo.speculative) {
-          stageIdToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]) +=
-            taskIndex
+          stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
+            new mutable.HashSet[Int]) += taskIndex
         } else {
-          stageIdToTaskIndices.getOrElseUpdate(stageAttempt, new mutable.HashSet[Int]) += taskIndex
+          stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
+            new mutable.HashSet[Int]) += taskIndex
         }
         if (totalPendingTasks() == 0) {
           allocationManager.onSchedulerQueueEmpty()
@@ -758,7 +763,7 @@ private[spark] class ExecutorAllocationManager(
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
       val stageAttemptId = taskEnd.stageAttemptId
-      val stageAttempt = (stageId, stageAttemptId)
+      val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
 
         // If the executor is no longer running any scheduled tasks, mark it as idle
@@ -778,9 +783,9 @@ private[spark] class ExecutorAllocationManager(
             allocationManager.onSchedulerBacklogged()
           }
           if (taskEnd.taskInfo.speculative) {
-            stageIdToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
+            stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
           } else {
-            stageIdToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
+            stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
           }
         }
       }
@@ -806,11 +811,11 @@ private[spark] class ExecutorAllocationManager(
       : Unit = {
       val stageId = speculativeTask.stageId
       val stageAttemptId = speculativeTask.stageAttemptId
-      val stageAttempt = (stageId, stageAttemptId)
+      val stageAttempt = StageAttempt(stageId, stageAttemptId)
 
       allocationManager.synchronized {
-        stageIdToNumSpeculativeTasks(stageAttempt) =
-          stageIdToNumSpeculativeTasks.getOrElse(stageAttempt, 0) + 1
+        stageAttemptToNumSpeculativeTasks(stageAttempt) =
+          stageAttemptToNumSpeculativeTasks.getOrElse(stageAttempt, 0) + 1
         allocationManager.onSchedulerBacklogged()
       }
     }
@@ -822,14 +827,14 @@ private[spark] class ExecutorAllocationManager(
      * Note: This is not thread-safe without the caller owning the `allocationManager` lock.
      */
     def pendingTasks(): Int = {
-      stageIdToNumTasks.map { case (stageId, numTasks) =>
-        numTasks - stageIdToTaskIndices.get(stageId).map(_.size).getOrElse(0)
+      stageAttemptToNumTasks.map { case (stageAttempt, numTasks) =>
+        numTasks - stageAttemptToTaskIndices.get(stageAttempt).map(_.size).getOrElse(0)
       }.sum
     }
 
     def pendingSpeculativeTasks(): Int = {
-      stageIdToNumSpeculativeTasks.map { case (stageId, numTasks) =>
-        numTasks - stageIdToSpeculativeTaskIndices.get(stageId).map(_.size).getOrElse(0)
+      stageAttemptToNumSpeculativeTasks.map { case (stageAttempt, numTasks) =>
+        numTasks - stageAttemptToSpeculativeTaskIndices.get(stageAttempt).map(_.size).getOrElse(0)
       }.sum
     }
 
@@ -865,7 +870,7 @@ private[spark] class ExecutorAllocationManager(
     def updateExecutorPlacementHints(): Unit = {
       var localityAwareTasks = 0
       val localityToCount = new mutable.HashMap[String, Int]()
-      stageIdToExecutorPlacementHints.values.foreach { case (numTasksPending, localities) =>
+      stageAttemptToExecutorPlacementHints.values.foreach { case (numTasksPending, localities) =>
         localityAwareTasks += numTasksPending
         localities.foreach { case (hostname, count) =>
           val updatedCount = localityToCount.getOrElse(hostname, 0) + count
