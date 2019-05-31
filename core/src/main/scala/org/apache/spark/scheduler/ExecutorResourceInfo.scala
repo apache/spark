@@ -26,22 +26,19 @@ import scala.collection.mutable.ArrayBuffer
  */
 private[spark] class ExecutorResourceInfo(
     private val name: String,
-    private val addresses: Seq[String]) extends Serializable {
+    private[scheduler] val addresses: ArrayBuffer[String]) extends Serializable {
 
-  // Addresses of resources that has not been assigned or reserved.
+  // Addresses of resource that has not been acquired.
   // Exposed for testing only.
-  private[scheduler] val idleAddresses: ArrayBuffer[String] = addresses.to[ArrayBuffer]
+  private[scheduler] val idleAddresses: ArrayBuffer[String] = addresses.clone()
 
-  // Addresses of resources that has been assigned to running tasks.
+  // Addresses of resource that has been assigned to running tasks.
   // Exposed for testing only.
   private[scheduler] val allocatedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
 
-  // Addresses of resources that has been reserved but not assigned out yet.
-  // Exposed for testing only.
-  private[scheduler] val reservedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
-
   def getName(): String = name
 
+  // Number of resource addresses that can be acquired.
   def getNumOfIdleResources(): Int = idleAddresses.size
 
   // Reserve given number of resource addresses, these addresses can be assigned to a future
@@ -51,34 +48,29 @@ private[spark] class ExecutorResourceInfo(
       s"Required $num $name addresses, but only ${idleAddresses.size} available.")
     val addrs = idleAddresses.take(num)
     idleAddresses --= addrs
-    reservedAddresses ++= addrs
     addrs
   }
 
-  // Give back a sequence of resource addresses, these addresses must have been reserved or
-  // assigned. Resource addresses are released when a task has finished, or the task launch is
-  // skipped.
+  // Give back a sequence of resource addresses, these addresses must have been assigned. Resource
+  // addresses are released when a task has finished.
   def releaseAddresses(addrs: Array[String]): Unit = {
     addrs.foreach { address =>
-      assert((allocatedAddresses ++ reservedAddresses).contains(address), "Try to release " +
-        s"address that is not reserved or allocated. $name address $address is not allocated.")
+      assert(allocatedAddresses.contains(address), "Try to release address that is not " +
+        s"allocated. $name address $address is not allocated.")
+      addresses += address
       idleAddresses += address
-      if (allocatedAddresses.contains(address)) {
-        allocatedAddresses -= address
-      } else if (reservedAddresses.contains(address)) {
-        reservedAddresses -= address
-      }
+      allocatedAddresses -= address
     }
   }
 
-  // Assign a sequence of resource addresses (to a launched task), these addresses must have been
-  // reserved.
+  // Assign a sequence of resource addresses (to a launched task), these addresses must be
+  // available.
   def assignAddresses(addrs: Array[String]): Unit = {
     addrs.foreach { address =>
-      assert(reservedAddresses.contains(address), "Try to assign address that is not reserved. " +
-        s"$name address $address is not reserved.")
+      assert(addresses.contains(address), "Try to assign address that is not available. " +
+        s"$name address $address is not available.")
       allocatedAddresses += address
-      reservedAddresses -= address
+      addresses -= address
     }
   }
 }

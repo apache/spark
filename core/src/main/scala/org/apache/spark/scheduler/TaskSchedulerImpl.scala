@@ -330,7 +330,7 @@ private[spark] class TaskSchedulerImpl(
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
-      availableResources: Array[Map[String, ExecutorResourceInfo]],
+      availableResources: Array[InternalExecutorResourcesInfo],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
       addressesWithDescs: ArrayBuffer[(String, TaskDescription)]) : Boolean = {
     var launchedTask = false
@@ -372,10 +372,9 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
    */
-  private def resourcesMeetTaskRequirements(
-      resources: Map[String, ExecutorResourceInfo]): Boolean = {
+  private def resourcesMeetTaskRequirements(resources: InternalExecutorResourcesInfo): Boolean = {
     resourcesPerTask.forall { case (rName, rNum) =>
-        resources.contains(rName) && resources(rName).getNumOfIdleResources() >= rNum
+      resources.getNumOfIdleResources(rName) >= rNum
     }
   }
 

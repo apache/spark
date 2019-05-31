@@ -218,7 +218,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes, resources,
             mutable.Map.empty[String, ExecutorResourceInfo] ++= resources.mapValues(v =>
-              new ExecutorResourceInfo(v.name, v.addresses)))
+              new ExecutorResourceInfo(v.name, v.addresses.to[ArrayBuffer])))
 
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
@@ -272,7 +272,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
-              Some(executorData.executorAddress.hostPort), executorData.availableResources.toMap)
+              Some(executorData.executorAddress.hostPort),
+              new InternalExecutorResourcesInfo(executorData.availableResources.toMap))
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
@@ -298,7 +299,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val executorData = executorDataMap(executorId)
           val workOffers = IndexedSeq(
             new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
-              Some(executorData.executorAddress.hostPort), executorData.availableResources.toMap))
+              Some(executorData.executorAddress.hostPort),
+              new InternalExecutorResourcesInfo(executorData.availableResources.toMap)))
           scheduler.resourceOffers(workOffers)
         } else {
           Seq.empty
@@ -317,14 +319,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        val executorData = executorDataMap(task.executorId)
         val serializedTask = TaskDescription.encode(task)
         if (serializedTask.limit() >= maxRpcMessageSize) {
-          // We skip launch the task, should release all the reserved resources.
-          task.resources.foreach { case (rName, rInfo) =>
-            assert(executorData.availableResources.contains(rName))
-            executorData.availableResources(rName).releaseAddresses(rInfo.addresses)
-          }
           Option(scheduler.taskIdToTaskSetManager.get(task.taskId)).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
@@ -338,6 +334,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
         else {
+          val executorData = executorDataMap(task.executorId)
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
           executorData.freeCores -= scheduler.CPUS_PER_TASK

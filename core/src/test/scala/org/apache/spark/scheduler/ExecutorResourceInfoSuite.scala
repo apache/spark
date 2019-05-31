@@ -17,69 +17,69 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.ResourceName.GPU
 import org.apache.spark.SparkFunSuite
+
 
 class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   test("Track Executor Resource information") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"))
+    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    assert(info.addresses sameElements Seq("0", "1", "2", "3"))
     assert(info.idleAddresses sameElements Seq("0", "1", "2", "3"))
     assert(info.allocatedAddresses.isEmpty)
-    assert(info.reservedAddresses.isEmpty)
     assert(info.getNumOfIdleResources() == 4)
 
     // Acquire addresses
     info.acquireAddresses(2)
+    assert(info.addresses sameElements Seq("0", "1", "2", "3"))
     assert(info.idleAddresses sameElements Seq("2", "3"))
-    assert(info.allocatedAddresses.isEmpty)
-    assert(info.reservedAddresses sameElements Seq("0", "1"))
+    assert(info.allocatedAddresses sameElements Seq.empty)
     assert(info.getNumOfIdleResources() == 2)
 
     // Assign addresses
     info.assignAddresses(Array("0", "1"))
+    assert(info.addresses sameElements Seq("2", "3"))
     assert(info.idleAddresses sameElements Seq("2", "3"))
     assert(info.allocatedAddresses sameElements Seq("0", "1"))
-    assert(info.reservedAddresses.isEmpty)
     assert(info.getNumOfIdleResources() == 2)
 
     // release addresses
     info.releaseAddresses(Array("0", "1"))
+    assert(info.addresses sameElements Seq("2", "3", "0", "1"))
     assert(info.idleAddresses sameElements Seq("2", "3", "0", "1"))
     assert(info.allocatedAddresses.isEmpty)
-    assert(info.reservedAddresses.isEmpty)
     assert(info.getNumOfIdleResources() == 4)
   }
 
   test("Don't allow acquire more addresses than available") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"))
+    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
     val e = intercept[AssertionError] {
       info.acquireAddresses(5)
     }
     assert(e.getMessage.contains("Required to take more addresses than available."))
   }
 
-  test("Don't allow assign address that is not reserved") {
+  test("Don't allow assign address that is not available") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"))
-    // Acquire addresses.
-    info.acquireAddresses(2)
-    assert(!info.reservedAddresses.contains("2"))
-    // Assign an address that is not reserved
+    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    // Assign addresses that are available
+    info.assignAddresses(Array("0", "1"))
+    assert(!info.addresses.contains("1"))
+    // Assign an address that is not available
     val e = intercept[AssertionError] {
-      info.assignAddresses(Array("2"))
+      info.assignAddresses(Array("1"))
     }
-    assert(e.getMessage.contains("Try to assign address that is not reserved."))
+    assert(e.getMessage.contains("Try to assign address that is not available."))
   }
 
-  test("Don't allow release address that is not reserved or allocated") {
+  test("Don't allow release address that is not allocated") {
     // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, Seq("0", "1", "2", "3"))
-    // Acquire addresses.
-    info.acquireAddresses(2)
-    assert(info.reservedAddresses sameElements Seq("0", "1"))
+    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
     // Assign addresses
     info.assignAddresses(Array("0", "1"))
     assert(!info.allocatedAddresses.contains("2"))
@@ -87,6 +87,6 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
     val e = intercept[AssertionError] {
       info.releaseAddresses(Array("2"))
     }
-    assert(e.getMessage.contains("Try to release address that is not reserved or allocated."))
+    assert(e.getMessage.contains("Try to release address that is not allocated."))
   }
 }

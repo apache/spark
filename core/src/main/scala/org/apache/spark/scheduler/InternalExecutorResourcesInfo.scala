@@ -17,15 +17,23 @@
 
 package org.apache.spark.scheduler
 
+
 /**
- * Represents free resources available on an executor.
+ * Class to hold information about resources on an Executor.
  */
-private[spark]
-case class WorkerOffer(
-    executorId: String,
-    host: String,
-    cores: Int,
-    // `address` is an optional hostPort string, it provide more useful information than `host`
-    // when multiple executors are launched on the same host.
-    address: Option[String] = None,
-    resources: InternalExecutorResourcesInfo = InternalExecutorResourcesInfo.EMPTY_RESOURCES_INFO)
+private[scheduler] class InternalExecutorResourcesInfo(
+    private val resources: Map[String, ExecutorResourceInfo]) extends Serializable {
+
+  def getNumOfIdleResources(resourceName: String): Int =
+    resources.get(resourceName).map(_.getNumOfIdleResources()).getOrElse(0)
+
+  // Reserve given number of resource addresses, these addresses can be assigned to a future
+  // launched task.
+  def acquireAddresses(resourceName: String, num: Int): Seq[String] = {
+    resources.get(resourceName).map(_.acquireAddresses(num)).getOrElse(Seq.empty)
+  }
+}
+
+private[scheduler] object InternalExecutorResourcesInfo {
+  final val EMPTY_RESOURCES_INFO = new InternalExecutorResourcesInfo(Map.empty)
+}

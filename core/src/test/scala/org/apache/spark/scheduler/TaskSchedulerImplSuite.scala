@@ -81,6 +81,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     setupSchedulerWithMaster("local", confs: _*)
   }
 
+  def setupScheduler(numCores: Int, confs: (String, String)*): TaskSchedulerImpl = {
+    setupSchedulerWithMaster(s"local[$numCores]", confs: _*)
+  }
+
   def setupSchedulerWithMaster(master: String, confs: (String, String)*): TaskSchedulerImpl = {
     val conf = new SparkConf().setMaster(master).setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
@@ -1245,7 +1249,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskGpus = 1
     val executorGpus = 4
     val executorCpus = 4
-    val taskScheduler = setupScheduler(config.CPUS_PER_TASK.key -> taskCpus.toString,
+    val taskScheduler = setupScheduler(numCores = executorCpus,
+      config.CPUS_PER_TASK.key -> taskCpus.toString,
       s"${config.SPARK_TASK_RESOURCE_PREFIX}${GPU}${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
         taskGpus.toString,
       s"${config.SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
@@ -1254,12 +1259,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskSet = FakeTask.createTaskSet(3)
 
     val numFreeCores = 2
-    val resources = Map(GPU ->
-      new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3")))
+    val resources = new InternalExecutorResourcesInfo(Map(GPU ->
+      new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))))
     val singleCoreWorkerOffers =
       IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
     val zeroGpuWorkerOffers =
-      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, Map.empty))
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None,
+        InternalExecutorResourcesInfo.EMPTY_RESOURCES_INFO))
     taskScheduler.submitTasks(taskSet)
     // WorkerOffer doesn't contain GPU resource, don't launch any task.
     var taskDescriptions = taskScheduler.resourceOffers(zeroGpuWorkerOffers).flatten

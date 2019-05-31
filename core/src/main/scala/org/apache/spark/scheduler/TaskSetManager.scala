@@ -30,6 +30,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.scheduler.InternalExecutorResourcesInfo.EMPTY_RESOURCES_INFO
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
@@ -469,7 +470,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      availableResources: Map[String, ExecutorResourceInfo])
+      availableResources: InternalExecutorResourcesInfo = EMPTY_RESOURCES_INFO)
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -535,7 +536,7 @@ private[spark] class TaskSetManager(
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
         val extraResources = sched.resourcesPerTask.map { case (rName, rNum) =>
-          val allocatedAddresses = availableResources(rName).acquireAddresses(rNum)
+          val allocatedAddresses = availableResources.acquireAddresses(rName, rNum)
           (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
         }
 
