@@ -52,7 +52,9 @@ abstract class DataSourceScanRedactionTest extends QueryTest with SharedSparkSes
         assert(rootPath.toString.contains(dir.toURI.getPath.stripSuffix("/")))
 
         assert(!df.queryExecution.sparkPlan.treeString(verbose = true).contains(rootPath.getName))
-        assert(!df.queryExecution.executedPlan.treeString(verbose = true).contains(rootPath.getName))
+        assert(!df.queryExecution.executedPlan.treeString(verbose = true).contains(
+          rootPath.getName)
+        )
         assert(!df.queryExecution.toString.contains(rootPath.getName))
         assert(!df.queryExecution.simpleString.contains(rootPath.getName))
 
