@@ -88,6 +88,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
     }
 
+    val driverResourceQuantities =
+      KubernetesUtils.buildResourcesQuantities(SPARK_DRIVER_RESOURCE_PREFIX, conf.sparkConf)
+
     val driverPort = conf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
     val driverBlockManagerPort = conf.sparkConf.getInt(
       DRIVER_BLOCK_MANAGER_PORT.key,
@@ -129,6 +132,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
         .addToRequests("memory", driverMemoryQuantity)
         .addToLimits("memory", driverMemoryQuantity)
+        .addToLimits(driverResourceQuantities.asJava)
         .endResources()
       .build()
 
