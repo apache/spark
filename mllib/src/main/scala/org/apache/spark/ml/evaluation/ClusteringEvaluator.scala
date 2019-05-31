@@ -146,16 +146,16 @@ private[evaluation] abstract class Silhouette {
       pointClusterId: Double,
       pointClusterNumOfPoints: Long,
       averageDistanceToCluster: (Double) => Double): Double = {
-    // Here we compute the average dissimilarity of the current point to any cluster of which the
-    // point is not a member.
-    // The cluster with the lowest average dissimilarity - i.e. the nearest cluster to the current
-    // point - is said to be the "neighboring cluster".
-    val otherClusterIds = clusterIds.filter(_ != pointClusterId)
-    val neighboringClusterDissimilarity = otherClusterIds.map(averageDistanceToCluster).min
-
     if (pointClusterNumOfPoints == 1) {
+      // Single-element clusters have silhouette 0
       0.0
     } else {
+      // Here we compute the average dissimilarity of the current point to any cluster of which the
+      // point is not a member.
+      // The cluster with the lowest average dissimilarity - i.e. the nearest cluster to the current
+      // point - is said to be the "neighboring cluster".
+      val otherClusterIds = clusterIds.filter(_ != pointClusterId)
+      val neighboringClusterDissimilarity = otherClusterIds.map(averageDistanceToCluster).min
       // adjustment for excluding the node itself from the computation of the average dissimilarity
       val currentClusterDissimilarity =
         averageDistanceToCluster(pointClusterId) * pointClusterNumOfPoints /
