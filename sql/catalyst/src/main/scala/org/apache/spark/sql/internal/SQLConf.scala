@@ -1326,12 +1326,12 @@ object SQLConf {
 
   val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
-      .doc("(Deprecated since Spark 3.0, please set 'spark.sql.pyspark.execution.arrow.enabled'.)")
+      .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
       .booleanConf
       .createWithDefault(false)
 
-  val PYSPARK_ARROW_EXECUTION_ENABLED =
-    buildConf("spark.sql.pyspark.execution.arrow.enabled")
+  val ARROW_PYSPARK_EXECUTION_ENABLED =
+    buildConf("spark.sql.execution.arrow.pyspark.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers in PySpark. " +
         "This optimization applies to: " +
         "1. pyspark.sql.DataFrame.toPandas " +
@@ -1340,8 +1340,8 @@ object SQLConf {
         "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
-  val SPARKR_ARROW_EXECUTION_ENABLED =
-    buildConf("spark.sql.sparkr.execution.arrow.enabled")
+  val ARROW_SPARKR_EXECUTION_ENABLED =
+    buildConf("spark.sql.execution.arrow.sparkr.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers in SparkR. " +
         "This optimization applies to: " +
         "1. createDataFrame when its input is an R DataFrame " +
@@ -1356,13 +1356,13 @@ object SQLConf {
   val ARROW_FALLBACK_ENABLED =
     buildConf("spark.sql.execution.arrow.fallback.enabled")
       .doc("(Deprecated since Spark 3.0, please set " +
-        "'spark.sql.pyspark.execution.arrow.fallback.enabled'.)")
+        "'spark.sql.execution.arrow.pyspark.fallback.enabled'.)")
       .booleanConf
       .createWithDefault(true)
 
-  val PYSPARK_ARROW_FALLBACK_ENABLED =
-    buildConf("spark.sql.pyspark.execution.arrow.fallback.enabled")
-      .doc(s"When true, optimizations enabled by '${PYSPARK_ARROW_EXECUTION_ENABLED.key}' will " +
+  val ARROW_PYSPARK_FALLBACK_ENABLED =
+    buildConf("spark.sql.execution.arrow.pyspark.fallback.enabled")
+      .doc(s"When true, optimizations enabled by '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' will " +
         "fallback automatically to non-optimized implementations if an error occurs.")
       .fallbackConf(ARROW_FALLBACK_ENABLED)
 
@@ -2163,11 +2163,11 @@ class SQLConf extends Serializable with Logging {
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
-  def pysparkArrowEnabled: Boolean = getConf(PYSPARK_ARROW_EXECUTION_ENABLED)
+  def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 
-  def sparkrArrowEnabled: Boolean = getConf(SPARKR_ARROW_EXECUTION_ENABLED)
+  def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
 
-  def pysparkArrowFallbackEnabled: Boolean = getConf(PYSPARK_ARROW_FALLBACK_ENABLED)
+  def arrowPySparkFallbackEnabled: Boolean = getConf(ARROW_PYSPARK_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
