@@ -668,12 +668,15 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
 
   trait TestUDF
 
+  val workerEnv = new java.util.HashMap[String, String]()
+  workerEnv.put("PYTHONPATH", s"$sourcePythonPath:$pythonPath")
+
   class TestPythonUDF() extends TestUDF {
     lazy val udf = UserDefinedPythonFunction(
       name = "udf",
       func = PythonFunction(
         command = pythonFunc,
-        envVars = new java.util.HashMap[String, String](),
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
         pythonVer = pythonVer,
@@ -689,7 +692,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
       name = "udf",
       func = PythonFunction(
         command = pandasFunc,
-        envVars = new java.util.HashMap[String, String](),
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
         pythonVer = pythonVer,
