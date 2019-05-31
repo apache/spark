@@ -429,8 +429,8 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
-    val useFetchCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false) ||
-      desc.conf.getBoolean("spark.mesos.fetcherCache.enable", false)
+    val useFetchCache = desc.conf.getBoolean("spark.mesos.fetcherCache.enable", false) ||
+        conf.getBoolean("spark.mesos.fetcherCache.enable", false)
 
     val confUris = List(conf.getOption("spark.mesos.uris"),
       desc.conf.getOption("spark.mesos.uris"),
