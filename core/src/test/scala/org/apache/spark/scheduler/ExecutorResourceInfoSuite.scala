@@ -19,74 +19,51 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ResourceName.GPU
-import org.apache.spark.SparkFunSuite
-
 
 class ExecutorResourceInfoSuite extends SparkFunSuite {
 
   test("Track Executor Resource information") {
     // Init Executor Resource.
     val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
-    assert(info.addresses sameElements Seq("0", "1", "2", "3"))
-    assert(info.idleAddresses sameElements Seq("0", "1", "2", "3"))
-    assert(info.allocatedAddresses.isEmpty)
-    assert(info.getNumOfIdleResources() == 4)
+    assert(info.availableAddrs.sorted sameElements Seq("0", "1", "2", "3"))
+    assert(info.assignedAddrs.isEmpty)
 
     // Acquire addresses
-    info.acquireAddresses(2)
-    assert(info.addresses sameElements Seq("0", "1", "2", "3"))
-    assert(info.idleAddresses sameElements Seq("2", "3"))
-    assert(info.allocatedAddresses sameElements Seq.empty)
-    assert(info.getNumOfIdleResources() == 2)
-
-    // Assign addresses
-    info.assignAddresses(Array("0", "1"))
-    assert(info.addresses sameElements Seq("2", "3"))
-    assert(info.idleAddresses sameElements Seq("2", "3"))
-    assert(info.allocatedAddresses sameElements Seq("0", "1"))
-    assert(info.getNumOfIdleResources() == 2)
+    info.acquire(Seq("0", "1"))
+    assert(info.availableAddrs.sorted sameElements Seq("2", "3"))
+    assert(info.assignedAddrs.sorted sameElements Seq("0", "1"))
 
     // release addresses
-    info.releaseAddresses(Array("0", "1"))
-    assert(info.addresses sameElements Seq("2", "3", "0", "1"))
-    assert(info.idleAddresses sameElements Seq("2", "3", "0", "1"))
-    assert(info.allocatedAddresses.isEmpty)
-    assert(info.getNumOfIdleResources() == 4)
+    info.release(Array("0", "1"))
+    assert(info.availableAddrs.sorted sameElements Seq("0", "1", "2", "3"))
+    assert(info.assignedAddrs.isEmpty)
   }
 
-  test("Don't allow acquire more addresses than available") {
+  test("Don't allow acquire address that is not available") {
     // Init Executor Resource.
     val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
-    val e = intercept[AssertionError] {
-      info.acquireAddresses(5)
+    // Acquire some addresses.
+    info.acquire(Seq("0", "1"))
+    assert(!info.availableAddrs.contains("1"))
+    // Acquire an address that is not available
+    val e = intercept[SparkException] {
+      info.acquire(Array("1"))
     }
-    assert(e.getMessage.contains("Required to take more addresses than available."))
+    assert(e.getMessage.contains("Try to acquire address that is not available."))
   }
 
-  test("Don't allow assign address that is not available") {
+  test("Don't allow release address that is not assigned") {
     // Init Executor Resource.
     val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
-    // Assign addresses that are available
-    info.assignAddresses(Array("0", "1"))
-    assert(!info.addresses.contains("1"))
-    // Assign an address that is not available
-    val e = intercept[AssertionError] {
-      info.assignAddresses(Array("1"))
+    // Acquire addresses
+    info.acquire(Array("0", "1"))
+    assert(!info.assignedAddrs.contains("2"))
+    // Release an address that is not assigned
+    val e = intercept[SparkException] {
+      info.release(Array("2"))
     }
-    assert(e.getMessage.contains("Try to assign address that is not available."))
-  }
-
-  test("Don't allow release address that is not allocated") {
-    // Init Executor Resource.
-    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
-    // Assign addresses
-    info.assignAddresses(Array("0", "1"))
-    assert(!info.allocatedAddresses.contains("2"))
-    // Release an address that is not allocated
-    val e = intercept[AssertionError] {
-      info.releaseAddresses(Array("2"))
-    }
-    assert(e.getMessage.contains("Try to release address that is not allocated."))
+    assert(e.getMessage.contains("Try to release address that is not assigned."))
   }
 }

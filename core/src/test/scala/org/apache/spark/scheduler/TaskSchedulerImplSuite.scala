@@ -1259,13 +1259,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskSet = FakeTask.createTaskSet(3)
 
     val numFreeCores = 2
-    val resources = new InternalExecutorResourcesInfo(Map(GPU ->
-      new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))))
+    val resources = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
     val singleCoreWorkerOffers =
       IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
     val zeroGpuWorkerOffers =
-      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None,
-        InternalExecutorResourcesInfo.EMPTY_RESOURCES_INFO))
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, Map.empty))
     taskScheduler.submitTasks(taskSet)
     // WorkerOffer doesn't contain GPU resource, don't launch any task.
     var taskDescriptions = taskScheduler.resourceOffers(zeroGpuWorkerOffers).flatten

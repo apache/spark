@@ -22,7 +22,7 @@ import java.util.{Locale, Timer, TimerTask}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark._
@@ -330,7 +330,7 @@ private[spark] class TaskSchedulerImpl(
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
-      availableResources: Array[InternalExecutorResourcesInfo],
+      availableResources: Array[Map[String, Buffer[String]]],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
       addressesWithDescs: ArrayBuffer[(String, TaskDescription)]) : Boolean = {
     var launchedTask = false
@@ -350,6 +350,11 @@ private[spark] class TaskSchedulerImpl(
             executorIdToRunningTaskIds(execId).add(tid)
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
+            task.resources.foreach { case (rName, rInfo) =>
+              availableResources(i).getOrElse(rName,
+                throw new SparkException(s"Try to acquire resource $rName that doesn't exist."))
+                .remove(0, rInfo.addresses.size)
+            }
             // Only update hosts for a barrier task.
             if (taskSet.isBarrier) {
               // The executor address is expected to be non empty.
@@ -372,9 +377,9 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
    */
-  private def resourcesMeetTaskRequirements(resources: InternalExecutorResourcesInfo): Boolean = {
+  private def resourcesMeetTaskRequirements(resources: Map[String, Buffer[String]]): Boolean = {
     resourcesPerTask.forall { case (rName, rNum) =>
-      resources.getNumOfIdleResources(rName) >= rNum
+      resources.contains(rName) && resources(rName).size >= rNum
     }
   }
 

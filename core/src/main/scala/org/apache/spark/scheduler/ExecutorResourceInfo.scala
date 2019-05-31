@@ -17,7 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
+
+import org.apache.spark.SparkException
 
 /**
  * Class to hold information about a type of Resource on an Executor. This information is managed
@@ -25,57 +27,45 @@ import scala.collection.mutable.ArrayBuffer
  * information.
  */
 private[spark] class ExecutorResourceInfo(
-    private val name: String,
-    private[scheduler] val addresses: ArrayBuffer[String]) extends Serializable {
+    val name: String,
+    private val addresses: Seq[String]) extends Serializable {
 
-  // Addresses of resource that has not been acquired.
+  private val addressesMap = new HashMap[String, Boolean]()
+  addresses.foreach(addressesMap.put(_, true))
+
+  // Sequence of currently available resource addresses.
+  def availableAddrs: Seq[String] = addressesMap.toList.filter(_._2 == true).map(_._1)
+
+  // Sequence of currently assigned resource addresses.
   // Exposed for testing only.
-  private[scheduler] var idleAddresses: ArrayBuffer[String] = addresses.clone()
+  private[scheduler] def assignedAddrs: Seq[String] =
+    addressesMap.toList.filter(_._2 == false).map(_._1)
 
-  // Addresses of resource that has been assigned to running tasks.
-  // Exposed for testing only.
-  private[scheduler] val allocatedAddresses: ArrayBuffer[String] = ArrayBuffer.empty
-
-  def getName(): String = name
-
-  // Number of resource addresses that can be acquired.
-  def getNumOfIdleResources(): Int = idleAddresses.size
-
-  // Reserve given number of resource addresses, these addresses can be assigned to a future
-  // launched task.
-  def acquireAddresses(num: Int): Seq[String] = {
-    assert(num <= idleAddresses.size, "Required to take more addresses than available. " +
-      s"Required $num $name addresses, but only ${idleAddresses.size} available.")
-    val addrs = idleAddresses.take(num)
-    idleAddresses --= addrs
-    addrs
+  // Acquire a sequence of resource addresses (to a launched task), these addresses must be
+  // available. When the task finishes, it will return the acquired resource addresses.
+  def acquire(addrs: Seq[String]): Unit = {
+    addrs.foreach { address =>
+      val isAvailable = addressesMap.getOrElse(address, false)
+      if (isAvailable) {
+        addressesMap(address) = false
+      } else {
+        throw new SparkException(s"Try to acquire address that is not available. $name address " +
+          s"$address is not available.")
+      }
+    }
   }
 
-  // Give back a sequence of resource addresses, these addresses must have been assigned. Resource
+  // Release a sequence of resource addresses, these addresses must have been assigned. Resource
   // addresses are released when a task has finished.
-  def releaseAddresses(addrs: Array[String]): Unit = {
+  def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
-      assert(allocatedAddresses.contains(address), "Try to release address that is not " +
-        s"allocated. $name address $address is not allocated.")
-      addresses += address
-      idleAddresses += address
-      allocatedAddresses -= address
+      val isAssigned = addressesMap.getOrElse(address, true)
+      if (!isAssigned) {
+        addressesMap(address) = true
+      } else {
+        throw new SparkException(s"Try to release address that is not assigned. $name address " +
+          s"$address is not assigned.")
+      }
     }
-  }
-
-  // Assign a sequence of resource addresses (to a launched task), these addresses must be
-  // available.
-  def assignAddresses(addrs: Array[String]): Unit = {
-    addrs.foreach { address =>
-      assert(addresses.contains(address), "Try to assign address that is not available. " +
-        s"$name address $address is not available.")
-      allocatedAddresses += address
-      addresses -= address
-    }
-  }
-
-  // Reset the resource addresses that has not been acquired.
-  def resetIdleAddresses(): Unit = {
-    idleAddresses = addresses.clone()
   }
 }

@@ -228,29 +228,21 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     var execResources = backend.getExecutorAvailableResources("1")
 
-    assert(execResources(GPU).idleAddresses === Array("0", "1", "3"))
+    assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
       new Properties(), taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
-    var numPendingTasks = 1
-    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenAnswer((_: InvocationOnMock) => {
-      if (numPendingTasks > 0) {
-        numPendingTasks -= 1
-        new InternalExecutorResourcesInfo(backend.getExecutorAvailableResources("1").toMap)
-          .acquireAddresses(GPU, 1)
-        taskDescs
-      }
-    })
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenReturn(taskDescs)
 
     backend.driverEndpoint.send(ReviveOffers)
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")
-      assert(execResources(GPU).addresses === Array("1", "3"))
-      assert(execResources(GPU).allocatedAddresses === Array("0"))
+      assert(execResources(GPU).availableAddrs.sorted === Array("1", "3"))
+      assert(execResources(GPU).assignedAddrs === Array("0"))
     }
 
     backend.driverEndpoint.send(
@@ -258,8 +250,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     eventually(timeout(5 seconds)) {
       execResources = backend.getExecutorAvailableResources("1")
-      assert(execResources(GPU).addresses === Array("1", "3", "0"))
-      assert(execResources(GPU).allocatedAddresses.isEmpty)
+      assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
+      assert(execResources(GPU).assignedAddrs.isEmpty)
     }
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(executorAddedCount === 3)

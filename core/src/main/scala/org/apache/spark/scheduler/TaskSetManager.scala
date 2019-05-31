@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.immutable.Map
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
 
@@ -30,7 +30,6 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.scheduler.InternalExecutorResourcesInfo.EMPTY_RESOURCES_INFO
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
@@ -470,7 +469,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      availableResources: InternalExecutorResourcesInfo = EMPTY_RESOURCES_INFO)
+      availableResources: Map[String, Buffer[String]] = Map.empty)
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -536,7 +535,11 @@ private[spark] class TaskSetManager(
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
         val extraResources = sched.resourcesPerTask.map { case (rName, rNum) =>
-          val allocatedAddresses = availableResources.acquireAddresses(rName, rNum)
+          val rAddresses = availableResources.getOrElse(rName, Buffer.empty)
+          assert(rAddresses.size >= rNum, s"Required $rNum $rName addresses, but only " +
+            s"${rAddresses.size} available.")
+          // We'll drop the allocated addresses later inside TaskSchedulerImpl.
+          val allocatedAddresses = rAddresses.take(rNum)
           (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
         }
 

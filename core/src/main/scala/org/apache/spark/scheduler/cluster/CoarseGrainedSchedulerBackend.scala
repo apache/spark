@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
@@ -148,7 +148,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               for ((k, v) <- resources) {
                 executorInfo.availableResources.get(k).foreach { r =>
-                  r.releaseAddresses(v.addresses)
+                  r.release(v.addresses)
                 }
               }
               makeOffers(executorId)
@@ -218,7 +218,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes, resources,
             mutable.Map.empty[String, ExecutorResourceInfo] ++= resources.mapValues(v =>
-              new ExecutorResourceInfo(v.name, v.addresses.to[ArrayBuffer])))
+              new ExecutorResourceInfo(v.name, v.addresses)))
 
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
@@ -273,7 +273,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
               Some(executorData.executorAddress.hostPort),
-              new InternalExecutorResourcesInfo(executorData.availableResources.toMap))
+              executorData.availableResources.map { case (rName, rInfo) =>
+                (rName, rInfo.availableAddrs.toBuffer)
+              }.toMap)
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
@@ -300,7 +302,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val workOffers = IndexedSeq(
             new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
               Some(executorData.executorAddress.hostPort),
-              new InternalExecutorResourcesInfo(executorData.availableResources.toMap)))
+              executorData.availableResources.map { case (rName, rInfo) =>
+                (rName, rInfo.availableAddrs.toBuffer)
+              }.toMap))
           scheduler.resourceOffers(workOffers)
         } else {
           Seq.empty
@@ -340,7 +344,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorData.freeCores -= scheduler.CPUS_PER_TASK
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.availableResources.contains(rName))
-            executorData.availableResources(rName).assignAddresses(rInfo.addresses)
+            executorData.availableResources(rName).acquire(rInfo.addresses)
           }
 
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
