@@ -2589,7 +2589,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
       }.getMessage
-      assert(e.contains("ALTER ADD COLUMNS does not support datasource table with type"))
+      assert(e.contains("ALTER [ADD|REPLACE] COLUMNS do not support datasource table with type"))
     }
   }
 
@@ -2599,7 +2599,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+      assert(e.message.contains("ALTER [ADD|REPLACE] COLUMNS do not support views"))
     }
   }
 
@@ -2609,7 +2609,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+      assert(e.message.contains("ALTER [ADD|REPLACE] COLUMNS do not support views"))
     }
   }
 

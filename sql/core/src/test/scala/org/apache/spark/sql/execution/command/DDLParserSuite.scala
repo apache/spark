@@ -840,14 +840,6 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
   }
 
-  test("alter table: replace columns (not allowed)") {
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT
-       |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT
-      """.stripMargin)
-  }
-
   test("show databases") {
     val sql1 = "SHOW DATABASES"
     val sql2 = "SHOW DATABASES LIKE 'defau*'"
