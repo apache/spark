@@ -572,6 +572,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
       None,
       "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
     true
+    throw new Exception(sparkHome)
   }
 
   private val pythonPath = sys.env.getOrElse("PYTHONPATH", "")
