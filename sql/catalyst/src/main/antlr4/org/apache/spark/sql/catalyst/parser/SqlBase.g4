@@ -794,7 +794,7 @@ errorCapturingIdentifier
     : identifier errorCapturingIdentifierExtra
     ;
 
-// extrq grammer for left refactoring
+// extra grammer for left refactoring
 errorCapturingIdentifierExtra
     : (MINUS identifier)+    #errorIdent
     |                        #realIdent
