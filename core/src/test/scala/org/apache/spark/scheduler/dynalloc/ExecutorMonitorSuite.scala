@@ -237,6 +237,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors().toSet === Set("1", "2", "3"))
     assert(monitor.pendingRemovalCount === 0)
 
+    // Notify that only a subset of executors was killed, to mimic the case where the scheduler
+    // refuses to kill an executor that is busy for whatever reason the monitor hasn't detected yet.
     monitor.executorsKilled(Seq("1"))
     assert(monitor.timedOutExecutors().toSet === Set("2", "3"))
     assert(monitor.pendingRemovalCount === 1)
