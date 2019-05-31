@@ -30,7 +30,7 @@ private[spark] class ExecutorResourceInfo(
 
   // Addresses of resource that has not been acquired.
   // Exposed for testing only.
-  private[scheduler] val idleAddresses: ArrayBuffer[String] = addresses.clone()
+  private[scheduler] var idleAddresses: ArrayBuffer[String] = addresses.clone()
 
   // Addresses of resource that has been assigned to running tasks.
   // Exposed for testing only.
@@ -72,5 +72,10 @@ private[spark] class ExecutorResourceInfo(
       allocatedAddresses += address
       addresses -= address
     }
+  }
+
+  // Reset the resource addresses that has not been acquired.
+  def resetIdleAddresses(): Unit = {
+    idleAddresses = addresses.clone()
   }
 }

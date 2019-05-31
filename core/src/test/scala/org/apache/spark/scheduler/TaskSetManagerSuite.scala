@@ -1623,10 +1623,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         // we'll reject them at NODE_LOCAL level,
         // but accept them at RACK_LOCAL level if they're on OK racks
         val hostIdx = 100 + rackIdx
-        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx,
-          TaskLocality.NODE_LOCAL).isEmpty)
-        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx,
-          TaskLocality.RACK_LOCAL).isDefined)
+        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx, TaskLocality.NODE_LOCAL)
+          .isEmpty)
+        assert(manager.resourceOffer("exec" + hostIdx, "host" + hostIdx, TaskLocality.RACK_LOCAL)
+          .isDefined)
       }
     }
     // check no more expensive calls to the rack resolution.  manager.resourceOffer() will call

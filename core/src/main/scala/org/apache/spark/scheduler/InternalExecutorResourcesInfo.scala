@@ -19,15 +19,23 @@ package org.apache.spark.scheduler
 
 
 /**
- * Class to hold information about resources on an Executor.
+ * Internal class to expose executor resources information to TaskScheduler from SchedulerBackend,
+ * while also ensure the TaskScheduler will not modify the executor resources information.
+ * Idealy we shall keep a copy of the map from resource name to resource addresses inside this
+ * class, but the deep copy can be time consuming when you have many executors, so we just keep
+ * the copy inside class ExecutorResourceInfo.
  */
 private[scheduler] class InternalExecutorResourcesInfo(
     private val resources: Map[String, ExecutorResourceInfo]) extends Serializable {
 
+  // Reset all the buffered addresses.
+  resources.values.foreach(_.resetIdleAddresses())
+
+  // Number of resource addresses that can be acquired.
   def getNumOfIdleResources(resourceName: String): Int =
     resources.get(resourceName).map(_.getNumOfIdleResources()).getOrElse(0)
 
-  // Reserve given number of resource addresses, these addresses can be assigned to a future
+  // Acquire given number of resource addresses, these addresses can be assigned to a future
   // launched task.
   def acquireAddresses(resourceName: String, num: Int): Seq[String] = {
     resources.get(resourceName).map(_.acquireAddresses(num)).getOrElse(Seq.empty)
