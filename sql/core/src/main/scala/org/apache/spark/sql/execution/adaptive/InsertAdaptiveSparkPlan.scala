@@ -114,6 +114,8 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
 
   private def getExecutedPlan(plan: LogicalPlan): SparkPlan = {
     val queryExec = new QueryExecution(session, plan)
+    // Apply the same instance of this rule to sub-queries so that sub-queries all share the
+    // same `stageCache` for Exchange reuse.
     val adaptivePlan = this.apply(queryExec.sparkPlan)
     if (!adaptivePlan.isInstanceOf[AdaptiveSparkPlanExec]) {
       throw SubqueryAdaptiveNotSupportedException(plan)

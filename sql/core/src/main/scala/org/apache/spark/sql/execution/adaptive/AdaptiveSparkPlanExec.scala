@@ -61,6 +61,45 @@ case class AdaptiveSparkPlanExec(
     stageCache: TrieMap[SparkPlan, QueryStageExec])
   extends LeafExecNode {
 
+  @transient private val executionId = Option(
+    session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
+
+  // A list of physical plan rules to be applied before creation of query stages. The physical
+  // plan should reach a final status of query stages (i.e., no more addition or removal of
+  // Exchange nodes) after running these rules.
+  @transient private val queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
+    PlanAdaptiveSubqueries(subqueryMap),
+    EnsureRequirements(conf)
+  )
+
+  // A list of physical optimizer rules to be applied to a new stage before its execution. These
+  // optimizations should be stage-independent.
+  @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
+    CollapseCodegenStages(conf)
+  )
+
+  private var currentStageId = 0
+
+  @volatile private var currentPhysicalPlan =
+    applyPhysicalRules(initialPlan, queryStagePreparationRules)
+
+  // The logical plan optimizer for re-optimizing the current logical plan.
+  private object Optimizer extends RuleExecutor[LogicalPlan] {
+    // TODO add more optimization rules
+    override protected def batches: Seq[Batch] = Seq()
+  }
+
+  /**
+   * Return type for `createQueryStages`
+   * @param newPlan the new plan with created query stages.
+   * @param allChildStagesMaterialized whether all child stages have been materialized.
+   * @param newStages the newly created query stages, including new reused query stages.
+   */
+  private case class CreateStageResult(
+    newPlan: SparkPlan,
+    allChildStagesMaterialized: Boolean,
+    newStages: Seq[(Exchange, QueryStageExec)])
+
   def executedPlan: SparkPlan = currentPhysicalPlan
 
   override def conf: SQLConf = session.sessionState.conf
@@ -69,7 +108,7 @@ case class AdaptiveSparkPlanExec(
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
-  override def doExecute(): RDD[InternalRow] = lock.synchronized {
+  override def doExecute(): RDD[InternalRow] = this.synchronized {
     var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
     var result = createQueryStages(currentPhysicalPlan)
     val events = new LinkedBlockingQueue[StageMaterializationEvent]()
@@ -143,47 +182,6 @@ case class AdaptiveSparkPlanExec(
     currentPhysicalPlan.generateTreeString(
       depth, lastChildren, append, verbose, "", addSuffix = false, maxFields)
   }
-
-  @transient private val executionId = Option(
-    session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
-
-  @transient private val lock = new Object()
-
-  // The logical plan optimizer for re-optimizing the current logical plan.
-  private object Optimizer extends RuleExecutor[LogicalPlan] {
-    // TODO add more optimization rules
-    override protected def batches: Seq[Batch] = Seq()
-  }
-
-  // A list of physical plan rules to be applied before creation of query stages. The physical
-  // plan should reach a final status of query stages (i.e., no more addition or removal of
-  // Exchange nodes) after running these rules.
-  @transient private val queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    PlanAdaptiveSubqueries(subqueryMap),
-    EnsureRequirements(conf)
-  )
-
-  // A list of physical optimizer rules to be applied to a new stage before its execution. These
-  // optimizations should be stage-independent.
-  @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    CollapseCodegenStages(conf)
-  )
-
-  private var currentStageId = 0
-
-  @volatile private var currentPhysicalPlan =
-    applyPhysicalRules(initialPlan, queryStagePreparationRules)
-
-  /**
-   * Return type for `createQueryStages`
-   * @param newPlan the new plan with created query stages.
-   * @param allChildStagesMaterialized whether all child stages have been materialized.
-   * @param newStages the newly created query stages, including new reused query stages.
-   */
-  private case class CreateStageResult(
-    newPlan: SparkPlan,
-    allChildStagesMaterialized: Boolean,
-    newStages: Seq[(Exchange, QueryStageExec)])
 
   /**
    * This method is called recursively to traverse the plan tree bottom-up and create a new query
@@ -314,9 +312,6 @@ case class AdaptiveSparkPlanExec(
       assert(physicalNode.isDefined)
       // Replace the corresponding logical node with LogicalQueryStage
       val newLogicalNode = LogicalQueryStage(logicalNode, physicalNode.get)
-      // Force update logical link
-      physicalNode.get.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, newLogicalNode)
-
       val newLogicalPlan = currentLogicalPlan.transformDown {
         case p if p.eq(logicalNode) => newLogicalNode
       }
