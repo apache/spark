@@ -64,6 +64,8 @@ case class AdaptiveSparkPlanExec(
   @transient private val executionId = Option(
     session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
 
+  @transient private val lock = new Object()
+
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
@@ -108,7 +110,7 @@ case class AdaptiveSparkPlanExec(
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
-  override def doExecute(): RDD[InternalRow] = this.synchronized {
+  override def doExecute(): RDD[InternalRow] = lock.synchronized {
     var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
     var result = createQueryStages(currentPhysicalPlan)
     val events = new LinkedBlockingQueue[StageMaterializationEvent]()
