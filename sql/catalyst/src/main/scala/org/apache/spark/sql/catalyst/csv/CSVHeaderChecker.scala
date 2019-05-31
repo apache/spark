@@ -49,6 +49,29 @@ class CSVHeaderChecker(
   // the column name don't conform to the schema, an exception is thrown.
   private val enforceSchema = options.enforceSchema
 
+  // SPARK-27873: When using `columnNameOfCorruptRecord` in specified schema, it shouldn't be
+  // checked with column names in a CSV header, because it isn't a column actually existing
+  // in CSV files.
+  private val schemaWithoutColumnNameOfCorruptRecord: StructType = {
+    val columnNameOfCorruptRecord = if (!caseSensitive) {
+      // scalastyle:off caselocale
+      options.columnNameOfCorruptRecord.toLowerCase
+      // scalastyle:on caselocale
+    } else {
+      options.columnNameOfCorruptRecord
+    }
+
+    StructType(schema.filter { field =>
+      if (!caseSensitive) {
+        // scalastyle:off caselocale
+        columnNameOfCorruptRecord != field.name.toLowerCase
+        // scalastyle:on caselocale
+      } else {
+        columnNameOfCorruptRecord != field.name
+      }
+    })
+  }
+
   /**
    * Checks that column names in a CSV header and field names in the schema are the same
    * by taking into account case sensitivity.
@@ -57,7 +80,7 @@ class CSVHeaderChecker(
    */
   private def checkHeaderColumnNames(columnNames: Array[String]): Unit = {
     if (columnNames != null) {
-      val fieldNames = schema.map(_.name).toIndexedSeq
+      val fieldNames = schemaWithoutColumnNameOfCorruptRecord.map(_.name).toIndexedSeq
       val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
       var errorMessage: Option[String] = None
 
