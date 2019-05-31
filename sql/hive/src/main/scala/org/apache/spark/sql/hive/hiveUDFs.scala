@@ -474,7 +474,10 @@ private[hive] case class HiveUDAFFunction(
   override def serialize(buffer: HiveUDAFBuffer): Array[Byte] = {
     // Serializes an `AggregationBuffer` that holds partial aggregation results so that we can
     // shuffle it for global aggregation later.
-    aggBufferSerDe.serialize(buffer.buf)
+    aggBufferSerDe.serialize(Option(buffer) match {
+      case Some(buffer) => buffer.buf
+      case None => null
+    })
   }
 
   override def deserialize(bytes: Array[Byte]): HiveUDAFBuffer = {

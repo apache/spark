@@ -149,6 +149,14 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       }
     }
   }
+
+  test("HiveUDAF with 0 rows throws NPE") {
+    sql("create table abc(a int)")
+    sql("insert into abc values (1)")
+    sql("insert into abc values (2)")
+    sql("select histogram_numeric(a,2) from abc").show
+    sql("select histogram_numeric(a,2) from abc where a=3").show
+  }
 }
 
 /**
