@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
@@ -570,7 +570,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
     Process(
       Seq(pythonExec, "-c", "import pyspark"),
       None,
-      "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+      "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
     true
   }.getOrElse(false)
 
@@ -580,11 +580,21 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
     sys.props("spark.test.home")
   } else {
     assert(sys.env.contains("SPARK_HOME"), "SPARK_HOME is not set.")
-    sys.env.get("SPARK_HOME").orNull
+    sys.env("SPARK_HOME")
   }
   // Note that we will directly refer python from source, not built-in zip. It is possible
   // the test is being ran without a regular build.
-  private val sourcePythonPath = new File(sparkHome, "python").getAbsolutePath
+  private val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
+  private val py4jPath = Paths.get(
+    sparkHome, "python", "lib", "py4j-0.10.8.1-src.zip").toAbsolutePath
+  private val pysparkPythonPath = s"$py4jPath:$sourcePath"
+
+  if (!sourcePath.toFile.exists()) {
+    logWarning(s"PySpark source directory was not found [$sourcePath].")
+  }
+  if (!py4jPath.toFile.exists()) {
+    logWarning(s"Py4J zip was not found [$py4jPath].")
+  }
 
   private lazy val isPandasAvailable: Boolean = isPythonAvailable && isPySparkAvailable && Try {
     Process(
@@ -594,7 +604,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
         "from pyspark.sql.utils import require_minimum_pandas_version;" +
           "require_minimum_pandas_version()"),
       None,
-      "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+      "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
     true
   }.getOrElse(false)
 
@@ -606,7 +616,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
         "from pyspark.sql.utils import require_minimum_pyarrow_version;" +
           "require_minimum_pyarrow_version()"),
       None,
-      "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+      "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
     true
   }.getOrElse(false)
 
@@ -614,7 +624,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
     Process(
       Seq(pythonExec, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"),
       None,
-      "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!.trim()
+      "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!.trim()
   } else {
     throw new RuntimeException(s"Python executable [$pythonExec] is unavailable.")
   }
@@ -637,7 +647,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
             "from pyspark import cloudpickle; " +
             s"cloudpickle.dump((lambda x: str(x), StringType()), open('$path', 'wb'))"),
         None,
-        "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+        "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
       binaryPythonFunc = Files.readAllBytes(path.toPath)
     }
     assert(binaryPythonFunc != null)
@@ -657,7 +667,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
             "from pyspark import cloudpickle; " +
             s"cloudpickle.dump((lambda x: x.apply(str), StringType()), open('$path', 'wb'))"),
         None,
-        "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+        "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
       binaryPythonFunc = Files.readAllBytes(path.toPath)
     }
     assert(binaryPythonFunc != null)
@@ -669,7 +679,7 @@ object IntegratedUDFTestUtils extends SQLHelper with Logging {
   trait TestUDF
 
   val workerEnv = new java.util.HashMap[String, String]()
-  workerEnv.put("PYTHONPATH", s"$sourcePythonPath:$pythonPath")
+  workerEnv.put("PYTHONPATH", s"$pysparkPythonPath:$pythonPath")
 
   class TestPythonUDF() extends TestUDF {
     lazy val udf = UserDefinedPythonFunction(
