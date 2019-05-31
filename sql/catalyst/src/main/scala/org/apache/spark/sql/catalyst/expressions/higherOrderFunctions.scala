@@ -425,6 +425,53 @@ case class ArrayExists(
 }
 
 /**
+ * Tests whether a predicate holds for all elements in the array.
+ */
+@ExpressionDescription(usage =
+  "_FUNC_(expr, pred) - Tests whether a predicate holds for all elements in the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 3, 7), x -> x % 2 == 1);
+       true
+      > SELECT _FUNC_(array(1, 3, 6), x -> x % 2 == 1);
+       false
+  """,
+  since = "3.0.0")
+case class ArrayForAll(
+    argument: Expression,
+    function: Expression)
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  override def dataType: DataType = BooleanType
+
+  override def functionType: AbstractDataType = BooleanType
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayForAll = {
+    val ArrayType(elementType, containsNull) = argument.dataType
+    copy(function = f(function, (elementType, containsNull) :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData]
+    val f = functionForEval
+    var forall = true
+    var i = 0
+    while (i < arr.numElements && forall) {
+      elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (!f.eval(inputRow).asInstanceOf[Boolean]) {
+        forall = false
+      }
+      i += 1
+    }
+    forall
+  }
+
+  override def prettyName: String = "forall"
+}
+
+/**
  * Applies a binary operator to a start value and all elements in the array.
  */
 @ExpressionDescription(

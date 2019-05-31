@@ -280,6 +280,43 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq(true, null, true))
   }
 
+  test("ArrayForAll") {
+    def forall(expr: Expression, f: Expression => Expression): Expression = {
+      val ArrayType(et, cn) = expr.dataType
+      ArrayForAll(expr, createLambda(et, cn, f)).bind(validateBinding)
+    }
+
+    val ai0 = Literal.create(Seq(2, 4, 8), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    val isEven: Expression => Expression = x => x % 2 === 0
+    val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+
+    checkEvaluation(forall(ai0, isEven), true)
+    checkEvaluation(forall(ai0, isNullOrOdd), false)
+    checkEvaluation(forall(ai1, isEven), false)
+    checkEvaluation(forall(ai1, isNullOrOdd), true)
+    checkEvaluation(forall(ain, isEven), null)
+    checkEvaluation(forall(ain, isNullOrOdd), null)
+
+    val as0 =
+      Literal.create(Seq("a0", "a1", "a2", "a3"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq(null, "b", "c"), ArrayType(StringType, containsNull = true))
+    val asn = Literal.create(null, ArrayType(StringType, containsNull = false))
+
+    val startsWithA: Expression => Expression = x => x.startsWith("a")
+
+    checkEvaluation(forall(as0, startsWithA), true)
+    checkEvaluation(forall(as1, startsWithA), false)
+    checkEvaluation(forall(asn, startsWithA), null)
+
+    val aai = Literal.create(Seq(Seq(1, 3, null), null, Seq(4, 5)),
+      ArrayType(ArrayType(IntegerType, containsNull = true), containsNull = true))
+    checkEvaluation(transform(aai, ix => forall(ix, isNullOrOdd)),
+      Seq(true, null, false))
+  }
+
   test("ArrayAggregate") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
