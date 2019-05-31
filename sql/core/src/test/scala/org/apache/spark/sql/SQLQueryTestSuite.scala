@@ -18,19 +18,30 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.nio.file.Files
 import java.util.{Locale, TimeZone}
 
+import scala.collection.JavaConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
+import org.apache.spark.TestUtils
+import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction}
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Tests
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
+import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
  * End-to-end test cases for SQL queries.
@@ -86,8 +97,24 @@ import org.apache.spark.sql.types.StructType
  *   -- !query 1
  *   ...
  * }}}
+ *
+ * Note that UDF tests differently. After the test files starting with 'udf-' are detected,
+ * it creates three test cases:
+ *
+ *  - Scala UDF test case with a Scalar UDF registered named 'udf'.
+ *
+ *  - Python UDF test case with a Python UDF registered named 'udf'
+ *    iff Python executable and pyspark are available.
+ *
+ *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered named 'udf'
+ *    iff Python executable, pyspark, pandas and pyarrow are available.
+ *
+ * Therefore, UDF test cases should have single input and output files but executed by three
+ * different types of UDFs. See 'udf-inner-join.sql' as an example.
  */
 class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
+
+  import IntegratedUDFTestUtils._
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
@@ -115,9 +142,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   // Create all the test cases.
   listTestCases().foreach(createScalaTestCase)
 
-  /** A test case. */
-  private case class TestCase(name: String, inputFile: String, resultFile: String)
-
   /** A single SQL query's output. */
   private case class QueryOutput(sql: String, schema: String, output: String) {
     def toString(queryIndex: Int): String = {
@@ -126,19 +150,47 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         sql + "\n" +
         s"-- !query $queryIndex schema\n" +
         schema + "\n" +
-         s"-- !query $queryIndex output\n" +
+        s"-- !query $queryIndex output\n" +
         output
     }
   }
+
+  /** A test case. */
+  sealed trait TestCase {
+    val name: String
+    val inputFile: String
+    val resultFile: String
+  }
+
+  /** A regular test case. */
+  private case class RegularTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase
+
+  /** A UDF test case. */
+  private case class UDFTestCase(
+      name: String, inputFile: String, resultFile: String, udf: TestUDF) extends TestCase
 
   private def createScalaTestCase(testCase: TestCase): Unit = {
     if (blackList.exists(t =>
         testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
-    } else {
-      // Create a test case to run this case.
-      test(testCase.name) { runTest(testCase) }
+    } else testCase match {
+      case UDFTestCase(_, _, _, udf: TestPythonUDF) if !shouldTestPythonUDFs =>
+        ignore(s"${testCase.name} is skipped because " +
+          s"[$pythonExec] and/or pyspark were not available.") {
+          /* Do nothing */
+        }
+      case UDFTestCase(_, _, _, udf: TestScalarPandasUDF) if !shouldTestScalarPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case _ =>
+        // Create a test case to run this case.
+        test(testCase.name) {
+          runTest(testCase)
+        }
     }
   }
 
@@ -166,7 +218,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // When we are regenerating the golden files, we don't need to set any config as they
     // all need to return the same result
     if (regenerateGoldenFiles) {
-      runQueries(queries, testCase.resultFile, None)
+      runQueries(queries, testCase, None)
     } else {
       val configSets = {
         val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
@@ -188,7 +240,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
       configSets.foreach { configSet =>
         try {
-          runQueries(queries, testCase.resultFile, Some(configSet))
+          runQueries(queries, testCase, Some(configSet))
         } catch {
           case e: Throwable =>
             val configs = configSet.map {
@@ -203,12 +255,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   private def runQueries(
       queries: Seq[String],
-      resultFileName: String,
+      testCase: TestCase,
       configSet: Option[Seq[(String, String)]]): Unit = {
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
+    testCase match {
+      case udfTestCase: UDFTestCase => registerTestUDF(udfTestCase.udf, localSparkSession)
+      case _ => // Don't add UDFs in Regular tests.
+    }
 
     if (configSet.isDefined) {
       // Execute the list of set operation in order to add the desired configs
@@ -233,7 +289,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         s"-- Number of queries: ${outputs.size}\n\n\n" +
         outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
       }
-      val resultFile = new File(resultFileName)
+      val resultFile = new File(testCase.resultFile)
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
@@ -243,7 +299,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     // Read back the golden file.
     val expectedOutputs: Seq[QueryOutput] = {
-      val goldenOutput = fileToString(new File(resultFileName))
+      val goldenOutput = fileToString(new File(testCase.resultFile))
       val segments = goldenOutput.split("-- !query.+\n")
 
       // each query has 3 segments, plus the header
@@ -322,11 +378,33 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def listTestCases(): Seq[TestCase] = {
-    listFilesRecursively(new File(inputFilePath)).map { file =>
+    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-      TestCase(testCaseName, absPath, resultFile)
+
+      if (file.getName.startsWith("udf-")) {
+        Seq(
+          UDFTestCase(
+            s"$testCaseName - Scala UDF",
+            absPath,
+            resultFile,
+            new TestScalaUDF),
+
+          UDFTestCase(
+            s"$testCaseName - Python UDF",
+            absPath,
+            resultFile,
+            new TestPythonUDF),
+
+          UDFTestCase(
+            s"$testCaseName - Scalar Pandas UDF",
+            absPath,
+            resultFile,
+            new TestScalarPandasUDF))
+      } else {
+        RegularTestCase(testCaseName, absPath, resultFile) :: Nil
+      }
     }
   }
 
@@ -439,6 +517,205 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       logWarning(RuleExecutor.dumpTimeSpent())
     } finally {
       super.afterAll()
+    }
+  }
+}
+
+
+/**
+ * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF and
+ * Scalar Pandas UDFs can be tested in SBT & Maven tests.
+ *
+ * The available UDFs cast input to strings and take one column as input with a string type
+ * column as output.
+ *
+ * To register Scala UDF in SQL:
+ * {{{
+ *   IntegratedUDFTestUtils.registerTestUDF(new TestScalaUDF, spark)
+ * }}}
+ *
+ * To register Python UDF in SQL:
+ * {{{
+ *   IntegratedUDFTestUtils.registerTestUDF(new TestPythonUDF, spark)
+ * }}}
+ *
+ * To register Scalar Pandas UDF in SQL:
+ * {{{
+ *   IntegratedUDFTestUtils.registerTestUDF(new TestScalarPandasUDF, spark)
+ * }}}
+ *
+ * To use it in Scala API and SQL:
+ * {{{
+ *   sql("SELECT udf(1)")
+ *   spark.select(expr("udf(1)")
+ * }}}
+ *
+ * They are currently registered as the name 'udf' in function registry.
+ */
+object IntegratedUDFTestUtils extends SQLHelper with Logging {
+  import scala.sys.process._
+
+  lazy val pythonExec: String = {
+    val pythonExec = sys.env.getOrElse("PYSPARK_PYTHON", "python3.6")
+    if (TestUtils.testCommandAvailable(pythonExec)) {
+      pythonExec
+    } else {
+      "python"
+    }
+  }
+
+  private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
+
+  private lazy val isPySparkAvailable: Boolean = isPythonAvailable && Try {
+    Process(
+      Seq(pythonExec, "-c", "import pyspark"),
+      None,
+      "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+    true
+  }.getOrElse(false)
+
+  private val pythonPath = sys.env.getOrElse("PYTHONPATH", "")
+  private val sparkHome = if (sys.props.contains(Tests.IS_TESTING.key)) {
+    assert(sys.props.contains("spark.test.home"), "spark.test.home is not set.")
+    sys.props("spark.test.home")
+  } else {
+    assert(sys.env.contains("SPARK_HOME"), "SPARK_HOME is not set.")
+    sys.env.get("SPARK_HOME").orNull
+  }
+  // Note that we will directly refer python from source, not built-in zip. It is possible
+  // the test is being ran without a regular build.
+  private val sourcePythonPath = new File(sparkHome, "python").getAbsolutePath
+
+  private lazy val isPandasAvailable: Boolean = isPythonAvailable && isPySparkAvailable && Try {
+    Process(
+      Seq(
+        pythonExec,
+        "-c",
+        "from pyspark.sql.utils import require_minimum_pandas_version;" +
+          "require_minimum_pandas_version()"),
+      None,
+      "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+    true
+  }.getOrElse(false)
+
+  private lazy val isPyArrowAvailable: Boolean = isPythonAvailable && isPySparkAvailable  && Try {
+    Process(
+      Seq(
+        pythonExec,
+        "-c",
+        "from pyspark.sql.utils import require_minimum_pyarrow_version;" +
+          "require_minimum_pyarrow_version()"),
+      None,
+      "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+    true
+  }.getOrElse(false)
+
+  private lazy val pythonVer = if (isPythonAvailable) {
+    Process(
+      Seq(pythonExec, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"),
+      None,
+      "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!.trim()
+  } else {
+    throw new RuntimeException(s"Python executable [$pythonExec] is unavailable.")
+  }
+
+  lazy val shouldTestPythonUDFs: Boolean = isPythonAvailable && isPySparkAvailable
+
+  lazy val shouldTestScalarPandasUDFs: Boolean =
+    isPythonAvailable && isPandasAvailable && isPyArrowAvailable
+
+  // Dynamically pickles and reads into JVM side in order to mimic Python native function within
+  // Python UDFs.
+  private lazy val pythonFunc: Array[Byte] = if (isPythonAvailable) {
+    var binaryPythonFunc: Array[Byte] = null
+    withTempPath { path =>
+      Process(
+        Seq(
+          pythonExec,
+          "-c",
+          "from pyspark.sql.types import StringType; " +
+            "from pyspark import cloudpickle; " +
+            s"cloudpickle.dump((lambda x: str(x), StringType()), open('$path', 'wb'))"),
+        None,
+        "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+      binaryPythonFunc = Files.readAllBytes(path.toPath)
+    }
+    assert(binaryPythonFunc != null)
+    binaryPythonFunc
+  } else {
+    throw new RuntimeException(s"Python executable [$pythonExec] is unavailable.")
+  }
+
+  private lazy val pandasFunc: Array[Byte] = if (isPythonAvailable) {
+    var binaryPythonFunc: Array[Byte] = null
+    withTempPath { path =>
+      Process(
+        Seq(
+          pythonExec,
+          "-c",
+          "from pyspark.sql.types import StringType; " +
+            "from pyspark import cloudpickle; " +
+            s"cloudpickle.dump((lambda x: x.apply(str), StringType()), open('$path', 'wb'))"),
+        None,
+        "PYTHONPATH" -> s"$sourcePythonPath:$pythonPath").!!
+      binaryPythonFunc = Files.readAllBytes(path.toPath)
+    }
+    assert(binaryPythonFunc != null)
+    binaryPythonFunc
+  } else {
+    throw new RuntimeException(s"Python executable [$pythonExec] is unavailable.")
+  }
+
+  trait TestUDF
+
+  class TestPythonUDF() extends TestUDF {
+    lazy val udf = UserDefinedPythonFunction(
+      name = "udf",
+      func = PythonFunction(
+        command = pythonFunc,
+        envVars = new java.util.HashMap[String, String](),
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = StringType,
+      pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+  }
+
+  class TestScalarPandasUDF() extends TestUDF {
+    lazy val udf = UserDefinedPythonFunction(
+      name = "udf",
+      func = PythonFunction(
+        command = pandasFunc,
+        envVars = new java.util.HashMap[String, String](),
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = StringType,
+      pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      udfDeterministic = true)
+  }
+
+  class TestScalaUDF() extends TestUDF {
+    lazy val udf = SparkUserDefinedFunction(
+      (input: Any) => input.toString,
+      StringType,
+      inputSchemas = Seq.fill(1)(None))
+  }
+
+  /**
+   * Register UDFs used in this test case.
+   */
+  def registerTestUDF(testUDF: TestUDF, session: SparkSession): Unit = {
+    testUDF match {
+      case udf: TestPythonUDF => session.udf.registerPython("udf", udf.udf)
+      case udf: TestScalarPandasUDF => session.udf.registerPython("udf", udf.udf)
+      case udf: TestScalaUDF => session.udf.register("udf", udf.udf)
+      case other => throw new RuntimeException(s"Unknown UDF class [${other.getClass}]")
     }
   }
 }
