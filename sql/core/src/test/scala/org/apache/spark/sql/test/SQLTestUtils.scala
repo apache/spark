@@ -24,7 +24,6 @@ import java.util.{Locale, UUID}
 
 import scala.concurrent.duration._
 import scala.language.implicitConversions
-import scala.util.{Failure, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -34,6 +33,7 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -43,7 +43,6 @@ import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
-
 
 /**
  * Helper trait that should be extended by all SQL test suites within the Spark
@@ -257,12 +256,12 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
-      val suppressed = viewNames.map(viewName => Try(spark.catalog.dropTempView(viewName))).map {
-        case Failure(t) => t
-      }
-      if (suppressed.nonEmpty) {
-        suppressed.tail.foreach(suppressed.head.addSuppressed)
-        throw suppressed.head
+      viewNames.foreach { viewName =>
+        try spark.catalog.dropTempView(viewName) catch {
+          // If the test failed part way, we don't want to mask the failure by failing to remove
+          // temp views that never got created.
+          case _: NoSuchTableException =>
+        }
       }
     }
   }
@@ -272,14 +271,12 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def withGlobalTempView(viewNames: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
-      val suppressed = viewNames.map(viewName =>
-        Try(spark.catalog.dropGlobalTempView(viewName))
-      ).map {
-        case Failure(t) => t
-      }
-      if (suppressed.nonEmpty) {
-        suppressed.tail.foreach(suppressed.head.addSuppressed)
-        throw suppressed.head
+      viewNames.foreach { viewName =>
+        try spark.catalog.dropGlobalTempView(viewName) catch {
+          // If the test failed part way, we don't want to mask the failure by failing to remove
+          // temp views that never got created.
+          case _: NoSuchTableException =>
+        }
       }
     }
   }
@@ -288,9 +285,11 @@ private[sql] trait SQLTestUtilsBase
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(tableNames.foreach { name =>
-      spark.sql(s"DROP TABLE IF EXISTS $name")
-    })
+    Utils.tryWithSafeFinally(f) {
+      tableNames.foreach { name =>
+        spark.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
   }
 
   /**
@@ -309,13 +308,10 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def withCache(cacheNames: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
-      val suppressed = cacheNames.map(cacheName => Try(uncacheTable(cacheName)))
-        .map {
-        case Failure(t) => t
-      }
-      if (suppressed.nonEmpty) {
-        suppressed.tail.foreach(suppressed.head.addSuppressed)
-        throw suppressed.head
+      cacheNames.foreach { cacheName =>
+        try uncacheTable(cacheName) catch {
+          case _: AnalysisException =>
+        }
       }
     }
   }
