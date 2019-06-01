@@ -243,6 +243,10 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors().toSet === Set("2", "3"))
     assert(monitor.pendingRemovalCount === 1)
 
+    // Check the timed out executors again so that we're sure they're still timed out when no
+    // events happen. This ensures that the monitor doesn't lose track of them.
+    assert(monitor.timedOutExecutors().toSet === Set("2", "3"))
+
     monitor.onTaskStart(SparkListenerTaskStart(1, 1, taskInfo("2", 1)))
     assert(monitor.timedOutExecutors().toSet === Set("3"))
 
