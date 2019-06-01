@@ -130,14 +130,13 @@ case class Generate(
 case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
 
-  private val impliedNotNullExprIds: Set[ExprId] = {
-    splitConjunctivePredicates(condition)
-      .collect { case isNotNull: IsNotNull => isNotNull }
-      .map(getImpliedNotNullExprIds)
-      .foldLeft(Set.empty[ExprId])(_ ++ _)
-  }
-
   override def output: Seq[Attribute] = {
+    val impliedNotNullExprIds: Set[ExprId] = {
+      splitConjunctivePredicates(condition)
+        .collect { case isNotNull: IsNotNull => isNotNull }
+        .map(getImpliedNotNullExprIds)
+        .foldLeft(Set.empty[ExprId])(_ ++ _)
+    }
     child.output.map { a =>
       if (a.nullable && impliedNotNullExprIds.contains(a.exprId)) {
         a.withNullability(false)
