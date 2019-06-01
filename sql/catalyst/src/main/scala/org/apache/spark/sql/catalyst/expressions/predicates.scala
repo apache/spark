@@ -119,6 +119,39 @@ trait PredicateHelper {
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
   }
+
+  /**
+   * Given a sequence of attributes and a filter condition, update attributes' nullability
+   * when the condition implies that attributes cannot be null.
+   */
+  protected def updateAttributeNullabilityFromNonNullConstraints(
+      attributes: Seq[Attribute],
+      condition: Expression): Seq[Attribute] = {
+    val attributeSet = AttributeSet(attributes)
+
+    // If one expression and its children are null intolerant, it is null intolerant.
+    def isNullIntolerant(expr: Expression): Boolean = expr match {
+      case e: NullIntolerant => e.children.forall(isNullIntolerant)
+      case _ => false
+    }
+
+    // Split out all the IsNotNulls from condition.
+    val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
+      case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(attributeSet)
+      case _ => false
+    }
+
+    // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
+    val notNullAttributes = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
+
+    attributes.map { a =>
+      if (a.nullable && notNullAttributes.contains(a.exprId)) {
+        a.withNullability(false)
+      } else {
+        a
+      }
+    }
+  }
 }
 
 @ExpressionDescription(

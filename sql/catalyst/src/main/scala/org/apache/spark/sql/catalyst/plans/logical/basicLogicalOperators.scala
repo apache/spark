@@ -129,7 +129,10 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
-  override def output: Seq[Attribute] = child.output
+
+  override def output: Seq[Attribute] = {
+    updateAttributeNullabilityFromNonNullConstraints(child.output, condition)
+  }
 
   override def maxRows: Option[Long] = child.maxRows
 
