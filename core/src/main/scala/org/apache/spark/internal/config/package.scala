@@ -71,7 +71,7 @@ package object config {
     .createWithDefaultString("1g")
 
   private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.memoryOverhead")
-    .doc("The amount of off-heap memory to be allocated per driver in cluster mode, " +
+    .doc("The amount of non-heap memory to be allocated per driver in cluster mode, " +
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createOptional
@@ -196,7 +196,7 @@ package object config {
     .createWithDefaultString("1g")
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
-    .doc("The amount of off-heap memory to be allocated per executor in cluster mode, " +
+    .doc("The amount of non-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createOptional
