@@ -5,6 +5,14 @@
 -- AGGREGATES [Part 2]
 -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql#L145-L350
 
+create temporary view int4_tbl as select * from values
+  (0),
+  (123456),
+  (-123456),
+  (2147483647),
+  (-2147483647)
+  as int4_tbl(f1);
+
 -- Test handling of Params within aggregate arguments in hashed aggregation.
 -- Per bug report from Jeevan Chalke.
 -- [SPARK-27877] Implement SQL-standard LATERAL subqueries
@@ -70,6 +78,7 @@
 --   BIT_OR(y)   AS "1101"
 -- FROM bitwise_test;
 
+-- [SPARK-27880] Implement boolean aggregates(BOOL_AND/booland_statefunc, BOOL_OR/boolor_statefunc and EVERY)
 --
 -- test boolean aggregates
 --
@@ -103,7 +112,6 @@
 --   boolor_statefunc(FALSE, TRUE) AS "t",
 --   NOT boolor_statefunc(FALSE, FALSE) AS "t";
 
--- [SPARK-27880] Implement boolean aggregates(BOOL_AND, BOOL_OR and EVERY)
 -- CREATE TEMPORARY TABLE bool_test(
 --   b1 BOOL,
 --   b2 BOOL,
@@ -155,17 +163,17 @@
 --
 
 -- Basic cases
-explain
-  select min(unique1) from tenk1;
+-- explain
+--  select min(unique1) from tenk1;
 select min(unique1) from tenk1;
-explain
-  select max(unique1) from tenk1;
+-- explain
+--  select max(unique1) from tenk1;
 select max(unique1) from tenk1;
-explain
-  select max(unique1) from tenk1 where unique1 < 42;
+-- explain
+--  select max(unique1) from tenk1 where unique1 < 42;
 select max(unique1) from tenk1 where unique1 < 42;
-explain
-  select max(unique1) from tenk1 where unique1 > 42;
+-- explain
+--  select max(unique1) from tenk1 where unique1 > 42;
 select max(unique1) from tenk1 where unique1 > 42;
 
 -- the planner may choose a generic aggregate here if parallel query is
@@ -174,44 +182,45 @@ select max(unique1) from tenk1 where unique1 > 42;
 -- the optimized plan, so temporarily disable parallel query.
 -- begin;
 -- set local max_parallel_workers_per_gather = 0;
-explain
-  select max(unique1) from tenk1 where unique1 > 42000;
+-- explain
+--  select max(unique1) from tenk1 where unique1 > 42000;
 select max(unique1) from tenk1 where unique1 > 42000;
 -- rollback;
 
 -- multi-column index (uses tenk1_thous_tenthous)
-explain
-  select max(tenthous) from tenk1 where thousand = 33;
+-- explain
+--  select max(tenthous) from tenk1 where thousand = 33;
 select max(tenthous) from tenk1 where thousand = 33;
-explain
-  select min(tenthous) from tenk1 where thousand = 33;
+-- explain
+--  select min(tenthous) from tenk1 where thousand = 33;
 select min(tenthous) from tenk1 where thousand = 33;
 
+-- [SPARK-17348] Correlated column is not allowed in a non-equality predicate
 -- check parameter propagation into an indexscan subquery
-explain
-  select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
-    from int4_tbl;
-select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
-  from int4_tbl;
+-- explain
+--  select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
+--    from int4_tbl;
+-- select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
+--  from int4_tbl;
 
 -- check some cases that were handled incorrectly in 8.3.0
-explain
-  select distinct max(unique2) from tenk1;
+-- explain
+--  select distinct max(unique2) from tenk1;
 select distinct max(unique2) from tenk1;
-explain
-  select max(unique2) from tenk1 order by 1;
+-- explain
+--  select max(unique2) from tenk1 order by 1;
 select max(unique2) from tenk1 order by 1;
-explain
-  select max(unique2) from tenk1 order by max(unique2);
+-- explain
+--  select max(unique2) from tenk1 order by max(unique2);
 select max(unique2) from tenk1 order by max(unique2);
-explain
-  select max(unique2) from tenk1 order by max(unique2)+1;
+-- explain
+--  select max(unique2) from tenk1 order by max(unique2)+1;
 select max(unique2) from tenk1 order by max(unique2)+1;
-explain
-  select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
-select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
+-- explain
+--  select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
+select t1.max_unique2, g from (select max(unique2) as max_unique2 FROM tenk1) t1 LATERAL VIEW explode(array(1,2,3)) t2 AS g order by g desc;
 
 -- interesting corner case: constant gets optimized into a seqscan
-explain
-  select max(100) from tenk1;
+-- explain
+--  select max(100) from tenk1;
 select max(100) from tenk1;
