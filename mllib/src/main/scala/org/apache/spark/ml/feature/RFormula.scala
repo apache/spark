@@ -35,7 +35,10 @@ import org.apache.spark.sql.types._
 /**
  * Base trait for [[RFormula]] and [[RFormulaModel]].
  */
-private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with HasHandleInvalid {
+private[feature] trait RFormulaBase
+    extends HasFeaturesCol
+    with HasLabelCol
+    with HasHandleInvalid {
 
   /**
    * R formula parameter. The formula is provided in string form.
@@ -57,7 +60,9 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
    * @group param
    */
   @Since("2.1.0")
-  val forceIndexLabel: BooleanParam = new BooleanParam(this, "forceIndexLabel",
+  val forceIndexLabel: BooleanParam = new BooleanParam(
+    this,
+    "forceIndexLabel",
     "Force to index label whether it is numeric or string")
   setDefault(forceIndexLabel -> false)
 
@@ -74,10 +79,12 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
    * @group param
    */
   @Since("2.3.0")
-  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+  override val handleInvalid: Param[String] = new Param[String](
+    this,
+    "handleInvalid",
     "How to handle invalid data (unseen or NULL values) in features and label column of string " +
-    "type. Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
-    "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
+      "type. Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
+      "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
     ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
   setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
 
@@ -105,12 +112,14 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
    * @group param
    */
   @Since("2.3.0")
-  final val stringIndexerOrderType: Param[String] = new Param(this, "stringIndexerOrderType",
+  final val stringIndexerOrderType: Param[String] = new Param(
+    this,
+    "stringIndexerOrderType",
     "How to order categories of a string FEATURE column used by StringIndexer. " +
-    "The last category after ordering is dropped when encoding strings. " +
-    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}. " +
-    "The default value is 'frequencyDesc'. When the ordering is set to 'alphabetDesc', " +
-    "RFormula drops the same category as R when encoding strings.",
+      "The last category after ordering is dropped when encoding strings. " +
+      s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}. " +
+      "The default value is 'frequencyDesc'. When the ordering is set to 'alphabetDesc', " +
+      "RFormula drops the same category as R when encoding strings.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))
   setDefault(stringIndexerOrderType, StringIndexer.frequencyDesc)
 
@@ -126,8 +135,9 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
 /**
  * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
- * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*' and '^'.
+ * Also see the R formula docs here:
+ * http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  *
  * The basic operators are:
  *  - `~` separate target and terms
@@ -135,6 +145,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  *  - `-` remove a term, "- 1" means removing intercept
  *  - `:` interaction (multiplication for numeric values, or binarized categorical values)
  *  - `.` all columns except target
+ *  - `*` factor crossing, includes the terms and interactions between them
+ *  - `^` factor crossing to a specified degree
  *
  * Suppose `a` and `b` are double columns, we use the following simple examples
  * to illustrate the effect of `RFormula`:
@@ -142,6 +154,10 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  * are coefficients.
  *  - `y ~ a + b + a:b - 1` means model `y ~ w1 * a + w2 * b + w3 * a * b` where `w1, w2, w3`
  * are coefficients.
+ *  - `y ~ a * b` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
+ *  intercept and `w1, w2, w3` are coefficients
+ *  - `y ~ (a + b)^2` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
+ *  intercept and `w1, w2, w3` are coefficients
  *
  * RFormula produces a vector column of features and a double or string column of label.
  * Like when formulas are used in R for linear regression, string input columns will be one-hot
@@ -152,8 +168,10 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  */
 @Experimental
 @Since("1.5.0")
-class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
-  extends Estimator[RFormulaModel] with RFormulaBase with DefaultParamsWritable {
+class RFormula @Since("1.5.0")(@Since("1.5.0") override val uid: String)
+    extends Estimator[RFormulaModel]
+    with RFormulaBase
+    with DefaultParamsWritable {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("rFormula"))
@@ -283,7 +301,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     encoderStages += new ColumnPruner(tempColumns.toSet)
 
     if ((dataset.schema.fieldNames.contains(resolvedFormula.label) &&
-      dataset.schema(resolvedFormula.label).dataType == StringType) || $(forceIndexLabel)) {
+        dataset.schema(resolvedFormula.label).dataType == StringType) || $(forceIndexLabel)) {
       encoderStages += new StringIndexer()
         .setInputCol(resolvedFormula.label)
         .setOutputCol($(labelCol))
@@ -297,13 +315,15 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
-    require(!hasLabelCol(schema) || !$(forceIndexLabel),
+    require(
+      !hasLabelCol(schema) || ! $(forceIndexLabel),
       "If label column already exists, forceIndexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
     } else {
-      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true) :+
-        StructField($(labelCol), DoubleType, true))
+      StructType(
+        schema.fields :+ StructField($(featuresCol), new VectorUDT, true) :+
+          StructField($(labelCol), DoubleType, true))
     }
   }
 
@@ -331,11 +351,13 @@ object RFormula extends DefaultParamsReadable[RFormula] {
  */
 @Experimental
 @Since("1.5.0")
-class RFormulaModel private[feature](
+class RFormulaModel private[feature] (
     @Since("1.5.0") override val uid: String,
     private[ml] val resolvedFormula: ResolvedRFormula,
     private[ml] val pipelineModel: PipelineModel)
-  extends Model[RFormulaModel] with RFormulaBase with MLWritable {
+    extends Model[RFormulaModel]
+    with RFormulaBase
+    with MLWritable {
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -393,7 +415,8 @@ class RFormulaModel private[feature](
     val columnNames = schema.map(_.name)
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(
-      !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType.isInstanceOf[NumericType],
+      !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType
+        .isInstanceOf[NumericType],
       s"Label column already exists and is not of type ${NumericType.simpleString}.")
   }
 
@@ -418,8 +441,11 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: resolvedFormula
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(instance.resolvedFormula))
-        .repartition(1).write.parquet(dataPath)
+      sparkSession
+        .createDataFrame(Seq(instance.resolvedFormula))
+        .repartition(1)
+        .write
+        .parquet(dataPath)
       // Save pipeline model
       val pmPath = new Path(path, "pipelineModel").toString
       instance.pipelineModel.save(pmPath)
@@ -435,7 +461,8 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("label", "terms", "hasIntercept").head()
+      val data =
+        sparkSession.read.parquet(dataPath).select("label", "terms", "hasIntercept").head()
       val label = data.getString(0)
       val terms = data.getAs[Seq[Seq[String]]](1)
       val hasIntercept = data.getBoolean(2)
@@ -457,7 +484,8 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
  * TODO(ekl) make this a public transformer
  */
 private class ColumnPruner(override val uid: String, val columnsToPrune: Set[String])
-  extends Transformer with MLWritable {
+    extends Transformer
+    with MLWritable {
 
   def this(columnsToPrune: Set[String]) =
     this(Identifiable.randomUID("columnPruner"), columnsToPrune)
@@ -530,7 +558,8 @@ private class VectorAttributeRewriter(
     override val uid: String,
     val vectorCol: String,
     val prefixesToRewrite: Map[String, String])
-  extends Transformer with MLWritable {
+    extends Transformer
+    with MLWritable {
 
   def this(vectorCol: String, prefixesToRewrite: Map[String, String]) =
     this(Identifiable.randomUID("vectorAttrRewriter"), vectorCol, prefixesToRewrite)
@@ -540,8 +569,9 @@ private class VectorAttributeRewriter(
       val group = AttributeGroup.fromStructField(dataset.schema(vectorCol))
       val attrs = group.attributes.get.map { attr =>
         if (attr.name.isDefined) {
-          val name = prefixesToRewrite.foldLeft(attr.name.get) { case (curName, (from, to)) =>
-            curName.replace(from, to)
+          val name = prefixesToRewrite.foldLeft(attr.name.get) {
+            case (curName, (from, to)) =>
+              curName.replace(from, to)
           }
           attr.withName(name)
         } else {
@@ -552,13 +582,13 @@ private class VectorAttributeRewriter(
     }
     val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
     val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
-    dataset.select(otherCols :+ rewrittenCol : _*)
+    dataset.select(otherCols :+ rewrittenCol: _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
     StructType(
       schema.fields.filter(_.name != vectorCol) ++
-      schema.fields.filter(_.name == vectorCol))
+        schema.fields.filter(_.name == vectorCol))
   }
 
   override def copy(extra: ParamMap): VectorAttributeRewriter = defaultCopy(extra)
@@ -573,8 +603,9 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
   override def load(path: String): VectorAttributeRewriter = super.load(path)
 
   /** [[MLWriter]] instance for [[VectorAttributeRewriter]] */
-  private[VectorAttributeRewriter]
-  class VectorAttributeRewriterWriter(instance: VectorAttributeRewriter) extends MLWriter {
+  private[VectorAttributeRewriter] class VectorAttributeRewriterWriter(
+      instance: VectorAttributeRewriter)
+      extends MLWriter {
 
     private case class Data(vectorCol: String, prefixesToRewrite: Map[String, String])
 
@@ -597,7 +628,8 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("vectorCol", "prefixesToRewrite").head()
+      val data =
+        sparkSession.read.parquet(dataPath).select("vectorCol", "prefixesToRewrite").head()
       val vectorCol = data.getString(0)
       val prefixesToRewrite = data.getAs[Map[String, String]](1)
       val rewriter = new VectorAttributeRewriter(metadata.uid, vectorCol, prefixesToRewrite)
