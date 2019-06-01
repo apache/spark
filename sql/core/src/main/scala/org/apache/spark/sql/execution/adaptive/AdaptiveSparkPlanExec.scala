@@ -85,6 +85,8 @@ case class AdaptiveSparkPlanExec(
   @volatile private var currentPhysicalPlan =
     applyPhysicalRules(initialPlan, queryStagePreparationRules)
 
+  @volatile private var isFinalPlan = false
+
   // The logical plan optimizer for re-optimizing the current logical plan.
   private object Optimizer extends RuleExecutor[LogicalPlan] {
     // TODO add more optimization rules
@@ -110,67 +112,73 @@ case class AdaptiveSparkPlanExec(
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
-  override def doExecute(): RDD[InternalRow] = lock.synchronized {
-    var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
-    var result = createQueryStages(currentPhysicalPlan)
-    val events = new LinkedBlockingQueue[StageMaterializationEvent]()
-    val errors = new mutable.ArrayBuffer[SparkException]()
-    while (!result.allChildStagesMaterialized) {
-      currentPhysicalPlan = result.newPlan
-      currentLogicalPlan = updateLogicalPlan(currentLogicalPlan, result.newStages)
-      currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
-      onUpdatePlan()
-
-      // Start materialization of all new stages.
-      result.newStages.map(_._2).foreach { stage =>
-        stage.materialize().onComplete { res =>
-          if (res.isSuccess) {
-            events.offer(StageSuccess(stage, res.get))
-          } else {
-            events.offer(StageFailure(stage, res.failed.get))
-          }
-        }(AdaptiveSparkPlanExec.executionContext)
-      }
-
-      // Wait on the next completed stage, which indicates new stats are available and probably
-      // new stages can be created. There might be other stages that finish at around the same
-      // time, so we process those stages too in order to reduce re-planning.
-      val nextMsg = events.take()
-      val rem = new util.ArrayList[StageMaterializationEvent]()
-      events.drainTo(rem)
-      (Seq(nextMsg) ++ rem.asScala).foreach {
-        case StageSuccess(stage, res) =>
-          stage.resultOption = Some(res)
-        case StageFailure(stage, ex) =>
-          errors.append(
-            new SparkException(s"Fail to materialize query stage: ${stage.treeString}", ex))
-      }
-
-      // In case of errors, we cancel all running stages and throw exception.
-      if (errors.nonEmpty) {
-        try {
-          currentPhysicalPlan.foreach {
-            case s: QueryStageExec => s.cancel()
-            case _ =>
-          }
-        } finally {
-          val ex = new SparkException(
-            "Adaptive execution failed due to stage materialization failures.", errors.head)
-          errors.tail.foreach(ex.addSuppressed)
-          throw ex
-        }
-      }
-
-      // Do re-planning and try creating new stages on the new physical plan.
-      reOptimize(currentLogicalPlan)
-      result = createQueryStages(currentPhysicalPlan)
-    }
-
-    // Run the final plan when there's no more unfinished stages.
-    currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
-    logDebug(s"Final plan: $currentPhysicalPlan")
-    onUpdatePlan()
+  override def doExecute(): RDD[InternalRow] = if (isFinalPlan) {
     currentPhysicalPlan.execute()
+  } else {
+    lock.synchronized {
+      var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
+      var result = createQueryStages(currentPhysicalPlan)
+      val events = new LinkedBlockingQueue[StageMaterializationEvent]()
+      val errors = new mutable.ArrayBuffer[SparkException]()
+      while (!result.allChildStagesMaterialized) {
+        currentPhysicalPlan = result.newPlan
+        currentLogicalPlan = updateLogicalPlan(currentLogicalPlan, result.newStages)
+        currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
+        onUpdatePlan()
+
+        // Start materialization of all new stages.
+        result.newStages.map(_._2).foreach { stage =>
+          stage.materialize().onComplete { res =>
+            if (res.isSuccess) {
+              events.offer(StageSuccess(stage, res.get))
+            } else {
+              events.offer(StageFailure(stage, res.failed.get))
+            }
+          }(AdaptiveSparkPlanExec.executionContext)
+        }
+
+        // Wait on the next completed stage, which indicates new stats are available and probably
+        // new stages can be created. There might be other stages that finish at around the same
+        // time, so we process those stages too in order to reduce re-planning.
+        val nextMsg = events.take()
+        val rem = new util.ArrayList[StageMaterializationEvent]()
+        events.drainTo(rem)
+        (Seq(nextMsg) ++ rem.asScala).foreach {
+          case StageSuccess(stage, res) =>
+            stage.resultOption = Some(res)
+          case StageFailure(stage, ex) =>
+            errors.append(
+              new SparkException(s"Fail to materialize query stage: ${stage.treeString}", ex))
+        }
+
+        // In case of errors, we cancel all running stages and throw exception.
+        if (errors.nonEmpty) {
+          try {
+            currentPhysicalPlan.foreach {
+              case s: QueryStageExec => s.cancel()
+              case _ =>
+            }
+          } finally {
+            val ex = new SparkException(
+              "Adaptive execution failed due to stage materialization failures.", errors.head)
+            errors.tail.foreach(ex.addSuppressed)
+            throw ex
+          }
+        }
+
+        // Do re-planning and try creating new stages on the new physical plan.
+        reOptimize(currentLogicalPlan)
+        result = createQueryStages(currentPhysicalPlan)
+      }
+
+      // Run the final plan when there's no more unfinished stages.
+      currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
+      currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
+      logDebug(s"Final plan: $currentPhysicalPlan")
+      onUpdatePlan()
+      isFinalPlan = true
+      currentPhysicalPlan.execute()
+    }
   }
 
   override def generateTreeString(
@@ -196,7 +204,9 @@ case class AdaptiveSparkPlanExec(
    * 3) A list of the new query stages that have been created.
    */
   private def createQueryStages(plan: SparkPlan): CreateStageResult = plan match {
-    case e: Exchange =>
+    case e: Exchange
+        if !e.isInstanceOf[ShuffleExchangeExec] ||
+          e.asInstanceOf[ShuffleExchangeExec].inputRDD.getNumPartitions > 0 =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
       stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
