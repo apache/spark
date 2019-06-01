@@ -215,10 +215,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           addressToExecutorId(executorAddress) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
+          val availableResources = resources.map{ case (k, v) =>
+            (v.name, new ExecutorResourceInfo(v.name, v.addresses))}
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes, resources,
-            mutable.Map.empty[String, ExecutorResourceInfo] ++= resources.mapValues(v =>
-              new ExecutorResourceInfo(v.name, v.addresses)))
+            availableResources)
 
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
@@ -547,10 +548,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   // this function is for testing only
-  def getExecutorAvailableResources(executorId: String):
-      mutable.Map[String, ExecutorResourceInfo] = {
-    executorDataMap.get(executorId).map(_.availableResources).
-      getOrElse(mutable.Map.empty[String, ExecutorResourceInfo])
+  def getExecutorAvailableResources(executorId: String): Map[String, ExecutorResourceInfo] = {
+    executorDataMap.get(executorId).map(_.availableResources).getOrElse(Map.empty)
   }
 
   /**

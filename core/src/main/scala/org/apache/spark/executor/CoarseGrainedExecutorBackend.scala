@@ -66,9 +66,11 @@ private[spark] class CoarseGrainedExecutorBackend(
   // to be changed so that we don't share the serializer instance across threads
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
-  // Map each taskId to the resource informations allocated to it, the resource information
-  // includes resource name and resource addresses.
-  // Exposed for testing only.
+  /**
+   * Map each taskId to the information about the resource allocated to it, Please refer to
+   * [[ResourceInformation]] for specifics.
+   * Exposed for testing only.
+   */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
   override def onStart() {

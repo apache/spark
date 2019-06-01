@@ -20,4 +20,5 @@ package org.apache.spark
 private[spark] object ResourceName {
   // known types of resources
   final val GPU: String = "gpu"
+  final val FPGA: String = "fpga"
 }

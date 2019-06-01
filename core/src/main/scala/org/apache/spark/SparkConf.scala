@@ -612,29 +612,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
       s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be no less than the value of " +
       s"${EXECUTOR_HEARTBEAT_INTERVAL.key}=${executorHeartbeatIntervalMs}ms.")
-
-    // Make sure the executor resources were specified and are large enough if
-    // any task resources were specified.
-    val taskResourcesAndCount = getTaskResourceRequirements()
-    val executorResourcesAndCounts =
-      getAllWithPrefixAndSuffix(SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_SUFFIX).toMap
-
-    taskResourcesAndCount.foreach { case (rName, taskCount) =>
-      val execCount = executorResourcesAndCounts.get(rName).getOrElse(
-        throw new SparkException(
-          s"The executor resource config: " +
-            s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
-            "needs to be specified since a task requirement config: " +
-            s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} was specified")
-      )
-      if (execCount.toLong < taskCount.toLong) {
-        throw new SparkException(
-          s"The executor resource config: " +
-            s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
-            s"= $execCount has to be >= the task config: " +
-            s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} = $taskCount")
-      }
-    }
   }
 
   /**

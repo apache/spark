@@ -177,8 +177,8 @@ abstract class TaskContext extends Serializable {
   def getLocalProperty(key: String): String
 
   /**
-   * Resources allocated to the task. A task may retrieve the resource name and available resource
-   * addresses from the map values.
+   * Resources allocated to the task. The key is the resource name and the value is information
+   * about the resource. Please refer to [[ResourceInformation]] for specifics.
    */
   @Evolving
   def resources(): Map[String, ResourceInformation]

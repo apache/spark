@@ -2722,21 +2722,45 @@ object SparkContext extends Logging {
           s"the task config: ${CPUS_PER_TASK.key} = $taskCores when run on $master.")
       }
 
-      // Resources per executor must be the same multiple numbers of the task requirements.
-      val numSlots = execCores / taskCores
+      // Calculate the max slots each executor can provide based on resources available on each
+      // executor and resources required by each task.
       val taskResourcesAndCount = sc.conf.getTaskResourceRequirements()
       val executorResourcesAndCounts = sc.conf.getAllWithPrefixAndSuffix(
         SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+      val numSlots = (taskResourcesAndCount.map { case (rName, taskCount) =>
+        // Make sure the executor resources were specified through config.
+        val execCount = executorResourcesAndCounts.getOrElse(rName,
+          throw new SparkException(
+            s"The executor resource config: " +
+              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
+              "needs to be specified since a task requirement config: " +
+              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} was specified")
+        )
+        // Make sure the executor resources are large enough to launch at least one task.
+        if (execCount.toLong < taskCount.toLong) {
+          throw new SparkException(
+            s"The executor resource config: " +
+              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
+              s"= $execCount has to be >= the task config: " +
+              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} = $taskCount")
+        }
+        execCount.toInt / taskCount
+      }.toList ++ Seq(execCores / taskCores)).min
       // There have been checks inside SparkConf to make sure the executor resources were specified
       // and are large enough if any task resources were specified.
       taskResourcesAndCount.foreach { case (rName, taskCount) =>
         val execCount = executorResourcesAndCounts(rName)
         if (execCount.toInt / taskCount.toInt != numSlots) {
-          throw new SparkException(
-            s"The value of executor resource config: " +
-              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
-              s"= $execCount has to be $numSlots times the number of the task config: " +
-              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} = $taskCount")
+          val message = s"The value of executor resource config: " +
+            s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
+            s"= $execCount is more than that tasks can take: $numSlots * " +
+            s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} = $taskCount. " +
+            s"The resources may be wasted."
+          if (Utils.isTesting) {
+            throw new SparkException(message)
+          } else {
+            logWarning(message)
+          }
         }
       }
     }

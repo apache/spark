@@ -25,6 +25,8 @@ import org.apache.spark.SparkException
  * Class to hold information about a type of Resource on an Executor. This information is managed
  * by SchedulerBackend, and TaskScheduler shall schedule tasks on idle Executors based on the
  * information.
+ * @param name Resource name
+ * @param addresses Resource addresses provided by the executor
  */
 private[spark] class ExecutorResourceInfo(
     val name: String,
@@ -33,16 +35,22 @@ private[spark] class ExecutorResourceInfo(
   private val addressesMap = new HashMap[String, Boolean]()
   addresses.foreach(addressesMap.put(_, true))
 
-  // Sequence of currently available resource addresses.
+  /**
+   * Sequence of currently available resource addresses.
+   */
   def availableAddrs: Seq[String] = addressesMap.toList.filter(_._2 == true).map(_._1)
 
-  // Sequence of currently assigned resource addresses.
-  // Exposed for testing only.
+  /**
+   * Sequence of currently assigned resource addresses.
+   * Exposed for testing only.
+   */
   private[scheduler] def assignedAddrs: Seq[String] =
     addressesMap.toList.filter(_._2 == false).map(_._1)
 
-  // Acquire a sequence of resource addresses (to a launched task), these addresses must be
-  // available. When the task finishes, it will return the acquired resource addresses.
+  /**
+   * Acquire a sequence of resource addresses (to a launched task), these addresses must be
+   * available. When the task finishes, it will return the acquired resource addresses.
+   */
   def acquire(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       val isAvailable = addressesMap.getOrElse(address, false)
@@ -55,8 +63,10 @@ private[spark] class ExecutorResourceInfo(
     }
   }
 
-  // Release a sequence of resource addresses, these addresses must have been assigned. Resource
-  // addresses are released when a task has finished.
+  /**
+   * Release a sequence of resource addresses, these addresses must have been assigned. Resource
+   * addresses are released when a task has finished.
+   */
   def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       val isAssigned = addressesMap.getOrElse(address, true)
