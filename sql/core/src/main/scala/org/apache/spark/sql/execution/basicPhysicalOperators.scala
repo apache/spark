@@ -87,10 +87,6 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 case class FilterExec(condition: Expression, child: SparkPlan)
   extends UnaryExecNode with CodegenSupport with PredicateHelper {
 
-  // Mark this as empty. We'll evaluate the input during doConsume(). We don't want to evaluate
-  // all the variables at the beginning to take advantage of short circuiting.
-  override def usedInputs: AttributeSet = AttributeSet.empty
-
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
     case IsNotNull(_) => true
@@ -102,6 +98,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       .map { case n: IsNotNull => getImpliedNotNullExprIds(n) }
       .foldLeft(Set.empty[ExprId])(_ ++ _)
   }
+    
+  // Mark this as empty. We'll evaluate the input during doConsume(). We don't want to evaluate
+  // all the variables at the beginning to take advantage of short circuiting.
+  override def usedInputs: AttributeSet = AttributeSet.empty
 
   override def output: Seq[Attribute] = {
     child.output.map { a =>
