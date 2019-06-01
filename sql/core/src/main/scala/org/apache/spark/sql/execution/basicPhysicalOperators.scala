@@ -91,8 +91,23 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   // all the variables at the beginning to take advantage of short circuiting.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
+  // Split out all the IsNotNulls from condition.
+  private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
+    case IsNotNull(_) => true
+    case _ => false
+  }
+
+  private val impliedNotNullExprIds: Set[ExprId] =
+    notNullPreds.map { case n: IsNotNull => getImpliedNotNullExprIds(n) }.reduce(_ ++ _)
+
   override def output: Seq[Attribute] = {
-    updateAttributeNullabilityFromNonNullConstraints(child.output, condition)
+    child.output.map { a =>
+      if (a.nullable && impliedNotNullExprIds.contains(a.exprId)) {
+        a.withNullability(false)
+      } else {
+        a
+      }
+    }
   }
 
   override lazy val metrics = Map(
@@ -133,7 +148,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     // To generate the predicates we will follow this algorithm.
     // For each predicate that is not IsNotNull, we will generate them one by one loading attributes
-    // as necessary. For each of both attributes, if there is an IsNotNull predicate we will
+    // as necessary. For each attribute, if there is an IsNotNull predicate we will
     // generate that check *before* the predicate. After all of these predicates, we will generate
     // the remaining IsNotNull checks that were not part of other predicates.
     // This has the property of not doing redundant IsNotNull checks and taking better advantage of
@@ -172,7 +187,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
     val resultVars = input.zipWithIndex.map { case (ev, i) =>
-      if (notNullAttributes.contains(child.output(i).exprId)) {
+      if (impliedNotNullExprIds.contains(child.output(i).exprId)) {
         ev.isNull = FalseLiteral
       }
       ev

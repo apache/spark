@@ -121,12 +121,10 @@ trait PredicateHelper {
   }
 
   /**
-   * Given a sequence of attributes and a filter condition, update attributes' nullability
-   * when the condition implies that attributes cannot be null.
+   * Given an IsNotNull expression, returns the IDs of expressions whose not-nullness
+   * is implied by the IsNotNull expressions.
    */
-  protected def updateAttributeNullabilityFromNonNullConstraints(
-      attributes: Seq[Attribute],
-      condition: Expression): Seq[Attribute] = {
+  protected def getImpliedNotNullExprIds(isNotNullExpr: IsNotNull): Set[ExprId] = {
     // This logic is a little tricky, so we'll use an example to build some intuition.
     // Consider the expression IsNotNull(f(g(x), y)). By definition, its child is not null:
     //    f(g(x), y) is not null
@@ -142,38 +140,21 @@ trait PredicateHelper {
     // By recursively applying this logic, if g is NullIntolerant then x is not null.
     // However, if g is NOT NullIntolerant (e.g. if g(null) is non-null) then we cannot
     // conclude anything about x's nullability.
-    def getNonNullAttributes(isNotNull: IsNotNull): Set[ExprId] = {
-      def getExprIdIfNamed(expr: Expression): Set[ExprId] = expr match {
-        case ne: NamedExpression => Set(ne.toAttribute.exprId)
-        case _ => Set.empty
-      }
-      // Recurse through the IsNotNull expression's descendants, stopping
-      // once we encounter a null-tolerant expression.
-      def getNotNullDescendants(expr: Expression): Set[ExprId] = {
-        expr.children.map {
-          case child: NullIntolerant =>
-            getExprIdIfNamed(child) ++ getNotNullDescendants(child)
-          case child =>
-            getExprIdIfNamed(child)
-        }.reduce(_ ++ _)
-      }
-      getExprIdIfNamed(isNotNull) ++ getNotNullDescendants(isNotNull)
+    def getExprIdIfNamed(expr: Expression): Set[ExprId] = expr match {
+      case ne: NamedExpression => Set(ne.toAttribute.exprId)
+      case _ => Set.empty
     }
-
-    val notNullAttributes: Set[ExprId] = {
-      splitConjunctivePredicates(condition)
-        .collect { case isNotNull: IsNotNull => isNotNull }
-        .map(getNonNullAttributes)
-        .reduce(_ ++ _)
+    // Recurse through the IsNotNull expression's descendants, stopping
+    // once we encounter a null-tolerant expression.
+    def getNotNullDescendants(expr: Expression): Set[ExprId] = {
+      expr.children.map {
+        case child: NullIntolerant =>
+          getExprIdIfNamed(child) ++ getNotNullDescendants(child)
+        case child =>
+          getExprIdIfNamed(child)
+      }.reduce(_ ++ _)
     }
-
-    attributes.map { a =>
-      if (a.nullable && notNullAttributes.contains(a.exprId)) {
-        a.withNullability(false)
-      } else {
-        a
-      }
-    }
+    getExprIdIfNamed(isNotNullExpr) ++ getNotNullDescendants(isNotNullExpr)
   }
 }
 
