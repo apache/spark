@@ -155,6 +155,9 @@ abstract class RDD[T: ClassTag](
   /** A friendly name for this RDD */
   @transient var name: String = _
 
+  /** lock for accessing partition */
+  @transient private val partitionLock = new Object
+
   /** Assign a name to this RDD */
   def setName(_name: String): this.type = {
     name = _name
@@ -228,6 +231,8 @@ abstract class RDD[T: ClassTag](
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   private var dependencies_ : Seq[Dependency[_]] = _
+
+  /** to be accessed only with partitionLock */
   @transient private var partitions_ : Array[Partition] = _
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
@@ -252,14 +257,16 @@ abstract class RDD[T: ClassTag](
    */
   final def partitions: Array[Partition] = {
     checkpointRDD.map(_.partitions).getOrElse {
-      if (partitions_ == null) {
-        partitions_ = getPartitions
-        partitions_.zipWithIndex.foreach { case (partition, index) =>
-          require(partition.index == index,
-            s"partitions($index).partition == ${partition.index}, but it should equal $index")
+      partitionLock.synchronized {
+        if (partitions_ == null) {
+          partitions_ = getPartitions
+          partitions_.zipWithIndex.foreach { case (partition, index) =>
+            require(partition.index == index,
+              s"partitions($index).partition == ${partition.index}, but it should equal $index")
+          }
         }
+        partitions_
       }
-      partitions_
     }
   }
 
@@ -1769,7 +1776,9 @@ abstract class RDD[T: ClassTag](
    */
   private[spark] def markCheckpointed(): Unit = {
     clearDependencies()
-    partitions_ = null
+    partitionLock.synchronized {
+      partitions_ = null
+    }
     deps = null    // Forget the constructor argument for dependencies too
   }
 
