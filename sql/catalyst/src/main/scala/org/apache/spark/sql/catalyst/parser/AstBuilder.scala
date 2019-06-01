@@ -2226,7 +2226,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitNewColumn(ctx: NewColumnContext): NewColumn = withOrigin(ctx) {
     NewColumn(
-      ctx.name.identifier.asScala.map(_.getText),
+      typedVisit[Seq[String]](ctx.name),
       typedVisit[DataType](ctx.dataType),
       Option(ctx.comment).map(string))
   }
