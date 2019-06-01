@@ -134,15 +134,4 @@ class ClusteringEvaluatorSuite
     // with wrong metadata the evaluator throws an Exception
     intercept[SparkException](evaluator.evaluate(dfWrong))
   }
-
-  test("SPARK-27896: single-element clusters should have silhouette score of 0") {
-    val twoSingleItemClusters =
-      irisDataset.where($"label" === 0.0).limit(1).union(
-        irisDataset.where($"label" === 1.0).limit(1))
-    val evaluator = new ClusteringEvaluator()
-      .setFeaturesCol("features")
-      .setPredictionCol("label")
-    assert(evaluator.evaluate(twoSingleItemClusters) === 0.0)
-  }
-
 }
