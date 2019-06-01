@@ -51,7 +51,14 @@ case class Subquery(child: LogicalPlan) extends OrderPreservingUnaryNode {
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override def output: Seq[Attribute] = {
+    // The child operator may have inferred more precise nullability information
+    // for the project expression, so leverage that information if it's availble:
+    val childOutputNullability = child.output.map(a => a.exprId -> a.nullable).toMap
+    projectList
+      .map(_.toAttribute)
+      .map{ a => childOutputNullability.get(a.exprId).map(a.withNullability).getOrElse(a) }
+  }
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val resolved: Boolean = {
