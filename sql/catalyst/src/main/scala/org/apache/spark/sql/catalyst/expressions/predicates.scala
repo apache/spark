@@ -144,15 +144,21 @@ trait PredicateHelper {
       case ne: NamedExpression => Set(ne.toAttribute.exprId)
       case _ => Set.empty
     }
+    def isNullIntolerant(expr: Expression): Boolean = expr match {
+      case _: NullIntolerant => true
+      case Alias(_: NullIntolerant, _) => true
+      case _ => false
+    }
     // Recurse through the IsNotNull expression's descendants, stopping
     // once we encounter a null-tolerant expression.
     def getNotNullDescendants(expr: Expression): Set[ExprId] = {
-      expr.children.map {
-        case child: NullIntolerant =>
+      expr.children.map { child =>
+        if (isNullIntolerant(child)) {
           getExprIdIfNamed(child) ++ getNotNullDescendants(child)
-        case child =>
+        } else {
           getExprIdIfNamed(child)
-      }.reduce(_ ++ _)
+        }
+      }.foldLeft(Set.empty[ExprId])(_ ++ _)
     }
     getExprIdIfNamed(isNotNullExpr) ++ getNotNullDescendants(isNotNullExpr)
   }

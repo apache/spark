@@ -134,7 +134,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
     splitConjunctivePredicates(condition)
       .collect { case isNotNull: IsNotNull => isNotNull }
       .map(getImpliedNotNullExprIds)
-      .reduce(_ ++ _)
+      .foldLeft(Set.empty[ExprId])(_ ++ _)
   }
 
   override def output: Seq[Attribute] = {

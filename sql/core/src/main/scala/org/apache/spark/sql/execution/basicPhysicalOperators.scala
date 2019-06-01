@@ -97,8 +97,11 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     case _ => false
   }
 
-  private val impliedNotNullExprIds: Set[ExprId] =
-    notNullPreds.map { case n: IsNotNull => getImpliedNotNullExprIds(n) }.reduce(_ ++ _)
+  private val impliedNotNullExprIds: Set[ExprId] = {
+    notNullPreds
+      .map { case n: IsNotNull => getImpliedNotNullExprIds(n) }
+      .foldLeft(Set.empty[ExprId])(_ ++ _)
+  }
 
   override def output: Seq[Attribute] = {
     child.output.map { a =>

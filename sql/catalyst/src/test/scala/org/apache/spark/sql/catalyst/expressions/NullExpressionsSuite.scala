@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types._
 
-class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PredicateHelper {
 
   def testAllTypes(testFunc: (Any, DataType) => Unit): Unit = {
     testFunc(false, BooleanType)
@@ -174,5 +174,23 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("AtLeastNNonNulls should not throw 64KiB exception") {
     val inputs = (1 to 4000).map(x => Literal(s"x_$x"))
     checkEvaluation(AtLeastNNonNulls(1, inputs), true)
+  }
+
+  test("getImpliedNotNullExprIds") {
+    val a = AttributeReference("a", IntegerType)(exprId = ExprId(1))
+    val b = AttributeReference("b", IntegerType)(exprId = ExprId(2))
+
+    // Simple case of IsNotNull of a leaf value:
+    assert(getImpliedNotNullExprIds(IsNotNull(a)) == Set(a.exprId))
+
+    // Even though we can't make claims about its children, a non-NullIntolerant is
+    // expression is still considered non-null due to its parent IsNotNull expression:
+    val coalesceExpr = Alias(Coalesce(Seq(a, b)), "c")(exprId = ExprId(3))
+    assert(getImpliedNotNullExprIds(IsNotNull(coalesceExpr)) == Set(coalesceExpr.exprId))
+
+    // NullIntolerant expressions propagate the non-null constraint to all of their children:
+    val addExpr = Alias(Add(a, b), "add")(exprId = ExprId(4))
+    assert(addExpr.child.isInstanceOf[NullIntolerant])
+    assert(getImpliedNotNullExprIds(IsNotNull(addExpr)) == Set(a, b, addExpr).map(_.exprId))
   }
 }
