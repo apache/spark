@@ -234,6 +234,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
     def mapChild(child: Any): Any = child match {
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
+      // CaseWhen Case or any tuple type
+      case tuple: (_, _) => (mapChild(tuple._1), mapChild(tuple._2))
       case nonChild: AnyRef => nonChild
       case null => null
     }
