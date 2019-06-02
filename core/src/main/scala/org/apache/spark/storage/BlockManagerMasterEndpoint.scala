@@ -520,15 +520,20 @@ class BlockManagerMasterEndpoint(
       if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
         Option(blockStatusByShuffleService(bmId).get(blockId))
       } else {
-        blockManagerInfo(bmId).getStatus(blockId)
+        blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
       }
     }
 
     if (locations.nonEmpty && status.isDefined) {
       val localDirs = locations.find { loc =>
-          loc.host == requesterHost && loc.port != externalShuffleServicePort
-          val status = blockManagerInfo(loc).getStatus(blockId)
-          status.isDefined && status.get.storageLevel.useDisk
+          if (loc.port != externalShuffleServicePort && loc.host == requesterHost) {
+            blockManagerInfo
+              .get(loc)
+              .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
+              .getOrElse(false)
+          } else {
+            false
+          }
       }.map(blockManagerInfo(_).localDirs)
       Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {

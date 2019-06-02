@@ -883,7 +883,7 @@ private[spark] class BlockManager(
               Some(block)
             })
         }
-        logDebug(s"Read $blockId from the disk of a same host executor is " +
+        logInfo(s"Read $blockId from the disk of a same host executor is " +
           (if (res.isDefined) "successful." else "failed."))
         res
       }.orElse {
