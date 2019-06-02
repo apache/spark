@@ -65,7 +65,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
-  private val valueMalformedWithHeaderFile = "test-data/value-malformed-with-header.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -2062,20 +2061,28 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
-    val schema = StructType.fromDDL("a int, b date")
-    val columnNameOfCorruptRecord = "_unparsed"
-    val schemaWithCorrField = schema.add(columnNameOfCorruptRecord, StringType)
-    val df = spark
-      .read
-      .option("mode", "Permissive")
-      .option("header", "true")
-      .option("enforceSchema", false)
-      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-      .schema(schemaWithCorrField)
-      .csv(testFile(valueMalformedWithHeaderFile))
-    checkAnswer(df,
-      Row(0, null, "0,2013-111-11 12:13:14") ::
-        Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
-        Nil)
+    Seq("csv", "").foreach { reader =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> reader) {
+        withTempPath { path =>
+          val df = Seq(("0", "2013-111-11")).toDF("a", "b")
+          df.write
+            .option("header", "true")
+            .csv(path.getAbsolutePath)
+
+          val schema = StructType.fromDDL("a int, b date")
+          val columnNameOfCorruptRecord = "_unparsed"
+          val schemaWithCorrField = schema.add(columnNameOfCorruptRecord, StringType)
+          val readDF = spark
+            .read
+            .option("mode", "Permissive")
+            .option("header", "true")
+            .option("enforceSchema", false)
+            .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+            .schema(schemaWithCorrField)
+            .csv(path.getAbsoluteFile.toString)
+          checkAnswer(readDF, Row(0, null, "0,2013-111-11") :: Nil)
+        }
+      }
+    }
   }
 }
