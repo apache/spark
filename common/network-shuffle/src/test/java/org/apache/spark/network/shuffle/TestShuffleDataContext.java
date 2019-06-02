@@ -76,9 +76,9 @@ public class TestShuffleDataContext {
 
     try {
       dataStream = new FileOutputStream(
-        ExecutorDiskReader.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
       indexStream = new DataOutputStream(new FileOutputStream(
-        ExecutorDiskReader.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
 
       long offset = 0;
       indexStream.writeLong(offset);
@@ -121,11 +121,11 @@ public class TestShuffleDataContext {
 
   private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
-    File file = ExecutorDiskReader.getFile(localDirs, subDirsPerLocalDir, filename);
+    File file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename);
     assert(!file.exists()) : "this test file has been already generated";
     try {
       dataStream = new FileOutputStream(
-        ExecutorDiskReader.getFile(localDirs, subDirsPerLocalDir, filename));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename));
       dataStream.write(block);
     } finally {
       Closeables.close(dataStream, false);

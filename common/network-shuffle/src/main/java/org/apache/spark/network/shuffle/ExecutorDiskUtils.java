@@ -25,7 +25,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.network.util.JavaUtils;
 
-public class ExecutorDiskReader {
+public class ExecutorDiskUtils {
 
   private static final Pattern MULTIPLE_SEPARATORS = Pattern.compile(File.separator + "{2,}");
 

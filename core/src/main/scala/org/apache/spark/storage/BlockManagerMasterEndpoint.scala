@@ -525,11 +525,11 @@ class BlockManagerMasterEndpoint(
     }
 
     if (locations.nonEmpty && status.isDefined) {
-      val localDirs = if (status.get.storageLevel.useDisk) {
-        locations.find(_.host == requesterHost).map(blockManagerInfo(_).localDirs)
-      } else {
-        None
-      }
+      val localDirs = locations.find { loc =>
+          loc.host == requesterHost && loc.port != externalShuffleServicePort
+          val status = blockManagerInfo(loc).getStatus(blockId)
+          status.isDefined && status.get.storageLevel.useDisk
+      }.map(blockManagerInfo(_).localDirs)
       Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {
       None

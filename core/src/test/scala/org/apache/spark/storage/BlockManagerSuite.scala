@@ -29,7 +29,8 @@ import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentMatchers => mc}
-import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.Mockito.{doAnswer, mock, spy, times, verify, when}
+import org.mockito.invocation.InvocationOnMock
 import org.scalatest._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
@@ -40,19 +41,18 @@ import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
-import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
+import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskReader, ExternalShuffleClient}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalShuffleClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
@@ -82,7 +82,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   // Implicitly convert strings to BlockIds for test clarity.
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
-
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
   private def init(sparkConf: SparkConf): Unit = {
@@ -95,51 +94,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
   }
 
-  type BlockManagerFactory = (
-    String,
-    RpcEnv,
-    BlockManagerMaster,
-    SerializerManager,
-    SparkConf,
-    MemoryManager,
-    MapOutputTracker,
-    ShuffleManager,
-    BlockTransferService,
-    SecurityManager,
-    Option[ExternalShuffleClient]) => BlockManager
-
-  private val defaultBlockManagerFactory: BlockManagerFactory = (
-      executorId: String,
-      rpcEnv: RpcEnv,
-      master: BlockManagerMaster,
-      serializerManager: SerializerManager,
-      conf: SparkConf,
-      memoryManager: MemoryManager,
-      mapOutputTracker: MapOutputTracker,
-      shuffleManager: ShuffleManager,
-      blockTransferService: BlockTransferService,
-      securityManager: SecurityManager,
-      externalShuffleClient: Option[ExternalShuffleClient]) =>
-    new BlockManager(
-      executorId,
-      rpcEnv,
-      master,
-      serializerManager,
-      conf,
-      memoryManager,
-      mapOutputTracker,
-      shuffleManager,
-      blockTransferService,
-      securityManager,
-      externalShuffleClient)
-
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER,
       master: BlockManagerMaster = this.master,
       transferService: Option[BlockTransferService] = Option.empty,
-      testConf: Option[SparkConf] = None,
-      blockManagerFactory: BlockManagerFactory = defaultBlockManagerFactory): BlockManager = {
+      testConf: Option[SparkConf] = None): BlockManager = {
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
     bmConf.set(TEST_MEMORY, maxMem)
     bmConf.set(MEMORY_OFFHEAP_SIZE, maxMem)
@@ -161,7 +121,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     } else {
       None
     }
-    val blockManager = blockManagerFactory(name, rpcEnv, master, serializerManager, bmConf,
+    val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, bmConf,
       memManager, mapOutputTracker, shuffleManager, transfer, bmSecurityMgr, externalShuffleClient)
     memManager.setMemoryStore(blockManager.memoryStore)
     allStores += blockManager
@@ -658,8 +618,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val expectedBlockData = store2.getLocalBytes(blockId)
       assert(expectedBlockData.isDefined)
       val expectedByteBuffer = expectedBlockData.get.toByteBuffer()
-
-      val transferServiceAfterLocalAccess = new MockBlockTransferService(0) {
+      val mockTransferService = new MockBlockTransferService(0) {
         override def fetchBlockSync(
             host: String,
             port: Int,
@@ -671,60 +630,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
           new NioManagedBuffer(expectedByteBuffer)
         }
       }
-
-      val blockManagerWithDeleteFactory: BlockManagerFactory = (
-          executorId: String,
-          rpcEnv: RpcEnv,
-          master: BlockManagerMaster,
-          serializerManager: SerializerManager,
-          conf: SparkConf,
-          memoryManager: MemoryManager,
-          mapOutputTracker: MapOutputTracker,
-          shuffleManager: ShuffleManager,
-          blockTransferService: BlockTransferService,
-          securityManager: SecurityManager,
-          externalShuffleClient: Option[ExternalShuffleClient]) => {
-        new BlockManager(
-          executorId,
-          rpcEnv,
-          master,
-          serializerManager,
-          conf,
-          memoryManager,
-          mapOutputTracker,
-          shuffleManager,
-          blockTransferService,
-          securityManager,
-          externalShuffleClient) {
-
-          override def readDiskBlockFromSameHostExecutor(
-              blockId: BlockId,
-              localDirs: Array[String],
-              blockSize: Long): Option[ManagedBuffer] = {
-            val res = super.readDiskBlockFromSameHostExecutor(blockId, localDirs, blockSize)
-            assert(res.isDefined)
-            // delete the file behind the blockId
-            ExecutorDiskReader.getFile(localDirs, subDirsPerLocalDir, blockId.name).delete()
-            sameHostExecutorTried = true
-            res
-          }
-        }
-      }
-
-      val store1 = makeBlockManager(
-        8000,
-        "executor1",
-        this.master,
-        Some(transferServiceAfterLocalAccess),
-        blockManagerFactory = blockManagerWithDeleteFactory)
+      val store1 = makeBlockManager(8000, "executor1", this.master, Some(mockTransferService))
+      val spiedStore1 = spy(store1)
+      doAnswer { inv =>
+        val blockId = inv.getArguments()(0).asInstanceOf[BlockId]
+        val localDirs = inv.getArguments()(1).asInstanceOf[Array[String]]
+        val blockSize = inv.getArguments()(2).asInstanceOf[Long]
+        val res = store1.readDiskBlockFromSameHostExecutor(blockId, localDirs, blockSize)
+        assert(res.isDefined)
+        // delete the file behind the blockId
+        ExecutorDiskUtils.getFile(localDirs, store1.subDirsPerLocalDir, blockId.name).delete()
+        sameHostExecutorTried = true
+        res
+      }.when(spiedStore1).readDiskBlockFromSameHostExecutor(mc.any(), mc.any(), mc.any())
 
       if (getValueOrBytes) {
-        val valuesViaStore1 = store1.getRemoteValues(blockId)
-        assert(valuesViaStore1.isDefined, "list expected to be accessed")
+        val valuesViaStore1 = spiedStore1.getRemoteValues(blockId)
+        assert(sameHostExecutorTried)
+        assert(valuesViaStore1.isDefined)
         assert(valuesViaStore1.get.data.toList.head === array)
       } else {
-        val bytesViaStore1 = store1.getRemoteBytes(blockId)
-        assert(bytesViaStore1.isDefined, "list expected to be accessed")
+        val bytesViaStore1 = spiedStore1.getRemoteBytes(blockId)
+        assert(sameHostExecutorTried)
+        assert(bytesViaStore1.isDefined)
         assert(bytesViaStore1.get.toByteBuffer === expectedByteBuffer)
       }
     }

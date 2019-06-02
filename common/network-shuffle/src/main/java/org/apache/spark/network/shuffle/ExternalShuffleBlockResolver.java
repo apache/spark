@@ -297,7 +297,7 @@ public class ExternalShuffleBlockResolver {
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
     ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) {
-    File indexFile = ExecutorDiskReader.getFile(executor.localDirs, executor.subDirsPerLocalDir,
+    File indexFile = ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 
     try {
@@ -305,7 +305,7 @@ public class ExternalShuffleBlockResolver {
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId);
       return new FileSegmentManagedBuffer(
         conf,
-        ExecutorDiskReader.getFile(executor.localDirs, executor.subDirsPerLocalDir,
+        ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.getOffset(),
         shuffleIndexRecord.getLength());
@@ -316,7 +316,7 @@ public class ExternalShuffleBlockResolver {
 
   public ManagedBuffer getDiskPersistedRddBlockData(
       ExecutorShuffleInfo executor, int rddId, int splitIndex) {
-    File file = ExecutorDiskReader.getFile(executor.localDirs, executor.subDirsPerLocalDir,
+    File file = ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "rdd_" + rddId + "_" + splitIndex);
     long fileLength = file.length();
     ManagedBuffer res = null;
@@ -345,7 +345,7 @@ public class ExternalShuffleBlockResolver {
     int numRemovedBlocks = 0;
     for (String blockId : blockIds) {
       File file =
-        ExecutorDiskReader.getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
+        ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
       if (file.delete()) {
         numRemovedBlocks++;
       } else {

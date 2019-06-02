@@ -108,7 +108,7 @@ private[spark] object BlockManagerMessages {
       locations: Seq[BlockManagerId],
       status: BlockStatus,
       localDirs: Option[Array[String]]) {
-    assert(locations.nonEmpty || localDirs.isDefined)
+    assert(locations.nonEmpty)
   }
 
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster

@@ -855,9 +855,9 @@ private[spark] class BlockManager(
    * @tparam T result type
    * @return
    */
-   private[spark] def getRemoteBlock[T](
-       blockId: BlockId,
-       bufferTransformer: ManagedBuffer => T): Option[T] = {
+  private[spark] def getRemoteBlock[T](
+      blockId: BlockId,
+      bufferTransformer: ManagedBuffer => T): Option[T] = {
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
 
@@ -875,7 +875,13 @@ private[spark] class BlockManager(
         val blockDataOption =
           readDiskBlockFromSameHostExecutor(blockId, localDirs, locationsAndStatus.status.diskSize)
         val res = blockDataOption.flatMap { blockData =>
-          Try(bufferTransformer(blockData)).toOption
+          Try(bufferTransformer(blockData))
+            .fold( { throwable =>
+              logDebug("Block from the same host executor cannot be opened: ", throwable)
+              None
+            }, { block =>
+              Some(block)
+            })
         }
         logDebug(s"Read $blockId from the disk of a same host executor is " +
           (if (res.isDefined) "successful." else "failed."))
@@ -915,7 +921,7 @@ private[spark] class BlockManager(
   /**
    * Fetch the block from remote block managers as a ManagedBuffer.
    */
-  def fetchRemoteManagedBuffer(
+  private def fetchRemoteManagedBuffer(
       blockId: BlockId,
       blockSize: Long,
       locationsAndStatus: BlockManagerMessages.BlockLocationsAndStatus): Option[ManagedBuffer] = {
@@ -996,7 +1002,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       localDirs: Array[String],
       blockSize: Long): Option[ManagedBuffer] = {
-    val file = ExecutorDiskReader.getFile(localDirs, subDirsPerLocalDir, blockId.name)
+    val file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId.name)
     if (file.exists()) {
       val mangedBuffer = securityManager.getIOEncryptionKey() match {
         case Some(key) =>
