@@ -148,6 +148,16 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-27907 HiveUDAF with 0 rows throws NPE") {
+    withTable("abc") {
+      sql("create table abc(a int)")
+      checkAnswer(sql("select histogram_numeric(a,2) from abc"), Row(null))
+      sql("insert into abc values (1)")
+      checkAnswer(sql("select histogram_numeric(a,2) from abc"), Row(Row(1.0, 1.0) :: Nil))
+      checkAnswer(sql("select histogram_numeric(a,2) from abc where a=3"), Row(null))
+    }
+  }
 }
 
 /**
