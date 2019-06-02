@@ -48,9 +48,13 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
       try {
         // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse. Fall
         // back to non-adaptive mode if adaptive execution is supported in any of the sub-queries.
-        logDebug(s"Adaptive execution enabled for plan: $plan")
         val subqueryMap = buildSubqueryMap(plan)
-        AdaptiveSparkPlanExec(plan, session, subqueryMap, stageCache)
+        // Run preparation rules.
+        val preparations = AdaptiveSparkPlanExec.createQueryStagePreparationRules(
+          session.sessionState.conf, subqueryMap)
+        val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preparations)
+        logDebug(s"Adaptive execution enabled for plan: $plan")
+        AdaptiveSparkPlanExec(newPlan, session, subqueryMap, stageCache)
       } catch {
         case SubqueryAdaptiveNotSupportedException(subquery) =>
           logWarning(s"${SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key} is enabled " +

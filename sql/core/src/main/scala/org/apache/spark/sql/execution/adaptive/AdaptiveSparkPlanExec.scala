@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
@@ -56,15 +57,21 @@ import org.apache.spark.util.ThreadUtils
  */
 case class AdaptiveSparkPlanExec(
     initialPlan: SparkPlan,
-    session: SparkSession,
-    subqueryMap: Map[Long, ExecSubqueryExpression],
-    stageCache: TrieMap[SparkPlan, QueryStageExec])
+    @transient session: SparkSession,
+    @transient subqueryMap: Map[Long, ExecSubqueryExpression],
+    @transient stageCache: TrieMap[SparkPlan, QueryStageExec])
   extends LeafExecNode {
 
   @transient private val executionId = Option(
     session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
 
   @transient private val lock = new Object()
+
+  // The logical plan optimizer for re-optimizing the current logical plan.
+  @transient private val optimizer = new RuleExecutor[LogicalPlan] {
+    // TODO add more optimization rules
+    override protected def batches: Seq[Batch] = Seq()
+  }
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
@@ -82,16 +89,9 @@ case class AdaptiveSparkPlanExec(
 
   private var currentStageId = 0
 
-  @volatile private var currentPhysicalPlan =
-    applyPhysicalRules(initialPlan, queryStagePreparationRules)
+  @volatile private var currentPhysicalPlan = initialPlan
 
   @volatile private var isFinalPlan = false
-
-  // The logical plan optimizer for re-optimizing the current logical plan.
-  private object Optimizer extends RuleExecutor[LogicalPlan] {
-    // TODO add more optimization rules
-    override protected def batches: Seq[Batch] = Seq()
-  }
 
   /**
    * Return type for `createQueryStages`
@@ -342,7 +342,7 @@ case class AdaptiveSparkPlanExec(
    */
   private def reOptimize(logicalPlan: LogicalPlan): Unit = {
     logicalPlan.invalidateStatsCache()
-    val optimized = Optimizer.execute(logicalPlan)
+    val optimized = optimizer.execute(logicalPlan)
     SparkSession.setActiveSession(session)
     val sparkPlan = session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
     val newPlan = applyPhysicalRules(sparkPlan, queryStagePreparationRules)
@@ -360,18 +360,29 @@ case class AdaptiveSparkPlanExec(
         SparkPlanInfo.fromSparkPlan(currentPhysicalPlan)))
     }
   }
-
-  /**
-   * Apply a list of physical operator rules on a [[SparkPlan]].
-   */
-  private def applyPhysicalRules(plan: SparkPlan, rules: Seq[Rule[SparkPlan]]): SparkPlan = {
-    rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
-  }
 }
 
 object AdaptiveSparkPlanExec {
   private val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("QueryStageCreator", 16))
+
+  /**
+   * Creates the list of physical plan rules to be applied before creation of query stages.
+   */
+  def createQueryStagePreparationRules(
+      conf: SQLConf,
+      subqueryMap: Map[Long, ExecSubqueryExpression]): Seq[Rule[SparkPlan]] = {
+    Seq(
+      PlanAdaptiveSubqueries(subqueryMap),
+      EnsureRequirements(conf))
+  }
+
+  /**
+   * Apply a list of physical operator rules on a [[SparkPlan]].
+   */
+  def applyPhysicalRules(plan: SparkPlan, rules: Seq[Rule[SparkPlan]]): SparkPlan = {
+    rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+  }
 }
 
 /**
