@@ -151,6 +151,15 @@ private[sql] class SharedState(
     wrapped
   }
 
+
+  lazy val mvCatalog: MvCatalog = {
+
+    val clazz = Utils.classForName(SharedState.mvCatalogClassName(sparkContext.conf))
+    val ctor = clazz.getDeclaredConstructor()
+    val mvCatalog = ctor.newInstance().asInstanceOf[MvCatalog]
+    mvCatalog
+  }
+
   /**
    * A manager for global temporary views.
    */
@@ -190,6 +199,15 @@ object SharedState extends Logging {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_EXTERNAL_CATALOG_CLASS_NAME
       case "in-memory" => classOf[InMemoryCatalog].getCanonicalName
+    }
+  }
+
+  private val HIVE_MV_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveMvCatalog"
+
+  def mvCatalogClassName(conf: SparkConf): String = {
+    conf.get(CATALOG_IMPLEMENTATION) match {
+      case "hive" => HIVE_MV_CATALOG_CLASS_NAME
+      case _ => classOf[InMemoryCatalog].getCanonicalName
     }
   }
 

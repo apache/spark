@@ -1015,6 +1015,24 @@ private[hive] object HiveClientImpl {
         throw new IllegalArgumentException(
           s"Unknown table type is found at toHiveTable: $t")
     })
+
+    if (table.tableType == CatalogTableType.MV) {
+      val hiveTableClass = classOf[HiveTable]
+      val field = hiveTableClass.getDeclaredField("tTable")
+      field.setAccessible(true)
+      val tTable = field.get(hiveTable).asInstanceOf[HiveTable]
+      tTable.setTableType(HiveTableType.VIRTUAL_VIEW)
+    } else {
+      hiveTable.setTableType(table.tableType match {
+        case CatalogTableType.EXTERNAL =>
+          hiveTable.setProperty("EXTERNAL", "TRUE")
+          HiveTableType.EXTERNAL_TABLE
+        case CatalogTableType.MANAGED =>
+          HiveTableType.MANAGED_TABLE
+        case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+      })
+    }
+
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)

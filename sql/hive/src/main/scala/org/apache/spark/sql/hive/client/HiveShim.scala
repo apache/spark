@@ -20,12 +20,11 @@ package org.apache.spark.sql.hive.client
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
-import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
+import java.util.{Locale, ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.IMetaStoreClient
@@ -38,11 +37,10 @@ import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
@@ -166,6 +164,8 @@ private[client] sealed abstract class Shim {
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
   }
+
+  protected def getMaterializedView(hive: Hive, dbName: String, tbl: String): Option[Table]
 }
 
 private[client] class Shim_v0_12 extends Shim with Logging {
@@ -455,6 +455,12 @@ private[client] class Shim_v0_12 extends Shim with Logging {
 
   def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
     Seq.empty[String]
+  }
+
+  protected override def getMaterializedView(hive: Hive,
+      dbName: String, tbl: String): Option[Table] = {
+    throw new AnalysisException("Hive 0.12 doesn't support Materialized views. " +
+      "Please use Hive 3.0 or higher.")
   }
 }
 
@@ -1210,6 +1216,13 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
   private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
     "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
 
+  private lazy val getMaterializedViewsMethod =
+    findMethod(
+      classOf[Hive],
+      "getAllMaterializedViewObjects"
+      )
+
+
   private lazy val loadPartitionMethod =
     findMethod(
       classOf[Hive],
@@ -1318,6 +1331,21 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       stmtIdInLoadTableOrPartition, hasFollowingStatsTask, AcidUtils.Operation.NOT_ACID,
       replace: JBoolean)
   }
+
+  protected override def getMaterializedView(hive: Hive,
+       dbName: String, tbl: String): Option[Table] = {
+    val seq = getMaterializedViewsMethod.invoke(hive).asInstanceOf[JList[Table]].asScala.toSeq
+    val creationMetadata = classOf[Table].getMethod("getCreationMetadata").invoke(seq(0))
+    val dbName = creationMetadata.getClass.getMethod("getDbName")
+    val tables = creationMetadata.getClass.getMethod("getTablesUsed")
+      .asInstanceOf[JSet[Table]]
+      .asScala.toSeq
+    if (tables.nonEmpty && tables.size == 1) {
+      return Option(tables(0))
+    }
+    return None;
+  }
+
 }
 
 private[client] class Shim_v3_1 extends Shim_v3_0

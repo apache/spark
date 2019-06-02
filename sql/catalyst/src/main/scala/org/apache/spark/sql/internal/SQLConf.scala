@@ -871,6 +871,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ENABLE_MV_OS_OPTIMIZATION = buildConf("spark.sql.mv.os.enable")
+    .doc("When true, Materialized view is used when applicable")
+    .booleanConf
+    .createWithDefault(false)
+
   val WHOLESTAGE_CODEGEN_ENABLED = buildConf("spark.sql.codegen.wholeStage")
     .internal()
     .doc("When true, the whole stage (of multiple operators) will be compiled into single java" +
@@ -2111,7 +2116,8 @@ class SQLConf extends Serializable with Logging {
   def targetPostShuffleInputSize: Long =
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
-  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+  def adaptiveExecutionEnabled: Boolean =
+    getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def nonEmptyPartitionRatioForBroadcastJoin: Double =
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
@@ -2406,6 +2412,8 @@ class SQLConf extends Serializable with Logging {
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
+  
+  def mvOSEnabled: Boolean = getConf(ENABLE_MV_OS_OPTIMIZATION)
 
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
