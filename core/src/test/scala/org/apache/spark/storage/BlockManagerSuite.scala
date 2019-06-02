@@ -613,7 +613,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val store2 = makeBlockManager(8000, "executor2", this.master,
         Some(new MockBlockTransferService(0)))
       val blockId = "list"
-      val array = new Array[Byte](4000)
+      val array = (0 to 4000).map(_ % Byte.MaxValue).toArray
       store2.putIterator(blockId, List(array).iterator, level, true)
       val expectedBlockData = store2.getLocalBytes(blockId)
       assert(expectedBlockData.isDefined)
