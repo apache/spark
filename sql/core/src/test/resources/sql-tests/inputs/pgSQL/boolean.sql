@@ -19,88 +19,88 @@ SELECT true AS true;
 
 SELECT false AS false;
 
-SELECT bool 't' AS true;
+SELECT cast('t' as boolean) AS true;
 
-SELECT bool '   f           ' AS false;
+SELECT cast('   f           ' as boolean) AS false;
 
-SELECT bool 'true' AS true;
+SELECT cast('true' as boolean) AS true;
 
-SELECT bool 'test' AS error;
+SELECT cast('test' as boolean) AS error;
 
-SELECT bool 'false' AS false;
+SELECT cast('false' as boolean) AS false;
 
-SELECT bool 'foo' AS error;
+SELECT cast('foo' as boolean) AS error;
 
-SELECT bool 'y' AS true;
+SELECT cast('y' as boolean) AS true;
 
-SELECT bool 'yes' AS true;
+SELECT cast('yes' as boolean) AS true;
 
-SELECT bool 'yeah' AS error;
+SELECT cast('yeah' as boolean) AS error;
 
-SELECT bool 'n' AS false;
+SELECT cast('n' as boolean) AS false;
 
-SELECT bool 'no' AS false;
+SELECT cast('no' as boolean) AS false;
 
-SELECT bool 'nay' AS error;
+SELECT cast('nay' as boolean) AS error;
 
-SELECT bool 'on' AS true;
+SELECT cast('on' as boolean) AS true;
 
-SELECT bool 'off' AS false;
+SELECT cast('off' as boolean) AS false;
 
-SELECT bool 'of' AS false;
+SELECT cast('of' as boolean) AS false;
 
-SELECT bool 'o' AS error;
+SELECT cast('o' as boolean) AS error;
 
-SELECT bool 'on_' AS error;
+SELECT cast('on_' as boolean) AS error;
 
-SELECT bool 'off_' AS error;
+SELECT cast('off_' as boolean) AS error;
 
-SELECT bool '1' AS true;
+SELECT cast('1' as boolean) AS true;
 
-SELECT bool '11' AS error;
+SELECT cast('11' as boolean) AS error;
 
-SELECT bool '0' AS false;
+SELECT cast('0' as boolean) AS false;
 
-SELECT bool '000' AS error;
+SELECT cast('000' as boolean) AS error;
 
-SELECT bool '' AS error;
+SELECT cast('' as boolean) AS error;
 
 -- and, or, not in qualifications
 
-SELECT bool 't' or bool 'f' AS true;
+SELECT cast('t' as boolean) or cast('f' as boolean) AS true;
 
-SELECT bool 't' and bool 'f' AS false;
+SELECT cast('t' as boolean) and cast('f' as boolean) AS false;
 
-SELECT not bool 'f' AS true;
+SELECT not cast('f' as boolean) AS true;
 
-SELECT bool 't' = bool 'f' AS false;
+SELECT cast('t' as boolean) = cast('f' as boolean) AS false;
 
-SELECT bool 't' <> bool 'f' AS true;
+SELECT cast('t' as boolean) <> cast('f' as boolean) AS true;
 
-SELECT bool 't' > bool 'f' AS true;
+SELECT cast('t' as boolean) > cast('f' as boolean) AS true;
 
-SELECT bool 't' >= bool 'f' AS true;
+SELECT cast('t' as boolean) >= cast('f' as boolean) AS true;
 
-SELECT bool 'f' < bool 't' AS true;
+SELECT cast('f' as boolean) < cast('t' as boolean) AS true;
 
-SELECT bool 'f' <= bool 't' AS true;
+SELECT cast('f' as boolean) <= cast('t' as boolean) AS true;
 
 -- explicit casts to/from text
-SELECT 'TrUe'::text::boolean AS true, 'fAlse'::text::boolean AS false;
-SELECT '    true   '::text::boolean AS true,
-       '     FALSE'::text::boolean AS false;
-SELECT true::boolean::text AS true, false::boolean::text AS false;
+SELECT cast(cast('TrUe' as string) as boolean) AS true, cast(cast('fAlse' as string) as boolean) AS false;
+SELECT cast(cast('    true   ' as string) as boolean) AS true,
+       cast(cast('     FALSE' as string) as boolean) AS false;
+SELECT cast(cast(true as boolean) as string) AS true, cast(cast(false as boolean) as string) AS false;
 
-SELECT '  tru e '::text::boolean AS invalid;    -- error
-SELECT ''::text::boolean AS invalid;            -- error
+SELECT cast(cast('  tru e ' as string) as boolean) AS invalid;    -- error
+SELECT cast(cast('' as string) as boolean) AS invalid;            -- error
 
-CREATE TABLE BOOLTBL1 (f1 bool);
+CREATE TABLE BOOLTBL1 (f1 boolean) USING parquet;
 
-INSERT INTO BOOLTBL1 (f1) VALUES (bool 't');
+INSERT INTO BOOLTBL1 VALUES (cast('t' as boolean));
 
-INSERT INTO BOOLTBL1 (f1) VALUES (bool 'True');
+INSERT INTO BOOLTBL1 VALUES (cast('True' as boolean));
 
-INSERT INTO BOOLTBL1 (f1) VALUES (bool 'true');
+INSERT INTO BOOLTBL1 VALUES (cast('true' as boolean));
 
 
 -- BOOLTBL1 should be full of true's at this point
@@ -109,38 +109,38 @@ SELECT '' AS t_3, BOOLTBL1.* FROM BOOLTBL1;
 
 SELECT '' AS t_3, BOOLTBL1.*
    FROM BOOLTBL1
-   WHERE f1 = bool 'true';
+   WHERE f1 = cast('true' as boolean);
 
 
 SELECT '' AS t_3, BOOLTBL1.*
    FROM BOOLTBL1
-   WHERE f1 <> bool 'false';
+   WHERE f1 <> cast('false' as boolean);
 
-SELECT '' AS zero, BOOLTBL1.*
-   FROM BOOLTBL1
-   WHERE booleq(bool 'false', f1);
+-- SELECT '' AS zero, BOOLTBL1.*
+--    FROM BOOLTBL1
+--    WHERE booleq(cast('false' as boolean), f1);
 
-INSERT INTO BOOLTBL1 (f1) VALUES (bool 'f');
+INSERT INTO BOOLTBL1 VALUES (cast('f' as boolean));
 
 SELECT '' AS f_1, BOOLTBL1.*
    FROM BOOLTBL1
-   WHERE f1 = bool 'false';
+   WHERE f1 = cast('false' as boolean);
 
 
-CREATE TABLE BOOLTBL2 (f1 bool);
+CREATE TABLE BOOLTBL2 (f1 boolean) USING parquet;
 
-INSERT INTO BOOLTBL2 (f1) VALUES (bool 'f');
+INSERT INTO BOOLTBL2 VALUES (cast('f' as boolean));
 
-INSERT INTO BOOLTBL2 (f1) VALUES (bool 'false');
+INSERT INTO BOOLTBL2 VALUES (cast('false' as boolean));
 
-INSERT INTO BOOLTBL2 (f1) VALUES (bool 'False');
+INSERT INTO BOOLTBL2 VALUES (cast('False' as boolean));
 
-INSERT INTO BOOLTBL2 (f1) VALUES (bool 'FALSE');
+INSERT INTO BOOLTBL2 VALUES (cast('FALSE' as boolean));
 
 -- This is now an invalid expression
 -- For pre-v6.3 this evaluated to false - thomas 1997-10-23
-INSERT INTO BOOLTBL2 (f1)
-   VALUES (bool 'XXX');
+INSERT INTO BOOLTBL2
+   VALUES (cast('XXX' as boolean));
 
 -- BOOLTBL2 should be full of false's at this point
 SELECT '' AS f_4, BOOLTBL2.* FROM BOOLTBL2;
@@ -151,19 +151,19 @@ SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
    WHERE BOOLTBL2.f1 <> BOOLTBL1.f1;
 
 
-SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
-   FROM BOOLTBL1, BOOLTBL2
-   WHERE boolne(BOOLTBL2.f1,BOOLTBL1.f1);
+--SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
+--   FROM BOOLTBL1, BOOLTBL2
+--   WHERE boolne(BOOLTBL2.f1,BOOLTBL1.f1);
 
 
 SELECT '' AS ff_4, BOOLTBL1.*, BOOLTBL2.*
    FROM BOOLTBL1, BOOLTBL2
-   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 and BOOLTBL1.f1 = bool 'false';
+   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 and BOOLTBL1.f1 = cast('false' as boolean);
 
 
 SELECT '' AS tf_12_ff_4, BOOLTBL1.*, BOOLTBL2.*
    FROM BOOLTBL1, BOOLTBL2
-   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 or BOOLTBL1.f1 = bool 'true'
+   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 or BOOLTBL1.f1 = cast('true' as boolean)
    ORDER BY BOOLTBL1.f1, BOOLTBL2.f1;
 
 --
@@ -172,63 +172,63 @@ SELECT '' AS tf_12_ff_4, BOOLTBL1.*, BOOLTBL2.*
 -- - thomas 2000-01-04
 --
 
-SELECT '' AS "True", f1
-   FROM BOOLTBL1
-   WHERE f1 IS TRUE;
+-- SELECT '' AS True, f1
+--    FROM BOOLTBL1
+--    WHERE f1 IS TRUE;
 
-SELECT '' AS "Not False", f1
-   FROM BOOLTBL1
-   WHERE f1 IS NOT FALSE;
+-- SELECT '' AS "Not False", f1
+--    FROM BOOLTBL1
+--    WHERE f1 IS NOT FALSE;
 
-SELECT '' AS "False", f1
-   FROM BOOLTBL1
-   WHERE f1 IS FALSE;
+-- SELECT '' AS "False", f1
+--    FROM BOOLTBL1
+--    WHERE f1 IS FALSE;
 
-SELECT '' AS "Not True", f1
-   FROM BOOLTBL1
-   WHERE f1 IS NOT TRUE;
+-- SELECT '' AS "Not True", f1
+--    FROM BOOLTBL1
+--    WHERE f1 IS NOT TRUE;
 
-SELECT '' AS "True", f1
-   FROM BOOLTBL2
-   WHERE f1 IS TRUE;
+-- SELECT '' AS "True", f1
+--    FROM BOOLTBL2
+--    WHERE f1 IS TRUE;
 
-SELECT '' AS "Not False", f1
-   FROM BOOLTBL2
-   WHERE f1 IS NOT FALSE;
+-- SELECT '' AS "Not False", f1
+--    FROM BOOLTBL2
+--    WHERE f1 IS NOT FALSE;
 
-SELECT '' AS "False", f1
-   FROM BOOLTBL2
-   WHERE f1 IS FALSE;
+-- SELECT '' AS "False", f1
+--    FROM BOOLTBL2
+--    WHERE f1 IS FALSE;
 
-SELECT '' AS "Not True", f1
-   FROM BOOLTBL2
-   WHERE f1 IS NOT TRUE;
+-- SELECT '' AS "Not True", f1
+--    FROM BOOLTBL2
+--    WHERE f1 IS NOT TRUE;
 
 --
 -- Tests for BooleanTest
 --
-CREATE TABLE BOOLTBL3 (d text, b bool, o int);
-INSERT INTO BOOLTBL3 (d, b, o) VALUES ('true', true, 1);
-INSERT INTO BOOLTBL3 (d, b, o) VALUES ('false', false, 2);
-INSERT INTO BOOLTBL3 (d, b, o) VALUES ('null', null, 3);
+CREATE TABLE BOOLTBL3 (d string, b boolean, o int) USING parquet;
+INSERT INTO BOOLTBL3 VALUES ('true', true, 1);
+INSERT INTO BOOLTBL3 VALUES ('false', false, 2);
+INSERT INTO BOOLTBL3 VALUES ('null', null, 3);
 
-SELECT
-    d,
-    b IS TRUE AS istrue,
-    b IS NOT TRUE AS isnottrue,
-    b IS FALSE AS isfalse,
-    b IS NOT FALSE AS isnotfalse,
-    b IS UNKNOWN AS isunknown,
-    b IS NOT UNKNOWN AS isnotunknown
-FROM booltbl3 ORDER BY o;
+-- SELECT
+--     d,
+--     b IS TRUE AS istrue,
+--     b IS NOT TRUE AS isnottrue,
+--     b IS FALSE AS isfalse,
+--     b IS NOT FALSE AS isnotfalse,
+--     b IS UNKNOWN AS isunknown,
+--     b IS NOT UNKNOWN AS isnotunknown
+-- FROM booltbl3 ORDER BY o;
 
 
 -- Test to make sure short-circuiting and NULL handling is
 -- correct. Use a table as source to prevent constant simplification
 -- to interfer.
-CREATE TABLE booltbl4(isfalse bool, istrue bool, isnul bool);
+CREATE TABLE booltbl4(isfalse boolean, istrue boolean, isnul boolean) USING parquet;
 INSERT INTO booltbl4 VALUES (false, true, null);
-\pset null '(null)'
+-- \pset null '(null)'
 
 -- AND expression need to return null if there's any nulls and not all
 -- of the value are true
