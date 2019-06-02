@@ -259,7 +259,7 @@ private[sql] trait SQLTestUtilsBase
       viewNames.foreach { viewName =>
         try spark.catalog.dropTempView(viewName) catch {
           // If the test failed part way, we don't want to mask the failure by failing to remove
-          // global temp views that never got created.
+          // temp views that never got created.
           case _: NoSuchTableException =>
         }
       }
@@ -274,7 +274,7 @@ private[sql] trait SQLTestUtilsBase
       viewNames.foreach { viewName =>
         try spark.catalog.dropGlobalTempView(viewName) catch {
           // If the test failed part way, we don't want to mask the failure by failing to remove
-          // temp views that never got created.
+          // global temp views that never got created.
           case _: NoSuchTableException =>
         }
       }
