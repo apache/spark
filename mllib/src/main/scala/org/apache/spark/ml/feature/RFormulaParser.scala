@@ -93,8 +93,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
 
   // expands the Dot operators in interaction terms
   private def expandInteraction(
-      schema: StructType,
-      terms: Seq[InteractableTerm]): Seq[Seq[String]] = {
+      schema: StructType, terms: Seq[InteractableTerm]): Seq[Seq[String]] = {
     if (terms.isEmpty) {
       return Seq(Nil)
     }
@@ -113,26 +112,21 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
 
     // Deduplicates feature interactions, for example, a:b is the same as b:a.
     val seen = mutable.Set[Set[String]]()
-    validInteractions
-      .flatMap {
-        case t if seen.contains(t.toSet) =>
-          None
-        case t =>
-          seen += t.toSet
-          Some(t)
-      }
-      .sortBy(_.length)
+    validInteractions.flatMap {
+      case t if seen.contains(t.toSet) =>
+        None
+      case t =>
+        seen += t.toSet
+        Some(t)
+    }.sortBy(_.length)
   }
 
   // the dot operator excludes complex column types
   private def expandDot(schema: StructType): Seq[String] = {
-    schema.fields
-      .filter(_.dataType match {
-        case _: NumericType | StringType | BooleanType | _: VectorUDT => true
-        case _ => false
-      })
-      .map(_.name)
-      .filter(_ != label.value)
+    schema.fields.filter(_.dataType match {
+      case _: NumericType | StringType | BooleanType | _: VectorUDT => true
+      case _ => false
+    }).map(_.name).filter(_ != label.value)
   }
 }
 
@@ -144,9 +138,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
  * @param hasIntercept whether the formula specifies fitting with an intercept.
  */
 private[ml] case class ResolvedRFormula(
-    label: String,
-    terms: Seq[Seq[String]],
-    hasIntercept: Boolean) {
+  label: String, terms: Seq[Seq[String]], hasIntercept: Boolean) {
 
   override def toString: String = {
     val ts = terms.map {
@@ -311,7 +303,7 @@ private[ml] object RFormulaParser extends RegexParsers {
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result
-    case failure: NoSuccess =>
-      throw new IllegalArgumentException("Could not parse formula: " + value)
+    case failure: NoSuccess => throw new IllegalArgumentException(
+      "Could not parse formula: " + value)
   }
 }
