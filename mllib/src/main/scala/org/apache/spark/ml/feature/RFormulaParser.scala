@@ -27,7 +27,6 @@ import org.apache.spark.sql.types._
  * Represents a parsed R formula.
  */
 private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
-
   /**
    * Resolves formula terms into column names. A schema is necessary for inferring the meaning
    * of the special '.' term. Duplicate terms will be removed during resolution.
