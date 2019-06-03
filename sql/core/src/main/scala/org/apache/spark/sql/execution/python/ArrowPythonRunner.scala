@@ -78,9 +78,7 @@ class ArrowPythonRunner(
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
 
-          val flushTimely =
-            evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF ||
-            evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+          val flushTimely = evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
           var lastFlushTime = System.currentTimeMillis()
           while (inputIterator.hasNext) {
