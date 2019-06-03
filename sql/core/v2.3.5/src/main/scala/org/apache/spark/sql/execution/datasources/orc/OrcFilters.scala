@@ -66,7 +66,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
       conjunction <- buildTree(convertibleFilters(schema, dataTypeMap, filters))
-      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
+      // Then tries to build a single ORC `SearchArgument` for the conjunction predicate.
+      // The input predicate is fully convertible. There should not be any empty result in the
+      // following recursive method call `buildSearchArgument`.
       builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
     } yield builder.build()
   }
@@ -80,6 +82,17 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     def convertibleFiltersHelper(
         filter: Filter,
         canPartialPushDown: Boolean): Option[Filter] = filter match {
+      // At here, it is not safe to just convert one side and remove the other side
+      // if we do not understand what the parent filters are.
+      //
+      // Here is an example used to explain the reason.
+      // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+      // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+      // NOT(a = 2), which will generate wrong results.
+      //
+      // Pushing one side of AND down is only safe to do at the top level or in the child
+      // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+      // can be safely removed.
       case And(left, right) =>
         val leftResultOptional = convertibleFiltersHelper(left, canPartialPushDown)
         val rightResultOptional = convertibleFiltersHelper(right, canPartialPushDown)
@@ -90,6 +103,17 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           case _ => None
         }
 
+      // The Or predicate is convertible when both of its children can be pushed down.
+      // That is to say, if one/both of the children can be partially pushed down, the Or
+      // predicate can be partially pushed down as well.
+      //
+      // Here is an example used to explain the reason.
+      // Let's say we have
+      // (a1 AND a2) OR (b1 AND b2),
+      // a1 and b1 is convertible, while a2 and b2 is not.
+      // The predicate can be converted as
+      // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+      // As per the logical in And predicate, we can push down (a1 OR b1).
       case Or(left, right) =>
         val leftResultOptional = convertibleFiltersHelper(left, canPartialPushDown)
         val rightResultOptional = convertibleFiltersHelper(right, canPartialPushDown)
@@ -150,23 +174,19 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    createBuilder(dataTypeMap, expression, builder, canPartialPushDownConjuncts = true)
+    createBuilder(dataTypeMap, expression, builder)
   }
 
   /**
    * @param dataTypeMap a map from the attribute name to its data type.
    * @param expression the input filter predicates.
    * @param builder the input SearchArgument.Builder.
-   * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
-   *                                    down safely. Pushing ONLY one side of AND down is safe to
-   *                                    do at the top level or none of its ancestors is NOT and OR.
    * @return the builder so far.
    */
   private def createBuilder(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
-      builder: Builder,
-      canPartialPushDownConjuncts: Boolean): Option[Builder] = {
+      builder: Builder): Option[Builder] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
 
@@ -174,62 +194,20 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
     expression match {
       case And(left, right) =>
-        // At here, it is not safe to just convert one side and remove the other side
-        // if we do not understand what the parent filters are.
-        //
-        // Here is an example used to explain the reason.
-        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
-        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
-        // NOT(a = 2), which will generate wrong results.
-        //
-        // Pushing one side of AND down is only safe to do at the top level or in the child
-        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
-        // can be safely removed.
-        val leftBuilderOption =
-          createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
-        val rightBuilderOption =
-          createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
-        (leftBuilderOption, rightBuilderOption) match {
-          case (Some(_), Some(_)) =>
-            for {
-              lhs <- createBuilder(dataTypeMap, left,
-                builder.startAnd(), canPartialPushDownConjuncts)
-              rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
-            } yield rhs.end()
-
-          case (Some(_), None) if canPartialPushDownConjuncts =>
-            createBuilder(dataTypeMap, left, builder, canPartialPushDownConjuncts)
-
-          case (None, Some(_)) if canPartialPushDownConjuncts =>
-            createBuilder(dataTypeMap, right, builder, canPartialPushDownConjuncts)
-
-          case _ => None
-        }
+        for {
+          lhs <- createBuilder(dataTypeMap, left, builder.startAnd())
+          rhs <- createBuilder(dataTypeMap, right, lhs)
+        } yield rhs.end()
 
       case Or(left, right) =>
-        // The Or predicate is convertible when both of its children can be pushed down.
-        // That is to say, if one/both of the children can be partially pushed down, the Or
-        // predicate can be partially pushed down as well.
-        //
-        // Here is an example used to explain the reason.
-        // Let's say we have
-        // (a1 AND a2) OR (b1 AND b2),
-        // a1 and b1 is convertible, while a2 and b2 is not.
-        // The predicate can be converted as
-        // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
-        // As per the logical in And predicate, we can push down (a1 OR b1).
         for {
-          _ <- createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
-          _ <- createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
-          lhs <- createBuilder(dataTypeMap, left, builder.startOr(), canPartialPushDownConjuncts)
-          rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
+          lhs <- createBuilder(dataTypeMap, left, builder.startOr())
+          rhs <- createBuilder(dataTypeMap, right, lhs)
         } yield rhs.end()
 
       case Not(child) =>
         for {
-          _ <- createBuilder(dataTypeMap, child, newBuilder, canPartialPushDownConjuncts = false)
-          negate <- createBuilder(dataTypeMap,
-            child, builder.startNot(), canPartialPushDownConjuncts = false)
+          negate <- createBuilder(dataTypeMap, child, builder.startNot())
         } yield negate.end()
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
