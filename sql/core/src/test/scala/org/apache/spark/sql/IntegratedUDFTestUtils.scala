@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.spark.TestUtils
-import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction}
+import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.config.Tests
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -74,7 +74,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   // It is possible the test is being ran without the build.
   private lazy val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
   private lazy val py4jPath = Paths.get(
-    sparkHome, "python", "lib", "py4j-0.10.8.1-src.zip").toAbsolutePath
+    sparkHome, "python", "lib", PythonUtils.PY4J_ZIP_NAME).toAbsolutePath
   private lazy val pysparkPythonPath = s"$py4jPath:$sourcePath"
 
   private lazy val isPythonAvailable: Boolean = TestUtils.testCommandAvailable(pythonExec)
