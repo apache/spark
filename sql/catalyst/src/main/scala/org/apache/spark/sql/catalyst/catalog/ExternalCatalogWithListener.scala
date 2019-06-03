@@ -142,10 +142,6 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
     delegate.getTablesByNames(db, tables)
   }
 
-  override def getAllTables(db: String): Seq[CatalogTable] = {
-    delegate.getAllTables(db)
-  }
-
   override def tableExists(db: String, table: String): Boolean = {
     delegate.tableExists(db, table)
   }

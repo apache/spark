@@ -86,8 +86,6 @@ private[hive] trait HiveClient {
 
   def getTablesByNames(dbName: String, tableNames: Seq[String]): Seq[CatalogTable]
 
-  def getAllTables(dbName: String): Seq[CatalogTable]
-
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 

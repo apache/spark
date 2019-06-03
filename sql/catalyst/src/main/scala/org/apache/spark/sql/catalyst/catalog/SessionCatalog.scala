@@ -446,18 +446,8 @@ class SessionCatalog(
       val tables = names.map(name => formatTableName(name.table))
       externalCatalog.getTablesByNames(db, tables)
     } else {
-      val db = getCurrentDatabase
-      requireDbExists(db)
-      getAllTables(db)
+      Seq.empty
     }
-  }
-
-  /**
-   * Retrieve the metadata of an existing permanent table/view. If no database is specified,
-   * assume the table/view is in the current database.
-   */
-  def getAllTables(dbName: String = getCurrentDatabase): Seq[CatalogTable] = {
-    externalCatalog.getAllTables(dbName)
   }
 
   /**

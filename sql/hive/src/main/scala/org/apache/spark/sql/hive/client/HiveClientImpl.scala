@@ -392,18 +392,8 @@ private[hive] class HiveClientImpl(
     try {
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala.map(new HiveTable(_))
     } catch {
-      case e: Exception =>
-        throw new HiveException(s"Unable to fetch tables of db $dbName", e);
-    }
-  }
-
-  private def getAllRawTables(dbName: String): Seq[HiveTable] = {
-    try {
-      msClient.getTableObjectsByName(dbName, msClient.getAllTables(dbName)).asScala
-        .map(new HiveTable(_))
-    } catch {
-      case e: Exception =>
-        throw new HiveException(s"Unable to fetch tables of db $dbName", e);
+      case ex: Exception =>
+        throw new HiveException(s"Unable to fetch tables of db $dbName", ex);
     }
   }
 
@@ -415,10 +405,6 @@ private[hive] class HiveClientImpl(
       dbName: String,
       tableNames: Seq[String]): Seq[CatalogTable] = withHiveState {
     getRawTablesByNames(dbName, tableNames).map(convertHiveTableToCatalogTable)
-  }
-
-  override def getAllTables(dbName: String): Seq[CatalogTable] = withHiveState {
-    getAllRawTables(dbName).map(convertHiveTableToCatalogTable)
   }
 
   override def getTableOption(

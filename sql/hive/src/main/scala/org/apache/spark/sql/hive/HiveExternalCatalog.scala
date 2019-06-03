@@ -124,10 +124,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.getTablesByNames(db, tables)
   }
 
-  private[hive] def getAllRawTables(db: String): Seq[CatalogTable] = {
-    client.getAllTables(db)
-  }
-
   /**
    * If the given table properties contains datasource properties, throw an exception. We will do
    * this check when create or alter a table, i.e. when we try to write table metadata to Hive
@@ -712,10 +708,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def getTablesByNames(db: String, tables: Seq[String]): Seq[CatalogTable] = withClient {
     getRawTablesByName(db, tables).map(restoreTableMetadata)
-  }
-
-  override def getAllTables(db: String): Seq[CatalogTable] = withClient {
-    getAllRawTables(db).map(restoreTableMetadata)
   }
 
   /**
