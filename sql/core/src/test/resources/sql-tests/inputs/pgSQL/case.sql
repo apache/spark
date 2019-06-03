@@ -3,7 +3,7 @@
 --
 --
 -- CASE
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/case.sql
 -- Test the case statement
 --
 -- There are 2 join condition is missing in this test case. we set spark.sql.crossJoin.enabled=true.
