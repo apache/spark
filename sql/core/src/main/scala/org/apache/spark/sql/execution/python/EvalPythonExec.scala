@@ -68,12 +68,10 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
     udf.children match {
       case Seq(u: PythonUDF) =>
         val (chained, children) = collectFunctions(u)
-        // scalastyle:off
         (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
       case children =>
         // There should not be any other UDFs, or the children can't be evaluated directly.
         assert(children.forall(_.find(_.isInstanceOf[PythonUDF]).isEmpty))
-        // scalastyle:on
         (ChainedPythonFunctions(Seq(udf.func)), udf.children)
     }
   }
@@ -103,21 +101,22 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
 
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
-      val fields = new ArrayBuffer[StructField]
+      val dataTypes = new ArrayBuffer[DataType]
       val argOffsets = inputs.map { input =>
         input.map { e =>
           if (allInputs.exists(_.semanticEquals(e))) {
             allInputs.indexWhere(_.semanticEquals(e))
           } else {
             allInputs += e
-            val fieldName = e.asInstanceOf[NamedExpression].qualifiedName
-            fields += StructField(fieldName, e.dataType)
+            dataTypes += e.dataType
             allInputs.length - 1
           }
         }.toArray
       }.toArray
       val projection = newMutableProjection(allInputs, child.output)
-      val schema = StructType(fields)
+      val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
+        StructField(s"_$i", dt)
+      })
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = iter.map { inputRow =>
