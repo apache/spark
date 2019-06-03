@@ -172,8 +172,8 @@ private[ml] sealed trait Term {
     other.asTerms.terms.foldLeft(this) {
       case (left, right) =>
         right match {
-          case t: Deletion => left add t
-          case t: Term => left add Deletion(t)
+          case t: Deletion => left.add(t)
+          case t: Term => left.add(Deletion(t))
         }
     }
   }
@@ -193,10 +193,10 @@ private[ml] sealed trait InteractableTerm extends Term {
 
   /** Interactions of interactable terms. */
   override def interact(other: Term): Term = other match {
-    case t: InteractableTerm => this.asInteraction interact t.asInteraction
-    case t: ColumnInteraction => this.asInteraction interact t
-    case t: Terms => this.asTerms interact t
-    case t: Term => t interact this // Deletion or non-interactable term
+    case t: InteractableTerm => this.asInteraction.interact(t.asInteraction)
+    case t: ColumnInteraction => this.asInteraction.interact(t)
+    case t: Terms => this.asTerms.interact(t)
+    case t: Term => t.interact(this) // Deletion or non-interactable term
   }
 }
 
@@ -211,10 +211,10 @@ private[ml] case class ColumnInteraction(terms: Seq[InteractableTerm]) extends T
 
   // Convert to ColumnInteraction and concat terms
   override def interact(other: Term): Term = other match {
-    case t: InteractableTerm => this interact t.asInteraction
+    case t: InteractableTerm => this.interact(t.asInteraction)
     case t: ColumnInteraction => ColumnInteraction(terms ++ t.terms)
-    case t: Terms => this.asTerms interact t
-    case t: Term => t interact this
+    case t: Terms => this.asTerms.interact(t)
+    case t: Term => t.interact(this)
   }
 }
 
@@ -226,8 +226,8 @@ private[ml] case class Deletion(term: Term) extends Term {
 
   // Unnest the deletion and interact
   override def interact(other: Term): Term = other match {
-    case Deletion(t) => Deletion(term interact t)
-    case t: Term => Deletion(term interact t)
+    case Deletion(t) => Deletion(term.interact(t))
+    case t: Term => Deletion(term.interact(t))
   }
 }
 
@@ -240,7 +240,7 @@ private[ml] case class Terms(terms: Seq[Term]) extends Term {
     val interactions = for {
       left <- terms
       right <- other.asTerms.terms
-    } yield left interact right
+    } yield left.interact(right)
     Terms(interactions)
   }
 }
@@ -251,13 +251,13 @@ private[ml] case class Terms(terms: Seq[Term]) extends Term {
  */
 private[ml] object RFormulaParser extends RegexParsers {
 
-  private def add(left: Term, right: Term) = left add right
+  private def add(left: Term, right: Term) = left.add(right)
 
-  private def subtract(left: Term, right: Term) = left subtract right
+  private def subtract(left: Term, right: Term) = left.subtract(right)
 
-  private def interact(left: Term, right: Term) = left interact right
+  private def interact(left: Term, right: Term) = left.interact(right)
 
-  private def cross(left: Term, right: Term) = left add right add (left interact right)
+  private def cross(left: Term, right: Term) = left.add(right).add(left.interact(right))
 
   private def power(base: Term, degree: Int): Term = {
     val exprs = List.fill(degree)(base)
