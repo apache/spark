@@ -37,14 +37,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
-import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
 
 /**
  * A command to create a table with the same definition of the given existing table.
@@ -197,9 +192,9 @@ abstract class AlterTableAddReplaceColumnsCommandsBase extends RunnableCommand {
   }
 
   /**
-   * ALTER TABLE [ADD|REPLACE] COLUMNS command do not support temporary view/table,
-   * view, or datasource table with text, orc formats or external provider.
-   * For datasource table, it currently only supports parquet, json, csv, orc.
+   * ALTER TABLE [ADD|REPLACE] COLUMNS command do not support temporary view/table, view
+   * or external provider. Datasource table currently supports: parquet, json, orc.
+   * ADD COLUMNS also supports csv. REPLACE COLUMNS also supports text.
    */
   protected def verifyAlterTableAddReplaceColumn(
     conf: SQLConf,
@@ -218,12 +213,9 @@ abstract class AlterTableAddReplaceColumnsCommandsBase extends RunnableCommand {
     if (DDLUtils.isDatasourceTable(catalogTable)) {
       DataSource.lookupDataSource(catalogTable.provider.get, conf).
         getConstructor().newInstance() match {
-        // For datasource table, this command can only support the following File format.
-        // TextFileFormat only default to one column "value"
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
-      case _: JsonDataSourceV2 | _: CSVDataSourceV2 | _: ParquetFileFormat | _: OrcDataSourceV2 =>
-      case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
+      case s if isDatasourceFormatSupported(s.getClass.getCanonicalName) =>
       case s =>
         throw new AnalysisException(
           s"""
@@ -233,6 +225,23 @@ abstract class AlterTableAddReplaceColumnsCommandsBase extends RunnableCommand {
       }
     }
     catalogTable
+  }
+
+  /**
+   * Checks if the datasource class canonical name provided ends with one of the
+   * formats supported specified in `supportedDatasourceFormats` as a sequence of strings
+   * representing the class names of the supported datasource formats
+   */
+  val supportedDatasourceFormats: Seq[String]
+
+  protected def isDatasourceFormatSupported(
+    datasourceClassCanonicalName: String): Boolean = {
+    supportedDatasourceFormats.foreach { ds =>
+      if (datasourceClassCanonicalName.endsWith(ds)) {
+        return true
+      }
+    }
+    false
   }
 }
 
@@ -247,6 +256,11 @@ abstract class AlterTableAddReplaceColumnsCommandsBase extends RunnableCommand {
 case class AlterTableAddColumnsCommand(
     table: TableIdentifier,
     colsToAdd: Seq[StructField]) extends AlterTableAddReplaceColumnsCommandsBase {
+
+  // Text format doesn't need ADD COLUMNS as text datasource can have only one column
+  override val supportedDatasourceFormats = Seq("ParquetFileFormat", "OrcFileFormat",
+    "OrcDataSourceV2", "JsonDataSourceV2", "CSVDataSourceV2")
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddReplaceColumn(
@@ -278,6 +292,12 @@ case class AlterTableAddColumnsCommand(
 case class AlterTableReplaceColumnsCommand(
     table: TableIdentifier,
     colsToReplace: Seq[StructField]) extends AlterTableAddReplaceColumnsCommandsBase {
+
+  // Csv format not supported by REPLACE COLUMNS as csv datasource is read positionally
+  // and a new replacement column would reference an old replaced column's data
+  override val supportedDatasourceFormats = Seq("ParquetFileFormat", "OrcFileFormat",
+    "OrcDataSourceV2", "JsonDataSourceV2", "TextDataSourceV2")
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddReplaceColumn(
