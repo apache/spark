@@ -440,10 +440,18 @@ class SessionCatalog(
    */
   @throws[NoSuchDatabaseException]
   def getTablesByNames(names: Seq[TableIdentifier]): Seq[CatalogTable] = {
-    val db = formatDatabaseName(names(0).database.getOrElse(getCurrentDatabase))
-    val tables = names.map(name => formatTableName(name.table))
+    val db = if (names.nonEmpty) {
+      formatDatabaseName(names.head.database.getOrElse(getCurrentDatabase))
+    } else {
+      getCurrentDatabase
+    }
     requireDbExists(db)
-    externalCatalog.getTablesByNames(db, tables)
+    if (names.nonEmpty) {
+      val tables = names.map(name => formatTableName(name.table))
+      externalCatalog.getTablesByNames(db, tables)
+    } else {
+      getAllTables(db)
+    }
   }
 
   /**
