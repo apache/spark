@@ -155,9 +155,9 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       (0.1, 0.0), (0.2, 0.0), (0.3, 1.0), (0.4, 0.0), (0.5, 0.0),
       (0.6, 1.0), (0.7, 1.0), (0.8, 0.0), (0.9, 1.0))
 
-    val scoreAndLabelsRDD = sc.parallelize(scoreAndLabels, 1)
+    val scoreAndLabelsRDD = sc.parallelize(scoreAndLabels, 3)
 
-    val original = new BinaryClassificationMetrics(scoreAndLabelsRDD)
+    val original = new BinaryClassificationMetrics(scoreAndLabelsRDD, 0)
     val originalROC = original.roc().collect().sorted.toList
     // Add 2 for (0,0) and (1,1) appended at either end
     assert(2 + scoreAndLabels.size == originalROC.size)
@@ -172,28 +172,13 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val numBins = 4
 
     val downsampled = new BinaryClassificationMetrics(scoreAndLabelsRDD, numBins)
+    assert(2 + numBins == downsampled.roc().getNumPartitions)
     val downsampledROC = downsampled.roc().collect().sorted.toList
-    assert(
-      // May have to add 1 if the sample factor didn't divide evenly
-      2 + (numBins + (if (scoreAndLabels.size % numBins == 0) 0 else 1)) ==
-      downsampledROC.size)
-    assert(
-      List(
-        (0.0, 0.0), (0.2, 0.25), (0.2, 0.75), (0.6, 0.75), (0.8, 1.0),
-        (1.0, 1.0), (1.0, 1.0)
-      ) ==
-      downsampledROC)
+    assert(2 + numBins == downsampledROC.size)
 
+    assert(numBins == downsampled.recallByThreshold().getNumPartitions)
     val downsampledRecall = downsampled.recallByThreshold().collect().sorted.toList
-    assert(
-      // May have to add 1 if the sample factor didn't divide evenly
-      numBins + (if (scoreAndLabels.size % numBins == 0) 0 else 1) ==
-      downsampledRecall.size)
-    assert(
-      List(
-        (0.1, 1.0), (0.2, 1.0), (0.4, 0.75), (0.6, 0.75), (0.8, 0.25)
-      ) ==
-      downsampledRecall)
+    assert(numBins == downsampledRecall.size)
   }
 
 }
