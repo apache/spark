@@ -21,8 +21,23 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
-abstract class ConditionalAggregate(predicate: Expression) extends UnevaluableAggregate {
-  def child: Expression
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the number of rows that the supplied expression is non-null and true.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col % 2 = 0) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
+       2
+      > SELECT _FUNC_(col IS NULL) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
+       1
+  """,
+  since = "3.0.0")
+case class CountIf(predicate: Expression) extends UnevaluableAggregate {
+  def child: Expression = Count(
+    new NullIf(Cast(predicate, BooleanType), Literal(false, BooleanType)))
+
+  override def prettyName: String = "count_if"
 
   override def children: Seq[Expression] = predicate :: child :: Nil
 
@@ -38,23 +53,4 @@ abstract class ConditionalAggregate(predicate: Expression) extends UnevaluableAg
         s"function ${prettyName} requires boolean type, not ${predicate.dataType.catalogString}"
       )
   }
-}
-
-@ExpressionDescription(
-  usage = """
-    _FUNC_(expr) - Returns the number of rows that the supplied expression is non-null and true.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col % 2 = 0) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
-       2
-      > SELECT _FUNC_(col IS NULL) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col);
-       1
-  """,
-  since = "3.0.0")
-case class CountIf(predicate: Expression) extends ConditionalAggregate(predicate) {
-  override def prettyName: String = "count_if"
-
-  override def child: Expression = Count(
-    new NullIf(Cast(predicate, BooleanType), Literal(false, BooleanType)))
 }
