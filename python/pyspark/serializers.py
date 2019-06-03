@@ -58,6 +58,7 @@ import types
 import collections
 import zlib
 import itertools
+import time
 
 if sys.version < '3':
     import cPickle as pickle
@@ -222,16 +223,22 @@ class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.
     """
+    def __init__(self, flush_timely=False):
+        self.flush_timely = flush_timely
 
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
         writer = None
+        last_flush_time = time.time()
         try:
             for batch in iterator:
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
-                stream.flush()
+                flush_time = time.time()
+                if self.flush_timely and (flush_time - last_flush_time > 0.1):
+                    stream.flush()
+                    last_flush_time = flush_time
         finally:
             if writer is not None:
                 writer.close()
@@ -255,8 +262,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     :param assign_cols_by_name: If True, then Pandas DataFrames will get columns by name
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name):
-        super(ArrowStreamPandasSerializer, self).__init__()
+    def __init__(self, timezone, safecheck, assign_cols_by_name, flush_timely=False):
+        super(ArrowStreamPandasSerializer, self).__init__(flush_timely=flush_timely)
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
@@ -361,9 +368,10 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     Serializer used by Python worker to evaluate Pandas UDFs
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, df_for_struct=False):
+    def __init__(self, timezone, safecheck, assign_cols_by_name, df_for_struct=False,
+                 flush_timely=False):
         super(ArrowStreamPandasUDFSerializer, self) \
-            .__init__(timezone, safecheck, assign_cols_by_name)
+            .__init__(timezone, safecheck, assign_cols_by_name, flush_timely=flush_timely)
         self._df_for_struct = df_for_struct
 
     def arrow_to_pandas(self, arrow_column):
