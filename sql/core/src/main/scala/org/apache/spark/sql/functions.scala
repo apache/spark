@@ -374,25 +374,6 @@ object functions {
     countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
-   * Aggregate function: returns the number of true values in a group.
-   *
-   * @group agg_funcs
-   * @since 3.0.0
-   */
-  def count_if(e: Column): Column = withAggregateFunction {
-    CountIf(e.expr)
-  }
-
-  /**
-   * Aggregate function: returns the number of true values in a group.
-   *
-   * @group agg_funcs
-   * @since 3.0.0
-   */
-  def count_if(columnName: String): TypedColumn[Boolean, Long] =
-    count_if(Column(columnName)).as(ExpressionEncoder[Long]())
-
-  /**
    * Aggregate function: returns the population covariance for two columns.
    *
    * @group agg_funcs

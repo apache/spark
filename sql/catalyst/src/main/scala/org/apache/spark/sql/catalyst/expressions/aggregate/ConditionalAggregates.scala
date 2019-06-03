@@ -18,9 +18,27 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
+
+abstract class ConditionalAggregate(predicate: Expression) extends UnevaluableAggregate {
+  def child: Expression
+
+  override def children: Seq[Expression] = predicate :: child :: Nil
+
+  override def nullable: Boolean = child.nullable
+
+  override def dataType: DataType = child.dataType
+
+  override def checkInputDataTypes(): TypeCheckResult = predicate.dataType match {
+    case BooleanType | NullType =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(
+        s"function ${prettyName} requires boolean type, not ${predicate.dataType.catalogString}"
+      )
+  }
+}
 
 @ExpressionDescription(
   usage = """
@@ -34,40 +52,9 @@ import org.apache.spark.sql.types._
        1
   """,
   since = "3.0.0")
-case class CountIf(child: Expression) extends DeclarativeAggregate {
+case class CountIf(predicate: Expression) extends ConditionalAggregate(predicate) {
+  override def prettyName: String = "count_if"
 
-  override def children: Seq[Expression] = child :: Nil
-
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = LongType
-
-  protected lazy val count: AttributeReference =
-    AttributeReference("count", LongType, nullable = false)()
-
-  override lazy val aggBufferAttributes: Seq[AttributeReference] = count :: Nil
-
-  override lazy val initialValues: Seq[Expression] = Seq(
-    /* count = */ Literal(0L)
-  )
-
-  override lazy val mergeExpressions: Seq[Expression] = Seq(
-    /* count = */ count.left + count.right
-  )
-
-  override lazy val evaluateExpression: AttributeReference = count
-
-  override def defaultResult: Option[Literal] = Option(Literal(0L))
-
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case BooleanType => TypeCheckResult.TypeCheckSuccess
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(
-        s"function count_if requires boolean type, not ${child.dataType.catalogString}"
-      )
-  }
-
-  override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* count = */ If(child, count + 1L, count)
-  )
+  override def child: Expression = Count(
+    new NullIf(Cast(predicate, BooleanType), Literal(false, BooleanType)))
 }

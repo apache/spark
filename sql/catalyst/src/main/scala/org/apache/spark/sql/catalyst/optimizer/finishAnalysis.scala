@@ -46,6 +46,7 @@ import org.apache.spark.sql.types._
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case e: RuntimeReplaceable => e.child
+    case e: ConditionalAggregate => e.child
     case SomeAgg(arg) => Max(arg)
     case AnyAgg(arg) => Max(arg)
     case EveryAgg(arg) => Min(arg)

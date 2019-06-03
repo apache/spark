@@ -901,22 +901,23 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       assert(thrownException.message.contains("function count_if requires boolean type"))
     }
 
-    checkAnswer(
-      testData.agg(count_if('key % 2 === 0), count_if('key > 50), count_if('key < 50)),
-      Row(50L, 50L, 49L))
-    checkAnswer(
-      sql("SELECT COUNT_IF(key % 2 = 0), COUNT_IF(key > 50), COUNT_IF(key < 50) FROM testData"),
-      Row(50L, 50L, 49L))
+    withTempView("tempView") {
+      Seq(("a", None), ("a", Some(1)), ("a", Some(2)), ("a", Some(3)),
+        ("b", None), ("b", Some(4)), ("b", Some(5)), ("b", Some(6)))
+        .toDF("x", "y")
+        .createOrReplaceTempView("tempView")
 
-    checkAnswer(
-      testData2.groupBy('a).agg(count_if('b % 2 === 0)),
-      Seq(Row(1, 1L), Row(2, 1L), Row(3, 1L)))
-    checkAnswer(
-      sql("SELECT a, COUNT_IF(b % 2 = 0) FROM testData2 GROUP BY a"),
-      Seq(Row(1, 1L), Row(2, 1L), Row(3, 1L)))
+      checkAnswer(
+        sql("SELECT COUNT_IF(NULL), COUNT_IF(y % 2 = 0), COUNT_IF(y % 2 <> 0), " +
+          "COUNT_IF(y IS NULL) FROM tempView"),
+        Row(0L, 3L, 3L, 2L))
 
-    checkError(testData.agg(count_if('key)))
-    checkError(testData.agg(count_if("key")))
-    checkError(sql("SELECT COUNT_IF(key) FROM testData"))
+      checkAnswer(
+        sql("SELECT x, COUNT_IF(NULL), COUNT_IF(y % 2 = 0), COUNT_IF(y % 2 <> 0), " +
+          "COUNT_IF(y IS NULL) FROM tempView GROUP BY x"),
+        Row("a", 0L, 1L, 2L, 1L) :: Row("b", 0L, 2L, 1L, 1L) :: Nil)
+
+      checkError(sql("SELECT COUNT_IF(x) FROM tempView"))
+    }
   }
 }
