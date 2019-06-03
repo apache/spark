@@ -25,25 +25,43 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_SSL
 import org.apache.kafka.common.serialization.StringDeserializer
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
 class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   test("redactParams should give back empty parameters") {
-    setSparkEnv(Map())
+    setSparkEnv(Map.empty)
     assert(KafkaRedactionUtil.redactParams(Seq()) === Seq())
   }
 
-  test("redactParams should give back non String parameters") {
-    setSparkEnv(Map())
+  test("redactParams should give back null value") {
+    setSparkEnv(Map.empty)
     val kafkaParams = Seq(
-      ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> classOf[StringDeserializer]
+      ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> null
     )
 
     assert(KafkaRedactionUtil.redactParams(kafkaParams) === kafkaParams)
   }
 
+  test("redactParams should redact non String parameters") {
+    setSparkEnv(
+      Map(
+        SECRET_REDACTION_PATTERN.key -> ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG
+      )
+    )
+    val kafkaParams = Seq(
+      ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> classOf[StringDeserializer]
+    )
+
+    val redactedParams = KafkaRedactionUtil.redactParams(kafkaParams).toMap
+
+    assert(redactedParams.size === 1)
+    assert(redactedParams.get(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG).get
+      === REDACTION_REPLACEMENT_TEXT)
+  }
+
   test("redactParams should redact token password from parameters") {
-    setSparkEnv(Map())
+    setSparkEnv(Map.empty)
     val groupId = "id-" + ju.UUID.randomUUID().toString
     addTokenToUGI(tokenService1)
     val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
@@ -55,16 +73,15 @@ class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTes
 
     val redactedParams = KafkaRedactionUtil.redactParams(kafkaParams).toMap
 
-    assert(redactedParams.get(ConsumerConfig.GROUP_ID_CONFIG).get.asInstanceOf[String]
-      === groupId)
+    assert(redactedParams.size === 2)
+    assert(redactedParams.get(ConsumerConfig.GROUP_ID_CONFIG).get === groupId)
     val redactedJaasParams = redactedParams.get(SaslConfigs.SASL_JAAS_CONFIG).get
-      .asInstanceOf[String]
     assert(redactedJaasParams.contains(tokenId))
     assert(!redactedJaasParams.contains(tokenPassword))
   }
 
   test("redactParams should redact passwords from parameters") {
-    setSparkEnv(Map())
+    setSparkEnv(Map.empty)
     val groupId = "id-" + ju.UUID.randomUUID().toString
     val kafkaParams = Seq(
       ConsumerConfig.GROUP_ID_CONFIG -> groupId,
@@ -75,14 +92,11 @@ class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTes
 
     val redactedParams = KafkaRedactionUtil.redactParams(kafkaParams).toMap
 
-    assert(redactedParams(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
-      === groupId)
-    assert(redactedParams(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG).asInstanceOf[String]
-      === REDACTION_REPLACEMENT_TEXT)
-    assert(redactedParams(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG).asInstanceOf[String]
-      === REDACTION_REPLACEMENT_TEXT)
-    assert(redactedParams(SslConfigs.SSL_KEY_PASSWORD_CONFIG).asInstanceOf[String]
-      === REDACTION_REPLACEMENT_TEXT)
+    assert(redactedParams.size === 4)
+    assert(redactedParams(ConsumerConfig.GROUP_ID_CONFIG) === groupId)
+    assert(redactedParams(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG) === REDACTION_REPLACEMENT_TEXT)
+    assert(redactedParams(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG) === REDACTION_REPLACEMENT_TEXT)
+    assert(redactedParams(SslConfigs.SSL_KEY_PASSWORD_CONFIG) === REDACTION_REPLACEMENT_TEXT)
   }
 
   test("redactJaasParam should give back null") {

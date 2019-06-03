@@ -25,20 +25,18 @@ import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
 import org.apache.spark.util.Utils.{redact, REDACTION_REPLACEMENT_TEXT}
 
 private[spark] object KafkaRedactionUtil extends Logging {
-  private[spark] def redactParams(params: Seq[(String, Object)]): Seq[(String, Object)] = {
+  private[spark] def redactParams(params: Seq[(String, Object)]): Seq[(String, String)] = {
     val redactionPattern = Some(SparkEnv.get.conf.get(SECRET_REDACTION_PATTERN))
     params.map { case (key, value) =>
-      if (key.equalsIgnoreCase(SaslConfigs.SASL_JAAS_CONFIG)) {
-        (key, redactJaasParam(value.asInstanceOf[String]))
-      } else {
-        value match {
-          case s: String =>
-            val (_, newValue) = redact(redactionPattern, Seq((key, s))).head
-            (key, newValue)
-
-          case _ =>
-            (key, value)
+      if (value != null) {
+        if (key.equalsIgnoreCase(SaslConfigs.SASL_JAAS_CONFIG)) {
+          (key, redactJaasParam(value.asInstanceOf[String]))
+        } else {
+          val (_, newValue) = redact(redactionPattern, Seq((key, value.toString))).head
+          (key, newValue)
         }
+      } else {
+        (key, value.asInstanceOf[String])
       }
     }
   }
