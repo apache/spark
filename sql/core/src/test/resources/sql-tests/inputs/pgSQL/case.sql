@@ -6,16 +6,17 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql
 -- Test the case statement
 --
-
+-- There are 2 join condition is missing in this test case. we set spark.sql.crossJoin.enabled=true.
+set spark.sql.crossJoin.enabled=true;
 CREATE TABLE CASE_TBL (
   i integer,
   f double
-);
+) USING parquet;
 
 CREATE TABLE CASE2_TBL (
   i integer,
   j integer
-);
+) USING parquet;
 
 INSERT INTO CASE_TBL VALUES (1, 10.1);
 INSERT INTO CASE_TBL VALUES (2, 20.2);
@@ -33,44 +34,45 @@ INSERT INTO CASE2_TBL VALUES (NULL, -6);
 -- Simplest examples without tables
 --
 
-SELECT '3' AS "One",
+SELECT '3' AS `One`,
   CASE
     WHEN 1 < 2 THEN 3
-  END AS "Simple WHEN";
+  END AS `Simple WHEN`;
 
-SELECT '<NULL>' AS "One",
+SELECT '<NULL>' AS `One`,
   CASE
     WHEN 1 > 2 THEN 3
-  END AS "Simple default";
+  END AS `Simple default`;
 
-SELECT '3' AS "One",
+SELECT '3' AS `One`,
   CASE
     WHEN 1 < 2 THEN 3
     ELSE 4
-  END AS "Simple ELSE";
+  END AS `Simple ELSE`;
 
-SELECT '4' AS "One",
+SELECT '4' AS `One`,
   CASE
     WHEN 1 > 2 THEN 3
     ELSE 4
-  END AS "ELSE default";
+  END AS `ELSE default`;
 
-SELECT '6' AS "One",
+SELECT '6' AS `One`,
   CASE
     WHEN 1 > 2 THEN 3
     WHEN 4 < 5 THEN 6
     ELSE 7
-  END AS "Two WHEN with default";
+  END AS `Two WHEN with default`;
 
-
-SELECT '7' AS "None",
-   CASE WHEN random() < 0 THEN 1
-   END AS "NULL on no matches";
+-- [SPARK-27930] Add built-in Math Function: RANDOM
+-- SELECT '7' AS `None`,
+--   CASE WHEN random() < 0 THEN 1
+--   END AS `NULL on no matches`;
 
 -- Constant-expression folding shouldn't evaluate unreachable subexpressions
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
 SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END;
 
+-- [SPARK-27923] PostgreSQL throws an exception but Spark SQL is NULL
 -- However we do not currently suppress folding of potentially
 -- reachable subexpressions
 SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl;
@@ -82,34 +84,34 @@ SELECT CASE 'a' WHEN 'a' THEN 1 ELSE 2 END;
 -- Examples of targets involving tables
 --
 
-SELECT '' AS "Five",
+SELECT '' AS `Five`,
   CASE
     WHEN i >= 3 THEN i
-  END AS ">= 3 or Null"
+  END AS `>= 3 or Null`
   FROM CASE_TBL;
 
-SELECT '' AS "Five",
+SELECT '' AS `Five`,
   CASE WHEN i >= 3 THEN (i + i)
        ELSE i
-  END AS "Simplest Math"
+  END AS `Simplest Math`
   FROM CASE_TBL;
 
-SELECT '' AS "Five", i AS "Value",
+SELECT '' AS `Five`, i AS `Value`,
   CASE WHEN (i < 0) THEN 'small'
        WHEN (i = 0) THEN 'zero'
        WHEN (i = 1) THEN 'one'
        WHEN (i = 2) THEN 'two'
        ELSE 'big'
-  END AS "Category"
+  END AS `Category`
   FROM CASE_TBL;
 
-SELECT '' AS "Five",
+SELECT '' AS `Five`,
   CASE WHEN ((i < 0) or (i < 0)) THEN 'small'
        WHEN ((i = 0) or (i = 0)) THEN 'zero'
        WHEN ((i = 1) or (i = 1)) THEN 'one'
        WHEN ((i = 2) or (i = 2)) THEN 'two'
        ELSE 'big'
-  END AS "Category"
+  END AS `Category`
   FROM CASE_TBL;
 
 --
@@ -133,38 +135,44 @@ SELECT *
   FROM CASE_TBL a, CASE2_TBL b
   WHERE COALESCE(a.f, b.i, b.j) = 2;
 
-SELECT '' AS Five, NULLIF(a.i,b.i) AS "NULLIF(a.i,b.i)",
-  NULLIF(b.i, 4) AS "NULLIF(b.i,4)"
+SELECT '' AS Five, NULLIF(a.i,b.i) AS `NULLIF(a.i,b.i)`,
+  NULLIF(b.i, 4) AS `NULLIF(b.i,4)`
   FROM CASE_TBL a, CASE2_TBL b;
 
-SELECT '' AS "Two", *
+SELECT '' AS `Two`, *
   FROM CASE_TBL a, CASE2_TBL b
   WHERE COALESCE(f,b.i) = 2;
 
+-- We don't support update now.
 --
 -- Examples of updates involving tables
 --
 
-UPDATE CASE_TBL
-  SET i = CASE WHEN i >= 3 THEN (- i)
-                ELSE (2 * i) END;
+-- UPDATE CASE_TBL
+--   SET i = CASE WHEN i >= 3 THEN (- i)
+--                 ELSE (2 * i) END;
 
-SELECT * FROM CASE_TBL;
+-- SELECT * FROM CASE_TBL;
 
-UPDATE CASE_TBL
-  SET i = CASE WHEN i >= 2 THEN (2 * i)
-                ELSE (3 * i) END;
+-- UPDATE CASE_TBL
+--   SET i = CASE WHEN i >= 2 THEN (2 * i)
+--                 ELSE (3 * i) END;
 
-SELECT * FROM CASE_TBL;
+-- SELECT * FROM CASE_TBL;
 
-UPDATE CASE_TBL
-  SET i = CASE WHEN b.i >= 2 THEN (2 * j)
-                ELSE (3 * j) END
-  FROM CASE2_TBL b
-  WHERE j = -CASE_TBL.i;
+-- UPDATE CASE_TBL
+--   SET i = CASE WHEN b.i >= 2 THEN (2 * j)
+--                 ELSE (3 * j) END
+--   FROM CASE2_TBL b
+--   WHERE j = -CASE_TBL.i;
 
-SELECT * FROM CASE_TBL;
+-- SELECT * FROM CASE_TBL;
 
+-- We don't support the features below:
+-- 1. CREATE FUNCTION ... returns ... as ...
+-- 2. CREATE DOMAIN ...
+-- 3. CREATE OPERATOR ...
+-- 4. CREATE TYPE ...
 --
 -- Nested CASE expressions
 --
@@ -178,77 +186,77 @@ SELECT * FROM CASE_TBL;
 
 -- Wrap this in a single transaction so the transient '=' operator doesn't
 -- cause problems in concurrent sessions
-BEGIN;
+-- BEGIN;
 
-CREATE FUNCTION vol(text) returns text as
-  'begin return $1; end' language plpgsql volatile;
+-- CREATE FUNCTION vol(text) returns text as
+--   'begin return $1; end' language plpgsql volatile;
 
-SELECT CASE
-  (CASE vol('bar')
-    WHEN 'foo' THEN 'it was foo!'
-    WHEN vol(null) THEN 'null input'
-    WHEN 'bar' THEN 'it was bar!' END
-  )
-  WHEN 'it was foo!' THEN 'foo recognized'
-  WHEN 'it was bar!' THEN 'bar recognized'
-  ELSE 'unrecognized' END;
+-- SELECT CASE
+--   (CASE vol('bar')
+--     WHEN 'foo' THEN 'it was foo!'
+--     WHEN vol(null) THEN 'null input'
+--     WHEN 'bar' THEN 'it was bar!' END
+--   )
+--   WHEN 'it was foo!' THEN 'foo recognized'
+--   WHEN 'it was bar!' THEN 'bar recognized'
+--   ELSE 'unrecognized' END;
 
 -- In this case, we can't inline the SQL function without confusing things.
-CREATE DOMAIN foodomain AS text;
+-- CREATE DOMAIN foodomain AS text;
 
-CREATE FUNCTION volfoo(text) returns foodomain as
-  'begin return $1::foodomain; end' language plpgsql volatile;
+-- CREATE FUNCTION volfoo(text) returns foodomain as
+--   'begin return $1::foodomain; end' language plpgsql volatile;
 
-CREATE FUNCTION inline_eq(foodomain, foodomain) returns boolean as
-  'SELECT CASE $2::text WHEN $1::text THEN true ELSE false END' language sql;
+-- CREATE FUNCTION inline_eq(foodomain, foodomain) returns boolean as
+--   'SELECT CASE $2::text WHEN $1::text THEN true ELSE false END' language sql;
 
-CREATE OPERATOR = (procedure = inline_eq,
-                   leftarg = foodomain, rightarg = foodomain);
+-- CREATE OPERATOR = (procedure = inline_eq,
+--                    leftarg = foodomain, rightarg = foodomain);
 
-SELECT CASE volfoo('bar') WHEN 'foo'::foodomain THEN 'is foo' ELSE 'is not foo' END;
+-- SELECT CASE volfoo('bar') WHEN 'foo'::foodomain THEN 'is foo' ELSE 'is not foo' END;
 
-ROLLBACK;
+-- ROLLBACK;
 
 -- Test multiple evaluation of a CASE arg that is a read/write object (#14472)
 -- Wrap this in a single transaction so the transient '=' operator doesn't
 -- cause problems in concurrent sessions
-BEGIN;
+-- BEGIN;
 
-CREATE DOMAIN arrdomain AS int[];
+-- CREATE DOMAIN arrdomain AS int[];
 
-CREATE FUNCTION make_ad(int,int) returns arrdomain as
-  'declare x arrdomain;
-   begin
-     x := array[$1,$2];
-     return x;
-   end' language plpgsql volatile;
+-- CREATE FUNCTION make_ad(int,int) returns arrdomain as
+--   'declare x arrdomain;
+--    begin
+--      x := array[$1,$2];
+--      return x;
+--    end' language plpgsql volatile;
 
-CREATE FUNCTION ad_eq(arrdomain, arrdomain) returns boolean as
-  'begin return array_eq($1, $2); end' language plpgsql;
+-- CREATE FUNCTION ad_eq(arrdomain, arrdomain) returns boolean as
+--   'begin return array_eq($1, $2); end' language plpgsql;
 
-CREATE OPERATOR = (procedure = ad_eq,
-                   leftarg = arrdomain, rightarg = arrdomain);
+-- CREATE OPERATOR = (procedure = ad_eq,
+--                    leftarg = arrdomain, rightarg = arrdomain);
 
-SELECT CASE make_ad(1,2)
-  WHEN array[2,4]::arrdomain THEN 'wrong'
-  WHEN array[2,5]::arrdomain THEN 'still wrong'
-  WHEN array[1,2]::arrdomain THEN 'right'
-  END;
+-- SELECT CASE make_ad(1,2)
+--   WHEN array[2,4]::arrdomain THEN 'wrong'
+--   WHEN array[2,5]::arrdomain THEN 'still wrong'
+--   WHEN array[1,2]::arrdomain THEN 'right'
+--   END;
 
-ROLLBACK;
+-- ROLLBACK;
 
 -- Test interaction of CASE with ArrayCoerceExpr (bug #15471)
-BEGIN;
+-- BEGIN;
 
-CREATE TYPE casetestenum AS ENUM ('e', 'f', 'g');
+-- CREATE TYPE casetestenum AS ENUM ('e', 'f', 'g');
 
-SELECT
-  CASE 'foo'::text
-    WHEN 'foo' THEN ARRAY['a', 'b', 'c', 'd'] || enum_range(NULL::casetestenum)::text[]
-    ELSE ARRAY['x', 'y']
-    END;
+-- SELECT
+--   CASE 'foo'::text
+--     WHEN 'foo' THEN ARRAY['a', 'b', 'c', 'd'] || enum_range(NULL::casetestenum)::text[]
+--     ELSE ARRAY['x', 'y']
+--     END;
 
-ROLLBACK;
+-- ROLLBACK;
 
 --
 -- Clean up
@@ -256,3 +264,4 @@ ROLLBACK;
 
 DROP TABLE CASE_TBL;
 DROP TABLE CASE2_TBL;
+set spark.sql.crossJoin.enabled=false;
