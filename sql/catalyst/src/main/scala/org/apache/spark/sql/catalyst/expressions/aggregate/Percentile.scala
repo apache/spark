@@ -45,14 +45,14 @@ import org.apache.spark.util.collection.OpenHashMap
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric column
-       `col` at the given percentage. The value of percentage must be between 0.0 and 1.0. The
-       value of frequency should be positive integral
+      _FUNC_(col, percentage [, frequency [, is_int_frequency]]) - Returns the exact
+       percentile value of numeric column `col` at the given percentage. The value of
+       percentage must be between 0.0 and 1.0. The value of frequency should be positive numeric
 
-      _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
-      percentile value array of numeric column `col` at the given percentage(s). Each value
-      of the percentage array must be between 0.0 and 1.0. The value of frequency should be
-      positive integral
+      _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency [, is_int_frequency]]) -
+      Returns the exact percentile value array of numeric column `col` at the given percentage(s).
+      Each value of the percentage array must be between 0.0 and 1.0. The value of frequency should
+      be positive numeric. The value of is_int_frequency should be boolean
 
       """,
   examples = """
@@ -67,16 +67,23 @@ case class Percentile(
     child: Expression,
     percentageExpression: Expression,
     frequencyExpression : Expression,
+    isIntFreqExpression: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes {
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Double]] with ImplicitCastInputTypes {
 
   def this(child: Expression, percentageExpression: Expression) = {
-    this(child, percentageExpression, Literal(1L), 0, 0)
+    this(child, percentageExpression, Literal(1L), Literal(true), 0, 0)
   }
 
   def this(child: Expression, percentageExpression: Expression, frequency: Expression) = {
-    this(child, percentageExpression, frequency, 0, 0)
+    this(child, percentageExpression, frequency, Literal(true), 0, 0)
+  }
+
+  def this(
+      child: Expression, percentageExpression: Expression,
+      frequency: Expression, isInt: Expression) = {
+    this(child, percentageExpression, frequency, isInt, 0, 0)
   }
 
   override def prettyName: String = "percentile"
@@ -98,7 +105,7 @@ case class Percentile(
   }
 
   override def children: Seq[Expression] = {
-    child  :: percentageExpression ::frequencyExpression :: Nil
+    child  :: percentageExpression ::frequencyExpression :: isIntFreqExpression :: Nil
   }
 
   // Returns null for empty inputs
@@ -114,7 +121,7 @@ case class Percentile(
       case _: ArrayType => ArrayType(DoubleType)
       case _ => DoubleType
     }
-    Seq(NumericType, percentageExpType, IntegralType)
+    Seq(NumericType, percentageExpType, NumericType, BooleanType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -143,24 +150,24 @@ case class Percentile(
     case n: Number => n.doubleValue
   }
 
-  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
+  override def createAggregationBuffer(): OpenHashMap[AnyRef, Double] = {
     // Initialize new counts map instance here.
-    new OpenHashMap[AnyRef, Long]()
+    new OpenHashMap[AnyRef, Double]()
   }
 
   override def update(
-      buffer: OpenHashMap[AnyRef, Long],
-      input: InternalRow): OpenHashMap[AnyRef, Long] = {
+      buffer: OpenHashMap[AnyRef, Double],
+      input: InternalRow): OpenHashMap[AnyRef, Double] = {
     val key = child.eval(input).asInstanceOf[AnyRef]
     val frqValue = frequencyExpression.eval(input)
 
     // Null values are ignored in counts map.
     if (key != null && frqValue != null) {
-      val frqLong = frqValue.asInstanceOf[Number].longValue()
+      val frqDouble = frqValue.asInstanceOf[Number].doubleValue()
       // add only when frequency is positive
-      if (frqLong > 0) {
-        buffer.changeValue(key, frqLong, _ + frqLong)
-      } else if (frqLong < 0) {
+      if (frqDouble > 0) {
+        buffer.changeValue(key, frqDouble, _ + frqDouble)
+      } else if (frqDouble < 0) {
         throw new SparkException(s"Negative values found in ${frequencyExpression.sql}")
       }
     }
@@ -168,32 +175,36 @@ case class Percentile(
   }
 
   override def merge(
-      buffer: OpenHashMap[AnyRef, Long],
-      other: OpenHashMap[AnyRef, Long]): OpenHashMap[AnyRef, Long] = {
+      buffer: OpenHashMap[AnyRef, Double],
+      other: OpenHashMap[AnyRef, Double]): OpenHashMap[AnyRef, Double] = {
     other.foreach { case (key, count) =>
       buffer.changeValue(key, count, _ + count)
     }
     buffer
   }
 
-  override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
+  override def eval(buffer: OpenHashMap[AnyRef, Double]): Any = {
     generateOutput(getPercentiles(buffer))
   }
 
-  private def getPercentiles(buffer: OpenHashMap[AnyRef, Long]): Seq[Double] = {
+  private def getPercentiles(buffer: OpenHashMap[AnyRef, Double]): Seq[Double] = {
     if (buffer.isEmpty) {
       return Seq.empty
     }
 
     val sortedCounts = buffer.toSeq.sortBy(_._1)(
       child.dataType.asInstanceOf[NumericType].ordering.asInstanceOf[Ordering[AnyRef]])
-    val accumlatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
+    val accumlatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0D)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
-    val maxPosition = accumlatedCounts.last._2 - 1
+
+    val maxPosition = accumlatedCounts.last._2
+    if (maxPosition == 0D) {
+      return Seq.empty
+    }
 
     percentages.map { percentile =>
-      getPercentile(accumlatedCounts, maxPosition * percentile)
+      getPercentile(accumlatedCounts, percentile)
     }
   }
 
@@ -213,27 +224,36 @@ case class Percentile(
    * This function has been based upon similar function from HIVE
    * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
    */
-  private def getPercentile(aggreCounts: Seq[(AnyRef, Long)], position: Double): Double = {
+  private def getPercentile(aggreCounts: Seq[(AnyRef, Double)], percentile: Double): Double = {
+    val countsArray = aggreCounts.map(_._2).toArray[Double]
+    if (this.isIntFreqExpression.eval() == false) {
+      val position = percentile * aggreCounts.last._2
+      val tmpLowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, position)
+      val lowerIndex = math.min(tmpLowerIndex, aggreCounts.size - 1)
+      val lowerKey = aggreCounts(lowerIndex)._1
+      val higherIndex = lowerIndex + 1
+      if (higherIndex >= aggreCounts.size || aggreCounts(lowerIndex)._2 != position) {
+        // no interpolation needed
+        return toDoubleValue(lowerKey)
+      }
+      val higherKey = aggreCounts(higherIndex)._1
+      // Linear interpolation to calculate the point on boundary
+      return 0.5D * toDoubleValue(lowerKey) + 0.5D * toDoubleValue(higherKey)
+    }
     // We may need to do linear interpolation to get the exact percentile
+    val position = percentile * (aggreCounts.last._2 - 1)
     val lower = position.floor.toLong
     val higher = position.ceil.toLong
-
-    // Use binary search to find the lower and the higher position.
-    val countsArray = aggreCounts.map(_._2).toArray[Long]
-    val lowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, lower + 1)
-    val higherIndex = binarySearchCount(countsArray, 0, aggreCounts.size, higher + 1)
-
-    val lowerKey = aggreCounts(lowerIndex)._1
-    if (higher == lower) {
-      // no interpolation needed because position does not have a fraction
-      return toDoubleValue(lowerKey)
-    }
-
+    // Use binary search to find the higher position
+    val higherIndex = binarySearchCount(countsArray, 0, aggreCounts.size, higher + 1D)
+    val lowerIndex = higherIndex - 1
     val higherKey = aggreCounts(higherIndex)._1
-    if (higherKey == lowerKey) {
-      // no interpolation needed because lower position and higher position has the same key
-      return toDoubleValue(lowerKey)
+
+    if (lowerIndex < 0 || aggreCounts(lowerIndex)._2 < lower + 1D) {
+      // no interpolation needed
+      return toDoubleValue(higherKey)
     }
+    val lowerKey = aggreCounts(lowerIndex)._1
 
     // Linear interpolation to get the exact percentile
     (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
@@ -243,19 +263,19 @@ case class Percentile(
    * use a binary search to find the index of the position closest to the current value.
    */
   private def binarySearchCount(
-      countsArray: Array[Long], start: Int, end: Int, value: Long): Int = {
+      countsArray: Array[Double], start: Int, end: Int, value: Double): Int = {
     util.Arrays.binarySearch(countsArray, 0, end, value) match {
       case ix if ix < 0 => -(ix + 1)
       case ix => ix
     }
   }
 
-  override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
+  override def serialize(obj: OpenHashMap[AnyRef, Double]): Array[Byte] = {
     val buffer = new Array[Byte](4 << 10)  // 4K
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(bos)
     try {
-      val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
+      val projection = UnsafeProjection.create(Array[DataType](child.dataType, DoubleType))
       // Write pairs in counts map to byte buffer.
       obj.foreach { case (key, count) =>
         val row = InternalRow.apply(key, count)
@@ -273,11 +293,11 @@ case class Percentile(
     }
   }
 
-  override def deserialize(bytes: Array[Byte]): OpenHashMap[AnyRef, Long] = {
+  override def deserialize(bytes: Array[Byte]): OpenHashMap[AnyRef, Double] = {
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(bis)
     try {
-      val counts = new OpenHashMap[AnyRef, Long]
+      val counts = new OpenHashMap[AnyRef, Double]
       // Read unsafeRow size and content in bytes.
       var sizeOfNextRow = ins.readInt()
       while (sizeOfNextRow >= 0) {
@@ -287,10 +307,11 @@ case class Percentile(
         row.pointTo(bs, sizeOfNextRow)
         // Insert the pairs into counts map.
         val key = row.get(0, child.dataType)
-        val count = row.get(1, LongType).asInstanceOf[Long]
+        val count = row.get(1, DoubleType).asInstanceOf[Double]
         counts.update(key, count)
         sizeOfNextRow = ins.readInt()
       }
+
 
       counts
     } finally {

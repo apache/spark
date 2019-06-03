@@ -38,12 +38,12 @@ class PercentileSuite extends SparkFunSuite {
     val agg = new Percentile(BoundReference(0, IntegerType, true), Literal(0.5))
 
     // Check empty serialize and deserialize
-    val buffer = new OpenHashMap[AnyRef, Long]()
+    val buffer = new OpenHashMap[AnyRef, Double]()
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
 
     // Check non-empty buffer serialize and deserialize.
     data.foreach { key =>
-      buffer.changeValue(Integer.valueOf(key), 1L, _ + 1L)
+      buffer.changeValue(Integer.valueOf(key), 1D, _ + 1D)
     }
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
@@ -52,7 +52,7 @@ class PercentileSuite extends SparkFunSuite {
     val count = 10000
     val percentages = Seq(0, 0.25, 0.5, 0.75, 1)
     val expectedPercentiles = Seq(1, 2500.75, 5000.5, 7500.25, 10000)
-    val childExpression = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
+    val childExpression = Cast(BoundReference(0, IntegerType, nullable = false), FloatType)
     val percentageExpression = CreateArray(percentages.toSeq.map(Literal(_)))
     val agg = new Percentile(childExpression, percentageExpression)
 
@@ -60,18 +60,19 @@ class PercentileSuite extends SparkFunSuite {
     val rows = (1 to count).map(x => Seq(x))
     runTest(agg, rows, expectedPercentiles)
 
-    // Test with row with frequency. Second and third columns are frequency in Int and Long
+    // Test with row with frequency. Second and third columns are frequency in Float and Double
     val countForFrequencyTest = 1000
-    val rowsWithFrequency = (1 to countForFrequencyTest).map(x => Seq(x, x):+ x.toLong)
+    val rowsWithFrequency = (1 to countForFrequencyTest).map(x =>
+        (Seq(x) :+ x.toFloat):+ x.toDouble)
     val expectedPercentilesWithFrquency = Seq(1.0, 500.0, 707.0, 866.0, 1000.0)
 
-    val frequencyExpressionInt = BoundReference(1, IntegerType, nullable = false)
-    val aggInt = new Percentile(childExpression, percentageExpression, frequencyExpressionInt)
-    runTest(aggInt, rowsWithFrequency, expectedPercentilesWithFrquency)
+    val frequencyExpressionFloat = BoundReference(1, FloatType, nullable = false)
+    val aggFloat = new Percentile(childExpression, percentageExpression, frequencyExpressionFloat)
+    runTest(aggFloat, rowsWithFrequency, expectedPercentilesWithFrquency)
 
-    val frequencyExpressionLong = BoundReference(2, LongType, nullable = false)
-    val aggLong = new Percentile(childExpression, percentageExpression, frequencyExpressionLong)
-    runTest(aggLong, rowsWithFrequency, expectedPercentilesWithFrquency)
+    val frequencyExpressionDouble = BoundReference(2, DoubleType, nullable = false)
+    val aggDouble = new Percentile(childExpression, percentageExpression, frequencyExpressionDouble)
+    runTest(aggDouble, rowsWithFrequency, expectedPercentilesWithFrquency)
 
     // Run test with Flatten data
     val flattenRows = (1 to countForFrequencyTest).flatMap(current =>
@@ -151,7 +152,7 @@ class PercentileSuite extends SparkFunSuite {
       assertEqual(percentile.checkInputDataTypes(), TypeCheckSuccess)
     }
 
-    val validFrequencyTypes = Seq(ByteType, ShortType, IntegerType, LongType)
+    val validFrequencyTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
     for (dataType <- validDataTypes;
       frequencyType <- validFrequencyTypes)  {
       val child = AttributeReference("a", dataType)()
@@ -171,9 +172,8 @@ class PercentileSuite extends SparkFunSuite {
             s"'`a`' is of ${dataType.simpleString} type."))
     }
 
-    val invalidFrequencyDataTypes = Seq(FloatType, DoubleType, BooleanType,
-        StringType, DateType, TimestampType,
-      CalendarIntervalType, NullType)
+    val invalidFrequencyDataTypes = Seq(BooleanType, StringType, DateType,
+        TimestampType, CalendarIntervalType, NullType)
 
     for(dataType <- invalidDataTypes;
         frequencyType <- validFrequencyTypes) {
@@ -191,7 +191,7 @@ class PercentileSuite extends SparkFunSuite {
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 3 requires integral type, however, " +
+        TypeCheckFailure(s"argument 3 requires numeric type, however, " +
             s"'`frq`' is of ${frequencyType.simpleString} type."))
     }
   }
@@ -259,7 +259,7 @@ class PercentileSuite extends SparkFunSuite {
     assert(agg.eval(buffer) == null)
 
     // Percentile with Frequency column
-    val frequencyExpression = Cast(BoundReference(1, IntegerType, nullable = true), IntegerType)
+    val frequencyExpression = Cast(BoundReference(1, IntegerType, nullable = true), DoubleType)
     val aggWithFrequency = new Percentile(childExpression, Literal(0.5), frequencyExpression)
     val bufferWithFrequency = new GenericInternalRow(new Array[Any](2))
     aggWithFrequency.initialize(bufferWithFrequency)
@@ -285,7 +285,7 @@ class PercentileSuite extends SparkFunSuite {
 
   test("negatives frequency column handling") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
-    val freqExpression = Cast(BoundReference(1, IntegerType, nullable = true), IntegerType)
+    val freqExpression = Cast(BoundReference(1, IntegerType, nullable = true), FloatType)
     val agg = new Percentile(childExpression, Literal(0.5), freqExpression)
     val buffer = new GenericInternalRow(new Array[Any](2))
     agg.initialize(buffer)
@@ -300,7 +300,7 @@ class PercentileSuite extends SparkFunSuite {
   }
 
   private def compareEquals(
-      left: OpenHashMap[AnyRef, Long], right: OpenHashMap[AnyRef, Long]): Boolean = {
+      left: OpenHashMap[AnyRef, Double], right: OpenHashMap[AnyRef, Double]): Boolean = {
     left.size == right.size && left.forall { case (key, count) =>
       right.apply(key) == count
     }
