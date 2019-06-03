@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransf
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, NewColumn}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -448,7 +448,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        NewColumn(Seq("x"), IntegerType, None)
+        QualifiedColType(Seq("x"), IntegerType, None)
       )))
   }
 
@@ -456,8 +456,8 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        NewColumn(Seq("x"), IntegerType, None),
-        NewColumn(Seq("y"), StringType, None)
+        QualifiedColType(Seq("x"), IntegerType, None),
+        QualifiedColType(Seq("y"), StringType, None)
       )))
   }
 
@@ -465,7 +465,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        NewColumn(Seq("x"), IntegerType, None)
+        QualifiedColType(Seq("x"), IntegerType, None)
       )))
   }
 
@@ -473,7 +473,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        NewColumn(Seq("x"), IntegerType, None)
+        QualifiedColType(Seq("x"), IntegerType, None)
       )))
   }
 
@@ -481,7 +481,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        NewColumn(Seq("x"), IntegerType, Some("doc"))
+        QualifiedColType(Seq("x"), IntegerType, Some("doc"))
       )))
   }
 
@@ -489,7 +489,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        NewColumn(Seq("x"), IntegerType, Some("doc"))
+        QualifiedColType(Seq("x"), IntegerType, Some("doc"))
       )))
   }
 
@@ -497,7 +497,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc'"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        NewColumn(Seq("x", "y", "z"), IntegerType, Some("doc"))
+        QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc"))
       )))
   }
 
@@ -505,14 +505,15 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc', a.b string"),
       AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        NewColumn(Seq("x", "y", "z"), IntegerType, Some("doc")),
-        NewColumn(Seq("a", "b"), StringType, None)
+        QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc")),
+        QualifiedColType(Seq("a", "b"), StringType, None)
       )))
   }
 
   test("alter table: add column at position (not supported)") {
+    assertUnsupported("ALTER TABLE table_name ADD COLUMNS name bigint COMMENT 'doc' FIRST, a.b int")
     assertUnsupported("ALTER TABLE table_name ADD COLUMN name bigint COMMENT 'doc' FIRST")
-    assertUnsupported("ALTER TABLE table_name ADD COLUMN name string AFTER other_col")
+    assertUnsupported("ALTER TABLE table_name ADD COLUMN name string AFTER a.b")
   }
 
   test("alter table: set location") {

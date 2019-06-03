@@ -22,14 +22,14 @@ import org.apache.spark.sql.types.DataType
 /**
  * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
  */
-case class NewColumn(name: Seq[String], dataType: DataType, comment: Option[String])
+case class QualifiedColType(name: Seq[String], dataType: DataType, comment: Option[String])
 
 /**
  * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
  */
 case class AlterTableAddColumnsStatement(
     tableName: Seq[String],
-    columnsToAdd: Seq[NewColumn]) extends ParsedStatement
+    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
 
 /**
  * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.

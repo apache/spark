@@ -114,10 +114,11 @@ statement
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ALTER TABLE multipartIdentifier
-        ADD (COLUMN | COLUMNS) columns=newColumnList colPosition?      #addTableColumns
+        ADD (COLUMN | COLUMNS)
+        columns=qualifiedColTypeWithPositionList                       #addTableColumns
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
-        '(' columns=newColumnList ')' colPosition?                     #addTableColumns
+        '(' columns=qualifiedColTypeWithPositionList ')'               #addTableColumns
     | ALTER TABLE multipartIdentifier
         RENAME COLUMN from=qualifiedName TO to=identifier              #renameTableColumn
     | ALTER TABLE multipartIdentifier
@@ -733,7 +734,7 @@ intervalUnit
     ;
 
 colPosition
-    : FIRST | AFTER identifier
+    : FIRST | AFTER qualifiedName
     ;
 
 dataType
@@ -743,12 +744,12 @@ dataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
-newColumnList
-    : newColumn (',' newColumn)*
+qualifiedColTypeWithPositionList
+    : qualifiedColTypeWithPosition (',' qualifiedColTypeWithPosition)*
     ;
 
-newColumn
-    : name=qualifiedName dataType (COMMENT comment=STRING)?
+qualifiedColTypeWithPosition
+    : name=qualifiedName dataType (COMMENT comment=STRING)? colPosition?
     ;
 
 colTypeList

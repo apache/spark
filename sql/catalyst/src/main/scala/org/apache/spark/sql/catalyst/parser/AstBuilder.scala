@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, NewColumn}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2224,8 +2224,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Parse new column info from ADD COLUMN into a NewColumn.
    */
-  override def visitNewColumn(ctx: NewColumnContext): NewColumn = withOrigin(ctx) {
-    NewColumn(
+  override def visitQualifiedColTypeWithPosition(
+      ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
+    if (ctx.colPosition != null) {
+      operationNotAllowed("ALTER TABLE table ADD COLUMN ... FIRST | AFTER otherCol", ctx)
+    }
+
+    QualifiedColType(
       typedVisit[Seq[String]](ctx.name),
       typedVisit[DataType](ctx.dataType),
       Option(ctx.comment).map(string))
@@ -2241,13 +2246,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.colPosition != null) {
-      operationNotAllowed("ALTER TABLE table ADD COLUMN ... FIRST | AFTER otherCol", ctx)
-    }
-
     AlterTableAddColumnsStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
-      ctx.columns.newColumn.asScala.map(typedVisit[NewColumn])
+      ctx.columns.qualifiedColTypeWithPosition.asScala.map(typedVisit[QualifiedColType])
     )
   }
 
