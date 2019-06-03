@@ -120,8 +120,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.getTable(db, table)
   }
 
-  private[hive] def getRawTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] = {
-    client.getTablesByNames(db, tables)
+  private[hive] def getRawTablesByNames(db: String, tables: Seq[String]): Seq[CatalogTable] = {
+    client.getTablesByName(db, tables)
   }
 
   /**
@@ -706,8 +706,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     restoreTableMetadata(getRawTable(db, table))
   }
 
-  override def getTablesByNames(db: String, tables: Seq[String]): Seq[CatalogTable] = withClient {
-    getRawTablesByName(db, tables).map(restoreTableMetadata)
+  override def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] = withClient {
+    getRawTablesByNames(db, tables).map(restoreTableMetadata)
   }
 
   /**

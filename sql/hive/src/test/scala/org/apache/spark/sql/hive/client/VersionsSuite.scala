@@ -237,12 +237,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
       assert(client.getTableOption("default", "src").isDefined)
     }
 
-    test(s"$version: getTablesByNames") {
-      assert(client.getTablesByNames("default", Seq("src")).nonEmpty)
-    }
-
-    test(s"$version: getAllTables") {
-      assert(client.getAllTables("default").nonEmpty)
+    test(s"$version: getTablesByName") {
+      assert(client.getTablesByName("default", Seq("src")).nonEmpty)
     }
 
     test(s"$version: alterTable(table: CatalogTable)") {

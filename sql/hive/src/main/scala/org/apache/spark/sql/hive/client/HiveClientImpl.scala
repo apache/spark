@@ -401,7 +401,7 @@ private[hive] class HiveClientImpl(
     getRawTableOption(dbName, tableName).nonEmpty
   }
 
-  override def getTablesByNames(
+  override def getTablesByName(
       dbName: String,
       tableNames: Seq[String]): Seq[CatalogTable] = withHiveState {
     getRawTablesByNames(dbName, tableNames).map(convertHiveTableToCatalogTable)
