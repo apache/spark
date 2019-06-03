@@ -30,7 +30,8 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
  *    executed or has already completed execution.
  * 2. Transforms [[Join]] which has one child relation already planned and executed as a
  *    [[BroadcastQueryStageExec]]. This is to prevent reversing a broadcast stage into a shuffle
- *    stage in case of the larger join child relation finishes before the smaller relation.
+ *    stage in case of the larger join child relation finishes before the smaller relation. Note
+ *    that this rule needs to applied before regular join strategies.
  */
 object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
 
