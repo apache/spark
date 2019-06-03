@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -384,8 +384,37 @@ private[hive] class HiveClientImpl(
     Option(client.getTable(dbName, tableName, false /* do not throw exception */))
   }
 
+  private def getRawTablesByNames(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
+    try {
+      client.getMSC.getTableObjectsByName(dbName, tableNames.asJava).asScala.map(new HiveTable(_))
+    } catch {
+      case e: Exception =>
+      throw new HiveException(s"Unable to fetch tables of db $dbName", e);
+    }
+  }
+
+  private def getAllRawTables(dbName: String): Seq[HiveTable] = {
+    try {
+      client.getMSC.getTableObjectsByName(dbName, client.getMSC.getAllTables(dbName))
+        .asScala.map(new HiveTable(_))
+    } catch {
+      case e: Exception =>
+        throw new HiveException(s"Unable to fetch tables of db $dbName", e);
+    }
+  }
+
   override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
     getRawTableOption(dbName, tableName).nonEmpty
+  }
+
+  override def getTablesByNames(
+      dbName: String,
+      tableNames: Seq[String]): Seq[CatalogTable] = withHiveState {
+    getRawTablesByNames(dbName, tableNames).map(convertHiveTableToCatalogTable)
+  }
+
+  override def getAllTables(dbName: String): Seq[CatalogTable] = withHiveState {
+    getAllRawTables(dbName).map(convertHiveTableToCatalogTable)
   }
 
   override def getTableOption(

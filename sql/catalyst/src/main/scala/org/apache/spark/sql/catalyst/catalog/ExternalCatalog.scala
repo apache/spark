@@ -128,6 +128,10 @@ trait ExternalCatalog {
 
   def getTable(db: String, table: String): CatalogTable
 
+  def getTablesByNames(db: String, tables: Seq[String]): Seq[CatalogTable]
+
+  def getAllTables(db: String): Seq[CatalogTable]
+
   def tableExists(db: String, table: String): Boolean
 
   def listTables(db: String): Seq[String]

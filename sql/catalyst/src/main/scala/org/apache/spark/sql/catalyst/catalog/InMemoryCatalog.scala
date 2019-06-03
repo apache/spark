@@ -327,6 +327,14 @@ class InMemoryCatalog(
     catalog(db).tables(table).table
   }
 
+  override def getTablesByNames(db: String, tables: Seq[String]): Seq[CatalogTable] = {
+    tables.map(catalog(db).tables(_).table)
+  }
+
+  override def getAllTables(db: String): Seq[CatalogTable] = {
+    catalog(db).tables.valuesIterator.map(_.table).toSeq
+  }
+
   override def tableExists(db: String, table: String): Boolean = synchronized {
     requireDbExists(db)
     catalog(db).tables.contains(table)

@@ -435,6 +435,25 @@ class SessionCatalog(
   }
 
   /**
+   * Retrieve the metadata of an existing permanent table/view. If no database is specified,
+   * assume the table/view is in the current database.
+   */
+  @throws[NoSuchDatabaseException]
+  def getTablesByNames(names: Seq[TableIdentifier]): Seq[CatalogTable] = {
+    val db = formatDatabaseName(names(0).database.getOrElse(getCurrentDatabase))
+    val tables = names.map(name => formatTableName(name.table))
+    externalCatalog.getTablesByNames(db, tables)
+  }
+
+  /**
+   * Retrieve the metadata of an existing permanent table/view. If no database is specified,
+   * assume the table/view is in the current database.
+   */
+  def getAllTables(dbName: String = getCurrentDatabase): Seq[CatalogTable] = {
+    externalCatalog.getAllTables(dbName)
+  }
+
+  /**
    * Load files stored in given path into an existing metastore table.
    * If no database is specified, assume the table is in the current database.
    * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
@@ -771,6 +790,34 @@ class SessionCatalog(
       StringUtils.filterPattern(tempViews.keys.toSeq, pattern).map { name =>
         TableIdentifier(name)
       }
+    }
+    dbTables ++ localTempViews
+  }
+
+  /**
+   * List all tables in the specified database, including local temporary views.
+   *
+   * Note that, if the specified database is global temporary view database, we will list global
+   * temporary views.
+   */
+  def listTableNames(db: String): Seq[String] = listTableNames(db, "*")
+
+  /**
+   * List all matching table names in the specified database, including local temporary views.
+   *
+   * Note that, if the specified database is global temporary view database, we will list global
+   * temporary views.
+   */
+  def listTableNames(db: String, pattern: String): Seq[String] = {
+    val dbName = formatDatabaseName(db)
+    val dbTables = if (dbName == globalTempViewManager.database) {
+      globalTempViewManager.listViewNames(pattern)
+    } else {
+      requireDbExists(dbName)
+      externalCatalog.listTables(dbName, pattern)
+    }
+    val localTempViews = synchronized {
+      StringUtils.filterPattern(tempViews.keys.toSeq, pattern)
     }
     dbTables ++ localTempViews
   }
