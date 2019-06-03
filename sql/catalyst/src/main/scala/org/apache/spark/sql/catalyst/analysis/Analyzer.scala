@@ -217,8 +217,8 @@ class Analyzer(
       case With(child, relations) =>
         // substitute CTE expressions right-to-left to resolve references to previous CTEs:
         // with a as (select * from t) with b as (select * from a) select * from b
-        relations.reverse.foldLeft(child) {
-          case (currentPlan, (cteName, ctePlan)) =>
+        relations.foldRight(child) {
+          case ((cteName, ctePlan), currentPlan) =>
             substituteCTE(currentPlan, cteName, ctePlan)
         }
       case other => other
