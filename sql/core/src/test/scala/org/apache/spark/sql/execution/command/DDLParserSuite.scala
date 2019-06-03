@@ -24,14 +24,13 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan, Project, ScriptTransformation}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
@@ -39,7 +38,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class DDLParserSuite extends PlanTest with SharedSQLContext {
+class DDLParserSuite extends AnalysisTest with SharedSQLContext {
   private lazy val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
@@ -52,12 +51,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     }
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parser.parsePlan(sqlCommand)).getMessage
-    messages.foreach { message =>
-      assert(e.contains(message))
-    }
-  }
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
 
   private def parseAs[T: ClassTag](query: String): T = {
     parser.parsePlan(query) match {
