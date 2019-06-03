@@ -86,8 +86,24 @@ import org.apache.spark.sql.types.StructType
  *   -- !query 1
  *   ...
  * }}}
+ *
+ * Note that UDF tests work differently. After the test files under 'inputs/udf' directory are
+ * detected, it creates three test cases:
+ *
+ *  - Scala UDF test case with a Scalar UDF registered as the name 'udf'.
+ *
+ *  - Python UDF test case with a Python UDF registered as the name 'udf'
+ *    iff Python executable and pyspark are available.
+ *
+ *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered as the name 'udf'
+ *    iff Python executable, pyspark, pandas and pyarrow are available.
+ *
+ * Therefore, UDF test cases should have single input and output files but executed by three
+ * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  */
 class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
+
+  import IntegratedUDFTestUtils._
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
@@ -115,9 +131,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   // Create all the test cases.
   listTestCases().foreach(createScalaTestCase)
 
-  /** A test case. */
-  private case class TestCase(name: String, inputFile: String, resultFile: String)
-
   /** A single SQL query's output. */
   private case class QueryOutput(sql: String, schema: String, output: String) {
     def toString(queryIndex: Int): String = {
@@ -126,19 +139,47 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         sql + "\n" +
         s"-- !query $queryIndex schema\n" +
         schema + "\n" +
-         s"-- !query $queryIndex output\n" +
+        s"-- !query $queryIndex output\n" +
         output
     }
   }
+
+  /** A test case. */
+  private trait TestCase {
+    val name: String
+    val inputFile: String
+    val resultFile: String
+  }
+
+  /** A regular test case. */
+  private case class RegularTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase
+
+  /** A UDF test case. */
+  private case class UDFTestCase(
+      name: String, inputFile: String, resultFile: String, udf: TestUDF) extends TestCase
 
   private def createScalaTestCase(testCase: TestCase): Unit = {
     if (blackList.exists(t =>
         testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
-    } else {
-      // Create a test case to run this case.
-      test(testCase.name) { runTest(testCase) }
+    } else testCase match {
+      case UDFTestCase(_, _, _, udf: TestPythonUDF) if !shouldTestPythonUDFs =>
+        ignore(s"${testCase.name} is skipped because " +
+          s"[$pythonExec] and/or pyspark were not available.") {
+          /* Do nothing */
+        }
+      case UDFTestCase(_, _, _, udf: TestScalarPandasUDF) if !shouldTestScalarPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case _ =>
+        // Create a test case to run this case.
+        test(testCase.name) {
+          runTest(testCase)
+        }
     }
   }
 
@@ -166,7 +207,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // When we are regenerating the golden files, we don't need to set any config as they
     // all need to return the same result
     if (regenerateGoldenFiles) {
-      runQueries(queries, testCase.resultFile, None)
+      runQueries(queries, testCase, None)
     } else {
       val configSets = {
         val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
@@ -188,7 +229,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
       configSets.foreach { configSet =>
         try {
-          runQueries(queries, testCase.resultFile, Some(configSet))
+          runQueries(queries, testCase, Some(configSet))
         } catch {
           case e: Throwable =>
             val configs = configSet.map {
@@ -203,12 +244,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   private def runQueries(
       queries: Seq[String],
-      resultFileName: String,
+      testCase: TestCase,
       configSet: Option[Seq[(String, String)]]): Unit = {
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
+    testCase match {
+      case udfTestCase: UDFTestCase => registerTestUDF(udfTestCase.udf, localSparkSession)
+      case _ => // Don't add UDFs in Regular tests.
+    }
 
     if (configSet.isDefined) {
       // Execute the list of set operation in order to add the desired configs
@@ -233,7 +278,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         s"-- Number of queries: ${outputs.size}\n\n\n" +
         outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
       }
-      val resultFile = new File(resultFileName)
+      val resultFile = new File(testCase.resultFile)
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
         assert(parent.mkdirs(), "Could not create directory: " + parent)
@@ -243,7 +288,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     // Read back the golden file.
     val expectedOutputs: Seq[QueryOutput] = {
-      val goldenOutput = fileToString(new File(resultFileName))
+      val goldenOutput = fileToString(new File(testCase.resultFile))
       val segments = goldenOutput.split("-- !query.+\n")
 
       // each query has 3 segments, plus the header
@@ -322,11 +367,33 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def listTestCases(): Seq[TestCase] = {
-    listFilesRecursively(new File(inputFilePath)).map { file =>
+    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-      TestCase(testCaseName, absPath, resultFile)
+
+      if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
+        Seq(
+          UDFTestCase(
+            s"$testCaseName - Scala UDF",
+            absPath,
+            resultFile,
+            TestScalaUDF(name = "udf")),
+
+          UDFTestCase(
+            s"$testCaseName - Python UDF",
+            absPath,
+            resultFile,
+            TestPythonUDF(name = "udf")),
+
+          UDFTestCase(
+            s"$testCaseName - Scalar Pandas UDF",
+            absPath,
+            resultFile,
+            TestScalarPandasUDF(name = "udf")))
+      } else {
+        RegularTestCase(testCaseName, absPath, resultFile) :: Nil
+      }
     }
   }
 
