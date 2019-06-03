@@ -2592,6 +2592,115 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  protected def testReplaceColumn(provider: String): Unit = {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 string) USING $provider")
+      sql("INSERT INTO t1 VALUES ('1')")
+      sql("ALTER TABLE t1 REPLACE COLUMNS (c2 int, c3 string)")
+      val e = intercept[AnalysisException] {
+        sql("SELECT c1 from t1")
+      }.getMessage
+      assert(e.contains("cannot resolve '`c1`' given input columns"))
+      sql("INSERT INTO t1 VALUES (2, '3')")
+      checkAnswer(
+        sql("SELECT * FROM t1 where c3 = '3'"),
+        Seq(Row(2, "3"))
+      )
+    }
+  }
+
+  // using a separate function as text datasource allows only one column of type string
+  protected def testReplaceColumnTextProvider(): Unit = {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 string) USING text")
+      sql("INSERT INTO t1 VALUES ('1')")
+      sql("ALTER TABLE t1 REPLACE COLUMNS (c2 string)")
+      val e = intercept[AnalysisException] {
+        sql("SELECT c1 from t1")
+      }.getMessage
+      assert(e.contains("cannot resolve '`c1`' given input columns"))
+      sql("INSERT INTO t1 VALUES ('2')")
+      checkAnswer(
+        sql("SELECT c2 FROM t1"),
+        Seq(Row("1"), Row("2"))
+      )
+    }
+  }
+
+  protected def testReplaceColumnPartitioned(provider: String): Unit = {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 int, c2 int, p int) USING $provider PARTITIONED BY (p)")
+      sql("INSERT INTO t1 PARTITION(p = 1) VALUES (1, 2)")
+      sql("ALTER TABLE t1 REPLACE COLUMNS (c4 int, c3 string, c2 string)")
+      val e = intercept[AnalysisException] {
+        sql("SELECT c1 from t1")
+      }.getMessage
+      assert(e.contains("cannot resolve '`c1`' given input columns"))
+      checkAnswer(
+        sql("SELECT c2, c3, c4 FROM t1 WHERE p = 1"),
+        Seq(Row("2", null, null))
+      )
+      sql("INSERT INTO t1 PARTITION(p = 2) VALUES (4, '3', '2')")
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE p = 2"),
+        Seq(Row(4, "3", "2", 2))
+      )
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c3 = '3'"),
+        Seq(Row(4, "3", "2", 2))
+      )
+    }
+  }
+
+  // using a separate function as text datasource allows only one column of type string
+  protected def testReplaceColumnPartitionedTextProvider(): Unit = {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 string, p int) USING text PARTITIONED BY (p)")
+      sql("INSERT INTO t1 PARTITION(p = 1) VALUES ('1')")
+      sql("ALTER TABLE t1 REPLACE COLUMNS (c2 string)")
+      val e = intercept[AnalysisException] {
+        sql("SELECT c1 from t1")
+      }.getMessage
+      assert(e.contains("cannot resolve '`c1`' given input columns"))
+      checkAnswer(
+        sql("SELECT c2 FROM t1 WHERE p = 1"),
+        Seq(Row("1"))
+      )
+      sql("INSERT INTO t1 PARTITION(p = 2) VALUES ('2')")
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE p = 2"),
+        Seq(Row("2", 2))
+      )
+      checkAnswer(
+        sql("SELECT * FROM t1"),
+        Seq(Row("1", 1), Row("2", 2))
+      )
+    }
+  }
+
+  val supportedNativeFileFormatsForAlterTableReplaceColumns = Seq("parquet", "orc", "json", "text")
+  supportedNativeFileFormatsForAlterTableReplaceColumns.foreach { provider =>
+    test(s"alter datasource table replace columns - $provider") {
+      if (provider == "text") testReplaceColumnTextProvider() else testReplaceColumn(provider)
+    }
+    test(s"alter datasource table replace columns - partitioned - $provider") {
+      if (provider == "text") testReplaceColumnPartitionedTextProvider()
+      else testReplaceColumn(provider)
+    }
+  }
+
+  // alter table replace columns for csv datasource not supported
+  // csv datasource is positional: a new column would reference a replaced column's data
+  test("alter datasource table replace columns - csv format not supported") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 string) USING csv")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t1 REPLACE COLUMNS (c2 int)")
+      }.getMessage
+      assert(e.contains("ALTER [ADD|REPLACE] COLUMNS do not support datasource table with type"))
+    }
+  }
+
   Seq("ADD", "REPLACE").foreach { addReplaceCmd =>
    test(s"alter table $addReplaceCmd columns - do not support temp view") {
      withTempView("tmp_v") {
