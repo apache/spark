@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
+import org.apache.hadoop.hive.metastore.{IMetaStoreClient, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
@@ -276,6 +276,10 @@ private[hive] class HiveClientImpl(
     }
   }
 
+  private def msClient: IMetaStoreClient = {
+    shim.getMSC(client)
+  }
+
   /** Return the associated Hive [[SessionState]] of this [[HiveClientImpl]] */
   override def getState: SessionState = withHiveState(state)
 
@@ -386,17 +390,17 @@ private[hive] class HiveClientImpl(
 
   private def getRawTablesByNames(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
     try {
-      client.getMSC.getTableObjectsByName(dbName, tableNames.asJava).asScala.map(new HiveTable(_))
+      msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala.map(new HiveTable(_))
     } catch {
       case e: Exception =>
-      throw new HiveException(s"Unable to fetch tables of db $dbName", e);
+        throw new HiveException(s"Unable to fetch tables of db $dbName", e);
     }
   }
 
   private def getAllRawTables(dbName: String): Seq[HiveTable] = {
     try {
-      client.getMSC.getTableObjectsByName(dbName, client.getMSC.getAllTables(dbName))
-        .asScala.map(new HiveTable(_))
+      msClient.getTableObjectsByName(dbName, msClient.getAllTables(dbName)).asScala
+        .map(new HiveTable(_))
     } catch {
       case e: Exception =>
         throw new HiveException(s"Unable to fetch tables of db $dbName", e);

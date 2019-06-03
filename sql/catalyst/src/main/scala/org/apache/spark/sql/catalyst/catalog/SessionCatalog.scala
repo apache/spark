@@ -442,6 +442,7 @@ class SessionCatalog(
   def getTablesByNames(names: Seq[TableIdentifier]): Seq[CatalogTable] = {
     val db = formatDatabaseName(names(0).database.getOrElse(getCurrentDatabase))
     val tables = names.map(name => formatTableName(name.table))
+    requireDbExists(db)
     externalCatalog.getTablesByNames(db, tables)
   }
 
@@ -790,34 +791,6 @@ class SessionCatalog(
       StringUtils.filterPattern(tempViews.keys.toSeq, pattern).map { name =>
         TableIdentifier(name)
       }
-    }
-    dbTables ++ localTempViews
-  }
-
-  /**
-   * List all tables in the specified database, including local temporary views.
-   *
-   * Note that, if the specified database is global temporary view database, we will list global
-   * temporary views.
-   */
-  def listTableNames(db: String): Seq[String] = listTableNames(db, "*")
-
-  /**
-   * List all matching table names in the specified database, including local temporary views.
-   *
-   * Note that, if the specified database is global temporary view database, we will list global
-   * temporary views.
-   */
-  def listTableNames(db: String, pattern: String): Seq[String] = {
-    val dbName = formatDatabaseName(db)
-    val dbTables = if (dbName == globalTempViewManager.database) {
-      globalTempViewManager.listViewNames(pattern)
-    } else {
-      requireDbExists(dbName)
-      externalCatalog.listTables(dbName, pattern)
-    }
-    val localTempViews = synchronized {
-      StringUtils.filterPattern(tempViews.keys.toSeq, pattern)
     }
     dbTables ++ localTempViews
   }
