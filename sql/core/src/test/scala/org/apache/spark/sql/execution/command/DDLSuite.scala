@@ -2566,23 +2566,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  val supportedNativeFileFormatsForAlterTableAddColumns = Seq("csv", "json", "parquet",
-    "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat",
+  val supportedNativeFileFormatsForAlterTableAddColumns = Seq("parquet", "orc", "json", "csv",
+    "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat",
+    "org.apache.spark.sql.execution.datasources.orc.OrcFileFormat",
     "org.apache.spark.sql.execution.datasources.json.JsonFileFormat",
-    "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat")
-
+    "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
   supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
     test(s"alter datasource table add columns - $provider") {
       testAddColumn(provider)
     }
-  }
-
-  supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
     test(s"alter datasource table add columns - partitioned - $provider") {
       testAddColumnPartitioned(provider)
     }
   }
 
+  // alter table add columns for text datasource is not needed
+  // text datasource can have only one column
   test("alter datasource table add columns - text format not supported") {
     withTable("t1") {
       sql("CREATE TABLE t1 (c1 string) USING text")
@@ -2593,24 +2592,26 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("alter table add columns -- not support temp view") {
-    withTempView("tmp_v") {
-      sql("CREATE TEMPORARY VIEW tmp_v AS SELECT 1 AS c1, 2 AS c2")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
-      }
-      assert(e.message.contains("ALTER [ADD|REPLACE] COLUMNS do not support views"))
-    }
-  }
+  Seq("ADD", "REPLACE").foreach { addReplaceCmd =>
+   test(s"alter table $addReplaceCmd columns - do not support temp view") {
+     withTempView("tmp_v") {
+       sql("CREATE TEMPORARY VIEW tmp_v AS SELECT 1 AS c1, 2 AS c2")
+       val e = intercept[AnalysisException] {
+         sql(s"ALTER TABLE tmp_v $addReplaceCmd COLUMNS (c3 INT)")
+       }
+       assert(e.message.contains("ALTER [ADD|REPLACE] COLUMNS do not support views"))
+     }
+   }
 
-  test("alter table add columns -- not support view") {
-    withView("v1") {
-      sql("CREATE VIEW v1 AS SELECT 1 AS c1, 2 AS c2")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
-      }
-      assert(e.message.contains("ALTER [ADD|REPLACE] COLUMNS do not support views"))
-    }
+   test(s"alter table $addReplaceCmd columns - do not support view") {
+     withView("v1") {
+       sql("CREATE VIEW v1 AS SELECT 1 AS c1, 2 AS c2")
+       val e = intercept[AnalysisException] {
+         sql(s"ALTER TABLE v1 $addReplaceCmd COLUMNS (c3 INT)")
+       }
+       assert(e.message.contains("ALTER [ADD|REPLACE] COLUMNS do not support views"))
+     }
+   }
   }
 
   test("alter table add columns with existing column name") {
@@ -2621,6 +2622,18 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }.getMessage
       assert(e.contains("Found duplicate column(s)"))
     }
+  }
+
+  test("alter table replace columns with duplicated column names") {
+   withTable("t1") {
+     sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+     sql("ALTER TABLE t1 REPLACE COLUMNS (c1 string)")
+     assert(spark.table("t1").schema == new StructType().add("c1", StringType))
+     val e = intercept[AnalysisException] {
+       sql("ALTER TABLE t1 REPLACE COLUMNS (c2 string, c2 string)")
+     }.getMessage
+     assert(e.contains("Found duplicate column(s)"))
+   }
   }
 
   test("create temporary function with if not exists") {
@@ -2688,6 +2701,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
             assert(spark.table("t1").schema ==
               new StructType().add("c1", IntegerType).add("C1", StringType))
+          }
+        }
+      }
+    }
+
+    test(s"alter table replace columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withTable("t1") {
+          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+          if (!caseSensitive) {
+            sql("ALTER TABLE t1 REPLACE COLUMNS (C1 string)")
+            assert(spark.table("t1").schema == new StructType().add("C1", StringType))
+          } else {
+            sql("ALTER TABLE t1 REPLACE COLUMNS (c1 string, C1 string)")
+            assert(spark.table("t1").schema ==
+              new StructType().add("c1", StringType).add("C1", StringType))
           }
         }
       }
