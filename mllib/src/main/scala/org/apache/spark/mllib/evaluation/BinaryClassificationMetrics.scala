@@ -172,7 +172,9 @@ class BinaryClassificationMetrics @Since("3.0.0") (
 
     // Create a bin for each distinct score value, count weighted positives and
     // negatives within each bin, and then sort by score values in descending order.
-    // Some algorithmUse UniqueId here to make range-based partition more even.
+    // Some classification algorithms generate small number of distinct prediction values, i.e.
+    // a decision tree model with depth=3, then it can generate at most 8 distinct prediction
+    // values. Here we use UniqueId in sort to make range-based partition more even.
     val counts = scoreLabelsWeight.combineByKey(
       createCombiner = (labelAndWeight: (Double, Double)) =>
         new BinaryLabelCounter(0.0, 0.0) += (labelAndWeight._1, labelAndWeight._2),
