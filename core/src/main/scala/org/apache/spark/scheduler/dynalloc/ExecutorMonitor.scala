@@ -61,7 +61,7 @@ private[spark] class ExecutorMonitor(
   // "task start" event has just been posted to the listener bus and hasn't yet been delivered to
   // this listener. There are safeguards in other parts of the code that would prevent that executor
   // from being removed.
-  private var nextTimeout = new AtomicLong(Long.MaxValue)
+  private val nextTimeout = new AtomicLong(Long.MaxValue)
   private var timedOutExecs = Seq.empty[String]
 
   def reset(): Unit = {
