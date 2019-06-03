@@ -1718,7 +1718,7 @@ object SQLConf {
         "Data source V1 now silently drops partitionBy columns for non-file-format sources; " +
         "turning the flag on provides a way for these sources to see these partitionBy columns.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE =
     buildConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue")
