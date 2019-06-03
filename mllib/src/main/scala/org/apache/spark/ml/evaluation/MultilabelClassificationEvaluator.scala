@@ -1,0 +1,151 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.ml.evaluation
+
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.evaluation.MultilabelMetrics
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+
+
+/**
+ * :: Experimental ::
+ * Evaluator for regression, which expects two input columns: predictions and labels.
+ */
+@Since("3.0.0")
+@Experimental
+class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String)
+  extends Evaluator with HasPredictionCol with HasLabelCol
+    with DefaultParamsWritable {
+
+  @Since("3.0.0")
+  def this() = this(Identifiable.randomUID("mlcEval"))
+
+  /**
+   * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
+   * `"weightedRecall"`, `"accuracy"`)
+   * @group param
+   */
+  @Since("3.0.0")
+  final val metricName: Param[String] = {
+    val allowedParams = ParamValidators.inArray(Array("subsetAccuracy", "accuracy",
+      "hammingLoss", "precision", "recall", "f1Measure", "precisionByLabel",
+      "recallByLabel", "f1MeasureByLabel", "microPrecision", "microRecall",
+      "microF1Measure"))
+    new Param(this, "metricName", "metric name in evaluation " +
+      "(subsetAccuracy|accuracy|hammingLoss|precision|recall|f1Measure|" +
+      "precisionByLabel|recallByLabel|f1MeasureByLabel|microPrecision|microRecall|" +
+      "microF1Measure)", allowedParams)
+  }
+
+  /** @group getParam */
+  @Since("3.0.0")
+  def getMetricName: String = $(metricName)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setMetricName(value: String): this.type = set(metricName, value)
+
+  setDefault(metricName -> "f1Measure")
+
+  @Since("3.0.0")
+  final val label: DoubleParam = new DoubleParam(this, "label",
+    "The label whose metric will be computed in precisionByLabel/recallByLabel/" +
+      "f1MeasureByLabel. Must be >= 0. The default value is 0.",
+    ParamValidators.gtEq(0.0))
+
+  @Since("3.0.0")
+  def getLabel: Double = $(label)
+
+  @Since("3.0.0")
+  def setLabel(value: Double): this.type = set(label, value)
+
+  setDefault(label -> 0.0)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
+
+  @Since("3.0.0")
+  override def evaluate(dataset: Dataset[_]): Double = {
+    val schema = dataset.schema
+    SchemaUtils.checkColumnType(schema, $(predictionCol), ArrayType(DoubleType, false))
+    SchemaUtils.checkColumnType(schema, $(labelCol), ArrayType(DoubleType, false))
+
+    val predictionAndLabels =
+      dataset.select(col($(predictionCol)), col($(labelCol)))
+        .rdd.map { row =>
+        (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
+      }
+    val metrics = new MultilabelMetrics(predictionAndLabels)
+    val metric = $(metricName) match {
+      case "subsetAccuracy" => metrics.subsetAccuracy
+      case "accuracy" => metrics.accuracy
+      case "hammingLoss" => metrics.hammingLoss
+      case "precision" => metrics.precision
+      case "recall" => metrics.recall
+      case "f1Measure" => metrics.f1Measure
+      case "precisionByLabel" => metrics.precision($(label))
+      case "recallByLabel" => metrics.recall($(label))
+      case "f1MeasureByLabel" => metrics.f1Measure($(label))
+      case "microPrecision" => metrics.microPrecision
+      case "microRecall" => metrics.microRecall
+      case "microF1Measure" => metrics.microF1Measure
+    }
+    metric
+  }
+
+  @Since("3.0.0")
+  override def isLargerBetter: Boolean = {
+    $(metricName) match {
+      case "subsetAccuracy" => true
+      case "accuracy" => true
+      case "hammingLoss" => false
+      case "precision" => true
+      case "recall" => true
+      case "f1Measure" => true
+      case "precisionByLabel" => true
+      case "recallByLabel" => true
+      case "f1MeasureByLabel" => true
+      case "microPrecision" => true
+      case "microRecall" => true
+      case "microF1Measure" => true
+    }
+  }
+
+  @Since("3.0.0")
+  override def copy(extra: ParamMap): MultilabelClassificationEvaluator = defaultCopy(extra)
+}
+
+
+@Since("3.0.0")
+object MultilabelClassificationEvaluator
+  extends DefaultParamsReadable[MultilabelClassificationEvaluator] {
+
+  @Since("3.0.0")
+  override def load(path: String): MultilabelClassificationEvaluator = super.load(path)
+}
