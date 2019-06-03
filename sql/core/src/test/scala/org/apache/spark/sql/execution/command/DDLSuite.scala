@@ -2566,7 +2566,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  val supportedNativeFileFormatsForAlterTableAddColumns = Seq("parquet", "json", "csv")
+  val supportedNativeFileFormatsForAlterTableAddColumns = Seq("csv", "json", "parquet",
+    "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat",
+    "org.apache.spark.sql.execution.datasources.json.JsonFileFormat",
+    "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat")
 
   supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
     test(s"alter datasource table add columns - $provider") {
