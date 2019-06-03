@@ -51,6 +51,8 @@ public final class Platform {
       // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but
       // ppc64 and ppc64le support it
       _unaligned = true;
+    } else if (arch.matches("s390x")) {
+      _unaligned = true;
     } else {
       try {
         Class<?> bitsClass =
