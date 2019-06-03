@@ -119,9 +119,12 @@ case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: ShuffleExchangeExec) extends QueryStageExec {
 
-  @transient lazy val mapOutputStatisticsFuture: FutureAction[MapOutputStatistics] = {
-    assert (plan.inputRDD.getNumPartitions > 0)
-    sparkContext.submitMapStage(plan.shuffleDependency)
+  @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+    if (plan.inputRDD.getNumPartitions == 0) {
+      Future.successful(null)
+    } else {
+      sparkContext.submitMapStage(plan.shuffleDependency)
+    }
   }
 
   override def doMaterialize(): Future[Any] = {
@@ -129,8 +132,10 @@ case class ShuffleQueryStageExec(
   }
 
   override def cancel(): Unit = {
-    if (!mapOutputStatisticsFuture.isCompleted) {
-      mapOutputStatisticsFuture.cancel()
+    mapOutputStatisticsFuture match {
+      case action: FutureAction[MapOutputStatistics] if !mapOutputStatisticsFuture.isCompleted =>
+        action.cancel()
+      case _ =>
     }
   }
 }

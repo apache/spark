@@ -204,9 +204,7 @@ case class AdaptiveSparkPlanExec(
    * 3) A list of the new query stages that have been created.
    */
   private def createQueryStages(plan: SparkPlan): CreateStageResult = plan match {
-    case e: Exchange
-        if !e.isInstanceOf[ShuffleExchangeExec] ||
-          e.asInstanceOf[ShuffleExchangeExec].inputRDD.getNumPartitions > 0 =>
+    case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
       stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
@@ -324,8 +322,16 @@ case class AdaptiveSparkPlanExec(
       assert(physicalNode.isDefined)
       // Replace the corresponding logical node with LogicalQueryStage
       val newLogicalNode = LogicalQueryStage(logicalNode, physicalNode.get)
+      // The logical plan may contain multiple identical subtree instances, because, e.g., rules
+      // like `PushDownPredicate` can push the same logical plan subtree instance into different
+      // branches of a Union. This hack is based on the fact that one physical stage should
+      // correspond to exactly one logical node and the Seq `newStages` is in the same order as
+      // that of the tree traversal by `transformDown`.
+      var transformed = false
       val newLogicalPlan = currentLogicalPlan.transformDown {
-        case p if p.eq(logicalNode) => newLogicalNode
+        case p if !transformed && p.eq(logicalNode) =>
+          transformed = true
+          newLogicalNode
       }
       assert(newLogicalPlan != currentLogicalPlan,
         s"logicalNode: $logicalNode; " +
