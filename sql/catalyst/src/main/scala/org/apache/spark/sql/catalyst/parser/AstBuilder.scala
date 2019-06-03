@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2195,4 +2195,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  /**
+   * Create a [[DropTableStatement]] command.
+   */
+  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
+    DropTableStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier()),
+      ctx.EXISTS != null,
+      ctx.PURGE != null)
+  }
+
+  /**
+   * Create a [[DropViewStatement]] command.
+   */
+  override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
+    DropViewStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier()),
+      ctx.EXISTS != null)
+  }
 }

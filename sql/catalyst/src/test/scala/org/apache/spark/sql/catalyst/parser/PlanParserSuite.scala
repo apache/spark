@@ -39,12 +39,8 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parsePlan(sqlCommand))
-    messages.foreach { message =>
-      assert(e.message.contains(message))
-    }
-  }
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)
 
   test("case insensitive") {
     val plan = table("a").select(star())

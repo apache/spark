@@ -24,23 +24,21 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical.{Project, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan, Project, ScriptTransformation}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class DDLParserSuite extends PlanTest with SharedSQLContext {
+class DDLParserSuite extends AnalysisTest with SharedSQLContext {
   private lazy val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
@@ -53,12 +51,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     }
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parser.parsePlan(sqlCommand)).getMessage
-    messages.foreach { message =>
-      assert(e.contains(message))
-    }
-  }
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
 
   private def parseAs[T: ClassTag](query: String): T = {
     parser.parsePlan(query) match {
@@ -901,64 +895,6 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
         "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
     }.getMessage
     assert(e.contains("Found an empty partition key 'b'"))
-  }
-
-  test("drop table") {
-    val tableName1 = "db.tab"
-    val tableName2 = "tab"
-
-    val parsed = Seq(
-        s"DROP TABLE $tableName1",
-        s"DROP TABLE IF EXISTS $tableName1",
-        s"DROP TABLE $tableName2",
-        s"DROP TABLE IF EXISTS $tableName2",
-        s"DROP TABLE $tableName2 PURGE",
-        s"DROP TABLE IF EXISTS $tableName2 PURGE"
-      ).map(parser.parsePlan)
-
-    val expected = Seq(
-      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = false, isView = false,
-        purge = false),
-      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = true, isView = false,
-        purge = false),
-      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
-        purge = false),
-      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
-        purge = false),
-      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
-        purge = true),
-      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
-        purge = true))
-
-    parsed.zip(expected).foreach { case (p, e) => comparePlans(p, e) }
-  }
-
-  test("drop view") {
-    val viewName1 = "db.view"
-    val viewName2 = "view"
-
-    val parsed1 = parser.parsePlan(s"DROP VIEW $viewName1")
-    val parsed2 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName1")
-    val parsed3 = parser.parsePlan(s"DROP VIEW $viewName2")
-    val parsed4 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName2")
-
-    val expected1 =
-      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = false, isView = true,
-        purge = false)
-    val expected2 =
-      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = true, isView = true,
-        purge = false)
-    val expected3 =
-      DropTableCommand(TableIdentifier("view", None), ifExists = false, isView = true,
-        purge = false)
-    val expected4 =
-      DropTableCommand(TableIdentifier("view", None), ifExists = true, isView = true,
-        purge = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
   }
 
   test("show columns") {

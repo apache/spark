@@ -23,7 +23,7 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder, Quantity, QuantityBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -32,6 +32,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{SPARK_RESOURCE_COUNT_SUFFIX, SPARK_RESOURCE_VENDOR_SUFFIX}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 import org.apache.spark.util.Utils.getHadoopFileSystem
@@ -214,6 +215,32 @@ private[spark] object KubernetesUtils extends Logging {
 
     val time = java.lang.Long.toHexString(clock.getTimeMillis() & 0xFFFFFFFFFFL)
     Hex.encodeHexString(random) + time
+  }
+
+  /**
+   * This function builds the Quantity objects for each resource in the Spark resource
+   * configs based on the component name(spark.driver.resource or spark.executor.resource).
+   * It assumes we can use the Kubernetes device plugin format: vendor-domain/resource.
+   * It returns a set with a tuple of vendor-domain/resource and Quantity for each resource.
+   */
+  def buildResourcesQuantities(
+      componentName: String,
+      sparkConf: SparkConf): Map[String, Quantity] = {
+    val allResources = sparkConf.getAllWithPrefix(componentName)
+    val vendors = SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_VENDOR_SUFFIX).toMap
+    val amounts = SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+    val uniqueResources = SparkConf.getBaseOfConfigs(allResources)
+
+    uniqueResources.map { rName =>
+      val vendorDomain = vendors.get(rName).getOrElse(throw new SparkException("Resource: " +
+        s"$rName was requested, but vendor was not specified."))
+      val amount = amounts.get(rName).getOrElse(throw new SparkException(s"Resource: $rName " +
+        "was requested, but count was not specified."))
+      val quantity = new QuantityBuilder(false)
+        .withAmount(amount)
+        .build()
+      (KubernetesConf.buildKubernetesResourceName(vendorDomain, rName), quantity)
+    }.toMap
   }
 
   /**

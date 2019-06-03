@@ -166,7 +166,7 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.9.8</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.9.9</fasterxml.jackson.version>
     <snappy.version>1.1.7.3</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.10</commons-codec.version>
@@ -762,13 +762,18 @@
       <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-        <version>3.5.3</version>
+        <version>3.6.6</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-xml_${scala.binary.version}</artifactId>
+        <version>1.2.0</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>

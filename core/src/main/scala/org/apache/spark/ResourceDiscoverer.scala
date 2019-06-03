@@ -17,11 +17,11 @@
 
 package org.apache.spark
 
-import java.io.File
+import java.io.{BufferedInputStream, File, FileInputStream}
 
 import com.fasterxml.jackson.core.JsonParseException
+import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import org.json4s.{DefaultFormats, MappingException}
-import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
@@ -131,5 +131,21 @@ private[spark] object ResourceDiscoverer extends Logging {
           s"is less than what the user requested: $reqCount)")
       }
     }
+  }
+
+  def parseAllocatedFromJsonFile(resourcesFile: String): Map[String, ResourceInformation] = {
+    implicit val formats = DefaultFormats
+    // case class to make json4s parsing easy
+    case class JsonResourceInformation(val name: String, val addresses: Array[String])
+    val resourceInput = new BufferedInputStream(new FileInputStream(resourcesFile))
+    val resources = try {
+      parse(resourceInput).extract[Seq[JsonResourceInformation]]
+    } catch {
+      case e@(_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
+        throw new SparkException(s"Exception parsing the resources in $resourcesFile", e)
+    } finally {
+      resourceInput.close()
+    }
+    resources.map(r => (r.name, new ResourceInformation(r.name, r.addresses))).toMap
   }
 }

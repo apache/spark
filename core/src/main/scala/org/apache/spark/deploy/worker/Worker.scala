@@ -393,12 +393,21 @@ private[deploy] class Worker(
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
-      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress) =>
-        if (preferConfiguredMasterAddress) {
-          logInfo("Successfully registered with master " + masterAddress.toSparkURL)
+      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate) =>
+        val preferredMasterAddress = if (preferConfiguredMasterAddress) {
+          masterAddress.toSparkURL
         } else {
-          logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+          masterRef.address.toSparkURL
         }
+
+        // there're corner cases which we could hardly avoid duplicate worker registration,
+        // e.g. Master disconnect(maybe due to network drop) and recover immediately, see
+        // SPARK-23191 for more details.
+        if (duplicate) {
+          logWarning(s"Duplicate registration at master $preferredMasterAddress")
+        }
+
+        logInfo(s"Successfully registered with master $preferredMasterAddress")
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
         forwardMessageScheduler.scheduleAtFixedRate(

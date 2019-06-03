@@ -21,7 +21,6 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -180,6 +179,30 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     verify(mockAmClient).addContainerRequest(captor.capture())
     val containerRequest: ContainerRequest = captor.getValue
     assert(containerRequest.getCapability === expectedResources)
+  }
+
+  test("custom spark resource mapped to yarn resource configs") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val yarnMadeupResource = "yarn.io/madeup"
+    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG, yarnMadeupResource)
+    ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+
+    val sparkResources =
+      Map(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${SPARK_RESOURCE_COUNT_SUFFIX}" -> "3",
+        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}fpga${SPARK_RESOURCE_COUNT_SUFFIX}" -> "2",
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}" -> "5")
+    val handler = createAllocator(1, mockAmClient, sparkResources)
+
+    handler.updateResourceRequests()
+    val yarnRInfo = ResourceRequestTestHelper.getResources(handler.resource)
+    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
+    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
+    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
+    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
+    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 2)
+    assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
+    assert(allResourceInfo.get(yarnMadeupResource).get === 5)
   }
 
   test("container should not be created if requested number if met") {

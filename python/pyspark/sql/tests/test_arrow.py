@@ -56,9 +56,23 @@ class ArrowTests(ReusedSQLTestCase):
         time.tzset()
 
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
+
+        # Test fallback
+        cls.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
+        assert cls.spark.conf.get("spark.sql.execution.arrow.pyspark.enabled") == "false"
         cls.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-        # Disable fallback by default to easily detect the failures.
+        assert cls.spark.conf.get("spark.sql.execution.arrow.pyspark.enabled") == "true"
+
+        cls.spark.conf.set("spark.sql.execution.arrow.fallback.enabled", "true")
+        assert cls.spark.conf.get("spark.sql.execution.arrow.pyspark.fallback.enabled") == "true"
         cls.spark.conf.set("spark.sql.execution.arrow.fallback.enabled", "false")
+        assert cls.spark.conf.get("spark.sql.execution.arrow.pyspark.fallback.enabled") == "false"
+
+        # Enable Arrow optimization in this tests.
+        cls.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+        # Disable fallback by default to easily detect the failures.
+        cls.spark.conf.set("spark.sql.execution.arrow.pyspark.fallback.enabled", "false")
+
         cls.schema = StructType([
             StructField("1_str_t", StringType(), True),
             StructField("2_int_t", IntegerType(), True),
@@ -97,7 +111,7 @@ class ArrowTests(ReusedSQLTestCase):
         return pd.DataFrame(data=data_dict)
 
     def test_toPandas_fallback_enabled(self):
-        with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
             schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
             df = self.spark.createDataFrame([({u'a': 1},)], schema=schema)
             with QuietTest(self.sc):
@@ -130,7 +144,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertTrue(all([c == 1 for c in null_counts]))
 
     def _toPandas_arrow_toggle(self, df):
-        with self.sql_conf({"spark.sql.execution.arrow.enabled": False}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             pdf = df.toPandas()
 
         pdf_arrow = df.toPandas()
@@ -192,7 +206,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertTrue(pdf.empty)
 
     def _createDataFrame_toggle(self, pdf, schema=None):
-        with self.sql_conf({"spark.sql.execution.arrow.enabled": False}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df_no_arrow = self.spark.createDataFrame(pdf, schema=schema)
 
         df_arrow = self.spark.createDataFrame(pdf, schema=schema)
@@ -323,7 +337,7 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_fallback_enabled(self):
         with QuietTest(self.sc):
-            with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
                 with warnings.catch_warnings(record=True) as warns:
                     # we want the warnings to appear even if this test is run from a subclass
                     warnings.simplefilter("always")

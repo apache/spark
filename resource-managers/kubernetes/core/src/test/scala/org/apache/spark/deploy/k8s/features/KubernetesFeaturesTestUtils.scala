@@ -66,4 +66,6 @@ object KubernetesFeaturesTestUtils {
     val desired = implicitly[ClassTag[T]].runtimeClass
     list.filter(_.getClass() == desired).map(_.asInstanceOf[T])
   }
+
+  case class TestResourceInformation(rName: String, count: String, vendor: String)
 }
