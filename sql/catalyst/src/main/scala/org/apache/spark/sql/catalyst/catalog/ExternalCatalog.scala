@@ -113,9 +113,9 @@ trait ExternalCatalog {
   def alterTable(tableDefinition: CatalogTable): Unit
 
   /**
-   * Alter the data schema of a table identified by the provided database and table name. The new
-   * data schema should not have conflict column names with the existing partition columns, and
-   * should still contain all the existing data columns.
+   * Alter the data schema of a table identified by the provided database and table name.
+   * The new data schema should not have conflicting column names with existing partition columns.
+   * The existing data schema will be overwritten with the new data schema provided.
    *
    * @param db Database that table to alter schema for exists in
    * @param table Name of table to alter schema for

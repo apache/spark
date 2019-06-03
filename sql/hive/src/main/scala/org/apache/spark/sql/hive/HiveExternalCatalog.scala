@@ -642,9 +642,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Alter the data schema of a table identified by the provided database and table name. The new
-   * data schema should not have conflict column names with the existing partition columns, and
-   * should still contain all the existing data columns.
+   * Alter the data schema of a table identified by the provided database and table name.
+   * The new data schema should not have conflicting column names with existing partition columns.
+   * The existing data schema will be overwritten with the new data schema provided.
    */
   override def alterTableDataSchema(
       db: String,

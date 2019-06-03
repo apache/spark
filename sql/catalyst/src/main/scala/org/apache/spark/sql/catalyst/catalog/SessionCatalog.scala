@@ -359,9 +359,9 @@ class SessionCatalog(
   }
 
   /**
-   * Alter the data schema of a table identified by the provided table identifier. The new data
-   * schema should not have conflict column names with the existing partition columns, and should
-   * still contain all the existing data columns.
+   * Alter the data schema of a table identified by the provided table identifier.
+   * The new data schema should not have conflicting column names with existing partition columns.
+   * The existing data schema will be overwritten with the new data schema provided.
    *
    * @param identifier TableIdentifier
    * @param newDataSchema Updated data schema to be used for the table
@@ -374,19 +374,6 @@ class SessionCatalog(
     val tableIdentifier = TableIdentifier(table, Some(db))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
-
-    val catalogTable = externalCatalog.getTable(db, table)
-    val oldDataSchema = catalogTable.dataSchema
-    // not supporting dropping columns yet
-    val nonExistentColumnNames =
-      oldDataSchema.map(_.name).filterNot(columnNameResolved(newDataSchema, _))
-    if (nonExistentColumnNames.nonEmpty) {
-      throw new AnalysisException(
-        s"""
-           |Some existing schema fields (${nonExistentColumnNames.mkString("[", ",", "]")}) are
-           |not present in the new schema. We don't support dropping columns yet.
-         """.stripMargin)
-    }
 
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
   }
