@@ -40,17 +40,17 @@ import org.apache.spark.sql.types.StringType
  *
  * To register Scala UDF in SQL:
  * {{{
- *   IntegratedUDFTestUtils.registerTestUDF(TestScalaUDF(name = "udf_name"), spark)
+ *   registerTestUDF(TestScalaUDF(name = "udf_name"), spark)
  * }}}
  *
  * To register Python UDF in SQL:
  * {{{
- *   IntegratedUDFTestUtils.registerTestUDF(TestPythonUDF(name = "udf_name"), spark)
+ *   registerTestUDF(TestPythonUDF(name = "udf_name"), spark)
  * }}}
  *
  * To register Scalar Pandas UDF in SQL:
  * {{{
- *   IntegratedUDFTestUtils.registerTestUDF(TestScalarPandasUDF(name = "udf_name"), spark)
+ *   registerTestUDF(TestScalarPandasUDF(name = "udf_name"), spark)
  * }}}
  *
  * To use it in Scala API and SQL:
@@ -70,8 +70,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
     assert(sys.env.contains("SPARK_HOME"), "SPARK_HOME is not set.")
     sys.env("SPARK_HOME")
   }
-  // Note that we will directly refer python from source, not built-in zip. It is possible
-  // the test is being ran without a regular build.
+  // Note that we will directly refer pyspark's source, not the zip from a regular build.
+  // It is possible the test is being ran without the build.
   private lazy val sourcePath = Paths.get(sparkHome, "python").toAbsolutePath
   private lazy val py4jPath = Paths.get(
     sparkHome, "python", "lib", "py4j-0.10.8.1-src.zip").toAbsolutePath
@@ -120,8 +120,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
     throw new RuntimeException(s"Python executable [$pythonExec] is unavailable.")
   }
 
-  // Dynamically pickles and reads into JVM side in order to mimic Python native function within
-  // Python UDFs.
+  // Dynamically pickles and reads the Python instance into JVM side in order to mimic
+  // Python native function within Python UDF.
   private lazy val pythonFunc: Array[Byte] = if (shouldTestPythonUDFs) {
     var binaryPythonFunc: Array[Byte] = null
     withTempPath { path =>
@@ -164,6 +164,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
   }
 
+  // Make sure this map stays mutable - this map gets updated later in Python runners.
   private val workerEnv = new java.util.HashMap[String, String]()
   workerEnv.put("PYTHONPATH", s"$pysparkPythonPath:$pythonPath")
 

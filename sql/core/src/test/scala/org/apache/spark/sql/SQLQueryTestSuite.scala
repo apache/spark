@@ -87,19 +87,19 @@ import org.apache.spark.sql.types.StructType
  *   ...
  * }}}
  *
- * Note that UDF tests differently. After the test files under 'inputs/udf' directory are detected,
- * it creates three test cases:
+ * Note that UDF tests work differently. After the test files under 'inputs/udf' directory are
+ * detected, it creates three test cases:
  *
- *  - Scala UDF test case with a Scalar UDF registered named 'udf'.
+ *  - Scala UDF test case with a Scalar UDF registered as the name 'udf'.
  *
- *  - Python UDF test case with a Python UDF registered named 'udf'
+ *  - Python UDF test case with a Python UDF registered as the name 'udf'
  *    iff Python executable and pyspark are available.
  *
- *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered named 'udf'
+ *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered as the name 'udf'
  *    iff Python executable, pyspark, pandas and pyarrow are available.
  *
  * Therefore, UDF test cases should have single input and output files but executed by three
- * different types of UDFs. See 'udf-inner-join.sql' as an example.
+ * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  */
 class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
