@@ -651,7 +651,7 @@ class SparkSession(object):
         .. versionchanged:: 2.1
            Added verifySchema.
 
-        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
@@ -731,28 +731,28 @@ class SparkSession(object):
                           (x.encode('utf-8') if not isinstance(x, str) else x)
                           for x in data.columns]
 
-            if self._wrapped._conf.arrowEnabled() and len(data) > 0:
+            if self._wrapped._conf.arrowPySparkEnabled() and len(data) > 0:
                 try:
                     return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
                     from pyspark.util import _exception_message
 
-                    if self._wrapped._conf.arrowFallbackEnabled():
+                    if self._wrapped._conf.arrowPySparkFallbackEnabled():
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
                             "failed by the reason below:\n  %s\n"
                             "Attempting non-optimization as "
-                            "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                            "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                             "true." % _exception_message(e))
                         warnings.warn(msg)
                     else:
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                            "the error below and will not continue because automatic fallback "
-                            "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
-                            "false.\n  %s" % _exception_message(e))
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                            "reached the error below and will not continue because automatic "
+                            "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
+                            "has been set to false.\n  %s" % _exception_message(e))
                         warnings.warn(msg)
                         raise
             data = self._convert_from_pandas(data, schema, timezone)

@@ -120,7 +120,7 @@ object MapPartitionsInR {
       schema: StructType,
       encoder: ExpressionEncoder[Row],
       child: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.arrowEnabled) {
+    if (SQLConf.get.arrowSparkREnabled) {
       MapPartitionsInRWithArrow(
         func,
         packageNames,
@@ -466,7 +466,7 @@ object FlatMapGroupsInR {
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       child: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.arrowEnabled) {
+    if (SQLConf.get.arrowSparkREnabled) {
       FlatMapGroupsInRWithArrow(
         func,
         packageNames,
