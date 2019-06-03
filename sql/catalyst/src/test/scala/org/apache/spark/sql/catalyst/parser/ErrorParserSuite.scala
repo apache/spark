@@ -69,7 +69,6 @@ class ErrorParserSuite extends SparkFunSuite {
     // ddl tests
     intercept("use test-test", 1, 8, 9, msg + " test-test", "^^^")
     intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute", "^^^")
-    intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute", "^^^")
     intercept("ALTER TABLE test ADD COLUMNS (h-col BIGINT)", 1, 31, 32, msg + " h-col", "^^^")
     intercept(
       """
