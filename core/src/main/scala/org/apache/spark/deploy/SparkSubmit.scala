@@ -861,6 +861,16 @@ private[spark] class SparkSubmit extends Logging {
    * running cluster deploy mode or python applications.
    */
   private def runMain(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
+    // set the handler as early as possible
+    // we need the driver check because spark-submit is used by mesos to launch
+    // executors (via the SparkLauncher)
+    val isExecutor = args.childArgs.contains("--executor-id")
+    args.deployMode match {
+      case "client" | null if !isExecutor =>
+        Thread.setDefaultUncaughtExceptionHandler(
+          new SparkUncaughtExceptionHandler(isDriver = true))
+    }
+
     val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
     // Let the main class re-initialize the logging system once it starts.
     if (uninitLog) {

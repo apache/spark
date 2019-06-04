@@ -45,7 +45,7 @@ private[spark] object ShutdownHookManager extends Logging {
    */
   val TEMP_DIR_SHUTDOWN_PRIORITY = 25
 
-  private lazy val shutdownHooks = {
+  private[spark] lazy val shutdownHooks = {
     val manager = new SparkShutdownHookManager()
     manager.install()
     manager
@@ -204,6 +204,11 @@ private [util] class SparkShutdownHookManager {
     hooks.synchronized { hooks.remove(ref) }
   }
 
+  def clear(): Unit = {
+    hooks.synchronized {
+      hooks.clear()
+    }
+  }
 }
 
 private class SparkShutdownHook(private val priority: Int, hook: () => Unit)

@@ -25,8 +25,15 @@ import org.apache.spark.internal.Logging
  *
  * @param exitOnUncaughtException Whether to exit the process on UncaughtException.
  */
-private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: Boolean = true)
+private[spark] class SparkUncaughtExceptionHandler(
+    val exitOnUncaughtException: Boolean = true,
+    isDriver: Boolean = false)
   extends Thread.UncaughtExceptionHandler with Logging {
+
+  private def sysExit(error: Int, clearHooks: Boolean = false): Unit = {
+    if (clearHooks) ShutdownHookManager.shutdownHooks.clear()
+    System.exit(error)
+  }
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
     try {
@@ -41,13 +48,19 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
       if (!ShutdownHookManager.inShutdown()) {
         exception match {
           case _: OutOfMemoryError =>
-            System.exit(SparkExitCode.OOM)
+            // we need to exit immediately no space for graceful shutdown here
+            // we cannot assume the jvm is healthy
+            sysExit(SparkExitCode.OOM, isDriver)
           case e: SparkFatalException if e.throwable.isInstanceOf[OutOfMemoryError] =>
             // SPARK-24294: This is defensive code, in case that SparkFatalException is
             // misused and uncaught.
-            System.exit(SparkExitCode.OOM)
+            sysExit(SparkExitCode.OOM, isDriver)
+          case _: VirtualMachineError if exitOnUncaughtException =>
+            // we need to exit immediately no space for graceful shutdown here
+            // we cannot assume the jvm is healthy
+            sysExit(SparkExitCode.VM_ERROR, isDriver)
           case _ if exitOnUncaughtException =>
-            System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
+            sysExit(SparkExitCode.UNCAUGHT_EXCEPTION)
         }
       }
     } catch {

@@ -29,4 +29,6 @@ private[spark] object SparkExitCode {
       OutOfMemoryError. */
   val OOM = 52
 
+  val VM_ERROR = 53
+
 }
