@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class DDLParserSuite extends AnalysisTest with SharedSQLContext {
   private lazy val parser = new SparkSqlParser(new SQLConf)
@@ -728,6 +728,24 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
       tableIdent,
       Some(Map("dt" -> "2008-08-08", "country" -> "us")),
       "new location")
+    comparePlans(parsed2, expected2)
+  }
+
+  test("alter table: change column name/type/comment") {
+    val sql1 = "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT"
+    val sql2 = "ALTER TABLE table_name CHANGE COLUMN col_name col_name INT COMMENT 'new_comment'"
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val tableIdent = TableIdentifier("table_name", None)
+    val expected1 = AlterTableChangeColumnCommand(
+      tableIdent,
+      "col_old_name",
+      StructField("col_new_name", IntegerType))
+    val expected2 = AlterTableChangeColumnCommand(
+      tableIdent,
+      "col_name",
+      StructField("col_name", IntegerType).withComment("new_comment"))
+    comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
   }
 

@@ -2280,12 +2280,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitAlterTableColumn(
       ctx: AlterTableColumnContext): LogicalPlan = withOrigin(ctx) {
+    val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
     if (ctx.colPosition != null) {
-      operationNotAllowed("ALTER TABLE table CHANGE COLUMN ... FIRST | AFTER otherCol", ctx)
+      operationNotAllowed(s"ALTER TABLE table $verb COLUMN ... FIRST | AFTER otherCol", ctx)
     }
 
     if (ctx.dataType == null && ctx.comment == null) {
-      operationNotAllowed("ALTER TABLE table CHANGE COLUMN requires a TYPE or a COMMENT", ctx)
+      operationNotAllowed(s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT", ctx)
     }
 
     AlterTableAlterColumnStatement(
