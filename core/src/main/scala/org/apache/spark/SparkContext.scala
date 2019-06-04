@@ -311,6 +311,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *  in case of local spark app something like 'local-1433865536131'
    *  in case of YARN something like 'application_1433865536131_34483'
    *  in case of MESOS something like 'driver-20170926223339-0001'
+   *  in case of Kubernetes something like 'spark-application-1559610575898'
    * )
    */
   def applicationId: String = _applicationId
