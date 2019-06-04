@@ -93,8 +93,10 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: Strin
   @Since("3.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
-    SchemaUtils.checkColumnType(schema, $(predictionCol), ArrayType(DoubleType, false))
-    SchemaUtils.checkColumnType(schema, $(labelCol), ArrayType(DoubleType, false))
+    SchemaUtils.checkColumnTypes(schema, $(predictionCol),
+      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
+    SchemaUtils.checkColumnTypes(schema, $(labelCol),
+      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
 
     val predictionAndLabels =
       dataset.select(col($(predictionCol)), col($(labelCol)))
