@@ -268,7 +268,7 @@ class MetadataBuilder {
   /** Puts a [[Metadata]]. */
   def putMetadata(key: String, value: Metadata): this.type = put(key, value)
 
-  /** Puts a [[Expression]]. */
+  /** Puts a Expression. */
   def putExpression(key: String, value: Expression): this.type = put(key, value)
 
   /** Puts a Long array. */
