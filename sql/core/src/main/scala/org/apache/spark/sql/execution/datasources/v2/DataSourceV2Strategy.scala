@@ -176,11 +176,6 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       ReplaceTableAsSelectExec(
         catalog, ident, parts, planLater(query), props, writeOptions) :: Nil
 
-    case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
-      val writeOptions = new CaseInsensitiveStringMap(options.asJava)
-      CreateTableAsSelectExec(
-        catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
-
     case AppendData(r: DataSourceV2Relation, query, _) =>
       AppendDataExec(r.table.asWritable, r.options, planLater(query)) :: Nil
 
