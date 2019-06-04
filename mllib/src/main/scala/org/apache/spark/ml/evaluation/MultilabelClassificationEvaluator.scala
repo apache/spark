@@ -136,8 +136,7 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: Strin
 object MultilabelClassificationEvaluator
   extends DefaultParamsReadable[MultilabelClassificationEvaluator] {
 
-  @Since("3.0.0")
-  final val supportedMetricNames: Array[String] = Array("subsetAccuracy",
+  private val supportedMetricNames: Array[String] = Array("subsetAccuracy",
     "accuracy", "hammingLoss", "precision", "recall", "f1Measure",
     "precisionByLabel", "recallByLabel", "f1MeasureByLabel",
     "microPrecision", "microRecall", "microF1Measure")
