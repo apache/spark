@@ -19,80 +19,83 @@ SELECT true AS true;
 
 SELECT false AS false;
 
-SELECT cast('t' as boolean) AS true;
+SELECT boolean('t') AS true;
 
-SELECT cast('   f           ' as boolean) AS false;
+-- [SPARK-27931] Trim the string when cast to boolean type
+-- SELECT bool '   f           ' AS false;
 
-SELECT cast('true' as boolean) AS true;
+SELECT boolean('true') AS true;
 
-SELECT cast('test' as boolean) AS error;
+SELECT boolean('test') AS error;
 
-SELECT cast('false' as boolean) AS false;
+SELECT boolean('false') AS false;
 
-SELECT cast('foo' as boolean) AS error;
+SELECT boolean('foo') AS error;
 
-SELECT cast('y' as boolean) AS true;
+SELECT boolean('y') AS true;
 
-SELECT cast('yes' as boolean) AS true;
+SELECT boolean('yes') AS true;
 
-SELECT cast('yeah' as boolean) AS error;
+SELECT boolean('yeah') AS error;
 
-SELECT cast('n' as boolean) AS false;
+SELECT boolean('n') AS false;
 
-SELECT cast('no' as boolean) AS false;
+SELECT boolean('no') AS false;
 
-SELECT cast('nay' as boolean) AS error;
+SELECT boolean('nay') AS error;
 
-SELECT cast('on' as boolean) AS true;
+-- [SPARK-27931] Accept 'on' and 'off' as input for boolean data type
+-- SELECT bool 'on' AS true;
 
-SELECT cast('off' as boolean) AS false;
+-- SELECT bool 'off' AS false;
 
-SELECT cast('of' as boolean) AS false;
+SELECT boolean('of') AS false;
 
-SELECT cast('o' as boolean) AS error;
+SELECT boolean('o') AS error;
 
-SELECT cast('on_' as boolean) AS error;
+SELECT boolean('on_') AS error;
 
-SELECT cast('off_' as boolean) AS error;
+SELECT boolean('off_') AS error;
 
-SELECT cast('1' as boolean) AS true;
+SELECT boolean('1') AS true;
 
-SELECT cast('11' as boolean) AS error;
+SELECT boolean('11') AS error;
 
-SELECT cast('0' as boolean) AS false;
+SELECT boolean('0') AS false;
 
-SELECT cast('000' as boolean) AS error;
+SELECT boolean('000') AS error;
 
-SELECT cast('' as boolean) AS error;
+SELECT boolean('') AS error;
 
 -- and, or, not in qualifications
 
-SELECT cast('t' as boolean) or cast('f' as boolean) AS true;
+SELECT boolean('t') or boolean('f') AS true;
 
-SELECT cast('t' as boolean) and cast('f' as boolean) AS false;
+SELECT boolean('t') and boolean('f') AS false;
 
-SELECT not cast('f' as boolean) AS true;
+SELECT not boolean('f') AS true;
 
-SELECT cast('t' as boolean) = cast('f' as boolean) AS false;
+SELECT boolean('t') = boolean('f') AS false;
 
-SELECT cast('t' as boolean) <> cast('f' as boolean) AS true;
+SELECT boolean('t') <> boolean('f') AS true;
 
-SELECT cast('t' as boolean) > cast('f' as boolean) AS true;
+SELECT boolean('t') > boolean('f') AS true;
 
-SELECT cast('t' as boolean) >= cast('f' as boolean) AS true;
+SELECT boolean('t') >= boolean('f') AS true;
 
-SELECT cast('f' as boolean) < cast('t' as boolean) AS true;
+SELECT boolean('f') < boolean('t') AS true;
 
-SELECT cast('f' as boolean) <= cast('t' as boolean) AS true;
+SELECT boolean('f') <= boolean('t') AS true;
 
 -- explicit casts to/from text
-SELECT cast(cast('TrUe' as string) as boolean) AS true, cast(cast('fAlse' as string) as boolean) AS false;
-SELECT cast(cast('    true   ' as string) as boolean) AS true,
-       cast(cast('     FALSE' as string) as boolean) AS false;
-SELECT cast(cast(true as boolean) as string) AS true, cast(cast(false as boolean) as string) AS false;
+SELECT boolean(string('TrUe')) AS true, boolean(string('fAlse')) AS false;
+-- [SPARK-27931] Trim the string when cast to boolean type
+-- SELECT '    true   '::text::boolean AS true,
+--        '     FALSE'::text::boolean AS false;
+SELECT string(boolean(true)) AS true, string(boolean(false)) AS false;
 
-SELECT cast(cast('  tru e ' as string) as boolean) AS invalid;    -- error
-SELECT cast(cast('' as string) as boolean) AS invalid;            -- error
+SELECT boolean(string('  tru e ')) AS invalid;    -- error
+SELECT boolean(string('')) AS invalid;            -- error
 
 CREATE TABLE BOOLTBL1 (f1 boolean) USING parquet;
 
@@ -109,38 +112,38 @@ SELECT '' AS t_3, BOOLTBL1.* FROM BOOLTBL1;
 
 SELECT '' AS t_3, BOOLTBL1.*
    FROM BOOLTBL1
-   WHERE f1 = cast('true' as boolean);
+   WHERE f1 = boolean('true');
 
 
 SELECT '' AS t_3, BOOLTBL1.*
    FROM BOOLTBL1
-   WHERE f1 <> cast('false' as boolean);
+   WHERE f1 <> boolean('false');
 
--- SELECT '' AS zero, BOOLTBL1.*
---    FROM BOOLTBL1
---    WHERE booleq(cast('false' as boolean), f1);
+SELECT '' AS zero, BOOLTBL1.*
+   FROM BOOLTBL1
+   WHERE booleq(boolean('false'), f1);
 
-INSERT INTO BOOLTBL1 VALUES (cast('f' as boolean));
+INSERT INTO BOOLTBL1 VALUES (boolean('f'));
 
 SELECT '' AS f_1, BOOLTBL1.*
    FROM BOOLTBL1
-   WHERE f1 = cast('false' as boolean);
+   WHERE f1 = boolean('false');
 
 
 CREATE TABLE BOOLTBL2 (f1 boolean) USING parquet;
 
-INSERT INTO BOOLTBL2 VALUES (cast('f' as boolean));
+INSERT INTO BOOLTBL2 VALUES (boolean('f'));
 
-INSERT INTO BOOLTBL2 VALUES (cast('false' as boolean));
+INSERT INTO BOOLTBL2 VALUES (boolean('false'));
 
-INSERT INTO BOOLTBL2 VALUES (cast('False' as boolean));
+INSERT INTO BOOLTBL2 VALUES (boolean('False'));
 
-INSERT INTO BOOLTBL2 VALUES (cast('FALSE' as boolean));
+INSERT INTO BOOLTBL2 VALUES (boolean('FALSE'));
 
 -- This is now an invalid expression
 -- For pre-v6.3 this evaluated to false - thomas 1997-10-23
 INSERT INTO BOOLTBL2
-   VALUES (cast('XXX' as boolean));
+   VALUES (boolean('XXX'));
 
 -- BOOLTBL2 should be full of false's at this point
 SELECT '' AS f_4, BOOLTBL2.* FROM BOOLTBL2;
@@ -151,21 +154,22 @@ SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
    WHERE BOOLTBL2.f1 <> BOOLTBL1.f1;
 
 
---SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
---   FROM BOOLTBL1, BOOLTBL2
---   WHERE boolne(BOOLTBL2.f1,BOOLTBL1.f1);
+SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
+   FROM BOOLTBL1, BOOLTBL2
+   WHERE boolne(BOOLTBL2.f1,BOOLTBL1.f1);
 
 
 SELECT '' AS ff_4, BOOLTBL1.*, BOOLTBL2.*
    FROM BOOLTBL1, BOOLTBL2
-   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 and BOOLTBL1.f1 = cast('false' as boolean);
+   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 and BOOLTBL1.f1 = boolean('false');
 
 
 SELECT '' AS tf_12_ff_4, BOOLTBL1.*, BOOLTBL2.*
    FROM BOOLTBL1, BOOLTBL2
-   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 or BOOLTBL1.f1 = cast('true' as boolean)
+   WHERE BOOLTBL2.f1 = BOOLTBL1.f1 or BOOLTBL1.f1 = boolean('true')
    ORDER BY BOOLTBL1.f1, BOOLTBL2.f1;
 
+-- [SPARK-27924] E061-14: Search Conditions
 --
 -- SQL syntax
 -- Try all combinations to ensure that we get nothing when we expect nothing
@@ -212,6 +216,7 @@ INSERT INTO BOOLTBL3 VALUES ('true', true, 1);
 INSERT INTO BOOLTBL3 VALUES ('false', false, 2);
 INSERT INTO BOOLTBL3 VALUES ('null', null, 3);
 
+-- [SPARK-27924] E061-14: Search Conditions
 -- SELECT
 --     d,
 --     b IS TRUE AS istrue,

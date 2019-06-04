@@ -209,6 +209,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
+    registerTestUDF(localSparkSession)
 
     if (configSet.isDefined) {
       // Execute the list of set operation in order to add the desired configs
@@ -416,6 +417,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         """.stripMargin)
       .load(testFile("test-data/postgresql/tenk.data"))
       .createOrReplaceTempView("tenk1")
+  }
+
+  /** Register built-in test UDFs into the SparkSession. */
+  private def registerTestUDF(session: SparkSession): Unit = {
+    // booleq/boolne used by boolean.sql
+    session.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
+    session.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
   }
 
   private val originalTimeZone = TimeZone.getDefault
