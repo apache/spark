@@ -155,6 +155,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private case class RegularTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase
 
+  /** A PostgreSQL test case. */
+  private case class PgSQLTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase
+
   /** A UDF test case. */
   private case class UDFTestCase(
       name: String, inputFile: String, resultFile: String, udf: TestUDF) extends TestCase
@@ -250,9 +254,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
-    registerTestUDF(localSparkSession)
     testCase match {
       case udfTestCase: UDFTestCase => registerTestUDF(udfTestCase.udf, localSparkSession)
+      case _: PgSQLTestCase =>
+        // booleq/boolne used by boolean.sql
+        localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
+        localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
       case _ => // Don't add UDFs in Regular tests.
     }
 
@@ -392,6 +399,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
             absPath,
             resultFile,
             TestScalarPandasUDF(name = "udf")))
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+        PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
@@ -484,13 +493,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         """.stripMargin)
       .load(testFile("test-data/postgresql/tenk.data"))
       .createOrReplaceTempView("tenk1")
-  }
-
-  /** Register built-in test UDFs into the SparkSession. */
-  private def registerTestUDF(session: SparkSession): Unit = {
-    // booleq/boolne used by boolean.sql
-    session.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
-    session.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
   }
 
   private val originalTimeZone = TimeZone.getDefault
