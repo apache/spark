@@ -29,10 +29,13 @@ import scala.concurrent.duration._
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.json4s.JsonAST.JArray
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
@@ -760,19 +763,30 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("test gpu driver resource address and discovery under local-cluster mode") {
+  private def writeJsonFile(dir: File, strToWrite: JArray): String = {
+    val f1 = File.createTempFile("test-resource-parser1", "", dir)
+    JavaFiles.write(f1.toPath(), compact(render(strToWrite)).getBytes())
+    f1.getPath()
+  }
+
+  test("test gpu driver resource files and discovery under local-cluster mode") {
     withTempDir { dir =>
       val gpuFile = new File(dir, "gpuDiscoverScript")
       val scriptPath = mockDiscoveryScript(gpuFile,
         """'{"name": "gpu","addresses":["5", "6"]}'""")
 
+      val gpusAllocated =
+        ("name" -> "gpu") ~
+        ("addresses" -> Seq("0", "1", "8"))
+      val ja = JArray(List(gpusAllocated))
+      val resourcesFile = writeJsonFile(dir, ja)
+
       val conf = new SparkConf()
         .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
           SPARK_RESOURCE_COUNT_SUFFIX, "1")
         .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
-          SPARK_RESOURCE_ADDRESSES_SUFFIX, "0, 1, 8")
-        .set(SPARK_DRIVER_RESOURCE_PREFIX + "gpu" +
           SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
+        .set(DRIVER_RESOURCES_FILE, resourcesFile)
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
       sc = new SparkContext(conf)

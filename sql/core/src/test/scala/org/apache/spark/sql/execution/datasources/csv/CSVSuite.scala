@@ -2059,4 +2059,30 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .option("inferSchema", "true")
       .csv(Seq("1,2").toDS).schema.head.dataType === StringType)
   }
+
+  test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
+    Seq("csv", "").foreach { reader =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> reader) {
+        withTempPath { path =>
+          val df = Seq(("0", "2013-111-11")).toDF("a", "b")
+          df.write
+            .option("header", "true")
+            .csv(path.getAbsolutePath)
+
+          val schema = StructType.fromDDL("a int, b date")
+          val columnNameOfCorruptRecord = "_unparsed"
+          val schemaWithCorrField = schema.add(columnNameOfCorruptRecord, StringType)
+          val readDF = spark
+            .read
+            .option("mode", "Permissive")
+            .option("header", "true")
+            .option("enforceSchema", false)
+            .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+            .schema(schemaWithCorrField)
+            .csv(path.getAbsoluteFile.toString)
+          checkAnswer(readDF, Row(0, null, "0,2013-111-11") :: Nil)
+        }
+      }
+    }
+  }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
+import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, Identifier, TableCatalog, TestTableCatalog}
@@ -25,7 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceResolution}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
@@ -54,6 +55,9 @@ class PlanResolutionSuite extends AnalysisTest {
     newConf.setConfString("spark.sql.default.catalog", "testcat")
     DataSourceResolution(newConf, lookupCatalog).apply(parsePlan(query))
   }
+
+  private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
+    comparePlans(parseAndResolve(query), expected, checkAnalysis = true)
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parseAndResolve(sql).collect {
@@ -437,5 +441,64 @@ class PlanResolutionSuite extends AnalysisTest {
         fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
+  }
+
+  test("drop table") {
+    val tableName1 = "db.tab"
+    val tableIdent1 = TableIdentifier("tab", Option("db"))
+    val tableName2 = "tab"
+    val tableIdent2 = TableIdentifier("tab", None)
+
+    parseResolveCompare(s"DROP TABLE $tableName1",
+      DropTableCommand(tableIdent1, ifExists = false, isView = false, purge = false))
+    parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
+      DropTableCommand(tableIdent1, ifExists = true, isView = false, purge = false))
+    parseResolveCompare(s"DROP TABLE $tableName2",
+      DropTableCommand(tableIdent2, ifExists = false, isView = false, purge = false))
+    parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
+      DropTableCommand(tableIdent2, ifExists = true, isView = false, purge = false))
+    parseResolveCompare(s"DROP TABLE $tableName2 PURGE",
+      DropTableCommand(tableIdent2, ifExists = false, isView = false, purge = true))
+    parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2 PURGE",
+      DropTableCommand(tableIdent2, ifExists = true, isView = false, purge = true))
+  }
+
+  test("drop table in v2 catalog") {
+    val tableName1 = "testcat.db.tab"
+    val tableIdent1 = Identifier.of(Array("db"), "tab")
+    val tableName2 = "testcat.tab"
+    val tableIdent2 = Identifier.of(Array.empty, "tab")
+
+    parseResolveCompare(s"DROP TABLE $tableName1",
+      DropTable(testCat, tableIdent1, ifExists = false))
+    parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
+      DropTable(testCat, tableIdent1, ifExists = true))
+    parseResolveCompare(s"DROP TABLE $tableName2",
+      DropTable(testCat, tableIdent2, ifExists = false))
+    parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
+      DropTable(testCat, tableIdent2, ifExists = true))
+  }
+
+  test("drop view") {
+    val viewName1 = "db.view"
+    val viewIdent1 = TableIdentifier("view", Option("db"))
+    val viewName2 = "view"
+    val viewIdent2 = TableIdentifier("view")
+
+    parseResolveCompare(s"DROP VIEW $viewName1",
+      DropTableCommand(viewIdent1, ifExists = false, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW IF EXISTS $viewName1",
+      DropTableCommand(viewIdent1, ifExists = true, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW $viewName2",
+      DropTableCommand(viewIdent2, ifExists = false, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW IF EXISTS $viewName2",
+      DropTableCommand(viewIdent2, ifExists = true, isView = true, purge = false))
+  }
+
+  test("drop view in v2 catalog") {
+    intercept[AnalysisException] {
+      parseAndResolve("DROP VIEW testcat.db.view")
+    }.getMessage.toLowerCase(Locale.ROOT).contains(
+      "view support in catalog has not been implemented")
   }
 }

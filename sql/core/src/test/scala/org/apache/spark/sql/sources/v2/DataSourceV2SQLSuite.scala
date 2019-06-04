@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalog.v2.Identifier
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
@@ -265,5 +265,21 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     } finally {
       conf.setConfString("spark.sql.default.catalog", originalDefaultCatalog)
     }
+  }
+
+  test("DropTable: basic") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    sql(s"CREATE TABLE $tableName USING foo AS SELECT id, data FROM source")
+    assert(spark.catalog("testcat").asTableCatalog.tableExists(ident) === true)
+    sql(s"DROP TABLE $tableName")
+    assert(spark.catalog("testcat").asTableCatalog.tableExists(ident) === false)
+  }
+
+  test("DropTable: if exists") {
+    intercept[NoSuchTableException] {
+      sql(s"DROP TABLE testcat.db.notbl")
+    }
+    sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
   }
 }

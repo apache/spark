@@ -150,6 +150,11 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     }
   }
 
+  @Override
+  public void exceptionCaught(Throwable cause, TransportClient client) {
+    metrics.caughtExceptions.inc();
+  }
+
   public MetricSet getAllMetrics() {
     return metrics;
   }
@@ -215,6 +220,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private Counter activeConnections = new Counter();
     // Number of registered connections to the shuffle service
     private Counter registeredConnections = new Counter();
+    // Number of exceptions caught in connections to the shuffle service
+    private Counter caughtExceptions = new Counter();
 
     public ShuffleMetrics() {
       allMetrics = new HashMap<>();
@@ -225,6 +232,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
                      (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
       allMetrics.put("numActiveConnections", activeConnections);
       allMetrics.put("numRegisteredConnections", registeredConnections);
+      allMetrics.put("numCaughtExceptions", caughtExceptions);
     }
 
     @Override

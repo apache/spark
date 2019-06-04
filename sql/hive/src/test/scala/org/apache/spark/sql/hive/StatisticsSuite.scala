@@ -40,6 +40,7 @@ import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
@@ -77,14 +78,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
           val file1 = new File(tempDir + "/data1")
-          val writer1 = new PrintWriter(file1)
-          writer1.write("1,2")
-          writer1.close()
+          Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+            writer.write("1,2")
+          }
 
           val file2 = new File(tempDir + "/data2")
-          val writer2 = new PrintWriter(file2)
-          writer2.write("1,2")
-          writer2.close()
+          Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+            writer.write("1,2")
+          }
 
           sql(
             s"""
@@ -957,9 +958,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           withTempDir { loadPath =>
             // load data command
             val file = new File(loadPath + "/data")
-            val writer = new PrintWriter(file)
-            writer.write("2,xyz")
-            writer.close()
+            Utils.tryWithResource(new PrintWriter(file)) { writer =>
+              writer.write("2,xyz")
+            }
             sql(s"LOAD DATA INPATH '${loadPath.toURI.toString}' INTO TABLE $table")
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -994,14 +995,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
             val file1 = new File(dir1 + "/data")
-            val writer1 = new PrintWriter(file1)
-            writer1.write("1,a")
-            writer1.close()
+            Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+              writer.write("1,a")
+            }
 
             val file2 = new File(dir2 + "/data")
-            val writer2 = new PrintWriter(file2)
-            writer2.write("1,a")
-            writer2.close()
+            Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+              writer.write("1,a")
+            }
 
             // add partition command
             sql(
