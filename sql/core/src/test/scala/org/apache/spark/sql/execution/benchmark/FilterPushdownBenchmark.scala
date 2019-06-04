@@ -141,11 +141,12 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
   def filterPushDownBenchmarkWithColumn(
       benchmark: Benchmark,
+      numFilter: Int,
       values: Int,
       whereColumn: Column,
       selectExpr: String = "*"
   ): Unit = {
-    benchmark.addCase("Native ORC Vectorized (Pushdown)") { _ =>
+    benchmark.addCase(s"Convert $numFilter filters to ORC filter") { _ =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         spark
           .table("orcTable")
@@ -154,7 +155,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
           .collect()
       }
     }
-    benchmark.addCase("Native Parquet Vectorized (Pushdown)") { _ =>
+    benchmark.addCase(s"Convert $numFilter filters to Parquet filter") { _ =>
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         spark
           .table("parquetTable")
@@ -417,15 +418,15 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       // get run when a full Spark job is executed.
       // The benchmark below runs a more complete, end-to-end test which covers the whole pipeline
       // and can uncover high-level performance problems, but is bad at discriminating details.
-      val numRows = 1
+      val numRows = 160000
       val width = 2000
 
       val columns = (1 to width).map(i => s"id c$i")
-      val df = spark.range(1).selectExpr(columns: _*)
+      val df = spark.range(numRows).selectExpr(columns: _*)
       val benchmark = new Benchmark(
         s"Convert filters to ORC filter",
         numRows, minNumIters = 5, output = output)
-      Seq(25, 5000, 15000).foreach { numFilter =>
+      Seq(2500, 5000, 15000).foreach { numFilter =>
         val whereColumn = (1 to numFilter)
           .map(i => col("c1") === lit(i))
           .foldLeft(lit(false))(_ || _)
@@ -439,22 +440,23 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     }
 
     runBenchmark(s"Pushdown benchmark with unbalanced Column") {
-      val numRows = 1
+      val numRows = 160000
       val width = 200
 
       withTempPath { dir =>
         val columns = (1 to width).map(i => s"id c$i")
-        val df = spark.range(1).selectExpr(columns: _*)
+        val df = spark.range(numRows).selectExpr(columns: _*)
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
           val benchmark =
             new Benchmark("Select 1 row with filters", numRows, minNumIters = 5, output = output)
-          Seq(25, 500, 1000).foreach { numFilter =>
+          Seq(100, 500, 1000).foreach { numFilter =>
             val whereColumn = (1 to numFilter)
               .map(i => col("c1") === lit(i))
               .foldLeft(lit(false))(_ || _)
             filterPushDownBenchmarkWithColumn(
               benchmark,
+              numFilter,
               numRows,
               whereColumn)
           }
