@@ -190,7 +190,7 @@ class PlanParserSuite extends AnalysisTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), partition, plan, overwrite, ifPartitionNotExists)
+      plan.insertInto(table("s"), overwrite, partition, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -205,10 +205,7 @@ class PlanParserSuite extends AnalysisTest {
     // Multi insert
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
-      InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
-        InsertIntoTable(
-          table("u"), Map.empty, plan2, false, ifPartitionNotExists = false)))
+      plan.limit(1).insertInto("s").union(plan2.insertInto("u")))
   }
 
   test ("insert with if not exists") {
@@ -619,11 +616,12 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(
         "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t"),
-      InsertIntoTable(table("s"), Map.empty,
-        UnresolvedHint("REPARTITION", Seq(Literal(100)),
-          UnresolvedHint("COALESCE", Seq(Literal(500)),
-            UnresolvedHint("COALESCE", Seq(Literal(10)),
-              table("t").select(star())))), overwrite = false, ifPartitionNotExists = false))
+      table("t")
+        .select(star())
+        .hint("COALESCE", Literal(10))
+        .hint("COALESCE", Literal(500))
+        .hint("REPARTITION", Literal(100))
+        .insertInto("s"))
 
     comparePlans(
       parsePlan("SELECT /*+ BROADCASTJOIN(u), REPARTITION(100) */ * FROM t"),

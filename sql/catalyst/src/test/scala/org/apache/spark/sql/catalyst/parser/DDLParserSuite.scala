@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
@@ -614,6 +615,63 @@ class DDLParserSuite extends AnalysisTest {
           Seq("table_name"),
           Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
     }
+  }
+
+  test("insert table: append") {
+    parseCompare("INSERT INTO TABLE testcat.ns1.ns2.tbl TABLE source",
+      table("source").insertInto(table("testcat", "ns1", "ns2", "tbl")))
+  }
+
+  test("insert table: append from another catalog") {
+    parseCompare("INSERT INTO TABLE testcat.ns1.ns2.tbl TABLE testcat2.db.tbl",
+      table("testcat2", "db", "tbl").insertInto(table("testcat", "ns1", "ns2", "tbl")))
+  }
+
+  test("insert table: append with partition") {
+    parseCompare(
+      """
+        |INSERT INTO testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3, p2)
+        |TABLE source
+      """.stripMargin,
+      table("source")
+          .insertInto(
+            table("testcat", "ns1", "ns2", "tbl"),
+            partition = Map("p1" -> Some("3"), "p2" -> None)))
+  }
+
+  test("insert table: overwrite") {
+    parseCompare("INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl TABLE source",
+      table("source").insertInto(table("testcat", "ns1", "ns2", "tbl"), overwrite = true))
+  }
+
+  test("insert table: overwrite with partition") {
+    parseCompare(
+      """
+        |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3, p2)
+        |TABLE source
+      """.stripMargin,
+      table("source")
+          .insertInto(
+            table("testcat", "ns1", "ns2", "tbl"),
+            overwrite = true,
+            partition = Map("p1" -> Some("3"), "p2" -> None)))
+  }
+
+  test("insert table: overwrite with partition if not exists") {
+    parseCompare(
+      """
+        |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3) IF NOT EXISTS
+        |TABLE source
+      """.stripMargin,
+      table("source")
+          .insertInto(
+            table("testcat", "ns1", "ns2", "tbl"),
+            overwrite = true,
+            partition = Map("p1" -> Some("3")),
+            ifPartitionNotExists = true))
   }
 
   private case class TableSpec(
