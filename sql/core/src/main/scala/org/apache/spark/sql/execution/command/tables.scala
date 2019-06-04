@@ -259,7 +259,7 @@ case class AlterTableAddColumnsCommand(
 
   // Text format doesn't need ADD COLUMNS as text datasource can have only one column
   override val supportedDatasourceFormats = Seq("ParquetFileFormat", "OrcFileFormat",
-    "OrcDataSourceV2", "JsonDataSourceV2", "CSVDataSourceV2")
+    "OrcDataSourceV2", "JsonFileFormat", "JsonDataSourceV2", "CSVFileFormat", "CSVDataSourceV2")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -296,7 +296,7 @@ case class AlterTableReplaceColumnsCommand(
   // Csv format not supported by REPLACE COLUMNS as csv datasource is read positionally
   // and a new replacement column would reference an old replaced column's data
   override val supportedDatasourceFormats = Seq("ParquetFileFormat", "OrcFileFormat",
-    "OrcDataSourceV2", "JsonDataSourceV2", "TextDataSourceV2")
+    "OrcDataSourceV2", "JsonFileFormat", "JsonDataSourceV2", "TextFileFormat", "TextDataSourceV2")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

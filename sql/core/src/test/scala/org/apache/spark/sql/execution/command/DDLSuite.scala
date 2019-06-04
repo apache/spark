@@ -2678,13 +2678,20 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  val supportedNativeFileFormatsForAlterTableReplaceColumns = Seq("parquet", "orc", "json", "text")
+  val supportedNativeFileFormatsForAlterTableReplaceColumns = Seq("parquet", "orc", "json", "text",
+    "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat",
+    "org.apache.spark.sql.execution.datasources.orc.OrcFileFormat",
+    "org.apache.spark.sql.execution.datasources.json.JsonFileFormat",
+    "org.apache.spark.sql.execution.datasources.text.TextFileFormat")
   supportedNativeFileFormatsForAlterTableReplaceColumns.foreach { provider =>
     test(s"alter datasource table replace columns - $provider") {
-      if (provider == "text") testReplaceColumnTextProvider() else testReplaceColumn(provider)
+      if (provider == "text" | provider.endsWith("TextFileFormat")) testReplaceColumnTextProvider()
+      else testReplaceColumn(provider)
     }
     test(s"alter datasource table replace columns - partitioned - $provider") {
-      if (provider == "text") testReplaceColumnPartitionedTextProvider()
+      if (provider == "text" | provider.endsWith("TextFileFormat")) {
+        testReplaceColumnPartitionedTextProvider()
+      }
       else testReplaceColumn(provider)
     }
   }
