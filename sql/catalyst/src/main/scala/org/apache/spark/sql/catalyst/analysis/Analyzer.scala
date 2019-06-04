@@ -216,7 +216,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case With(child, relations) =>
         // substitute CTE expressions right-to-left to resolve references to previous CTEs:
-        // with a as (select * from t) with b as (select * from a) select * from b
+        // with a as (select * from t), b as (select * from a) select * from b
         relations.foldRight(child) {
           case ((cteName, ctePlan), currentPlan) =>
             substituteCTE(currentPlan, cteName, ctePlan)
