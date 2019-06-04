@@ -199,7 +199,7 @@ Data source options of Avro can be set via:
     <td><code>avroSchema</code></td>
     <td>None</td>
     <td>Optional Avro schema provided by a user in JSON format. The date type and naming of record fields
-    should match the input Avro data or Catalyst data, otherwise the read/write action will fail.</td>
+    should match the input Avro data or Spark's internal data type, otherwise the read/write action will fail.</td>
     <td>read and write</td>
   </tr>
   <tr>
