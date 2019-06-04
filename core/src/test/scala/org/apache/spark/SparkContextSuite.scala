@@ -848,9 +848,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The value of executor resource config: " +
-      "spark.executor.resource.gpu.count = 4 is more than that tasks can take: " +
-      "1 * spark.task.resource.gpu.count = 2. The resources may be wasted."))
+    assert(error.contains("The configuration of resource: gpu (exec = 4, task = 2) will result " +
+      "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
+      "executor to: 1. Please adjust your configuration."))
   }
 
   def mockDiscoveryScript(file: File, result: String): String = {

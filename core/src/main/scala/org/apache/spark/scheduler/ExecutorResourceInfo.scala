@@ -32,33 +32,34 @@ private[spark] class ExecutorResourceInfo(
     val name: String,
     private val addresses: Seq[String]) extends Serializable {
 
-  private val addressesMap = new HashMap[String, Boolean]()
-  addresses.foreach(addressesMap.put(_, true))
+  private val addressesAllocatedMap = new HashMap[String, Boolean]()
+  addresses.foreach(addressesAllocatedMap.put(_, true))
 
   /**
    * Sequence of currently available resource addresses.
    */
-  def availableAddrs: Seq[String] = addressesMap.toList.filter(_._2 == true).map(_._1)
+  def availableAddrs: Seq[String] = addressesAllocatedMap.toList.filter(_._2 == true).map(_._1)
 
   /**
    * Sequence of currently assigned resource addresses.
    * Exposed for testing only.
    */
   private[scheduler] def assignedAddrs: Seq[String] =
-    addressesMap.toList.filter(_._2 == false).map(_._1)
+    addressesAllocatedMap.toList.filter(_._2 == false).map(_._1)
 
   /**
    * Acquire a sequence of resource addresses (to a launched task), these addresses must be
    * available. When the task finishes, it will return the acquired resource addresses.
+   * Throw an Exception if an address is not available or doesn't exist.
    */
   def acquire(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
-      val isAvailable = addressesMap.getOrElse(address, false)
+      val isAvailable = addressesAllocatedMap.getOrElse(address, false)
       if (isAvailable) {
-        addressesMap(address) = false
+        addressesAllocatedMap(address) = false
       } else {
-        throw new SparkException(s"Try to acquire address that is not available. $name address " +
-          s"$address is not available.")
+        throw new SparkException("Try to acquire an address that is not available or doesn't " +
+          s"exist. $name address $address is not available or doesn't exist.")
       }
     }
   }
@@ -66,15 +67,16 @@ private[spark] class ExecutorResourceInfo(
   /**
    * Release a sequence of resource addresses, these addresses must have been assigned. Resource
    * addresses are released when a task has finished.
+   * Throw an Exception if an address is not assigned or doesn't exist.
    */
   def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
-      val isAssigned = addressesMap.getOrElse(address, true)
+      val isAssigned = addressesAllocatedMap.getOrElse(address, true)
       if (!isAssigned) {
-        addressesMap(address) = true
+        addressesAllocatedMap(address) = true
       } else {
-        throw new SparkException(s"Try to release address that is not assigned. $name address " +
-          s"$address is not assigned.")
+        throw new SparkException("Try to release an address that is not assigned or doesn't " +
+          s"exist. $name address $address is not assigned or doesn't exist.")
       }
     }
   }

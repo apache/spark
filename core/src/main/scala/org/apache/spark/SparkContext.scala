@@ -2727,7 +2727,9 @@ object SparkContext extends Logging {
       val taskResourcesAndCount = sc.conf.getTaskResourceRequirements()
       val executorResourcesAndCounts = sc.conf.getAllWithPrefixAndSuffix(
         SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_SUFFIX).toMap
-      val numSlots = (taskResourcesAndCount.map { case (rName, taskCount) =>
+      var numSlots = execCores / taskCores
+      var limitingResourceName = "CPU"
+      taskResourcesAndCount.foreach { case (rName, taskCount) =>
         // Make sure the executor resources were specified through config.
         val execCount = executorResourcesAndCounts.getOrElse(rName,
           throw new SparkException(
@@ -2744,18 +2746,22 @@ object SparkContext extends Logging {
               s"= $execCount has to be >= the task config: " +
               s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} = $taskCount")
         }
-        execCount.toInt / taskCount
-      }.toList ++ Seq(execCores / taskCores)).min
-      // There have been checks inside SparkConf to make sure the executor resources were specified
-      // and are large enough if any task resources were specified.
+        // Compare and update the max slots each executor can provide.
+        val resourceNumSlots = execCount.toInt / taskCount
+        if (resourceNumSlots < numSlots) {
+          numSlots = resourceNumSlots
+          limitingResourceName = rName
+        }
+      }
+      // There have been checks above to make sure the executor resources were specified and are
+      // large enough if any task resources were specified.
       taskResourcesAndCount.foreach { case (rName, taskCount) =>
         val execCount = executorResourcesAndCounts(rName)
         if (execCount.toInt / taskCount.toInt != numSlots) {
-          val message = s"The value of executor resource config: " +
-            s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
-            s"= $execCount is more than that tasks can take: $numSlots * " +
-            s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} = $taskCount. " +
-            s"The resources may be wasted."
+          val message = s"The configuration of resource: $rName (exec = ${execCount.toInt}, " +
+            s"task = ${taskCount}) will result in wasted resources due to resource " +
+            s"${limitingResourceName} limiting the number of runnable tasks per executor to: " +
+            s"${numSlots}. Please adjust your configuration."
           if (Utils.isTesting) {
             throw new SparkException(message)
           } else {

@@ -51,7 +51,8 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       info.acquire(Array("1"))
     }
-    assert(e.getMessage.contains("Try to acquire address that is not available."))
+    assert(e.getMessage.contains(
+      "Try to acquire an address that is not available or doesn't exist."))
   }
 
   test("Don't allow release address that is not assigned") {
@@ -64,6 +65,7 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       info.release(Array("2"))
     }
-    assert(e.getMessage.contains("Try to release address that is not assigned."))
+    assert(e.getMessage.contains(
+      "Try to release an address that is not assigned or doesn't exist."))
   }
 }

@@ -351,6 +351,10 @@ private[spark] class TaskSchedulerImpl(
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
             task.resources.foreach { case (rName, rInfo) =>
+              // Remove the first n elements from availableResources addresses, these removed
+              // addresses are the same as that we allocated in taskSet.resourceOffer() since it's
+              // synchronized. We don't remove the exact addresses allocated because the current
+              // approach produces the identical result with less time complexity.
               availableResources(i).getOrElse(rName,
                 throw new SparkException(s"Try to acquire resource $rName that doesn't exist."))
                 .remove(0, rInfo.addresses.size)
