@@ -570,35 +570,43 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   Seq(
     StorageLevel(useDisk = true, useMemory = false, deserialized = false),
-    StorageLevel(useDisk = true, useMemory = false, deserialized = true)
+    StorageLevel(useDisk = true, useMemory = false, deserialized = true),
+    StorageLevel(useDisk = true, useMemory = false, deserialized = true, replication = 2)
   ).foreach { storageLevel =>
     test(s"SPARK-27622: avoid the network when block requested from same host, $storageLevel") {
       conf.set("spark.shuffle.io.maxRetries", "0")
-       val noFetcher = new MockBlockTransferService(0) {
-        override def fetchBlockSync(
-            host: String,
-            port: Int,
-            execId: String,
-            blockId: String,
-            tempFileManager: DownloadFileManager): ManagedBuffer = {
-          fail("Fetching over network is not expected when the block is requested from same host")
-        }
-      }
-      val store1 = makeBlockManager(8000, "executor1", this.master, Some(noFetcher))
-      val store2 = makeBlockManager(8000, "executor2", this.master, Some(noFetcher))
+      val sameHostBm = makeBlockManager(8000, "sameHost", master)
+
+      val otherHostTransferSrv = spy(sameHostBm.blockTransferService)
+      doAnswer { _ =>
+         "otherHost"
+      }.when(otherHostTransferSrv).hostName
+      val otherHostBm = makeBlockManager(8000, "otherHost", master, Some(otherHostTransferSrv))
+
+      // This test always uses the cleanBm to get the block. In case of replication
+      // the block can be added to the otherHostBm as direct disk read will use
+      // the local disk of sameHostBm where the block is replicated to.
+      // When there is no replication then block must be added via sameHostBm directly.
+      val bmToPutBlock = if (storageLevel.replication > 1) otherHostBm else sameHostBm
+      val array = Array.fill(16)(Byte.MinValue to Byte.MaxValue).flatten
       val blockId = "list"
-      val array = new Array[Byte](4000)
-      store2.putIterator(blockId, List(array).iterator, storageLevel, true)
+      bmToPutBlock.putIterator(blockId, List(array).iterator, storageLevel, tellMaster = true)
+
+      val sameHostTransferSrv = spy(sameHostBm.blockTransferService)
+      doAnswer { _ =>
+         fail("Fetching over network is not expected when the block is requested from same host")
+      }.when(sameHostTransferSrv).fetchBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
+      val cleanBm = makeBlockManager(8000, "clean", master, Some(sameHostTransferSrv))
 
       // check getRemoteBytes
-      val bytesViaStore1 = store1.getRemoteBytes(blockId)
-      assert(bytesViaStore1.isDefined, "list expected to be accessed")
-      val expectedContent = store2.getBlockData(blockId).nioByteBuffer().array()
+      val bytesViaStore1 = cleanBm.getRemoteBytes(blockId)
+      assert(bytesViaStore1.isDefined)
+      val expectedContent = sameHostBm.getBlockData(blockId).nioByteBuffer().array()
       assert(bytesViaStore1.get.toArray === expectedContent)
 
       // check getRemoteValues
-      val valueViaStore1 = store1.getRemoteValues[List.type](blockId)
-      assert(valueViaStore1.isDefined, "list expected to be accessed")
+      val valueViaStore1 = cleanBm.getRemoteValues[List.type](blockId)
+      assert(valueViaStore1.isDefined)
       assert(valueViaStore1.get.data.toList.head === array)
     }
   }
@@ -613,7 +621,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val store2 = makeBlockManager(8000, "executor2", this.master,
         Some(new MockBlockTransferService(0)))
       val blockId = "list"
-      val array = (0 to 4000).map(_ % Byte.MaxValue).toArray
+      val array = Array.fill(16)(Byte.MinValue to Byte.MaxValue).flatten
       store2.putIterator(blockId, List(array).iterator, level, true)
       val expectedBlockData = store2.getLocalBytes(blockId)
       assert(expectedBlockData.isDefined)

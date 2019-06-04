@@ -17,7 +17,8 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File, FileInputStream, FileOutputStream, InputStream, PrintStream, SequenceInputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
+  FileOutputStream, InputStream, PrintStream, SequenceInputStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
@@ -1307,24 +1308,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(Utils.trimExceptCRLF(s"${s}a") === "a")
       assert(Utils.trimExceptCRLF(s"a${s}") === "a")
       assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
-    }
-  }
-
-  test("deleting an already opened file does not interrupt the reading process") {
-    withTempDir { dir =>
-      val testFile = Utils.tempFileWith(dir)
-      Utils.tryWithResource(new FileOutputStream(testFile)) { outputStream =>
-        (1 to 1000).foreach { index =>
-          outputStream.write((42 + index) % 256)
-        }
-      }
-      Utils.tryWithResource(new FileInputStream(testFile)) { inputStream =>
-        // deleting the file
-        testFile.delete()
-        (1 to 1000).foreach { index =>
-          assert(inputStream.read() === (index + 42) % 256)
-        }
-      }
     }
   }
 }
