@@ -24,3 +24,13 @@ select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 -- split function
 SELECT split('aa1cc2ee3', '[1-9]+');
 SELECT split('aa1cc2ee3', '[1-9]+', 2);
+
+--substring function
+SELECT substring('abcdefg', 1);
+SELECT substring('abcdefg', -1, 5);
+SELECT substr('abcdefg', 1);
+SELECT substr('abcdefg', -1, 5);
+SELECT substring('abcdefg' from 1);
+SELECT substring('abcdefg' from -1 for 5);
+SELECT substr('abcdefg' from 1);
+SELECT substr('abcdefg' from -1 for 5);
