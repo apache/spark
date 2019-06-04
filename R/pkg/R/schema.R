@@ -162,7 +162,7 @@ checkType <- function(type) {
             },
             m = {
               # Map type
-              m <- regexec("^map<(.+),(.+)>$", type)
+              m <- regexec("map<(string|character),(.+)>", type)
               matchedStrings <- regmatches(type, m)
               if (length(matchedStrings[[1]]) >= 3) {
                 keyType <- matchedStrings[[1]][2]
