@@ -181,10 +181,16 @@ of the most common options to set are:
   <td><code>spark.driver.memoryOverhead</code></td>
   <td>driverMemory * 0.10, with minimum of 384 </td>
   <td>
-    The amount of off-heap memory to be allocated per driver in cluster mode, in MiB unless
-    otherwise specified. This is memory that accounts for things like VM overheads, interned strings, 
+    Amount of non-heap memory to be allocated per driver process in cluster mode, in MiB unless
+    otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
     other native overheads, etc. This tends to grow with the container size (typically 6-10%). 
     This option is currently supported on YARN, Mesos and Kubernetes.
+    <em>Note:</em> Non-heap memory includes off-heap memory 
+    (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other driver processes
+    (e.g. python process that goes with a PySpark driver) and memory used by other non-driver 
+    processes running in the same container. The maximum memory size of container to running 
+    driver is determined by the sum of <code>spark.driver.memoryOverhead</code> 
+    and <code>spark.driver.memory</code>.
   </td>
 </tr>
 <tr>
@@ -204,6 +210,16 @@ of the most common options to set are:
     A script for the driver to run to discover a particular resource type. This should
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
     name and an array of addresses.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.driver.resource.{resourceName}.vendor</code></td>
+  <td>None</td>
+  <td>
+    Vendor of the resources to use for the driver. This option is currently
+    only supported on Kubernetes and is actually both the vendor and domain following
+    the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
+    this config would be set to nvidia.com or amd.com)
   </td>
 </tr>
 <tr>
@@ -234,10 +250,17 @@ of the most common options to set are:
  <td><code>spark.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
-    The amount of off-heap memory to be allocated per executor, in MiB unless otherwise specified.
-    This is memory that accounts for things like VM overheads, interned strings, other native 
-    overheads, etc. This tends to grow with the executor size (typically 6-10%).
+    Amount of non-heap memory to be allocated per executor process in cluster mode, in MiB unless
+    otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
+    other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
     This option is currently supported on YARN and Kubernetes.
+    <br/>
+    <em>Note:</em> Non-heap memory includes off-heap memory 
+    (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other executor processes
+    (e.g. python process that goes with a PySpark executor) and memory used by other non-executor 
+    processes running in the same container. The maximum memory size of container to running executor 
+    is determined by the sum of <code>spark.executor.memoryOverhead</code> and 
+    <code>spark.executor.memory</code>.
   </td>
 </tr>
 <tr>
@@ -257,6 +280,16 @@ of the most common options to set are:
     A script for the executor to run to discover a particular resource type. This should
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
     name and an array of addresses.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.resource.{resourceName}.vendor</code></td>
+  <td>None</td>
+  <td>
+    Vendor of the resources to use for the executors. This option is currently
+    only supported on Kubernetes and is actually both the vendor and domain following
+    the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
+    this config would be set to nvidia.com or amd.com)
   </td>
 </tr>
 <tr>
@@ -1263,6 +1296,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory 
     use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
+    <em>Note:</em> If off-heap memory is enabled, may need to raise the non-heap memory size
+    (e.g. increase <code>spark.driver.memoryOverhead</code> or
+    <code>spark.executor.memoryOverhead</code>).
   </td>
 </tr>
 <tr>

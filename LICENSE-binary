@@ -368,6 +368,7 @@ org.eclipse.jetty:jetty-servlets
 org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
+org.scala-lang.modules:scala-xml_2.12
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -412,7 +413,6 @@ org.scala-lang:scala-compiler
 org.scala-lang:scala-library
 org.scala-lang:scala-reflect
 org.scala-lang.modules:scala-parser-combinators_2.12
-org.scala-lang.modules:scala-xml_2.12
 org.fusesource.leveldbjni:leveldbjni-all
 net.sourceforge.f2j:arpack_combined_all
 xmlenc:xmlenc

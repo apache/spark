@@ -762,13 +762,18 @@
       <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-        <version>3.5.3</version>
+        <version>3.6.6</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-xml_${scala.binary.version}</artifactId>
+        <version>1.2.0</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>

@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHive, TestHiveContext}
+import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveContext}
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.{ResetSystemProperties, Utils}
