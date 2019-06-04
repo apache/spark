@@ -26,7 +26,7 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TransactionalTableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -69,32 +69,58 @@ case class CreateTableAsSelectExec(
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
   override protected def doExecute(): RDD[InternalRow] = {
-    if (catalog.tableExists(ident)) {
-      if (ifNotExists) {
-        return sparkContext.parallelize(Seq.empty, 1)
-      }
+    catalog match {
+      case txnCatalog: TransactionalTableCatalog =>
+        val stagedTable = txnCatalog.stageCreate(
+            ident, query.schema, partitioning.toArray, properties.asJava)
+        Utils.tryWithSafeFinallyAndFailureCallbacks({
+          stagedTable match {
+            case table: SupportsWrite =>
+              val batchWrite = table.newWriteBuilder(writeOptions)
+                .withInputDataSchema(query.schema)
+                .withQueryId(UUID.randomUUID().toString)
+                .buildForBatch()
 
-      throw new TableAlreadyExistsException(ident)
+              val writtenRows = doWrite(batchWrite)
+
+              stagedTable.commitStagedChanges()
+              writtenRows
+            case _ =>
+              // table does not support writes
+              throw new SparkException(
+                s"Table implementation does not support writes: ${ident.quoted}")
+          }
+        })(catchBlock = {
+          stagedTable.abortStagedChanges()
+        })
+      case _ =>
+        Utils.tryWithSafeFinallyAndFailureCallbacks({
+          if (catalog.tableExists(ident)) {
+            if (ifNotExists) {
+              return sparkContext.parallelize(Seq.empty, 1)
+            }
+
+            throw new TableAlreadyExistsException(ident)
+          }
+          catalog.createTable(
+              ident, query.schema, partitioning.toArray, properties.asJava) match {
+            case table: SupportsWrite =>
+              val batchWrite = table.newWriteBuilder(writeOptions)
+                .withInputDataSchema(query.schema)
+                .withQueryId(UUID.randomUUID().toString)
+                .buildForBatch()
+
+              doWrite(batchWrite)
+
+            case _ =>
+              // table does not support writes
+              throw new SparkException(
+                s"Table implementation does not support writes: ${ident.quoted}")
+          }
+        })(catchBlock = {
+          catalog.dropTable(ident)
+        })
     }
-
-    Utils.tryWithSafeFinallyAndFailureCallbacks({
-      catalog.createTable(ident, query.schema, partitioning.toArray, properties.asJava) match {
-        case table: SupportsWrite =>
-          val batchWrite = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(query.schema)
-            .withQueryId(UUID.randomUUID().toString)
-            .buildForBatch()
-
-          doWrite(batchWrite)
-
-        case _ =>
-          // table does not support writes
-          throw new SparkException(s"Table implementation does not support writes: ${ident.quoted}")
-      }
-
-    })(catchBlock = {
-      catalog.dropTable(ident)
-    })
   }
 }
 
