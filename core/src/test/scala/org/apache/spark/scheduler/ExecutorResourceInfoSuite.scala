@@ -51,8 +51,18 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       info.acquire(Array("1"))
     }
-    assert(e.getMessage.contains(
-      "Try to acquire an address that is not available or doesn't exist."))
+    assert(e.getMessage.contains("Try to acquire an address that is not available."))
+  }
+
+  test("Don't allow acquire address that doesn't exist") {
+    // Init Executor Resource.
+    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    assert(!info.availableAddrs.contains("4"))
+    // Acquire an address that doesn't exist
+    val e = intercept[SparkException] {
+      info.acquire(Array("4"))
+    }
+    assert(e.getMessage.contains("Try to acquire an address that doesn't exist."))
   }
 
   test("Don't allow release address that is not assigned") {
@@ -65,7 +75,17 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       info.release(Array("2"))
     }
-    assert(e.getMessage.contains(
-      "Try to release an address that is not assigned or doesn't exist."))
+    assert(e.getMessage.contains("Try to release an address that is not assigned."))
+  }
+
+  test("Don't allow release address that doesn't exist") {
+    // Init Executor Resource.
+    val info = new ExecutorResourceInfo(GPU, ArrayBuffer("0", "1", "2", "3"))
+    assert(!info.assignedAddrs.contains("4"))
+    // Release an address that doesn't exist
+    val e = intercept[SparkException] {
+      info.release(Array("4"))
+    }
+    assert(e.getMessage.contains("Try to release an address that doesn't exist."))
   }
 }

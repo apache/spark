@@ -65,7 +65,7 @@ private[spark] class TaskDescription(
 private[spark] object TaskDescription {
   private def serializeStringLongMap(map: Map[String, Long], dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(map.size)
-    for ((key, value) <- map) {
+    map.foreach { case (key, value) =>
       dataOut.writeUTF(key)
       dataOut.writeLong(value)
     }
@@ -74,13 +74,11 @@ private[spark] object TaskDescription {
   private def serializeResources(map: immutable.Map[String, ResourceInformation],
       dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(map.size)
-    for ((key, value) <- map) {
+    map.foreach { case (key, value) =>
       dataOut.writeUTF(key)
       dataOut.writeUTF(value.name)
       dataOut.writeInt(value.addresses.size)
-      for (identifier <- value.addresses) {
-        dataOut.writeUTF(identifier)
-      }
+      value.addresses.foreach(dataOut.writeUTF(_))
     }
   }
 
@@ -125,8 +123,10 @@ private[spark] object TaskDescription {
   private def deserializeStringLongMap(dataIn: DataInputStream): HashMap[String, Long] = {
     val map = new HashMap[String, Long]()
     val mapSize = dataIn.readInt()
-    for (i <- 0 until mapSize) {
+    var i = 0
+    while (i < mapSize) {
       map(dataIn.readUTF()) = dataIn.readLong()
+      i += 1
     }
     map
   }
@@ -135,15 +135,19 @@ private[spark] object TaskDescription {
       immutable.Map[String, ResourceInformation] = {
     val map = new HashMap[String, ResourceInformation]()
     val mapSize = dataIn.readInt()
-    for (i <- 0 until mapSize) {
+    var i = 0
+    while (i < mapSize) {
       val resType = dataIn.readUTF()
       val name = dataIn.readUTF()
       val numIdentifier = dataIn.readInt()
       val identifiers = new ArrayBuffer[String](numIdentifier)
-      for (j <- 0 until numIdentifier) {
+      var j = 0
+      while (j < numIdentifier) {
         identifiers += dataIn.readUTF()
+        j += 1
       }
       map(resType) = new ResourceInformation(name, identifiers.toArray)
+      i += 1
     }
     map.toMap
   }

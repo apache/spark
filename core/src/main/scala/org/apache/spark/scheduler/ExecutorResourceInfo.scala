@@ -17,35 +17,45 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 
 import org.apache.spark.SparkException
+import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Class to hold information about a type of Resource on an Executor. This information is managed
  * by SchedulerBackend, and TaskScheduler shall schedule tasks on idle Executors based on the
  * information.
+ * Please note that this class is intended to be used in a single thread.
  * @param name Resource name
  * @param addresses Resource addresses provided by the executor
  */
 private[spark] class ExecutorResourceInfo(
     val name: String,
-    private val addresses: Seq[String]) extends Serializable {
+    addresses: Seq[String]) extends Serializable {
 
-  private val addressesAllocatedMap = new HashMap[String, Boolean]()
-  addresses.foreach(addressesAllocatedMap.put(_, true))
+  /**
+   * Map from an address to its availability, the value `true` means the address is available,
+   * while value `false` means the address is assigned.
+   * TODO Use [[OpenHashMap]] instead to gain better performance.
+   */
+  private val addressAvailabilityMap = mutable.HashMap(addresses.map(_ -> true): _*)
 
   /**
    * Sequence of currently available resource addresses.
    */
-  def availableAddrs: Seq[String] = addressesAllocatedMap.toList.filter(_._2 == true).map(_._1)
+  def availableAddrs: Seq[String] = addressAvailabilityMap.flatMap { case (addr, available) =>
+    if (available) Some(addr) else None
+  }.toSeq
 
   /**
    * Sequence of currently assigned resource addresses.
    * Exposed for testing only.
    */
-  private[scheduler] def assignedAddrs: Seq[String] =
-    addressesAllocatedMap.toList.filter(_._2 == false).map(_._1)
+  private[scheduler] def assignedAddrs: Seq[String] = addressAvailabilityMap
+    .flatMap { case (addr, available) =>
+      if (!available) Some(addr) else None
+    }.toSeq
 
   /**
    * Acquire a sequence of resource addresses (to a launched task), these addresses must be
@@ -54,12 +64,16 @@ private[spark] class ExecutorResourceInfo(
    */
   def acquire(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
-      val isAvailable = addressesAllocatedMap.getOrElse(address, false)
+      if (!addressAvailabilityMap.contains(address)) {
+        throw new SparkException(s"Try to acquire an address that doesn't exist. $name address " +
+          s"$address doesn't exist.")
+      }
+      val isAvailable = addressAvailabilityMap(address)
       if (isAvailable) {
-        addressesAllocatedMap(address) = false
+        addressAvailabilityMap(address) = false
       } else {
-        throw new SparkException("Try to acquire an address that is not available or doesn't " +
-          s"exist. $name address $address is not available or doesn't exist.")
+        throw new SparkException(s"Try to acquire an address that is not available. $name " +
+          s"address $address is not available.")
       }
     }
   }
@@ -71,12 +85,16 @@ private[spark] class ExecutorResourceInfo(
    */
   def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
-      val isAssigned = addressesAllocatedMap.getOrElse(address, true)
-      if (!isAssigned) {
-        addressesAllocatedMap(address) = true
+      if (!addressAvailabilityMap.contains(address)) {
+        throw new SparkException(s"Try to release an address that doesn't exist. $name address " +
+          s"$address doesn't exist.")
+      }
+      val isAvailable = addressAvailabilityMap(address)
+      if (!isAvailable) {
+        addressAvailabilityMap(address) = true
       } else {
-        throw new SparkException("Try to release an address that is not assigned or doesn't " +
-          s"exist. $name address $address is not assigned or doesn't exist.")
+        throw new SparkException(s"Try to release an address that is not assigned. $name " +
+          s"address $address is not assigned.")
       }
     }
   }

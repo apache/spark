@@ -146,7 +146,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
-              for ((k, v) <- resources) {
+              resources.foreach { case (k, v) =>
                 executorInfo.availableResources.get(k).foreach { r =>
                   r.release(v.addresses)
                 }

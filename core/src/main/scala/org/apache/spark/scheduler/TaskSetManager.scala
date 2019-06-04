@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.immutable.Map
-import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
 
@@ -469,7 +469,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      availableResources: Map[String, Buffer[String]] = Map.empty)
+      availableResources: Map[String, Seq[String]] = Map.empty)
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -535,7 +535,7 @@ private[spark] class TaskSetManager(
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
         val extraResources = sched.resourcesPerTask.map { case (rName, rNum) =>
-          val rAddresses = availableResources.getOrElse(rName, Buffer.empty)
+          val rAddresses = availableResources.getOrElse(rName, Seq.empty)
           assert(rAddresses.size >= rNum, s"Required $rNum $rName addresses, but only " +
             s"${rAddresses.size} available.")
           // We'll drop the allocated addresses later inside TaskSchedulerImpl.
