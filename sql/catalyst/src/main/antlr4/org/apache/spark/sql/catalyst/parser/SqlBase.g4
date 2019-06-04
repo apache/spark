@@ -407,24 +407,23 @@ sortItem
     ;
 
 querySpecification
-    : (((SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
-        | kind=MAP namedExpressionSeq
-        | kind=REDUCE namedExpressionSeq))
-       inRowFormat=rowFormat?
-       (RECORDWRITER recordWriter=STRING)?
-       USING script=STRING
-       (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
-       outRowFormat=rowFormat?
-       (RECORDREADER recordReader=STRING)?
-       fromClause?
-       (WHERE where=booleanExpression)?)
-    | ((kind=SELECT (hints+=hint)* setQuantifier? namedExpressionSeq fromClause?
-       | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
-       lateralView*
-       (WHERE where=booleanExpression)?
-       aggregation?
-       (HAVING having=booleanExpression)?
-       windows?)
+    : transformQuerySpecification
+    | selectQuerySpecification
+    ;
+
+transformQuerySpecification
+    : transformClause
+      fromClause?
+      whereClause?
+    ;
+
+selectQuerySpecification
+    : (selectClause fromClause? | fromClause selectClause)
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windows?
     ;
 
 hint
@@ -436,11 +435,35 @@ hintStatement
     | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
     ;
 
+transformClause
+    : (SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
+            | kind=MAP namedExpressionSeq
+            | kind=REDUCE namedExpressionSeq)
+      inRowFormat=rowFormat?
+      (RECORDWRITER recordWriter=STRING)?
+      USING script=STRING
+      (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
+      outRowFormat=rowFormat?
+      (RECORDREADER recordReader=STRING)?
+    ;
+
+selectClause
+    : SELECT (hints+=hint)* setQuantifier? namedExpressionSeq
+    ;
+
 fromClause
     : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
-aggregation
+whereClause
+    : WHERE booleanExpression
+    ;
+
+havingClause
+    : HAVING booleanExpression
+    ;
+
+aggregationClause
     : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE

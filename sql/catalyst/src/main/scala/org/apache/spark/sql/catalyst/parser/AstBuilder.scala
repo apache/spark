@@ -406,12 +406,93 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create a logical plan using a query specification.
    */
-  override def visitQuerySpecification(
-      ctx: QuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
+  override def visitTransformQuerySpecification(
+    ctx: TransformQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
-    withQuerySpecification(ctx, from)
+    withTransformQuerySpecification(ctx, from)
+  }
+
+  /**
+   * Create a logical plan using a query specification.
+   */
+  override def visitSelectQuerySpecification(
+    ctx: SelectQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
+    val from = OneRowRelation().optional(ctx.fromClause) {
+      visitFromClause(ctx.fromClause)
+    }
+    withSelectQuerySpecification(ctx, from)
+  }
+
+  override def visitNamedExpressionSeq(
+    ctx: NamedExpressionSeqContext): Seq[Expression] = {
+    Option(ctx).toSeq
+      .flatMap(_.namedExpression.asScala)
+      .map(typedVisit[Expression])
+  }
+
+  /**
+   * Create a logical plan using a having clause.
+   */
+  private def withHavingClause(
+    ctx: HavingClauseContext, plan: LogicalPlan): LogicalPlan = {
+    // Note that we add a cast to non-predicate expressions. If the expression itself is
+    // already boolean, the optimizer will get rid of the unnecessary cast.
+    val predicate = expression(ctx.booleanExpression) match {
+      case p: Predicate => p
+      case e => Cast(e, BooleanType)
+    }
+    Filter(predicate, plan)
+  }
+
+  /**
+   * Create a logical plan using a where clause.
+   */
+  private def withWhereClause(ctx: WhereClauseContext, plan: LogicalPlan): LogicalPlan = {
+    Filter(expression(ctx.booleanExpression), plan)
+  }
+
+  private def withTransformQuerySpecification(
+    ctx: TransformQuerySpecificationContext,
+    relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    // Add where.
+    val withFilter = relation.optionalMap(ctx.whereClause)(withWhereClause)
+
+    // Create the transform.
+    val expressions = visitNamedExpressionSeq(transformClause.namedExpressionSeq)
+
+    // Create the attributes.
+    val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
+      // Typed return columns.
+      (createSchema(transformClause.colTypeList).toAttributes, false)
+    } else if (transformClause.identifierSeq != null) {
+      // Untyped return columns.
+      val attrs = visitIdentifierSeq(transformClause.identifierSeq).map { name =>
+        AttributeReference(name, StringType, nullable = true)()
+      }
+      (attrs, false)
+    } else {
+      (Seq(AttributeReference("key", StringType)(),
+        AttributeReference("value", StringType)()), true)
+    }
+
+    // Create the transform.
+    ScriptTransformation(
+      expressions,
+      string(transformClause.script),
+      attributes,
+      withFilter,
+      withScriptIOSchema(
+        ctx,
+        transformClause.inRowFormat,
+        transformClause.recordWriter,
+        transformClause.outRowFormat,
+        transformClause.recordReader,
+        schemaLess
+      )
+    )
   }
 
   /**
@@ -421,122 +502,68 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *
    * Note that query hints are ignored (both by the parser and the builder).
    */
-  private def withQuerySpecification(
-      ctx: QuerySpecificationContext,
-      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+  private def withSelectQuerySpecification(
+    ctx: SelectQuerySpecificationContext,
+    relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     import ctx._
+    // Regular select
 
-    // WHERE
-    def filter(ctx: BooleanExpressionContext, plan: LogicalPlan): LogicalPlan = {
-      Filter(expression(ctx), plan)
+    // Add lateral views.
+    val withLateralView = ctx.lateralView.asScala.foldLeft(relation)(withGenerate)
+
+    // Add where.
+    val withFilter = withLateralView.optionalMap(whereClause)(withWhereClause)
+
+    val expressions = visitNamedExpressionSeq(ctx.selectClause.namedExpressionSeq)
+    // Add aggregation or a project.
+    val namedExpressions = expressions.map {
+      case e: NamedExpression => e
+      case e: Expression => UnresolvedAlias(e)
     }
 
-    def withHaving(ctx: BooleanExpressionContext, plan: LogicalPlan): LogicalPlan = {
-      // Note that we add a cast to non-predicate expressions. If the expression itself is
-      // already boolean, the optimizer will get rid of the unnecessary cast.
-      val predicate = expression(ctx) match {
-        case p: Predicate => p
-        case e => Cast(e, BooleanType)
+    def createProject() = if (namedExpressions.nonEmpty) {
+      Project(namedExpressions, withFilter)
+    } else {
+      withFilter
+    }
+
+    val withProject = if (aggregationClause == null && havingClause != null) {
+      if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
+        // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
+        withHavingClause(havingClause, createProject())
+      } else {
+        // According to SQL standard, HAVING without GROUP BY means global aggregate.
+        withHavingClause(havingClause, Aggregate(Nil, namedExpressions, withFilter))
       }
-      Filter(predicate, plan)
+    } else if (aggregationClause != null) {
+      val aggregate = withAggregationClause(aggregationClause, namedExpressions, withFilter)
+      aggregate.optionalMap(havingClause)(withHavingClause)
+    } else {
+      // When hitting this branch, `having` must be null.
+      createProject()
     }
 
-
-    // Expressions.
-    val expressions = Option(namedExpressionSeq).toSeq
-      .flatMap(_.namedExpression.asScala)
-      .map(typedVisit[Expression])
-
-    // Create either a transform or a regular query.
-    val specType = Option(kind).map(_.getType).getOrElse(SqlBaseParser.SELECT)
-    specType match {
-      case SqlBaseParser.MAP | SqlBaseParser.REDUCE | SqlBaseParser.TRANSFORM =>
-        // Transform
-
-        // Add where.
-        val withFilter = relation.optionalMap(where)(filter)
-
-        // Create the attributes.
-        val (attributes, schemaLess) = if (colTypeList != null) {
-          // Typed return columns.
-          (createSchema(colTypeList).toAttributes, false)
-        } else if (identifierSeq != null) {
-          // Untyped return columns.
-          val attrs = visitIdentifierSeq(identifierSeq).map { name =>
-            AttributeReference(name, StringType, nullable = true)()
-          }
-          (attrs, false)
-        } else {
-          (Seq(AttributeReference("key", StringType)(),
-            AttributeReference("value", StringType)()), true)
-        }
-
-        // Create the transform.
-        ScriptTransformation(
-          expressions,
-          string(script),
-          attributes,
-          withFilter,
-          withScriptIOSchema(
-            ctx, inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
-
-      case SqlBaseParser.SELECT =>
-        // Regular select
-
-        // Add lateral views.
-        val withLateralView = ctx.lateralView.asScala.foldLeft(relation)(withGenerate)
-
-        // Add where.
-        val withFilter = withLateralView.optionalMap(where)(filter)
-
-        // Add aggregation or a project.
-        val namedExpressions = expressions.map {
-          case e: NamedExpression => e
-          case e: Expression => UnresolvedAlias(e)
-        }
-
-        def createProject() = if (namedExpressions.nonEmpty) {
-          Project(namedExpressions, withFilter)
-        } else {
-          withFilter
-        }
-
-        val withProject = if (aggregation == null && having != null) {
-          if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
-            // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
-            withHaving(having, createProject())
-          } else {
-            // According to SQL standard, HAVING without GROUP BY means global aggregate.
-            withHaving(having, Aggregate(Nil, namedExpressions, withFilter))
-          }
-        } else if (aggregation != null) {
-          val aggregate = withAggregation(aggregation, namedExpressions, withFilter)
-          aggregate.optionalMap(having)(withHaving)
-        } else {
-          // When hitting this branch, `having` must be null.
-          createProject()
-        }
-
-        // Distinct
-        val withDistinct = if (setQuantifier() != null && setQuantifier().DISTINCT() != null) {
-          Distinct(withProject)
-        } else {
-          withProject
-        }
-
-        // Window
-        val withWindow = withDistinct.optionalMap(windows)(withWindows)
-
-        // Hint
-        hints.asScala.foldRight(withWindow)(withHints)
+    // Distinct
+    val withDistinct = if (
+      selectClause.setQuantifier() != null &&
+      selectClause.setQuantifier().DISTINCT() != null) {
+      Distinct(withProject)
+    } else {
+      withProject
     }
+
+    // Window
+    val withWindow = withDistinct.optionalMap(windows)(withWindows)
+
+    // Hint
+    selectClause.hints.asScala.foldRight(withWindow)(withHints)
   }
 
   /**
    * Create a (Hive based) [[ScriptInputOutputSchema]].
    */
   protected def withScriptIOSchema(
-      ctx: QuerySpecificationContext,
+      ctx: TransformQuerySpecificationContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,
@@ -635,8 +662,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Add an [[Aggregate]] or [[GroupingSets]] to a logical plan.
    */
-  private def withAggregation(
-      ctx: AggregationContext,
+  private def withAggregationClause(
+      ctx: AggregationClauseContext,
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val groupByExpressions = expressionList(ctx.groupingExpressions)
