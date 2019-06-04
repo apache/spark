@@ -731,7 +731,7 @@ dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
-    | errorCapturingIdentifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
+    | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
 colTypeList
@@ -799,7 +799,7 @@ errorCapturingIdentifier
 
 // extra left-factoring grammar
 errorCapturingIdentifierExtra
-    : (MINUS identifier)+    #errorIdent
+    : (MINUS (identifier|number))+    #errorIdent
     |                        #realIdent
     ;
 

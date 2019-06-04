@@ -1816,7 +1816,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
-    val dataType = ctx.errorCapturingIdentifier.getText.toLowerCase(Locale.ROOT)
+    val dataType = ctx.identifier.getText.toLowerCase(Locale.ROOT)
     (dataType, ctx.INTEGER_VALUE().asScala.toList) match {
       case ("boolean", Nil) => BooleanType
       case ("tinyint" | "byte", Nil) => ByteType
