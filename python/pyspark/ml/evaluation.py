@@ -366,9 +366,9 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     Evaluator for Multilabel Classification, which expects two input
     columns: prediction and label.
 
-    >>> scoreAndLabels = sc.parallelize([([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
+    >>> scoreAndLabels = [([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
     ...     ([], [0.0]), ([2.0], [2.0]), ([2.0, 0.0], [2.0, 0.0]),
-    ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])])
+    ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
     ...
     >>> evaluator = MultilabelClassificationEvaluator(predictionCol="prediction")
@@ -390,10 +390,10 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                        "precisionByLabel|recallByLabel|f1MeasureByLabel|microPrecision|"
                        "microRecall|microF1Measure)",
                        typeConverter=TypeConverters.toString)
-
     label = Param(Params._dummy(), "label",
-                       "The label whose metric will be computed in precisionByLabel|recallByLabel|"
-                       "f1MeasureByLabel. Must be >= 0. The default value is 0.",
+                       "The label whose metric will be computed in precisionByLabel|"
+                       "recallByLabel|f1MeasureByLabel. "
+                       "Must be >= 0. The default value is 0.",
                        typeConverter=TypeConverters.toFloat)
 
     @keyword_only

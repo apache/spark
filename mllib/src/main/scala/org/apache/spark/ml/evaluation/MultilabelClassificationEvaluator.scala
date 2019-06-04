@@ -69,7 +69,7 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: Strin
 
   @Since("3.0.0")
   final val label: DoubleParam = new DoubleParam(this, "label",
-    "The label whose metric will be computed in precisionByLabel/recallByLabel/" +
+    "The label whose metric will be computed in precisionByLabel|recallByLabel|" +
       "f1MeasureByLabel. Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
