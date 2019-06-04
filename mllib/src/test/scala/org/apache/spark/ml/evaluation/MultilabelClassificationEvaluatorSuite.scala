@@ -26,8 +26,28 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 class MultilabelClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   test("params") {
     ParamsSuite.checkParams(new MultilabelClassificationEvaluator)
+  }
+
+  test("evaluation metrics") {
+    val scoreAndLabels = Seq((Array(0.0, 1.0), Array(0.0, 2.0)),
+      (Array(0.0, 2.0), Array(0.0, 1.0)),
+      (Array.empty[Double], Array(0.0)),
+      (Array(2.0), Array(2.0)),
+      (Array(2.0, 0.0), Array(2.0, 0.0)),
+      (Array(0.0, 1.0, 2.0), Array(0.0, 1.0)),
+      (Array(1.0), Array(1.0, 2.0))).toDF("prediction", "label")
+
+    val evaluator = new MultilabelClassificationEvaluator()
+      .setMetricName("subsetAccuracy")
+    assert(math.abs(evaluator.evaluate(scoreAndLabels) - 2.0 / 7) < 0.00001)
+
+    evaluator.setMetricName("recallByLabel")
+      .setLabel(0.0)
+    assert(math.abs(evaluator.evaluate(scoreAndLabels) - 0.8) < 0.00001)
   }
 
   test("read/write") {

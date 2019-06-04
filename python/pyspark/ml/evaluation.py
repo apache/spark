@@ -364,7 +364,7 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     .. note:: Experimental
 
     Evaluator for Multilabel Classification, which expects two input
-    columns: predictions and labels.
+    columns: prediction and label.
 
     >>> scoreAndLabels = sc.parallelize([([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
     ...     ([], [0.0]), ([2.0], [2.0]), ([2.0, 0.0], [2.0, 0.0]),
@@ -392,9 +392,9 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                        typeConverter=TypeConverters.toString)
 
     label = Param(Params._dummy(), "label",
-                      "The label whose metric will be computed in precisionByLabel/recallByLabel/"
-                      "f1MeasureByLabel. Must be >= 0. The default value is 0.",
-                      typeConverter=TypeConverters.toFloat)
+                       "The label whose metric will be computed in precisionByLabel|recallByLabel|"
+                       "f1MeasureByLabel. Must be >= 0. The default value is 0.",
+                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",

@@ -29,32 +29,32 @@ import org.apache.spark.sql.types._
 
 /**
  * :: Experimental ::
- * Evaluator for regression, which expects two input columns: predictions and labels.
+ * Evaluator for multi-label classification, which expects two input
+ * columns: prediction and label.
  */
 @Since("3.0.0")
 @Experimental
-class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String)
+class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol
     with DefaultParamsWritable {
+
+  import MultilabelClassificationEvaluator.supportedMetricNames
 
   @Since("3.0.0")
   def this() = this(Identifiable.randomUID("mlcEval"))
 
   /**
-   * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
-   * `"weightedRecall"`, `"accuracy"`)
+   * param for metric name in evaluation (supports `"f1Measure"` (default), `"subsetAccuracy"`,
+   * `"accuracy"`, `"hammingLoss"`, `"precision"`, `"recall"`, `"precisionByLabel"`,
+   * `"recallByLabel"`, `"f1MeasureByLabel"`, `"microPrecision"`, `"microRecall"`,
+   * `"microF1Measure"`)
    * @group param
    */
   @Since("3.0.0")
   final val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("subsetAccuracy", "accuracy",
-      "hammingLoss", "precision", "recall", "f1Measure", "precisionByLabel",
-      "recallByLabel", "f1MeasureByLabel", "microPrecision", "microRecall",
-      "microF1Measure"))
+    val allowedParams = ParamValidators.inArray(supportedMetricNames)
     new Param(this, "metricName", "metric name in evaluation " +
-      "(subsetAccuracy|accuracy|hammingLoss|precision|recall|f1Measure|" +
-      "precisionByLabel|recallByLabel|f1MeasureByLabel|microPrecision|microRecall|" +
-      "microF1Measure)", allowedParams)
+      s"${supportedMetricNames.mkString("(", "|", ")")}", allowedParams)
   }
 
   /** @group getParam */
@@ -122,18 +122,8 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") overrid
   @Since("3.0.0")
   override def isLargerBetter: Boolean = {
     $(metricName) match {
-      case "subsetAccuracy" => true
-      case "accuracy" => true
       case "hammingLoss" => false
-      case "precision" => true
-      case "recall" => true
-      case "f1Measure" => true
-      case "precisionByLabel" => true
-      case "recallByLabel" => true
-      case "f1MeasureByLabel" => true
-      case "microPrecision" => true
-      case "microRecall" => true
-      case "microF1Measure" => true
+      case _ => true
     }
   }
 
@@ -145,6 +135,12 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") overrid
 @Since("3.0.0")
 object MultilabelClassificationEvaluator
   extends DefaultParamsReadable[MultilabelClassificationEvaluator] {
+
+  @Since("3.0.0")
+  final val supportedMetricNames: Array[String] = Array("subsetAccuracy",
+    "accuracy", "hammingLoss", "precision", "recall", "f1Measure",
+    "precisionByLabel", "recallByLabel", "f1MeasureByLabel",
+    "microPrecision", "microRecall", "microF1Measure")
 
   @Since("3.0.0")
   override def load(path: String): MultilabelClassificationEvaluator = super.load(path)
