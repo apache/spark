@@ -449,7 +449,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
           val benchmark =
-            new Benchmark("Select 1 row with filters", numRows, minNumIters = 5, output = output)
+            new Benchmark("Select data with filters", numRows, minNumIters = 5, output = output)
           Seq(100, 500, 1000).foreach { numFilter =>
             val whereColumn = (1 to numFilter)
               .map(i => col("c1") === lit(i))
