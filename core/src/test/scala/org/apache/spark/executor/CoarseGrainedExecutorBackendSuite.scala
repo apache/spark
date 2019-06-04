@@ -20,23 +20,32 @@ package org.apache.spark.executor
 
 import java.io.File
 import java.net.URL
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JavaFiles}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
-import java.util.EnumSet
+import java.util.{EnumSet, Properties}
+
+import scala.collection.mutable
+import scala.concurrent.duration._
 
 import com.google.common.io.Files
 import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 import org.mockito.Mockito.when
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.ResourceInformation
+import org.apache.spark.ResourceName.GPU
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.scheduler.TaskDescription
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.LaunchTask
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableBuffer, Utils}
 
 class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
@@ -224,13 +233,59 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     }
   }
 
-  private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
+  test("track allocated resources by taskId") {
+    val conf = new SparkConf
+    val securityMgr = new SecurityManager(conf)
+    val serializer = new JavaSerializer(conf)
+    var backend: CoarseGrainedExecutorBackend = null
+
+    try {
+      val rpcEnv = RpcEnv.create("1", "localhost", 0, conf, securityMgr)
+      val env = createMockEnv(conf, serializer, Some(rpcEnv))
+      backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
+        "host1", 4, Seq.empty[URL], env, None)
+      assert(backend.taskResources.isEmpty)
+
+      val taskId = 1000000
+      // We don't really verify the data, just pass it around.
+      val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
+      val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19, 1,
+        mutable.Map.empty, mutable.Map.empty, new Properties,
+        Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+      val serializedTaskDescription = TaskDescription.encode(taskDescription)
+      backend.executor = mock[Executor]
+      backend.rpcEnv.setupEndpoint("Executor 1", backend)
+
+      // Launch a new task shall add an entry to `taskResources` map.
+      backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))
+      eventually(timeout(10.seconds)) {
+        assert(backend.taskResources.size == 1)
+        assert(backend.taskResources(taskId)(GPU).addresses sameElements Array("0", "1"))
+      }
+
+      // Update the status of a running task shall not affect `taskResources` map.
+      backend.statusUpdate(taskId, TaskState.RUNNING, data)
+      assert(backend.taskResources.size == 1)
+      assert(backend.taskResources(taskId)(GPU).addresses sameElements Array("0", "1"))
+
+      // Update the status of a finished task shall remove the entry from `taskResources` map.
+      backend.statusUpdate(taskId, TaskState.FINISHED, data)
+      assert(backend.taskResources.isEmpty)
+    } finally {
+      if (backend != null) {
+        backend.rpcEnv.shutdown()
+      }
+    }
+  }
+
+  private def createMockEnv(conf: SparkConf, serializer: JavaSerializer,
+      rpcEnv: Option[RpcEnv] = None): SparkEnv = {
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.serializer).thenReturn(serializer)
     when(mockEnv.closureSerializer).thenReturn(serializer)
-    when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
+    when(mockEnv.rpcEnv).thenReturn(rpcEnv.getOrElse(mockRpcEnv))
     SparkEnv.set(mockEnv)
     mockEnv
   }
