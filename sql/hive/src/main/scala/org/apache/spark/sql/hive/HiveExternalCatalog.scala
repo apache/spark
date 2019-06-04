@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+import java.text.ParseException
 import java.util
 import java.util.Locale
 
@@ -47,8 +48,8 @@ import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOpti
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{DataType, StructType}
-
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -455,6 +456,65 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         sortColumnNames.zipWithIndex.foreach { case (sortCol, index) =>
           properties.put(s"$DATASOURCE_SCHEMA_SORTCOL_PREFIX$index", sortCol)
         }
+      }
+    }
+
+    // default value properties.
+    schema.foreach { field =>
+      if (field.metadata.contains("defaultExpression")) {
+        val expr = field.metadata.getExpression("defaultExpression")
+        val defaultValue = (field.dataType, expr) match {
+          case (BooleanType, Literal(v: Boolean, b: BooleanType)) => v.toString()
+          case (ByteType, Literal(v, b: IntegerType)) =>
+            val value = v.asInstanceOf[Integer]
+            if (value < Byte.MinValue || value > Byte.MaxValue) {
+              throw new AnalysisException(s"${field.name} has a invalid default value $value")
+            }
+            v.toString()
+          case (ShortType, Literal(v, b: IntegerType)) =>
+            val value = v.asInstanceOf[Integer]
+            if (value < Short.MinValue || value > Short.MaxValue) {
+              throw new AnalysisException(s"${field.name} has a invalid default value $value")
+            }
+            v.toString()
+          case (IntegerType, Literal(v, b: IntegerType)) =>
+            val value = v.asInstanceOf[Integer]
+            if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
+              throw new AnalysisException(s"${field.name} has a invalid default value $value")
+            }
+            v.toString()
+          case (LongType, Literal(v, b: IntegralType)) => v.toString()
+          case (FloatType, Literal(v: Decimal, b: DecimalType)) =>
+            v.toFloat.toString()
+          case (DoubleType, Literal(v: Decimal, b: DecimalType)) =>
+            v.toDouble.toString()
+          case (DateType, UnresolvedFunction(name, children, _)) =>
+            val value = FunctionRegistry.builtin.lookupFunction(name, children) match {
+              case currentDate: CurrentDate => currentDate.prettyName
+              case _ => throw new AnalysisException(s"${field.name} is date type only support " +
+                  "function current_date as default value")
+            }
+            value
+          case (TimestampType, UnresolvedFunction(name, children, _)) =>
+            val value = FunctionRegistry.builtin.lookupFunction(name, children) match {
+              case currentTimestamp: CurrentTimestamp => currentTimestamp.prettyName
+              case _ => throw new AnalysisException(s"${field.name} is timestamp type only support " +
+                  "function current_timestamp as default value")
+            }
+            value
+          case (StringType, Literal(v: UTF8String, StringType)) => v.toString()
+          case (CharType(len), Literal(v, b: StringType)) => v.toString()
+          case (VarcharType(len), Literal(v, b: StringType)) => v.toString()
+          case (BinaryType, Literal(v: UTF8String, t: BinaryType)) =>
+            throw new AnalysisException(s"${field.name} is binary type that not supports " +
+                "default value")
+          case (DecimalType.Fixed(_, _), Literal(v, t: DecimalType)) => v.toString()
+          case (_, Literal(v, t)) =>
+            throw new AnalysisException(s"Cannot create a table having a column " +
+            s"${field.name} whose default value have incompatible type $t with " +
+            s"field type ${field.dataType}")
+        }
+        properties.put(s"$DATASOURCE_SCHEMA_DEFAULTVALUE_PREFIX${field.name}", defaultValue)
       }
     }
 
@@ -1318,6 +1378,7 @@ object HiveExternalCatalog {
   val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
   val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
   val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
+  val DATASOURCE_SCHEMA_DEFAULTVALUE_PREFIX = DATASOURCE_SCHEMA_PREFIX + "defaultValue."
 
   val STATISTICS_PREFIX = SPARK_SQL_PREFIX + "statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"

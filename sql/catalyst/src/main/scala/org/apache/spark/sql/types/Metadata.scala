@@ -23,6 +23,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 
 /**
@@ -61,6 +62,9 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
 
   /** Gets a Metadata. */
   def getMetadata(key: String): Metadata = get(key)
+
+  /** Gets a Expression. */
+  def getExpression(key: String): Expression = get(key)
 
   /** Gets a Long array. */
   def getLongArray(key: String): Array[Long] = get(key)
@@ -194,6 +198,8 @@ object Metadata {
         JNull
       case x: Metadata =>
         toJsonValue(x.map)
+      case x: Expression =>
+        toJsonValue(x.toString())
       case other =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
@@ -261,6 +267,9 @@ class MetadataBuilder {
 
   /** Puts a [[Metadata]]. */
   def putMetadata(key: String, value: Metadata): this.type = put(key, value)
+
+  /** Puts a [[Expression]]. */
+  def putExpression(key: String, value: Expression): this.type = put(key, value)
 
   /** Puts a Long array. */
   def putLongArray(key: String, value: Array[Long]): this.type = put(key, value)

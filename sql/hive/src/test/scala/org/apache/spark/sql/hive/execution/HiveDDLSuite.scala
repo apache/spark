@@ -496,6 +496,53 @@ class HiveDDLSuite
     }
   }
 
+  test("create table with default value") {
+    val catalog = spark.sessionState.catalog
+    val tabName = "tab1"
+    withTable(tabName) {
+      val ddl = s"""create table $tabName (
+                      c1 boolean DEFAULT true,
+                      c2 tinyint DEFAULT 0,
+                      c3 smallint DEFAULT 0,
+                      c4 int DEFAULT 100,
+                      c5 bigint DEFAULT 100000000,
+                      c6 float DEFAULT 1.0,
+                      c7 double DEFAULT 1.0,
+                      c8 decimal(10,2) DEFAULT 23101.05,
+                      c9 string DEFAULT 'undefined',
+                      c10 varchar(50) DEFAULT 'unknown',
+                      c11 date DEFAULT CURRENT_DATE(),
+                      c12 timestamp DEFAULT CURRENT_TIMESTAMP()
+                    )"""
+      sql(ddl)
+      val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c1") ==
+        Option("true"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c2") ==
+        Option("0"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c3") ==
+        Option("0"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c4") ==
+        Option("100"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c5") ==
+        Option("100000000"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c6") ==
+        Option("1.0"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c7") ==
+        Option("1.0"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c8") ==
+        Option("23101.05"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c9") ==
+        Option("undefined"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c10") ==
+        Option("unknown"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c11") ==
+        Option("current_date"))
+      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c12") ==
+        Option("current_timestamp"))
+    }
+  }
+
   test("create Hive-serde table and view with unicode columns and comment") {
     val catalog = spark.sessionState.catalog
     val tabName = "tab1"

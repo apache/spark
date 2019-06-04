@@ -1879,6 +1879,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     if (STRING != null) {
       builder.putString("comment", string(STRING))
     }
+    // Add default constraint to metadata
+    if (defaultExpression != null) {
+      builder.putExpression("defaultExpression", this.expression(defaultExpression))
+    }
     // Add Hive type string to metadata.
     val rawDataType = typedVisit[DataType](ctx.dataType)
     val cleanedDataType = HiveStringType.replaceCharType(rawDataType)

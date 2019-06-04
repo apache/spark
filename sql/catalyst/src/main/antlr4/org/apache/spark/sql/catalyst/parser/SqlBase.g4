@@ -735,7 +735,7 @@ colTypeList
     ;
 
 colType
-    : identifier dataType (COMMENT STRING)?
+    : identifier dataType (COMMENT STRING)? (DEFAULT defaultExpression=expression)?
     ;
 
 complexColTypeList
@@ -1305,6 +1305,7 @@ COLLECTION: 'COLLECTION';
 COLUMN: 'COLUMN';
 COLUMNS: 'COLUMNS';
 COMMENT: 'COMMENT';
+DEFAULT: 'DEFAULT';
 COMMIT: 'COMMIT';
 COMPACT: 'COMPACT';
 COMPACTIONS: 'COMPACTIONS';
