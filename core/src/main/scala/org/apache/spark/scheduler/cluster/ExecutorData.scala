@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.ResourceInformation
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.ExecutorResourceInfo
 
@@ -29,8 +28,7 @@ import org.apache.spark.scheduler.ExecutorResourceInfo
  * @param executorHost The hostname that this executor is running on
  * @param freeCores  The current number of cores available for work on the executor
  * @param totalCores The total number of cores available to the executor
- * @param totalResources The information of all resources on the executor
- * @param availableResources The information of the currently available resources on the executor
+ * @param resourcesInfo The information of the currently available resources on the executor
  */
 private[cluster] class ExecutorData(
    val executorEndpoint: RpcEndpointRef,
@@ -40,6 +38,5 @@ private[cluster] class ExecutorData(
    override val totalCores: Int,
    override val logUrlMap: Map[String, String],
    override val attributes: Map[String, String],
-   override val totalResources: Map[String, ResourceInformation],
-   val availableResources: Map[String, ExecutorResourceInfo]
-) extends ExecutorInfo(executorHost, totalCores, logUrlMap, attributes, totalResources)
+   val resourcesInfo: Map[String, ExecutorResourceInfo]
+) extends ExecutorInfo(executorHost, totalCores, logUrlMap, attributes)

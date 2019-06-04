@@ -206,10 +206,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val listener = new SparkListener() {
       override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
         executorAddedCount += 1
-        assert(executorAdded.executorInfo.totalResources.get(GPU).nonEmpty)
-        val totalResources = executorAdded.executorInfo.totalResources(GPU)
-        assert(totalResources.addresses === Array("0", "1", "3"))
-        assert(totalResources.name == GPU)
       }
     }
 
