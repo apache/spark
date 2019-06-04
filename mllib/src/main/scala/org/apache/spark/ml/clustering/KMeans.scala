@@ -126,10 +126,15 @@ class KMeansModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    val predictUDF = udf((vector: Vector) => predict(vector))
-
-    dataset.withColumn($(predictionCol),
-      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+    if ($(predictionCol).nonEmpty) {
+      val predictUDF = udf((vector: Vector) => predict(vector))
+      dataset.withColumn($(predictionCol),
+        predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+    } else {
+      this.logWarning(s"$uid: KMeansModel.transform() was called as NOOP" +
+        " since no output columns were set.")
+      dataset.toDF()
+    }
   }
 
   @Since("1.5.0")

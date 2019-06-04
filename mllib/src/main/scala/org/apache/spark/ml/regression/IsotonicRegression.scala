@@ -241,14 +241,20 @@ class IsotonicRegressionModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val predict = dataset.schema($(featuresCol)).dataType match {
-      case DoubleType =>
-        udf { feature: Double => oldModel.predict(feature) }
-      case _: VectorUDT =>
-        val idx = $(featureIndex)
-        udf { features: Vector => oldModel.predict(features(idx)) }
+    if ($(predictionCol).nonEmpty) {
+      val predict = dataset.schema($(featuresCol)).dataType match {
+        case DoubleType =>
+          udf { feature: Double => oldModel.predict(feature) }
+        case _: VectorUDT =>
+          val idx = $(featureIndex)
+          udf { features: Vector => oldModel.predict(features(idx)) }
+      }
+      dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
+    } else {
+      this.logWarning(s"$uid: IsotonicRegressionModel.transform() was called as NOOP" +
+        " since no output columns were set.")
+      dataset.toDF()
     }
-    dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
   }
 
   @Since("1.5.0")

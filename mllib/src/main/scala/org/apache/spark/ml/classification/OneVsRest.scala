@@ -228,8 +228,8 @@ final class OneVsRestModel private[ml] (
         Vectors.dense(predArray)
       }
 
-      predictionColNames = predictionColNames :+ getRawPredictionCol
-      predictionColumns = predictionColumns :+ rawPredictionUDF(col(accColName))
+      predictionColNames :+= getRawPredictionCol
+      predictionColumns :+= rawPredictionUDF(col(accColName))
     }
 
     if (getPredictionCol != "") {
@@ -238,14 +238,20 @@ final class OneVsRestModel private[ml] (
         predictions.maxBy(_._2)._1.toDouble
       }
 
-      predictionColNames = predictionColNames :+ getPredictionCol
-      predictionColumns = predictionColumns :+ labelUDF(col(accColName))
+      predictionColNames :+= getPredictionCol
+      predictionColumns :+= labelUDF(col(accColName))
         .as(getPredictionCol, labelMetadata)
     }
 
-    aggregatedDataset
-      .withColumns(predictionColNames, predictionColumns)
-      .drop(accColName)
+    if (predictionColNames.nonEmpty) {
+      aggregatedDataset
+        .withColumns(predictionColNames, predictionColumns)
+        .drop(accColName)
+    } else {
+      this.logWarning(s"$uid: OneVsRestModel.transform() was called as NOOP" +
+        " since no output columns were set.")
+      dataset.toDF()
+    }
   }
 
   @Since("1.4.1")
