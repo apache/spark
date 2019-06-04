@@ -292,6 +292,9 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     0.66...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
     0.66...
+    >>> evaluator.setMetricName("truePositiveRateByLabel").setLabel(1.0)
+    >>> evaluator.evaluate(dataset)
+    0.75...
     >>> mce_path = temp_path + "/mce"
     >>> evaluator.save(mce_path)
     >>> evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
@@ -313,20 +316,31 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|weightedPrecision|weightedRecall|accuracy)",
+                       "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate|"
+                       "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel|"
+                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel)",
                        typeConverter=TypeConverters.toString)
+    label = Param(Params._dummy(), "label",
+                       "The label whose metric will be computed in truePositiveRateByLabel|"
+                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel."
+                       " Must be >= 0. The default value is 0.",
+                       typeConverter=TypeConverters.toFloat)
+    beta = Param(Params._dummy(), "beta",
+                       "The beta value used in weightedFMeasure|fMeasureByLabel."
+                       " Must be > 0. The default value is 1.",
+                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="f1", weightCol=None):
+                 metricName="f1", weightCol=None, label=0.0, beta=1.0):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="f1", weightCol=None)
+                 metricName="f1", weightCol=None, label=0.0, beta=1.0)
         """
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
-        self._setDefault(metricName="f1")
+        self._setDefault(metricName="f1", label=0.0, beta=1.0)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -344,13 +358,41 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         return self.getOrDefault(self.metricName)
 
+    @since("3.0.0")
+    def setLabel(self, value):
+        """
+        Sets the value of :py:attr:`label`.
+        """
+        return self._set(label=value)
+
+    @since("3.0.0")
+    def getLabel(self):
+        """
+        Gets the value of label or its default value.
+        """
+        return self.getOrDefault(self.label)
+
+    @since("3.0.0")
+    def setBeta(self, value):
+        """
+        Sets the value of :py:attr:`beta`.
+        """
+        return self._set(beta=value)
+
+    @since("3.0.0")
+    def getBeta(self):
+        """
+        Gets the value of beta or its default value.
+        """
+        return self.getOrDefault(self.beta)
+
     @keyword_only
     @since("1.5.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="f1", weightCol=None):
+                  metricName="f1", weightCol=None, label=0.0, beta=1.0):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="f1", weightCol=None)
+                  metricName="f1", weightCol=None, label=0.0, beta=1.0)
         Sets params for multiclass classification evaluator.
         """
         kwargs = self._input_kwargs
