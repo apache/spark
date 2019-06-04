@@ -498,8 +498,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           case (TimestampType, UnresolvedFunction(name, children, _)) =>
             val value = FunctionRegistry.builtin.lookupFunction(name, children) match {
               case currentTimestamp: CurrentTimestamp => currentTimestamp.prettyName
-              case _ => throw new AnalysisException(s"${field.name} is timestamp type only support " +
-                  "function current_timestamp as default value")
+              case _ => throw new AnalysisException(s"${field.name} is timestamp type only " +
+                  "support function current_timestamp as default value")
             }
             value
           case (StringType, Literal(v: UTF8String, StringType)) => v.toString()
