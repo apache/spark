@@ -210,7 +210,11 @@ object TextInputCSVDataSource extends CSVDataSource {
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        val schema = if (columnPruning) requiredSchema else dataSchema
+        val actualRequiredSchema =
+          StructType(requiredSchema.filterNot(_.name == parser.options.columnNameOfCorruptRecord))
+        val actualDataSchema =
+          StructType(dataSchema.filterNot(_.name == parser.options.columnNameOfCorruptRecord))
+        val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
         val columnNames = parser.tokenizer.parseLine(header)
         CSVDataSource.checkHeaderColumnNames(
           schema,
@@ -297,7 +301,11 @@ object MultiLineCSVDataSource extends CSVDataSource {
       caseSensitive: Boolean,
       columnPruning: Boolean): Iterator[InternalRow] = {
     def checkHeader(header: Array[String]): Unit = {
-      val schema = if (columnPruning) requiredSchema else dataSchema
+      val actualRequiredSchema =
+        StructType(requiredSchema.filterNot(_.name == parser.options.columnNameOfCorruptRecord))
+      val actualDataSchema =
+        StructType(dataSchema.filterNot(_.name == parser.options.columnNameOfCorruptRecord))
+      val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       CSVDataSource.checkHeaderColumnNames(
         schema,
         header,
