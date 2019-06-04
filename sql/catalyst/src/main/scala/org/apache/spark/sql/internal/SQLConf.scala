@@ -1518,7 +1518,7 @@ object SQLConf {
       " register class names for which data source V2 write paths are disabled. Writes from these" +
       " sources will fall back to the V1 sources.")
     .stringConf
-    .createWithDefault("csv,json,orc,text")
+    .createWithDefault("csv,json,orc,text,parquet")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
