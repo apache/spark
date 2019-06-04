@@ -289,6 +289,70 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(iConf) === 3)
   }
 
+  test("conf entry: prepend with default separator") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended1")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend1"))
+      .withPrepended(prependedKey)
+      .stringConf
+      .createOptional
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(derivedConf) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(derivedConf) === Some("2 1"))
+  }
+
+  test("conf entry: prepend with custom separator") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended2")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend2"))
+      .withPrepended(prependedKey, ",")
+      .stringConf
+      .createOptional
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(derivedConf) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(derivedConf) === Some("2,1"))
+  }
+
+  test("conf entry: prepend should work only with string type") {
+    var i = 0
+    def testPrependFail(createConf: (String, String) => Unit): Unit = {
+      intercept[IllegalArgumentException] {
+        createConf(testKey(s"prependedFail$i"), testKey(s"prependFail$i"))
+      }.getMessage.contains("type must be string if prepend used")
+      i += 1
+    }
+
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).intConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).longConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).doubleConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).booleanConf
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).timeConf(TimeUnit.MILLISECONDS)
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).bytesConf(ByteUnit.BYTE)
+    )
+    testPrependFail( (prependedKey, prependKey) =>
+      ConfigBuilder(testKey(prependKey)).withPrepended(prependedKey).regexConf
+    )
+  }
+
   test("onCreate") {
     var onCreateCalled = false
     ConfigBuilder(testKey("oc1")).onCreate(_ => onCreateCalled = true).intConf.createWithDefault(1)
