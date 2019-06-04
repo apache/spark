@@ -358,7 +358,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
 
 @inherit_doc
-class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
+class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
                                         JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
