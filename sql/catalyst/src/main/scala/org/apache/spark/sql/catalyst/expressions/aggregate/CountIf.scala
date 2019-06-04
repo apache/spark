@@ -33,20 +33,19 @@ import org.apache.spark.sql.types._
        1
   """,
   since = "3.0.0")
-case class CountIf(predicate: Expression) extends UnevaluableAggregate {
-  def child: Expression = Count(
-    new NullIf(Cast(predicate, BooleanType), Literal(false, BooleanType)))
-
+case class CountIf(predicate: Expression) extends UnevaluableAggregate with ImplicitCastInputTypes {
   override def prettyName: String = "count_if"
 
-  override def children: Seq[Expression] = predicate :: child :: Nil
+  override def children: Seq[Expression] = predicate :: Nil
 
-  override def nullable: Boolean = child.nullable
+  override def nullable: Boolean = false
 
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType = LongType
+
+  override def inputTypes: Seq[AbstractDataType] = BooleanType :: Nil
 
   override def checkInputDataTypes(): TypeCheckResult = predicate.dataType match {
-    case BooleanType | NullType =>
+    case BooleanType =>
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
