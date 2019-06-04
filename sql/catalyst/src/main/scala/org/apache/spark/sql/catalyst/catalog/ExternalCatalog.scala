@@ -291,4 +291,6 @@ trait ExternalCatalog {
   def functionExists(db: String, funcName: String): Boolean
 
   def listFunctions(db: String, pattern: String): Seq[String]
+
+  def getMaterializedViewForTable(db: String, tblName: String): Seq[String]
 }

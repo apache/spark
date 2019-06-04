@@ -299,4 +299,8 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
   override def listFunctions(db: String, pattern: String): Seq[String] = {
     delegate.listFunctions(db, pattern)
   }
+
+  override def getMaterializedViewForTable(db: String, tblName: String): Seq[String] = {
+    delegate.getMaterializedViewForTable(db, tblName)
+  }
 }

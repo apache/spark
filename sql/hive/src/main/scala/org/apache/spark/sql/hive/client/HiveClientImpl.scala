@@ -896,6 +896,10 @@ private[hive] class HiveClientImpl(
     shim.listFunctions(client, db, pattern)
   }
 
+  override def getMaterializedViewForTable(db: String, tblName: String): Seq[String] = {
+    shim.getMaterializedView(client, db, tblName)
+  }
+
   def addJar(path: String): Unit = {
     val uri = new Path(path).toUri
     val jarURL = if (uri.getScheme == null) {

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  */
 trait MvCatalog {
 
-  def getMaterializedViewsOfTable(catalogTable: CatalogTable): Seq[CatalogTable]
+  def getMaterializedViewsOfTable(metaInfos: Seq[String]): Seq[CatalogTable]
 
   def getMaterializedViewPlan(catalogTable: CatalogTable): Any
 

@@ -165,7 +165,7 @@ private[client] sealed abstract class Shim {
     klass.getMethod(name, args: _*)
   }
 
-  protected def getMaterializedView(hive: Hive, dbName: String, tbl: String): Option[Table]
+  def getMaterializedView(hive: Hive, dbName: String, tbl: String): Seq[String]
 }
 
 private[client] class Shim_v0_12 extends Shim with Logging {
@@ -457,8 +457,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     Seq.empty[String]
   }
 
-  protected override def getMaterializedView(hive: Hive,
-      dbName: String, tbl: String): Option[Table] = {
+  override def getMaterializedView(hive: Hive,
+      dbName: String, tbl: String): Seq[String] = {
     throw new AnalysisException("Hive 0.12 doesn't support Materialized views. " +
       "Please use Hive 3.0 or higher.")
   }
@@ -1332,18 +1332,18 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       replace: JBoolean)
   }
 
-  protected override def getMaterializedView(hive: Hive,
-       dbName: String, tbl: String): Option[Table] = {
+  override def getMaterializedView(hive: Hive,
+       dbName: String, tbl: String): Seq[String] = {
     val seq = getMaterializedViewsMethod.invoke(hive).asInstanceOf[JList[Table]].asScala.toSeq
     val creationMetadata = classOf[Table].getMethod("getCreationMetadata").invoke(seq(0))
     val dbName = creationMetadata.getClass.getMethod("getDbName")
     val tables = creationMetadata.getClass.getMethod("getTablesUsed")
-      .asInstanceOf[JSet[Table]]
+      .asInstanceOf[JSet[String]]
       .asScala.toSeq
     if (tables.nonEmpty && tables.size == 1) {
-      return Option(tables(0))
+      return dbName :: tables(0) :: Nil
     }
-    return None;
+    return Seq.empty;
   }
 
 }

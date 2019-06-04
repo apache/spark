@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -71,16 +71,34 @@ case class SubstituteMaterializedOSView(spark: SparkSession, mvCatalog: HiveMvCa
     // 3. Reducing the seq or filters by And ?
     // 4. The original relation is substituted with mv's relation
     // 5. The original filter is transformed to have mv's attribute using name,
-    val mvs = mvCatalog.getMaterializedViewsOfTable(catalogTable)
-    mvs.map(table => {
 
+    val ident = catalogTable.identifier
+    val mv = spark.sessionState.catalog.externalCatalog.
+      getMaterializedViewForTable(ident.database.get, ident.table)
+
+    val attrs = filters.flatMap {
+      filter =>
+        filter match {
+          case EqualTo(expr: AttributeReference, _) =>
+            Seq(expr.name)
+          case EqualTo(_, expr: AttributeReference) =>
+            Seq(expr.name)
+          case _ =>
+            Seq.empty
+        }
+    }
+    val mvs = mvCatalog.getMaterializedViewsOfTable(mv)
+
+    val sortAttrs = mvs.flatMap(table => {
       val (mvPlan, mvRelation) = mvCatalog.getMaterializedViewPlan(table).get
-
-      mvPlan match {
-        case op@PhysicalOperation(mvProjects: Seq[NamedExpression], mvFilters, logicalPlan) =>
-
+      val sort = mvPlan.collect {
+        case s: Sort => s
       }
+      val sortAttrs = sort(0).references.map(x => x.name).toSeq
+      mvs.intersect(sortAttrs).size > 0
+      Seq.empty
     })
+    mvs.intersect(sortAttrs)
     None
   }
 

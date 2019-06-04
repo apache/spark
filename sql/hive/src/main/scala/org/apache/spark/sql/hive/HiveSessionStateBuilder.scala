@@ -106,7 +106,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   override protected def optimizer: Optimizer = {
     new SparkOptimizer(catalog, experimentalMethods) {
       override def defaultBatches: Seq[Batch] = {
-        if (conf.mvReplacementEnabeld) {
+        if (conf.mvOSEnabled) {
           var newBatches: List[Batch] = List()
           val oldBatches = super.defaultBatches.toArray
           oldBatches.foreach(oldBatch => {

@@ -280,6 +280,9 @@ private[hive] trait HiveClient {
   /** Return the names of all functions that match the given pattern in the database. */
   def listFunctions(db: String, pattern: String): Seq[String]
 
+  /** Return the names of all MVs for a given table. */
+  def getMaterializedViewForTable(db: String, tblName: String): Seq[String]
+
   /** Add a jar into class loader */
   def addJar(path: String): Unit
 

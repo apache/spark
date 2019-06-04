@@ -108,13 +108,25 @@ class HiveMvCatalog extends MvCatalog {
     this.sparkSession = null
   }
 
-  override def getMaterializedViewsOfTable(catalogTable: CatalogTable): Seq[CatalogTable] = {
-    mvCache.getOrElse(catalogTable.identifier, Set.empty).toSeq
+  override def getMaterializedViewsOfTable(metaInfos: Seq[String]): Seq[CatalogTable] = {
+    metaInfos match {
+      case dbName :: tblNames =>
+        tblNames.map { name =>
+          sparkSession.sessionState.catalog.externalCatalog.getTable(dbName, name)
+        }
+      case  _ =>
+        Seq.empty
+    }
   }
 
   override def getMaterializedViewPlan(catalogTable: CatalogTable): Option[(LogicalPlan,
-    HiveTableRelation)] =
-    planCache.get(catalogTable.identifier)
+    HiveTableRelation)] = {
+
+    val viewText = catalogTable.viewOriginalText
+    val plan = sparkSession.sessionState.sqlParser.parsePlan(viewText.get);
+    Some((plan, null))
+
+  }
 
   def getCorrespondingMvProject(exprId: ExprId): Option[NamedExpression] = {
     attributeRefMap.get(exprId)
