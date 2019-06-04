@@ -391,10 +391,10 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                        "microRecall|microF1Measure)",
                        typeConverter=TypeConverters.toString)
     label = Param(Params._dummy(), "label",
-                       "The label whose metric will be computed in precisionByLabel|"
-                       "recallByLabel|f1MeasureByLabel. "
-                       "Must be >= 0. The default value is 0.",
-                       typeConverter=TypeConverters.toFloat)
+                  "The label whose metric will be computed in precisionByLabel|"
+                  "recallByLabel|f1MeasureByLabel. "
+                  "Must be >= 0. The default value is 0.",
+                  typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
