@@ -87,6 +87,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     assert(dstream.cloudWatchCreds == None)
     assert(dstream.metricsLevel == DEFAULT_METRICS_LEVEL)
     assert(dstream.metricsEnabledDimensions == DEFAULT_METRICS_ENABLED_DIMENSIONS)
+    assert(dstream.dynamoDBEndpointUrl == None)
   }
 
   test("should propagate custom non-auth values to KinesisInputDStream") {
@@ -102,6 +103,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     val customMetricsLevel = MetricsLevel.NONE
     val customMetricsEnabledDimensions =
       KinesisClientLibConfiguration.METRICS_ALWAYS_ENABLED_DIMENSIONS.asScala.toSet
+    val customDynamoDBEndpointUrl = "https://dynamodb.us-west-2.amazonaws.com"
 
     val dstream = builder
       .endpointUrl(customEndpointUrl)
@@ -115,6 +117,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
       .cloudWatchCredentials(customCloudWatchCreds)
       .metricsLevel(customMetricsLevel)
       .metricsEnabledDimensions(customMetricsEnabledDimensions)
+      .dynamoDBEndpointUrl(customDynamoDBEndpointUrl)
       .build()
     assert(dstream.endpointUrl == customEndpointUrl)
     assert(dstream.regionName == customRegion)
@@ -127,6 +130,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     assert(dstream.cloudWatchCreds == Option(customCloudWatchCreds))
     assert(dstream.metricsLevel == customMetricsLevel)
     assert(dstream.metricsEnabledDimensions == customMetricsEnabledDimensions)
+    assert(dstream.dynamoDBEndpointUrl == Option(customDynamoDBEndpointUrl))
 
     // Testing with AtTimestamp
     val cal = Calendar.getInstance()
