@@ -106,7 +106,7 @@ object RRunner {
 
         val returnCode = process.waitFor()
         if (returnCode != 0) {
-          throw SparkUserAppException(returnCode, stdoutBuffer.toString)
+          throw SparkUserAppException(returnCode, Option(stdoutBuffer.toString))
         }
       } finally {
         sparkRBackend.close()
