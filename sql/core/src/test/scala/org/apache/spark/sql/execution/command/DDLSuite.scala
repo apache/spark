@@ -2572,17 +2572,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     "org.apache.spark.sql.execution.datasources.json.JsonFileFormat",
     "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
   supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
-    test(s"alter datasource table add columns - $provider") {
+    test(s"alter table add columns ddl - $provider") {
       testAddColumn(provider)
     }
-    test(s"alter datasource table add columns - partitioned - $provider") {
+    test(s"alter table add columns ddl - partitioned - $provider") {
       testAddColumnPartitioned(provider)
     }
   }
 
   // alter table add columns for text datasource is not needed
   // text datasource can have only one column
-  test("alter datasource table add columns - text format not supported") {
+  test("alter table add columns ddl - text format not supported") {
     withTable("t1") {
       sql("CREATE TABLE t1 (c1 string) USING text")
       val e = intercept[AnalysisException] {
@@ -2709,11 +2709,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     "org.apache.spark.sql.execution.datasources.json.JsonFileFormat",
     "org.apache.spark.sql.execution.datasources.text.TextFileFormat")
   supportedNativeFileFormatsForAlterTableReplaceColumns.foreach { provider =>
-    test(s"alter datasource table replace columns - $provider") {
+    test(s"alter table replace columns ddl - $provider") {
       if (provider == "text" | provider.endsWith("TextFileFormat")) testReplaceColumnTextProvider()
       else testReplaceColumn(provider)
     }
-    test(s"alter datasource table replace columns - partitioned - $provider") {
+    test(s"alter table replace columns ddl - partitioned - $provider") {
       if (provider == "text" | provider.endsWith("TextFileFormat")) {
         testReplaceColumnPartitionedTextProvider()
       }
@@ -2723,7 +2723,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   // alter table replace columns for csv datasource not supported
   // csv datasource is positional: a new column would reference a replaced column's data
-  test("alter datasource table replace columns - csv format not supported") {
+  test("alter table replace columns ddl - csv format not supported") {
     withTable("t1") {
       sql("CREATE TABLE t1 (c1 string) USING csv")
       val e = intercept[AnalysisException] {

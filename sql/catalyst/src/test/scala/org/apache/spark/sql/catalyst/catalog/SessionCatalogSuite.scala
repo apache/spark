@@ -479,11 +479,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
-      val e = intercept[AnalysisException] {
-        sessionCatalog.alterTableDataSchema(
-          TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
-      }.getMessage
-      assert(e.contains("We don't support dropping columns yet."))
+      sessionCatalog.alterTableDataSchema(
+        TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
     }
   }
 
