@@ -517,29 +517,29 @@ class HiveDDLSuite
       sql(ddl)
       val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c1") ==
-        Option("true"))
+        Some("true"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c2") ==
-        Option("0"))
+        Some("0"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c3") ==
-        Option("0"))
+        Some("0"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c4") ==
-        Option("100"))
+        Some("100"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c5") ==
-        Option("100000000"))
+        Some("100000000"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c6") ==
-        Option("1.0"))
+        Some("1.0"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c7") ==
-        Option("1.0"))
+        Some("1.0"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c8") ==
-        Option("23101.05"))
+        Some("23101.05"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c9") ==
-        Option("undefined"))
+        Some("undefined"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c10") ==
-        Option("unknown"))
+        Some("unknown"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c11") ==
-        Option("current_date"))
+        Some("current_date"))
       assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c12") ==
-        Option("current_timestamp"))
+        Some("current_timestamp"))
     }
   }
 
