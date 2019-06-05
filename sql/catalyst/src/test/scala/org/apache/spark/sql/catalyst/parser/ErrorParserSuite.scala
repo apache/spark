@@ -76,7 +76,6 @@ class ErrorParserSuite extends SparkFunSuite {
         |SET DBPROPERTIES ('p1'='v1')""".stripMargin, 2, 17, 18, "my-database", "^^^")
     intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute", "^^^")
     intercept("ALTER TABLE test ADD COLUMNS (h-col BIGINT)", 1, 31, 32, msg + " h-col", "^^^")
-    intercept("ALTER TABLE test ADD COLUMNS (a-1 INT, a-2 INT)", 1, 31, 32, msg + " a-1", "^^^")
     intercept(
       """
         |CREATE TABLE IF NOT EXISTS mydb.page-view
@@ -86,7 +85,7 @@ class ErrorParserSuite extends SparkFunSuite {
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
         |AS SELECT * FROM src""".stripMargin, 2, 36, 37, msg + " page-view", "^^^")
     intercept("analyze table test-table PARTITION (part1)", 1, 18, 19, msg + " test-table", "^^^")
-    intercept("analyze table test PARTITION (part-1)", 1, 34, 35, msg + " part-1", "^^^")
+    intercept("analyze table test PARTITION (part-i)", 1, 34, 35, msg + " part-i", "^^^")
     intercept("drop function my-func if exists", 1, 16, 17, " my-func", "^^^")
     intercept("show tables in hyphen-database", 1, 21, 22, " hyphen-database", "^^^")
     intercept("show test-id functions like \"str\" ", 1, 9, 10, " test-id", "^^^")
