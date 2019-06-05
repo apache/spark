@@ -21,50 +21,62 @@ SELECT false AS false;
 
 SELECT boolean('t') AS true;
 
--- [SPARK-27931] Trim the string when cast to boolean type
--- SELECT bool '   f           ' AS false;
+-- [SPARK-27931] Trim the string when cast string type to boolean type
+SELECT boolean('   f           ') AS false;
 
 SELECT boolean('true') AS true;
 
+-- [SPARK-27923] PostgreSQL does not accept 'test' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('test') AS error;
 
 SELECT boolean('false') AS false;
 
+-- [SPARK-27923] PostgreSQL does not accept 'foo' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('foo') AS error;
 
 SELECT boolean('y') AS true;
 
 SELECT boolean('yes') AS true;
 
+-- [SPARK-27923] PostgreSQL does not accept 'yeah' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('yeah') AS error;
 
 SELECT boolean('n') AS false;
 
 SELECT boolean('no') AS false;
 
+-- [SPARK-27923] PostgreSQL does not accept 'nay' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('nay') AS error;
 
 -- [SPARK-27931] Accept 'on' and 'off' as input for boolean data type
--- SELECT bool 'on' AS true;
+SELECT boolean('on') AS true;
 
--- SELECT bool 'off' AS false;
+SELECT boolean('off') AS false;
 
+-- TODO Is it a PostgreSQL bug?
+-- https://github.com/postgres/postgres/commit/05a7db05826c5eb68173b6d7ef1553c19322ef48#r33770116
 SELECT boolean('of') AS false;
 
+-- [SPARK-27923] PostgreSQL does not accept 'o' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('o') AS error;
 
+-- [SPARK-27923] PostgreSQL does not accept 'on_' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('on_') AS error;
 
+-- [SPARK-27923] PostgreSQL does not accept 'off_' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('off_') AS error;
 
 SELECT boolean('1') AS true;
 
+-- [SPARK-27923] PostgreSQL does not accept '11' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('11') AS error;
 
 SELECT boolean('0') AS false;
 
+-- [SPARK-27923] PostgreSQL does not accept '000' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('000') AS error;
 
+-- [SPARK-27923] PostgreSQL does not accept '' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('') AS error;
 
 -- and, or, not in qualifications
@@ -90,11 +102,13 @@ SELECT boolean('f') <= boolean('t') AS true;
 -- explicit casts to/from text
 SELECT boolean(string('TrUe')) AS true, boolean(string('fAlse')) AS false;
 -- [SPARK-27931] Trim the string when cast to boolean type
--- SELECT '    true   '::text::boolean AS true,
---        '     FALSE'::text::boolean AS false;
+SELECT boolean(string('    true   ')) AS true,
+       boolean(string('     FALSE')) AS false;
 SELECT string(boolean(true)) AS true, string(boolean(false)) AS false;
 
+-- [SPARK-27923] PostgreSQL does not accept '  tru e ' but Spark SQL accepts it and sets it to NULL
 SELECT boolean(string('  tru e ')) AS invalid;    -- error
+-- [SPARK-27923] PostgreSQL does not accept '' but Spark SQL accepts it and sets it to NULL
 SELECT boolean(string('')) AS invalid;            -- error
 
 CREATE TABLE BOOLTBL1 (f1 boolean) USING parquet;
@@ -140,6 +154,7 @@ INSERT INTO BOOLTBL2 VALUES (boolean('False'));
 
 INSERT INTO BOOLTBL2 VALUES (boolean('FALSE'));
 
+-- [SPARK-27923] PostgreSQL does not accept 'XXX' but Spark SQL accepts it and sets it to NULL
 -- This is now an invalid expression
 -- For pre-v6.3 this evaluated to false - thomas 1997-10-23
 INSERT INTO BOOLTBL2
