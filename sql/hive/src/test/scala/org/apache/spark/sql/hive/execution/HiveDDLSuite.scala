@@ -39,7 +39,7 @@ import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
-import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, DEBUG_MODE}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -499,47 +499,49 @@ class HiveDDLSuite
   test("create table with default value") {
     val catalog = spark.sessionState.catalog
     val tabName = "tab1"
-    withTable(tabName) {
-      val ddl = s"""create table $tabName (
-                      c1 boolean DEFAULT true,
-                      c2 tinyint DEFAULT 0,
-                      c3 smallint DEFAULT 0,
-                      c4 int DEFAULT 100,
-                      c5 bigint DEFAULT 100000000,
-                      c6 float DEFAULT 1.0,
-                      c7 double DEFAULT 1.0,
-                      c8 decimal(10,2) DEFAULT 23101.05,
-                      c9 string DEFAULT 'undefined',
-                      c10 varchar(50) DEFAULT 'unknown',
-                      c11 date DEFAULT CURRENT_DATE(),
-                      c12 timestamp DEFAULT CURRENT_TIMESTAMP()
-                    )"""
-      sql(ddl)
-      val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c1") ==
-        Some("true"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c2") ==
-        Some("0"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c3") ==
-        Some("0"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c4") ==
-        Some("100"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c5") ==
-        Some("100000000"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c6") ==
-        Some("1.0"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c7") ==
-        Some("1.0"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c8") ==
-        Some("23101.05"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c9") ==
-        Some("undefined"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c10") ==
-        Some("unknown"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c11") ==
-        Some("current_date"))
-      assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c12") ==
-        Some("current_timestamp"))
+    withDebugMode {
+      withTable(tabName) {
+        val ddl = s"""create table $tabName (
+                        c1 boolean DEFAULT true,
+                        c2 tinyint DEFAULT 0,
+                        c3 smallint DEFAULT 0,
+                        c4 int DEFAULT 100,
+                        c5 bigint DEFAULT 100000000,
+                        c6 float DEFAULT 1.0,
+                        c7 double DEFAULT 1.0,
+                        c8 decimal(10,2) DEFAULT 23101.05,
+                        c9 string DEFAULT 'undefined',
+                        c10 varchar(50) DEFAULT 'unknown',
+                        c11 date DEFAULT CURRENT_DATE(),
+                        c12 timestamp DEFAULT CURRENT_TIMESTAMP()
+                      )"""
+        sql(ddl)
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c1") ==
+          Option("true"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c2") ==
+          Option("0"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c3") ==
+          Option("0"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c4") ==
+          Option("100"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c5") ==
+          Option("100000000"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c6") ==
+          Option("1.0"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c7") ==
+          Option("1.0"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c8") ==
+          Option("23101.05"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c9") ==
+          Option("undefined"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c10") ==
+          Option("unknown"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c11") ==
+          Option("current_date"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c12") ==
+          Option("current_timestamp"))
+      }
     }
   }
 
@@ -2561,6 +2563,16 @@ class HiveDDLSuite
             .partitionColumnNames === Seq("b"))
         }
       }
+    }
+  }
+
+  private def withDebugMode(f: => Unit): Unit = {
+    val previousValue = spark.sparkContext.conf.get(DEBUG_MODE)
+    try {
+      spark.sparkContext.conf.set(DEBUG_MODE, true)
+      f
+    } finally {
+      spark.sparkContext.conf.set(DEBUG_MODE, previousValue)
     }
   }
 }
