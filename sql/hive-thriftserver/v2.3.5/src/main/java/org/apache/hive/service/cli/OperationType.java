@@ -18,7 +18,7 @@
 
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.TOperationType;
+import org.apache.hive.service.rpc.thrift.TOperationType;
 
 /**
  * OperationType.
