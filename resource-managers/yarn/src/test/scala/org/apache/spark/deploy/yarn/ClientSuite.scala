@@ -390,7 +390,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     }
   }
 
-  test(s"custom resource request yarn config and spark config fails") {
+  test(s"custom driver resource request yarn config and spark config fails") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
     ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
@@ -408,10 +408,34 @@ class ClientSuite extends SparkFunSuite with Matchers {
     }.getMessage()
 
     assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/fpga," +
-      " please use spark.driver.resource.fpga"))
+      " please use spark.driver.resource.fpga.amount"))
     assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/gpu," +
-      " please use spark.driver.resource.gpu"))
+      " please use spark.driver.resource.gpu.amount"))
   }
+
+  test(s"custom executor resource request yarn config and spark config fails") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
+    ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+
+    val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
+    resources.keys.foreach { yarnName =>
+      conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}", "2")
+    }
+    resources.values.foreach { rName =>
+      conf.set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+    }
+
+    val error = intercept[SparkException] {
+      ResourceRequestHelper.validateResources(conf)
+    }.getMessage()
+
+    assert(error.contains("Do not use spark.yarn.executor.resource.yarn.io/fpga," +
+      " please use spark.executor.resource.fpga.amount"))
+    assert(error.contains("Do not use spark.yarn.executor.resource.yarn.io/gpu," +
+      " please use spark.executor.resource.gpu.amount"))
+  }
+
 
   test(s"custom resources spark config mapped to yarn config") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
