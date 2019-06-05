@@ -83,11 +83,11 @@ statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE db=errorCapturingIdentifier                                  #use
-    | CREATE database (IF NOT EXISTS)? errorCapturingIdentifier
+    | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
          (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
-    | ALTER database errorCapturingIdentifier
+    | ALTER database db=errorCapturingIdentifier
         SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
@@ -114,7 +114,7 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (errorCapturingIdentifier |
+        (ident=errorCapturingIdentifier |
         FOR COLUMNS identifierSeq |
         FOR ALL COLUMNS)?                                              #analyze
     | ALTER TABLE tableIdentifier
@@ -126,7 +126,8 @@ statement
     | ALTER (TABLE | VIEW) tableIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN? errorCapturingIdentifier colType colPosition?   #changeColumn
+        CHANGE COLUMN?
+        colName=errorCapturingIdentifier colType colPosition?          #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -171,11 +172,11 @@ statement
     | SHOW COLUMNS (FROM | IN) tableIdentifier
         ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
-    | SHOW errorCapturingIdentifier? FUNCTIONS
+    | SHOW func=errorCapturingIdentifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) database EXTENDED? errorCapturingIdentifier    #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
@@ -189,7 +190,7 @@ statement
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
     | MSCK REPAIR TABLE tableIdentifier                                #repairTable
-    | op=(ADD | LIST) errorCapturingIdentifier .*?                     #manageResource
+    | op=(ADD | LIST) resourceType=errorCapturingIdentifier .*?        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
@@ -284,7 +285,7 @@ partitionSpec
     ;
 
 partitionVal
-    : errorCapturingIdentifier (EQ constant)?
+    : name=errorCapturingIdentifier (EQ constant)?
     ;
 
 database
@@ -351,7 +352,7 @@ createFileFormat
 
 fileFormat
     : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING    #tableFileFormat
-    | errorCapturingIdentifier                               #genericFileFormat
+    | fmt=errorCapturingIdentifier                           #genericFileFormat
     ;
 
 storageHandler
@@ -359,7 +360,7 @@ storageHandler
     ;
 
 resource
-    : errorCapturingIdentifier STRING
+    : resourceType=errorCapturingIdentifier STRING
     ;
 
 dmlStatementNoWith
@@ -467,7 +468,7 @@ pivotColumn
     ;
 
 pivotValue
-    : expression (AS? errorCapturingIdentifier)?
+    : expression (AS? alias=errorCapturingIdentifier)?
     ;
 
 lateralView
@@ -511,7 +512,7 @@ sampleMethod
     : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
     | expression ROWS                                                             #sampleByRows
     | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
-        (ON (errorCapturingIdentifier | qualifiedName '(' ')'))?                  #sampleByBucket
+        (ON (ident=errorCapturingIdentifier | qualifiedName '(' ')'))?            #sampleByBucket
     | bytes=expression                                                            #sampleByBytes
     ;
 
@@ -520,7 +521,7 @@ identifierList
     ;
 
 identifierSeq
-    : errorCapturingIdentifier (',' errorCapturingIdentifier)*
+    : ident+=errorCapturingIdentifier (',' ident+=errorCapturingIdentifier)*
     ;
 
 orderedIdentifierList
@@ -528,7 +529,7 @@ orderedIdentifierList
     ;
 
 orderedIdentifier
-    : errorCapturingIdentifier ordering=(ASC | DESC)?
+    : ident=errorCapturingIdentifier ordering=(ASC | DESC)?
     ;
 
 identifierCommentList
@@ -536,7 +537,7 @@ identifierCommentList
     ;
 
 identifierComment
-    : errorCapturingIdentifier (COMMENT STRING)?
+    : ident=errorCapturingIdentifier (COMMENT STRING)?
     ;
 
 relationPrimary
@@ -552,7 +553,7 @@ inlineTable
     ;
 
 functionTable
-    : errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
+    : funcName=errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
     ;
 
 tableAlias
@@ -582,7 +583,7 @@ functionIdentifier
     ;
 
 namedExpression
-    : expression (AS? (errorCapturingIdentifier | identifierList))?
+    : expression (AS? (ident=errorCapturingIdentifier | identifierList))?
     ;
 
 namedExpressionSeq
@@ -739,7 +740,7 @@ colTypeList
     ;
 
 colType
-    : errorCapturingIdentifier dataType (COMMENT STRING)?
+    : colName=errorCapturingIdentifier dataType (COMMENT STRING)?
     ;
 
 complexColTypeList
@@ -747,7 +748,7 @@ complexColTypeList
     ;
 
 complexColType
-    : errorCapturingIdentifier ':' dataType (COMMENT STRING)?
+    : colName=errorCapturingIdentifier ':' dataType (COMMENT STRING)?
     ;
 
 whenClause
@@ -759,18 +760,18 @@ windows
     ;
 
 namedWindow
-    : errorCapturingIdentifier AS windowSpec
+    : name=errorCapturingIdentifier AS windowSpec
     ;
 
 windowSpec
-    : name=errorCapturingIdentifier  #windowRef
-    | '('name=errorCapturingIdentifier')'  #windowRef
+    : name=errorCapturingIdentifier         #windowRef
+    | '('name=errorCapturingIdentifier')'   #windowRef
     | '('
       ( CLUSTER BY partition+=expression (',' partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?
         ((ORDER | SORT) BY sortItem (',' sortItem)*)?)
       windowFrame?
-      ')'              #windowDef
+      ')'                                   #windowDef
     ;
 
 windowFrame
