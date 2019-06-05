@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}
+import org.apache.spark.ResourceID
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
@@ -67,5 +68,5 @@ object KubernetesFeaturesTestUtils {
     list.filter(_.getClass() == desired).map(_.asInstanceOf[T])
   }
 
-  case class TestResourceInformation(rName: String, count: String, vendor: String)
+  case class TestResourceInformation(rId: ResourceID, count: String, vendor: String)
 }

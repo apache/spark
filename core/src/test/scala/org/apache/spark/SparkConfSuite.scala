@@ -25,7 +25,7 @@ import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
 
-import org.apache.spark.ResourceName._
+import org.apache.spark.ResourceUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
@@ -109,34 +109,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.get("k4", "not found") === "not found")
     assert(conf.getOption("k1") === Some("v4"))
     assert(conf.getOption("k4") === None)
-  }
-
-  test("basic getAllWithPrefixAndPostfix") {
-    val conf = new SparkConf(false)
-    conf.set("spark.prefix.main.suffix", "v1")
-    val prefix = "spark.prefix."
-    val suffix = ".suffix"
-    assert(conf.getAllWithPrefixAndSuffix(prefix, suffix).toSet ===
-      Set(("main", "v1")))
-
-    conf.set("spark.prefix.main2.suffix", "v2")
-    conf.set("spark.prefix.main3.extra1.suffix", "v3")
-    conf.set("spark.prefix.main4.extra2.nonmatchingsuffix", "v4")
-    conf.set("spark.notmatchingprefix.main4.suffix", "v5")
-
-    assert(conf.getAllWithPrefixAndSuffix(prefix, suffix).toSet ===
-      Set(("main", "v1"), ("main2", "v2"), ("main3.extra1", "v3")))
-  }
-
-  test("test prefix config parsing utilities") {
-    val conf = new SparkConf(false)
-    conf.set("spark.prefix.main.suffix", "v1")
-    val prefix = "spark.prefix."
-    val suffix = ".suffix"
-    val configsWithPrefix = conf.getAllWithPrefix(prefix)
-    assert(configsWithPrefix.toSet === Set(("main.suffix", "v1")))
-    assert(SparkConf.getBaseOfConfigs(configsWithPrefix) === Set("main"))
-    assert(SparkConf.getConfigsWithSuffix(configsWithPrefix, suffix).toSet === Set(("main", "v1")))
   }
 
   test("basic getAllWithPrefix") {
@@ -450,23 +422,28 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("get task resource requirement from config") {
     val conf = new SparkConf()
-    conf.set(SPARK_TASK_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_AMOUNT_SUFFIX, "2")
-    conf.set(SPARK_TASK_RESOURCE_PREFIX + FPGA + SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
-    var taskResourceRequirement = conf.getTaskResourceRequirements()
+    setTaskResourceAmountConf(conf, GPU, "2")
+    setTaskResourceAmountConf(conf, FPGA, "1")
+    var taskResourceRequirement =
+      parseTaskResourceRequirements(sc.conf).map(req => (req.resourceName, req.count)).toMap
+
     assert(taskResourceRequirement.size == 2)
     assert(taskResourceRequirement(GPU) == 2)
     assert(taskResourceRequirement(FPGA) == 1)
 
-    conf.remove(SPARK_TASK_RESOURCE_PREFIX + FPGA + SPARK_RESOURCE_AMOUNT_SUFFIX)
+    conf.remove(resourceAmountConfigName(ResourceID(SPARK_TASK_PREFIX, FPGA)))
     // Ignore invalid prefix
-    conf.set("spark.invalid.prefix" + FPGA + SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
-    taskResourceRequirement = conf.getTaskResourceRequirements()
+    setResourceAmountConf(conf, ResourceID("spark.invalid.prefix", FPGA), "1")
+    taskResourceRequirement =
+      parseTaskResourceRequirements(sc.conf).map(req => (req.resourceName, req.count)).toMap
     assert(taskResourceRequirement.size == 1)
     assert(taskResourceRequirement.get(FPGA).isEmpty)
 
     // Ignore invalid suffix
-    conf.set(SPARK_TASK_RESOURCE_PREFIX + FPGA + "invalid.suffix", "1")
-    taskResourceRequirement = conf.getTaskResourceRequirements()
+    val fpgaId = ResourceID(SPARK_TASK_PREFIX, FPGA)
+    conf.set(s"${fpgaId.confPrefix}invalid.suffix", "1")
+    taskResourceRequirement =
+      parseTaskResourceRequirements(sc.conf).map(req => (req.resourceName, req.count)).toMap
     assert(taskResourceRequirement.size == 1)
     assert(taskResourceRequirement.get(FPGA).isEmpty)
   }

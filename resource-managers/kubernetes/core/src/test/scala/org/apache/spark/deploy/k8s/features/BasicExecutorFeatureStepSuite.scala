@@ -26,7 +26,8 @@ import com.google.common.net.InternetDomainName
 import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{ResourceID, SecurityManager, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.ResourceUtils._
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -93,13 +94,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test spark resource missing vendor") {
-    val gpuResources = Map(("nvidia.com/gpu" -> TestResourceInformation("gpu", "2", "nvidia.com")))
-    // test missing vendor
-    gpuResources.foreach { case (_, testRInfo) =>
-      baseConf.set(
-        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}",
-        testRInfo.count)
-    }
+    setExecutorResourceAmountConf(baseConf, GPU, "2")
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val error = intercept[SparkException] {
       val executor = step.configurePod(SparkPod.initialPod())
@@ -108,30 +103,24 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test spark resource missing amount") {
-    val gpuResources = Map(("nvidia.com/gpu" -> TestResourceInformation("gpu", "2", "nvidia.com")))
-    // test missing count
-    gpuResources.foreach { case (_, testRInfo) =>
-      baseConf.set(
-        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_VENDOR_SUFFIX}",
-        testRInfo.vendor)
-    }
+    setExecutorResourceVendorConf(baseConf, GPU, "nvidia.com")
+
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val error = intercept[SparkException] {
       val executor = step.configurePod(SparkPod.initialPod())
     }.getMessage()
-    assert(error.contains("Resource: gpu was requested, but count was not specified"))
+    assert(error.contains("Resource: gpu was requested, but amount was not specified"))
   }
 
   test("basic executor pod with resources") {
-    val gpuResources = Map(("nvidia.com/gpu" -> TestResourceInformation("gpu", "2", "nvidia.com")),
-      ("foo.com/fpga" -> TestResourceInformation("fpga", "f1", "foo.com")))
+    val fpgaResourceID = ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
+    val gpuExecutorResourceID = ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
+    val gpuResources =
+      Map(("nvidia.com/gpu" -> TestResourceInformation(gpuExecutorResourceID, "2", "nvidia.com")),
+      ("foo.com/fpga" -> TestResourceInformation(fpgaResourceID, "f1", "foo.com")))
     gpuResources.foreach { case (_, testRInfo) =>
-      baseConf.set(
-        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}",
-        testRInfo.count)
-      baseConf.set(
-        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_VENDOR_SUFFIX}",
-        testRInfo.vendor)
+      setResourceAmountConf(baseConf, testRInfo.rId, testRInfo.count)
+      setResourceVendorConf(baseConf, testRInfo.rId, testRInfo.vendor)
     }
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())

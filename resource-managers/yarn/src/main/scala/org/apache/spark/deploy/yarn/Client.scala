@@ -248,7 +248,7 @@ private[spark] class Client(
         sparkConf.getAllWithPrefix(config.YARN_AM_RESOURCE_TYPES_PREFIX).toMap
       }
     val amResources = yarnAMResources ++
-      getYarnResourcesFromSparkResources(SPARK_DRIVER_RESOURCE_PREFIX, sparkConf)
+      getYarnResourcesFromSparkResources(SPARK_DRIVER_PREFIX, sparkConf)
     logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))

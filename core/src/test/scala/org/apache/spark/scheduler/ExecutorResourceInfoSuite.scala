@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ResourceName.GPU
+import org.apache.spark.ResourceUtils.GPU
 
 class ExecutorResourceInfoSuite extends SparkFunSuite {
 

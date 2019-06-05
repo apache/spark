@@ -27,9 +27,10 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark._
-import org.apache.spark.ResourceName.GPU
+import org.apache.spark.ResourceUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.SPARK_TASK_PREFIX
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ManualClock}
@@ -1639,7 +1640,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     import TestUtils._
 
     sc = new SparkContext("local", "test")
-    setTaskResourceRequirement(sc.conf, GPU, 2)
+    setTaskResourceAmountConf(sc.conf, GPU, "2")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)

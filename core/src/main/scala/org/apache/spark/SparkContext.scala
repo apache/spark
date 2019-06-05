@@ -39,6 +39,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
+import org.apache.spark.ResourceUtils._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -363,43 +364,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
-  /**
-   * Checks to see if any resources (GPU/FPGA/etc) are available to the driver by looking
-   * at and processing the spark.driver.resourcesFile and
-   * spark.driver.resource.resourceName.discoveryScript configs. The configs have to be
-   * present when the driver starts, setting them after startup does not work.
-   *
-   * If a resources file was specified then assume all resources will be specified
-   * in that file. Otherwise use the discovery scripts to find the resources. Users should
-   * not be setting the resources file config directly and should not be mixing methods
-   * for different types of resources since the resources file config is meant for Standalone mode
-   * and other cluster managers should use the discovery scripts.
-   */
-  private def setupDriverResources(): Unit = {
-    // Only call getAllWithPrefix once and filter on those since there could be a lot of spark
-    // configs.
-    val allDriverResourceConfs = _conf.getAllWithPrefix(SPARK_DRIVER_RESOURCE_PREFIX)
-    val resourcesFile = _conf.get(DRIVER_RESOURCES_FILE)
-    _resources = resourcesFile.map { rFile => {
-      ResourceDiscoverer.parseAllocatedFromJsonFile(rFile)
-    }}.getOrElse {
-      // we already have the resources confs here so just pass in the unique resource names
-      // rather then having the resource discoverer reparse all the configs.
-      val uniqueResources = SparkConf.getBaseOfConfigs(allDriverResourceConfs)
-      ResourceDiscoverer.discoverResourcesInformation(_conf, SPARK_DRIVER_RESOURCE_PREFIX,
-        Some(uniqueResources))
-    }
-    // verify the resources we discovered are what the user requested
-    val driverReqResourcesAndCounts =
-      SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_AMOUNT_SUFFIX).toMap
-    ResourceDiscoverer.checkActualResourcesMeetRequirements(driverReqResourcesAndCounts, _resources)
-
-    logInfo("===============================================================================")
-    logInfo(s"Driver Resources:")
-    _resources.foreach { case (k, v) => logInfo(s"$k -> $v") }
-    logInfo("===============================================================================")
-  }
-
   try {
     _conf = config.clone()
     _conf.validateSettings()
@@ -413,7 +377,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _driverLogger = DriverLogger(_conf)
 
-    setupDriverResources()
+    val resourcesFileOpt = conf.get(DRIVER_RESOURCES_FILE)
+    _resources = getAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
 
     // log out spark.app.name in the Spark driver logs
     logInfo(s"Submitted application: $appName")
@@ -2723,42 +2688,45 @@ object SparkContext extends Logging {
 
       // Calculate the max slots each executor can provide based on resources available on each
       // executor and resources required by each task.
-      val taskResourcesAndCount = sc.conf.getTaskResourceRequirements()
-      val executorResourcesAndCounts = sc.conf.getAllWithPrefixAndSuffix(
-        SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_AMOUNT_SUFFIX).toMap
+      val taskResourceRequirements = parseTaskResourceRequirements(sc.conf)
+      val executorResourcesAndCounts =
+        parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
+          .map(request => (request.id.resourceName, request.count)).toMap
       var numSlots = execCores / taskCores
       var limitingResourceName = "CPU"
-      taskResourcesAndCount.foreach { case (rName, taskCount) =>
+
+      taskResourceRequirements.foreach { taskReq =>
         // Make sure the executor resources were specified through config.
-        val execCount = executorResourcesAndCounts.getOrElse(rName,
-          throw new SparkException(
-            s"The executor resource config: " +
-              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_AMOUNT_SUFFIX} " +
-              "needs to be specified since a task requirement config: " +
-              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_AMOUNT_SUFFIX} was specified")
+        val execCount = executorResourcesAndCounts.getOrElse(taskReq.resourceName,
+          throw new SparkException("The executor resource config: " +
+            resourceAmountConfigName(ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName)) +
+            " needs to be specified since a task requirement config: " +
+            resourceAmountConfigName(ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName)) +
+            " was specified")
         )
         // Make sure the executor resources are large enough to launch at least one task.
-        if (execCount.toLong < taskCount.toLong) {
-          throw new SparkException(
-            s"The executor resource config: " +
-              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_AMOUNT_SUFFIX} " +
-              s"= $execCount has to be >= the task config: " +
-              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_AMOUNT_SUFFIX} = $taskCount")
+        if (execCount < taskReq.count) {
+          throw new SparkException("The executor resource config: " +
+            resourceAmountConfigName(ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName)) +
+            s" = $execCount has to be >= the task config: " +
+            resourceAmountConfigName(ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName)) +
+            s" = ${taskReq.count}")
         }
         // Compare and update the max slots each executor can provide.
-        val resourceNumSlots = execCount.toInt / taskCount
+        val resourceNumSlots = execCount / taskReq.count
         if (resourceNumSlots < numSlots) {
           numSlots = resourceNumSlots
-          limitingResourceName = rName
+          limitingResourceName = taskReq.resourceName
         }
       }
       // There have been checks above to make sure the executor resources were specified and are
       // large enough if any task resources were specified.
-      taskResourcesAndCount.foreach { case (rName, taskCount) =>
-        val execCount = executorResourcesAndCounts(rName)
-        if (taskCount.toInt * numSlots < execCount.toInt) {
-          val message = s"The configuration of resource: $rName (exec = ${execCount.toInt}, " +
-            s"task = ${taskCount}) will result in wasted resources due to resource " +
+      taskResourceRequirements.foreach { taskReq =>
+        val execCount = executorResourcesAndCounts(taskReq.resourceName)
+        if (taskReq.count * numSlots < execCount) {
+          val message = s"The configuration of resource: ${taskReq.resourceName} " +
+            s"(exec = ${execCount}, " +
+            s"task = ${taskReq.count}) will result in wasted resources due to resource " +
             s"${limitingResourceName} limiting the number of runnable tasks per executor to: " +
             s"${numSlots}. Please adjust your configuration."
           if (Utils.isTesting) {

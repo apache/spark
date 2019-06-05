@@ -26,6 +26,7 @@ import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.ResourceUtils.parseTaskResourceRequirements
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
@@ -93,7 +94,7 @@ private[spark] class TaskSchedulerImpl(
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
   // Resources to request per task
-  val resourcesPerTask = conf.getTaskResourceRequirements()
+  val resourcesPerTask = parseTaskResourceRequirements(sc.conf)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
@@ -382,8 +383,8 @@ private[spark] class TaskSchedulerImpl(
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
    */
   private def resourcesMeetTaskRequirements(resources: Map[String, Buffer[String]]): Boolean = {
-    resourcesPerTask.forall { case (rName, rNum) =>
-      resources.contains(rName) && resources(rName).size >= rNum
+    resourcesPerTask.forall { req =>
+      resources.contains(req.resourceName) && resources(req.resourceName).size >= req.count
     }
   }
 

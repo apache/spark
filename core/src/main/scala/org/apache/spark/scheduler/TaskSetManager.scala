@@ -534,14 +534,16 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
-        val extraResources = sched.resourcesPerTask.map { case (rName, rNum) =>
+        val extraResources = sched.resourcesPerTask.map { taskReq =>
+          val rName = taskReq.resourceName
+          val count = taskReq.count
           val rAddresses = availableResources.getOrElse(rName, Seq.empty)
-          assert(rAddresses.size >= rNum, s"Required $rNum $rName addresses, but only " +
+          assert(rAddresses.size >= count, s"Required $count $rName addresses, but only " +
             s"${rAddresses.size} available.")
           // We'll drop the allocated addresses later inside TaskSchedulerImpl.
-          val allocatedAddresses = rAddresses.take(rNum)
+          val allocatedAddresses = rAddresses.take(count)
           (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
-        }
+        }.toMap
 
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(

@@ -26,6 +26,8 @@ import scala.util.Try
 import org.apache.hadoop.yarn.api.records.Resource
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.ResourceID
+import org.apache.spark.ResourceUtils._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -68,17 +70,16 @@ private object ResourceRequestHelper extends Logging {
       (AM_CORES.key, YARN_AM_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (DRIVER_CORES.key, YARN_DRIVER_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
       (EXECUTOR_CORES.key, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "cpu-vcores"),
-      (s"${SPARK_EXECUTOR_RESOURCE_PREFIX}fpga${SPARK_RESOURCE_AMOUNT_SUFFIX}",
+      (resourceAmountConfigName(ResourceID(SPARK_EXECUTOR_PREFIX, "fpga")),
         s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${YARN_FPGA_RESOURCE_CONFIG}"),
-      (s"${SPARK_DRIVER_RESOURCE_PREFIX}fpga${SPARK_RESOURCE_AMOUNT_SUFFIX}",
+      (resourceAmountConfigName(ResourceID(SPARK_DRIVER_PREFIX, "fpga")),
         s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_FPGA_RESOURCE_CONFIG}"),
-      (s"${SPARK_EXECUTOR_RESOURCE_PREFIX}gpu${SPARK_RESOURCE_AMOUNT_SUFFIX}",
+      (resourceAmountConfigName(ResourceID(SPARK_EXECUTOR_PREFIX, "gpu")),
         s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"),
-      (s"${SPARK_DRIVER_RESOURCE_PREFIX}gpu${SPARK_RESOURCE_AMOUNT_SUFFIX}",
+      (resourceAmountConfigName(ResourceID(SPARK_DRIVER_PREFIX, "gpu")),
         s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"))
 
     val errorMessage = new mutable.StringBuilder()
-
     resourceDefinitions.foreach { case (sparkName, resourceRequest) =>
       if (sparkConf.contains(resourceRequest)) {
         errorMessage.append(s"Error: Do not use $resourceRequest, " +
