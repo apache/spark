@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.processors.CommandProcessor;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hadoop.io.IOUtils;
+import org.apache.hive.service.ServiceUtils;
 import org.apache.hive.service.cli.FetchOrientation;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationState;
@@ -90,8 +90,8 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
 
 
   private void tearDownSessionIO() {
-    IOUtils.cleanup(LOG, parentSession.getSessionState().out);
-    IOUtils.cleanup(LOG, parentSession.getSessionState().err);
+    ServiceUtils.cleanup(LOG,
+        parentSession.getSessionState().out, parentSession.getSessionState().err);
   }
 
   @Override
@@ -154,7 +154,7 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
       resetResultReader();
     }
     List<String> rows = readResults((int) maxRows);
-    RowSet rowSet = RowSetFactory.create(resultSchema, getProtocolVersion());
+    RowSet rowSet = RowSetFactory.create(resultSchema, getProtocolVersion(), false);
 
     for (String row : rows) {
       rowSet.addRow(new String[] {row});
@@ -200,13 +200,13 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
   private void cleanTmpFile() {
     resetResultReader();
     SessionState sessionState = getParentSession().getSessionState();
-    File tmp = sessionState.getTmpOutputFile();
-    tmp.delete();
+    sessionState.deleteTmpOutputFile();
+    sessionState.deleteTmpErrOutputFile();
   }
 
   private void resetResultReader() {
     if (resultReader != null) {
-      IOUtils.cleanup(LOG, resultReader);
+      ServiceUtils.cleanup(LOG, resultReader);
       resultReader = null;
     }
   }

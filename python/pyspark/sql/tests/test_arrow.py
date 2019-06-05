@@ -23,6 +23,7 @@ import unittest
 import warnings
 
 from pyspark.sql import Row
+from pyspark.sql.functions import udf
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -204,6 +205,17 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(len(pdf.columns), 1)
         self.assertEqual(pdf.columns[0], "field1")
         self.assertTrue(pdf.empty)
+
+    def test_propagates_spark_exception(self):
+        df = self.spark.range(3).toDF("i")
+
+        def raise_exception():
+            raise Exception("My error")
+        exception_udf = udf(raise_exception, IntegerType())
+        df = df.withColumn("error", exception_udf())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(RuntimeError, 'My error'):
+                df.toPandas()
 
     def _createDataFrame_toggle(self, pdf, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):

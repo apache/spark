@@ -501,4 +501,80 @@ class PlanResolutionSuite extends AnalysisTest {
     }.getMessage.toLowerCase(Locale.ROOT).contains(
       "view support in catalog has not been implemented")
   }
+
+  // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+  test("alter view: alter view properties") {
+    val sql1_view = "ALTER VIEW table_name SET TBLPROPERTIES ('test' = 'test', " +
+        "'comment' = 'new_comment')"
+    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+
+    val parsed1_view = parseAndResolve(sql1_view)
+    val parsed2_view = parseAndResolve(sql2_view)
+    val parsed3_view = parseAndResolve(sql3_view)
+
+    val tableIdent = TableIdentifier("table_name", None)
+    val expected1_view = AlterTableSetPropertiesCommand(
+      tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = true)
+    val expected2_view = AlterTableUnsetPropertiesCommand(
+      tableIdent, Seq("comment", "test"), ifExists = false, isView = true)
+    val expected3_view = AlterTableUnsetPropertiesCommand(
+      tableIdent, Seq("comment", "test"), ifExists = true, isView = true)
+
+    comparePlans(parsed1_view, expected1_view)
+    comparePlans(parsed2_view, expected2_view)
+    comparePlans(parsed3_view, expected3_view)
+  }
+
+  // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+  test("alter table: alter table properties") {
+    val sql1_table = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
+        "'comment' = 'new_comment')"
+    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+
+    val parsed1_table = parseAndResolve(sql1_table)
+    val parsed2_table = parseAndResolve(sql2_table)
+    val parsed3_table = parseAndResolve(sql3_table)
+
+    val tableIdent = TableIdentifier("table_name", None)
+    val expected1_table = AlterTableSetPropertiesCommand(
+      tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = false)
+    val expected2_table = AlterTableUnsetPropertiesCommand(
+      tableIdent, Seq("comment", "test"), ifExists = false, isView = false)
+    val expected3_table = AlterTableUnsetPropertiesCommand(
+      tableIdent, Seq("comment", "test"), ifExists = true, isView = false)
+
+    comparePlans(parsed1_table, expected1_table)
+    comparePlans(parsed2_table, expected2_table)
+    comparePlans(parsed3_table, expected3_table)
+  }
+
+  test("support for other types in TBLPROPERTIES") {
+    val sql =
+      """
+        |ALTER TABLE table_name
+        |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE)
+      """.stripMargin
+    val parsed = parseAndResolve(sql)
+    val expected = AlterTableSetPropertiesCommand(
+      TableIdentifier("table_name"),
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+      isView = false)
+
+    comparePlans(parsed, expected)
+  }
+
+  test("alter table: set location") {
+    val sql1 = "ALTER TABLE table_name SET LOCATION 'new location'"
+    val parsed1 = parseAndResolve(sql1)
+    val tableIdent = TableIdentifier("table_name", None)
+    val expected1 = AlterTableSetLocationCommand(
+      tableIdent,
+      None,
+      "new location")
+    comparePlans(parsed1, expected1)
+  }
 }

@@ -25,6 +25,7 @@ import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
 
+import org.apache.spark.ResourceName._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
@@ -445,6 +446,29 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       }
       assert(thrown.getMessage.contains(key))
     }
+  }
+
+  test("get task resource requirement from config") {
+    val conf = new SparkConf()
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_COUNT_SUFFIX, "2")
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + FPGA + SPARK_RESOURCE_COUNT_SUFFIX, "1")
+    var taskResourceRequirement = conf.getTaskResourceRequirements()
+    assert(taskResourceRequirement.size == 2)
+    assert(taskResourceRequirement(GPU) == 2)
+    assert(taskResourceRequirement(FPGA) == 1)
+
+    conf.remove(SPARK_TASK_RESOURCE_PREFIX + FPGA + SPARK_RESOURCE_COUNT_SUFFIX)
+    // Ignore invalid prefix
+    conf.set("spark.invalid.prefix" + FPGA + SPARK_RESOURCE_COUNT_SUFFIX, "1")
+    taskResourceRequirement = conf.getTaskResourceRequirements()
+    assert(taskResourceRequirement.size == 1)
+    assert(taskResourceRequirement.get(FPGA).isEmpty)
+
+    // Ignore invalid suffix
+    conf.set(SPARK_TASK_RESOURCE_PREFIX + FPGA + "invalid.suffix", "1")
+    taskResourceRequirement = conf.getTaskResourceRequirements()
+    assert(taskResourceRequirement.size == 1)
+    assert(taskResourceRequirement.get(FPGA).isEmpty)
   }
 }
 

@@ -204,7 +204,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       provider.getTable(new CaseInsensitiveStringMap(params.asJava), userSpecifiedSchema)
     }
     assert(exception.getMessage.contains(
-      "socket source does not support user-specified schema"))
+      "TextSocketSourceProvider source does not support user-specified schema"))
   }
 
   test("input row metrics") {
