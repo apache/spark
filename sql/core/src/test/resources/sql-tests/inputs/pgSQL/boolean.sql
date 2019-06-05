@@ -53,8 +53,7 @@ SELECT boolean('on') AS true;
 
 SELECT boolean('off') AS false;
 
--- TODO Is it a PostgreSQL bug?
--- https://github.com/postgres/postgres/commit/05a7db05826c5eb68173b6d7ef1553c19322ef48#r33770116
+-- [SPARK-27931] Accept unique prefixes thereof
 SELECT boolean('of') AS false;
 
 -- [SPARK-27923] PostgreSQL does not accept 'o' but Spark SQL accepts it and sets it to NULL
