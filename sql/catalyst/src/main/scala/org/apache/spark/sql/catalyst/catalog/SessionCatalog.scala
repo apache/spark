@@ -435,13 +435,22 @@ class SessionCatalog(
   }
 
   /**
-   * Retrieve the metadata of an existing permanent table/view. If no database is specified,
+   * Retrieve all metadata of existing permanent tables/views. If no database is specified,
    * assume the table/view is in the current database.
+   * Only the tables/views belong to one same database that can be retrieved are returned.
+   * For example, if none of the requested tables could be retrieved, an empty list is returned.
+   * There is no guarantee of ordering of the returned tables.
    */
   @throws[NoSuchDatabaseException]
   def getTablesByName(names: Seq[TableIdentifier]): Seq[CatalogTable] = {
     if (names.nonEmpty) {
-      val db = formatDatabaseName(names.head.database.getOrElse(getCurrentDatabase))
+      val dbs = names.map(_.database.getOrElse(getCurrentDatabase))
+      if (dbs.distinct.size != 1) {
+        throw new AnalysisException(
+          s"Only the tables/views belong to one same database can be retrieved."
+        )
+      }
+      val db = formatDatabaseName(dbs.head)
       requireDbExists(db)
       val tables = names.map(name => formatTableName(name.table))
       externalCatalog.getTablesByName(db, tables)

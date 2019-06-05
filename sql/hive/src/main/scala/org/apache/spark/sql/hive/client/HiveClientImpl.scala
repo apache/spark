@@ -388,7 +388,7 @@ private[hive] class HiveClientImpl(
     Option(client.getTable(dbName, tableName, false /* do not throw exception */))
   }
 
-  private def getRawTablesByNames(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
+  private def getRawTablesByName(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
     try {
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala.map(new HiveTable(_))
     } catch {
@@ -404,7 +404,7 @@ private[hive] class HiveClientImpl(
   override def getTablesByName(
       dbName: String,
       tableNames: Seq[String]): Seq[CatalogTable] = withHiveState {
-    getRawTablesByNames(dbName, tableNames).map(convertHiveTableToCatalogTable)
+    getRawTablesByName(dbName, tableNames).map(convertHiveTableToCatalogTable)
   }
 
   override def getTableOption(

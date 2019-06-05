@@ -329,7 +329,7 @@ class InMemoryCatalog(
 
   override def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] = {
     requireDbExists(db)
-    tables.map(catalog(db).tables(_).table)
+    tables.flatMap(catalog(db).tables.get).map(_.table)
   }
 
   override def tableExists(db: String, table: String): Boolean = synchronized {
