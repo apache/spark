@@ -1081,6 +1081,7 @@ nonReserved
     | DAY
     | DAYS
     | DBPROPERTIES
+    | DEFAULT
     | DEFINED
     | DELETE
     | DELIMITED
