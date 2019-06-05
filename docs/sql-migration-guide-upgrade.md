@@ -23,6 +23,7 @@ license: |
 {:toc}
 
 ## Upgrading From Spark SQL 2.4 to 3.0
+  - In Spark version 2.4 and earlier, SQL queries such as `FROM test` or `FROM test UNION ALL FROM test` are supported by accident. In hive-style `FROM test SELECT *`, the `SELECT` clause is not negligible. Therefore we will treat these queries as invalid since Spark 3.0.
 
   - Since Spark 3.0, the Dataset and DataFrame API `unionAll` is not deprecated any more. It is an alias for `union`.
 

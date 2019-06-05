@@ -41,6 +41,17 @@ class ErrorParserSuite extends SparkFunSuite {
     }
   }
 
+  def intercept(sql: String, messages: String*): Unit = {
+    val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
+
+    // Check messages.
+    val error = e.getMessage
+    messages.foreach { message =>
+      assert(error.contains(message))
+    }
+  }
+
+
   test("no viable input") {
     intercept("select ((r + 1) ", 1, 16, 16,
       "no viable alternative at input", "----------------^^^")
@@ -62,5 +73,11 @@ class ErrorParserSuite extends SparkFunSuite {
     intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
       "^^^")
+  }
+
+  test("SPARK-27901: misleading error message due to problematic antlr grammar") {
+    intercept("select * from a left joinn b on a.id = b.id", "missing 'JOIN' at 'joinn'")
+    intercept("select * from test where test.t is like 'test'", "mismatched input 'is' expecting")
+    intercept("SELECT * FROM test WHERE x NOT NULL", "mismatched input 'NOT' expecting")
   }
 }
