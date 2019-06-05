@@ -141,6 +141,9 @@ private class OrcFilterConverter(val dataTypeMap: Map[String, DataType]) {
     }
   }
 
+  /**
+   * Removes all sub-Filters from a given Filter that are not convertible to an ORC SearchArgument.
+   */
   private[sql] def trimUnconvertibleFilters(expression: Filter): Option[Filter] = {
     performAction(TrimUnconvertibleFilters(canPartialPushDownConjuncts = true), expression)
   }
