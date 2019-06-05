@@ -136,19 +136,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
     val from = visitFromClause(ctx.fromClause)
     val selects = ctx.selectStatement.asScala.map { select =>
-      validate(select.querySpecification.fromClause == null,
-        "This select statement can not have FROM cause as its already specified upfront",
-        select)
-
-      withQuerySpecification(select.querySpecification, from).
+      val querySpec = select.selectNoFromQuerySpecification
+      withSelectQuerySpecification(
+        querySpec,
+        querySpec.selectClause,
+        querySpec.lateralView,
+        querySpec.whereClause,
+        querySpec.aggregationClause,
+        querySpec.havingClause,
+        querySpec.windowClause,
+        from
+      ).
         // Add organization statements.
         optionalMap(select.queryOrganization)(withQueryResultClauses)
     }
     // If there are multiple SELECT just UNION them together into one query.
-    if (selects.length == 1) {
-      selects.head
-    } else {
-      Union(selects)
+    selects.length match {
+      case 0 => from
+      case 1 => selects.head
+      case _ => Union(selects)
     }
   }
 
@@ -187,14 +193,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Build the insert clauses.
     val inserts = ctx.multiInsertQueryBody().asScala.map {
       body =>
-        validate(body.selectStatement.querySpecification.fromClause == null,
-          "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
-          body)
-
-       withInsertInto(body.insertInto,
-         withQuerySpecification(body.selectStatement.querySpecification, from).
+        val querySpec = body.selectStatement.selectNoFromQuerySpecification
+        withInsertInto(body.insertInto,
+          withSelectQuerySpecification(
+            querySpec,
+            querySpec.selectClause,
+            querySpec.lateralView,
+            querySpec.whereClause,
+            querySpec.aggregationClause,
+            querySpec.havingClause,
+            querySpec.windowClause,
+            from).
            // Add organization statements.
-           optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses))
+           optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses
+          )
+        )
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -384,7 +397,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     // WINDOWS
-    val withWindow = withOrder.optionalMap(windows)(withWindows)
+    val withWindow = withOrder.optionalMap(windowClause)(withWindowClause)
 
     // LIMIT
     // - LIMIT ALL is the same as omitting the LIMIT clause
@@ -414,15 +427,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     withTransformQuerySpecification(ctx, from)
   }
 
-  /**
-   * Create a logical plan using a query specification.
-   */
-  override def visitSelectQuerySpecification(
-    ctx: SelectQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
+  override def visitSelectWithFromQuerySpecification(
+    ctx: SelectWithFromQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
-    withSelectQuerySpecification(ctx, from)
+    if (ctx.selectClause == null) {
+      return from
+    }
+
+    withSelectQuerySpecification(
+      ctx,
+      ctx.selectClause,
+      ctx.lateralView,
+      ctx.whereClause,
+      ctx.aggregationClause,
+      ctx.havingClause,
+      ctx.windowClause,
+      from
+    )
   }
 
   override def visitNamedExpressionSeq(
@@ -503,18 +526,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Note that query hints are ignored (both by the parser and the builder).
    */
   private def withSelectQuerySpecification(
-    ctx: SelectQuerySpecificationContext,
+    ctx: ParserRuleContext,
+    selectClause: SelectClauseContext,
+    lateralView: java.util.List[LateralViewContext],
+    whereClause: WhereClauseContext,
+    aggregationClause: AggregationClauseContext,
+    havingClause: HavingClauseContext,
+    windowClause: WindowClauseContext,
     relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    import ctx._
-    // Regular select
-
+    // regular select
     // Add lateral views.
-    val withLateralView = ctx.lateralView.asScala.foldLeft(relation)(withGenerate)
+    val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
 
     // Add where.
     val withFilter = withLateralView.optionalMap(whereClause)(withWhereClause)
 
-    val expressions = visitNamedExpressionSeq(ctx.selectClause.namedExpressionSeq)
+    val expressions = visitNamedExpressionSeq(selectClause.namedExpressionSeq)
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
       case e: NamedExpression => e
@@ -553,7 +580,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     // Window
-    val withWindow = withDistinct.optionalMap(windows)(withWindows)
+    val withWindow = withDistinct.optionalMap(windowClause)(withWindowClause)
 
     // Hint
     selectClause.hints.asScala.foldRight(withWindow)(withHints)
@@ -628,8 +655,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Add a [[WithWindowDefinition]] operator to a logical plan.
    */
-  private def withWindows(
-      ctx: WindowsContext,
+  private def withWindowClause(
+      ctx: WindowClauseContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Collect all window specifications defined in the WINDOW clause.
     val baseWindowMap = ctx.namedWindow.asScala.map {

@@ -373,7 +373,7 @@ queryOrganization
       (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
       (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
-      windows?
+      windowClause?
       (LIMIT (ALL | limit=expression))?
     ;
 
@@ -382,7 +382,7 @@ multiInsertQueryBody
     ;
 
 selectStatement
-    : querySpecification queryOrganization
+    : selectNoFromQuerySpecification queryOrganization
     ;
 
 queryTerm
@@ -396,7 +396,8 @@ queryTerm
     ;
 
 queryPrimary
-    : querySpecification                                                    #queryPrimaryDefault
+    : transformQuerySpecification                                           #queryPrimaryTransform
+    | selectWithFromQuerySpecification                                      #queryPrimarySelect
     | TABLE tableIdentifier                                                 #table
     | inlineTable                                                           #inlineTableDefault1
     | '(' queryNoWith  ')'                                                  #subquery
@@ -406,24 +407,29 @@ sortItem
     : expression ordering=(ASC | DESC)? (NULLS nullOrder=(LAST | FIRST))?
     ;
 
-querySpecification
-    : transformQuerySpecification
-    | selectQuerySpecification
-    ;
-
 transformQuerySpecification
     : transformClause
       fromClause?
       whereClause?
     ;
 
-selectQuerySpecification
-    : (selectClause fromClause? | fromClause selectClause)
+selectWithFromQuerySpecification
+    : selectClause
+      fromClause?
       lateralView*
       whereClause?
       aggregationClause?
       havingClause?
-      windows?
+      windowClause?
+    ;
+
+selectNoFromQuerySpecification
+    : selectClause
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?
     ;
 
 hint
@@ -773,7 +779,7 @@ whenClause
     : WHEN condition=expression THEN result=expression
     ;
 
-windows
+windowClause
     : WINDOW namedWindow (',' namedWindow)*
     ;
 
