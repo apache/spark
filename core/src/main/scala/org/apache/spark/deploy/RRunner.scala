@@ -84,7 +84,6 @@ object RRunner {
 
     sparkRBackendThread.start()
     // Wait for RBackend initialization to finish
-    // Wait for RBackend initialization to finish
     if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
       try {

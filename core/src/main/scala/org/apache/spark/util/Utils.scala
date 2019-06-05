@@ -2994,21 +2994,19 @@ private[spark] class RedirectThread(
 
   setDaemon(true)
 
-  private var _lastBuf = new Array[Byte](1024)
+  private val _lastBuf = new CircularBuffer(1024)
 
   override def run() {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
       Utils.tryWithSafeFinally {
         var buf = new Array[Byte](1024)
-        var tmp = buf
         var len = in.read(buf)
         while (len != -1) {
           out.write(buf, 0, len)
           out.flush()
-          tmp = _lastBuf
-          _lastBuf = buf
-          buf = tmp
+          _lastBuf.write(buf, 0, len)
+          _lastBuf.flush()
           len = in.read(buf)
         }
       } {
@@ -3020,7 +3018,7 @@ private[spark] class RedirectThread(
   }
 
   def lastBuf: String = {
-    new String(_lastBuf, StandardCharsets.UTF_8)
+    _lastBuf.toString
   }
 }
 

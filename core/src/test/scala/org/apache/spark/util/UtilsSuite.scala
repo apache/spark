@@ -816,6 +816,23 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(!Utils.isInDirectory(nullFile, childFile3))
   }
 
+  test("redirect thread") {
+    // input array initialization
+    val bytes = Array.ofDim[Byte](9000)
+    Random.nextBytes(bytes)
+    // val bytes = ("abcdefghijklmnopqrstuvxyz" * 10).getBytes(StandardCharsets.UTF_8)
+    val in = new ByteArrayInputStream(bytes)
+    val out = new ByteArrayOutputStream()
+
+    val redirectThread = new RedirectThread(in, out, "test redirect thread", false)
+    redirectThread.start()
+    redirectThread.join()
+
+    val expectedLastBuf = new String(bytes.takeRight(1024), StandardCharsets.UTF_8)
+    assert(out.toByteArray.toList.equals(bytes.toList))
+    assert(redirectThread.lastBuf === expectedLastBuf)
+  }
+
   test("circular buffer: if nothing was written to the buffer, display nothing") {
     val buffer = new CircularBuffer(4)
     assert(buffer.toString === "")
