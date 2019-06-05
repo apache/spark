@@ -84,9 +84,10 @@ object RRunner {
 
     sparkRBackendThread.start()
     // Wait for RBackend initialization to finish
+    // Wait for RBackend initialization to finish
     if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
-      val returnCode = try {
+      try {
         val builder = new ProcessBuilder((Seq(rCommand, rFileNormalized) ++ otherArgs).asJava)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
@@ -100,14 +101,17 @@ object RRunner {
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
         val process = builder.start()
 
-        new RedirectThread(process.getInputStream, System.out, "redirect R output").start()
+        val redirectThread = new RedirectThread(
+          process.getInputStream, System.out, "redirect R output")
+        redirectThread.start()
 
-        process.waitFor()
+        val returnCode = process.waitFor()
+
+        if (returnCode != 0) {
+          throw SparkUserAppException(returnCode, redirectThread.lastBuf)
+        }
       } finally {
         sparkRBackend.close()
-      }
-      if (returnCode != 0) {
-        throw new SparkUserAppException(returnCode)
       }
     } else {
       val errorMessage = s"SparkR backend did not initialize in $backendTimeout seconds"

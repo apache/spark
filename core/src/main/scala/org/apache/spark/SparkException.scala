@@ -35,8 +35,8 @@ private[spark] class SparkDriverExecutionException(cause: Throwable)
  * Exception thrown when the main user code is run as a child process (e.g. pyspark) and we want
  * the parent SparkSubmit process to exit with the same exit code.
  */
-private[spark] case class SparkUserAppException(exitCode: Int)
-  extends SparkException(s"User application exited with $exitCode")
+private[spark] case class SparkUserAppException(exitCode: Int, message: String = "")
+  extends SparkException(s"User application exited with exit code $exitCode and message $message")
 
 /**
  * Exception thrown when the relative executor to access is dead.
