@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 
 /**
  * Test various parser errors.
  */
-class ErrorParserSuite extends SparkFunSuite {
+class ErrorParserSuite extends AnalysisTest {
+  def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(CatalystSqlParser.parsePlan)(sqlCommand, messages: _*)
+
   def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
                 messages: String*): Unit = {
     val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
@@ -40,17 +43,6 @@ class ErrorParserSuite extends SparkFunSuite {
       assert(error.contains(message))
     }
   }
-
-  def intercept(sql: String, messages: String*): Unit = {
-    val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
-
-    // Check messages.
-    val error = e.getMessage
-    messages.foreach { message =>
-      assert(error.contains(message))
-    }
-  }
-
 
   test("no viable input") {
     intercept("select ((r + 1) ", 1, 16, 16,

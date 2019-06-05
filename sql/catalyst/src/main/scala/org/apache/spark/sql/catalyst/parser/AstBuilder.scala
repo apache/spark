@@ -190,20 +190,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     // Build the insert clauses.
     val inserts = ctx.multiInsertQueryBody().asScala.map { body =>
-        val select = body.selectStatement
-        withInsertInto(body.insertInto,
-          withSelectQuerySpecification(
-            select,
-            select.selectClause,
-            select.lateralView,
-            select.whereClause,
-            select.aggregationClause,
-            select.havingClause,
-            select.windowClause,
-            from).
-           // Add organization statements.
-           optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses)
-        )
+      val select = body.selectStatement
+      withInsertInto(body.insertInto,
+        withSelectQuerySpecification(
+          select,
+          select.selectClause,
+          select.lateralView,
+          select.whereClause,
+          select.aggregationClause,
+          select.havingClause,
+          select.windowClause,
+          from).
+         // Add organization statements.
+         optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -416,7 +415,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a logical plan using a query specification.
    */
   override def visitTransformQuerySpecification(
-    ctx: TransformQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
+      ctx: TransformQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
@@ -428,11 +427,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
-    if (ctx.selectClause == null) {
-      // TODO fix when there's a conclusion
-      return null
-    }
-
     withSelectQuerySpecification(
       ctx,
       ctx.selectClause,
@@ -526,14 +520,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Note that query hints are ignored (both by the parser and the builder).
    */
   private def withSelectQuerySpecification(
-    ctx: ParserRuleContext,
-    selectClause: SelectClauseContext,
-    lateralView: java.util.List[LateralViewContext],
-    whereClause: WhereClauseContext,
-    aggregationClause: AggregationClauseContext,
-    havingClause: HavingClauseContext,
-    windowClause: WindowClauseContext,
-    relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      ctx: ParserRuleContext,
+      selectClause: SelectClauseContext,
+      lateralView: java.util.List[LateralViewContext],
+      whereClause: WhereClauseContext,
+      aggregationClause: AggregationClauseContext,
+      havingClause: HavingClauseContext,
+      windowClause: WindowClauseContext,
+      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Add lateral views.
     val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
 

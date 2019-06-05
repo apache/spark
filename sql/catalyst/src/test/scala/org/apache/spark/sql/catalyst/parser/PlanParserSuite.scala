@@ -111,7 +111,7 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a from 1k.2m", table("1k", "2m").select('a))
   }
 
-  test("hive-style single from statement") {
+  test("hive-style single-FROM statement") {
     assertEqual("from a select b, c", table("a").select('b, 'c))
     assertEqual(
       "from db.a select b, c where d < 1", table("db", "a").where('d < 1).select('b, 'c))

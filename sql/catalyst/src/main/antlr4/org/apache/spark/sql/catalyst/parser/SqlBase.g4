@@ -21,7 +21,7 @@ grammar SqlBase;
    * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
    */
-  public boolean legacy_setops_precedence_enabled = false;
+  public boolean legacy_setops_precedence_enbled = false;
 
   /**
    * Verify whether current token is a valid decimal token (which contains dot).
@@ -407,11 +407,11 @@ selectStatement
 
 queryTerm
     : queryPrimary                                                                       #queryTermDefault
-    | left=queryTerm {legacy_setops_precedence_enabled}?
+    | left=queryTerm {legacy_setops_precedence_enbled}?
         operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enabled}?
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enabled}?
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
