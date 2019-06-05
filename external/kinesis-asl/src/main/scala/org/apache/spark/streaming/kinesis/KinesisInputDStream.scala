@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kinesis
 import scala.reflect.ClassTag
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.annotation.Evolving
@@ -44,7 +45,9 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val messageHandler: Record => T,
     val kinesisCreds: SparkAWSCredentials,
     val dynamoDBCreds: Option[SparkAWSCredentials],
-    val cloudWatchCreds: Option[SparkAWSCredentials]
+    val cloudWatchCreds: Option[SparkAWSCredentials],
+    val dynamoDBEndpointUrl: Option[String],
+    val cloudWatchMetricsLevel: Option[MetricsLevel]
   ) extends ReceiverInputDStream[T](_ssc) {
 
   import KinesisReadConfigurations._
@@ -80,7 +83,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
   override def getReceiver(): Receiver[T] = {
     new KinesisReceiver(streamName, endpointUrl, regionName, initialPosition,
       checkpointAppName, checkpointInterval, _storageLevel, messageHandler,
-      kinesisCreds, dynamoDBCreds, cloudWatchCreds)
+      kinesisCreds, dynamoDBCreds, cloudWatchCreds, dynamoDBEndpointUrl, cloudWatchMetricsLevel)
   }
 }
 
@@ -107,6 +110,8 @@ object KinesisInputDStream {
     private var kinesisCredsProvider: Option[SparkAWSCredentials] = None
     private var dynamoDBCredsProvider: Option[SparkAWSCredentials] = None
     private var cloudWatchCredsProvider: Option[SparkAWSCredentials] = None
+    private var dynamoDBEndpointUrl: Option[String] = None
+    private var cloudWatchMetricsLevel: Option[MetricsLevel] = None
 
     /**
      * Sets the StreamingContext that will be used to construct the Kinesis DStream. This is a
@@ -269,6 +274,30 @@ object KinesisInputDStream {
     }
 
     /**
+      * Sets the AWS DynamoDB endpoint URL. Defaults to
+      * "https://dynamodb.us-east-1.amazonaws.com" if no custom value is specified
+      *
+      * @param url DynamoDB endpoint URL to use
+      * @return Reference to this [[KinesisInputDStream.Builder]]
+      */
+    def dynamoDBEndpointUrl(url: String): Builder = {
+      dynamoDBEndpointUrl = Option(url)
+      this
+    }
+
+    /**
+      * Sets the AWS CloudWatch MetricsLevel. Defaults to
+      * MetricsLevel.DETAILED if no custom value is specified
+      *
+      * @param metricsLevel CloudWatch MetricsLevel to use
+      * @return Reference to this [[KinesisInputDStream.Builder]]
+      */
+    def cloudWatchMetricsLevel(metricsLevel: MetricsLevel): Builder = {
+      cloudWatchMetricsLevel = Option(metricsLevel)
+      this
+    }
+
+    /**
      * Create a new instance of [[KinesisInputDStream]] with configured parameters and the provided
      * message handler.
      *
@@ -290,7 +319,9 @@ object KinesisInputDStream {
         ssc.sc.clean(handler),
         kinesisCredsProvider.getOrElse(DefaultCredentials),
         dynamoDBCredsProvider,
-        cloudWatchCredsProvider)
+        cloudWatchCredsProvider,
+        dynamoDBEndpointUrl,
+        cloudWatchMetricsLevel)
     }
 
     /**

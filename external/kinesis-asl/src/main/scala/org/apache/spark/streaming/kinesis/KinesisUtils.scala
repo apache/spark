@@ -75,7 +75,7 @@ object KinesisUtils {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, DefaultCredentials, None, None)
+        cleanedHandler, DefaultCredentials, None, None, None, None)
     }
   }
 
@@ -132,7 +132,7 @@ object KinesisUtils {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, kinesisCredsProvider, None, None)
+        cleanedHandler, kinesisCredsProvider, None, None, None, None)
     }
   }
 
@@ -202,7 +202,7 @@ object KinesisUtils {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, kinesisCredsProvider, None, None)
+        cleanedHandler, kinesisCredsProvider, None, None, None, None)
     }
   }
 
@@ -248,7 +248,7 @@ object KinesisUtils {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
-        KinesisInputDStream.defaultMessageHandler, DefaultCredentials, None, None)
+        KinesisInputDStream.defaultMessageHandler, DefaultCredentials, None, None, None, None)
     }
   }
 
@@ -299,7 +299,7 @@ object KinesisUtils {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
         KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
         kinesisAppName, checkpointInterval, storageLevel,
-        KinesisInputDStream.defaultMessageHandler, kinesisCredsProvider, None, None)
+        KinesisInputDStream.defaultMessageHandler, kinesisCredsProvider, None, None, None, None)
     }
   }
 

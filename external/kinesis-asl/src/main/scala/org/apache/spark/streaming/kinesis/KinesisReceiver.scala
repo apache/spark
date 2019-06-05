@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{KinesisClientLibConfiguration, Worker}
+import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.Logging
@@ -80,6 +81,10 @@ import org.apache.spark.util.Utils
  * @param dynamoDBCreds Optional SparkAWSCredentials instance that will be used to generate the
  *                      AWSCredentialsProvider passed to the KCL to authorize DynamoDB API calls.
  *                      Will use kinesisCreds if value is None.
+ * @param dynamoDBEndpointUrl Optional Url of DynamoDB service
+ *                           (e.g., https://dynamodb.us-east-1.amazonaws.com)
+ * @param cloudWatchMetricsLevel Optional MetricsLevel to use for metrics. Default is
+ *                               MetricsLevel.DETAILED. Set to MetricsLevel.NONE to disable.
  */
 private[kinesis] class KinesisReceiver[T](
     val streamName: String,
@@ -92,7 +97,9 @@ private[kinesis] class KinesisReceiver[T](
     messageHandler: Record => T,
     kinesisCreds: SparkAWSCredentials,
     dynamoDBCreds: Option[SparkAWSCredentials],
-    cloudWatchCreds: Option[SparkAWSCredentials])
+    cloudWatchCreds: Option[SparkAWSCredentials],
+    dynamoDBEndpointUrl: Option[String],
+    cloudWatchMetricsLevel: Option[MetricsLevel])
   extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
@@ -163,13 +170,21 @@ private[kinesis] class KinesisReceiver[T](
         .withTaskBackoffTimeMillis(500)
         .withRegionName(regionName)
 
+      val withOptionalConfiguration = (dynamoDBEndpointUrl, cloudWatchMetricsLevel) match {
+        case (Some(endpoint), Some(metricsLevel)) => baseClientLibConfiguration
+          .withDynamoDBEndpoint(endpoint).withMetricsLevel(metricsLevel)
+        case (None, Some(metricsLevel)) => baseClientLibConfiguration.withMetricsLevel(metricsLevel)
+        case (Some(endpoint), None) => baseClientLibConfiguration.withDynamoDBEndpoint(endpoint)
+        case _ => baseClientLibConfiguration
+      }
+
       // Update the Kinesis client lib config with timestamp
       // if InitialPositionInStream.AT_TIMESTAMP is passed
       initialPosition match {
         case ts: AtTimestamp =>
-          baseClientLibConfiguration.withTimestampAtInitialPositionInStream(ts.getTimestamp)
+          withOptionalConfiguration.withTimestampAtInitialPositionInStream(ts.getTimestamp)
         case _ =>
-          baseClientLibConfiguration.withInitialPositionInStream(initialPosition.getPosition)
+          withOptionalConfiguration.withInitialPositionInStream(initialPosition.getPosition)
       }
     }
 

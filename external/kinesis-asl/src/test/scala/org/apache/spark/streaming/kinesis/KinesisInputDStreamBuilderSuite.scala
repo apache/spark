@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kinesis
 import java.util.Calendar
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mockito.MockitoSugar
 
@@ -80,8 +81,10 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     assert(dstream.checkpointInterval == batchDuration)
     assert(dstream._storageLevel == DEFAULT_STORAGE_LEVEL)
     assert(dstream.kinesisCreds == DefaultCredentials)
-    assert(dstream.dynamoDBCreds == None)
-    assert(dstream.cloudWatchCreds == None)
+    assert(dstream.dynamoDBCreds.isEmpty)
+    assert(dstream.cloudWatchCreds.isEmpty)
+    assert(dstream.dynamoDBEndpointUrl.isEmpty)
+    assert(dstream.cloudWatchMetricsLevel.isEmpty)
   }
 
   test("should propagate custom non-auth values to KinesisInputDStream") {
@@ -94,6 +97,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     val customKinesisCreds = mock[SparkAWSCredentials]
     val customDynamoDBCreds = mock[SparkAWSCredentials]
     val customCloudWatchCreds = mock[SparkAWSCredentials]
+    val customDynamoDBEndpointUrl = "https://dynamodb.us-west-2.amazonaws.com"
+    val customCloudWatchMetricsLevel = MetricsLevel.NONE
 
     val dstream = builder
       .endpointUrl(customEndpointUrl)
@@ -105,6 +110,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
       .kinesisCredentials(customKinesisCreds)
       .dynamoDBCredentials(customDynamoDBCreds)
       .cloudWatchCredentials(customCloudWatchCreds)
+      .dynamoDBEndpointUrl(customDynamoDBEndpointUrl)
+      .cloudWatchMetricsLevel(customCloudWatchMetricsLevel)
       .build()
     assert(dstream.endpointUrl == customEndpointUrl)
     assert(dstream.regionName == customRegion)
@@ -115,6 +122,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     assert(dstream.kinesisCreds == customKinesisCreds)
     assert(dstream.dynamoDBCreds == Option(customDynamoDBCreds))
     assert(dstream.cloudWatchCreds == Option(customCloudWatchCreds))
+    assert(dstream.dynamoDBEndpointUrl == Option(customDynamoDBEndpointUrl))
+    assert(dstream.cloudWatchMetricsLevel == Option(customCloudWatchMetricsLevel))
 
     // Testing with AtTimestamp
     val cal = Calendar.getInstance()
