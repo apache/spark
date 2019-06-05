@@ -20,15 +20,15 @@ package org.apache.spark.deploy
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
 
-import scala.collection.JavaConverters._
-
+import org.apache.commons.io.output.TeeOutputStream
 import org.apache.hadoop.fs.Path
+import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.internal.config.R._
 import org.apache.spark.internal.config.SUBMIT_DEPLOY_MODE
-import org.apache.spark.util.RedirectThread
+import org.apache.spark.util.{CircularBuffer, RedirectThread}
 
 /**
  * Main class used to launch SparkR applications using spark-submit. It executes R as a
@@ -100,14 +100,13 @@ object RRunner {
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
         val process = builder.start()
 
-        val redirectThread = new RedirectThread(
-          process.getInputStream, System.out, "redirect R output")
-        redirectThread.start()
+        val stdoutBuffer = new CircularBuffer(1024)
+        val output = new TeeOutputStream(System.out, stdoutBuffer)
+        new RedirectThread(process.getInputStream, output, "redirect R output").start()
 
         val returnCode = process.waitFor()
-
         if (returnCode != 0) {
-          throw SparkUserAppException(returnCode, redirectThread.lastBuf)
+          throw SparkUserAppException(returnCode, stdoutBuffer.toString)
         }
       } finally {
         sparkRBackend.close()

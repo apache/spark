@@ -2983,7 +2983,6 @@ private[spark] class CallerContext(
 
 /**
  * A utility class to redirect the child process's stdout or stderr.
- * Keeps track of the most recently read bytes for later access.
  */
 private[spark] class RedirectThread(
     in: InputStream,
@@ -2993,20 +2992,15 @@ private[spark] class RedirectThread(
   extends Thread(name) {
 
   setDaemon(true)
-
-  private val _lastBuf = new CircularBuffer(1024)
-
   override def run() {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
       Utils.tryWithSafeFinally {
-        var buf = new Array[Byte](1024)
+        val buf = new Array[Byte](1024)
         var len = in.read(buf)
         while (len != -1) {
           out.write(buf, 0, len)
           out.flush()
-          _lastBuf.write(buf, 0, len)
-          _lastBuf.flush()
           len = in.read(buf)
         }
       } {
@@ -3015,10 +3009,6 @@ private[spark] class RedirectThread(
         }
       }
     }
-  }
-
-  def lastBuf: String = {
-    _lastBuf.toString
   }
 }
 
