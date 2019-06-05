@@ -595,7 +595,7 @@ functionIdentifier
     ;
 
 namedExpression
-    : expression (AS? (ident=errorCapturingIdentifier | identifierList))?
+    : expression (AS? (name=errorCapturingIdentifier | identifierList))?
     ;
 
 namedExpressionSeq

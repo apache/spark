@@ -115,11 +115,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
           ctx.partitionSpec.getText)
       }
     }
-    if (ctx.ident != null &&
-        ctx.ident.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw new ParseException(
-        s"Expected `NOSCAN` instead of `${ctx.ident.getText}`", ctx
-      )
+    if (ctx.identifier != null &&
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
     }
 
     val table = visitTableIdentifier(ctx.tableIdentifier)
@@ -129,9 +127,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     } else if (ctx.identifierSeq() == null) {
       if (ctx.partitionSpec != null) {
         AnalyzePartitionCommand(table, visitPartitionSpec(ctx.partitionSpec),
-          noscan = ctx.ident != null)
+          noscan = ctx.identifier != null)
       } else {
-        AnalyzeTableCommand(table, noscan = ctx.ident != null)
+        AnalyzeTableCommand(table, noscan = ctx.identifier != null)
       }
     } else {
       checkPartitionSpec()
@@ -579,8 +577,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
     import ctx._
-    val (user, system) = Option(ctx.func)
-      .map(_.getText.toLowerCase(Locale.ROOT)) match {
+    val (user, system) = Option(ctx.func).map(_.getText.toLowerCase(Locale.ROOT)) match {
       case None | Some("all") => (true, true)
       case Some("system") => (false, true)
       case Some("user") => (true, false)
