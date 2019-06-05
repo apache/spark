@@ -144,17 +144,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         select.aggregationClause,
         select.havingClause,
         select.windowClause,
-        from
-      ).
+        from).
         // Add organization statements.
         optionalMap(select.queryOrganization)(withQueryResultClauses)
     }
     // If there are multiple SELECT just UNION them together into one query.
-    // TODO fix when we have a conclusion
-    selects.length match {
-      case 0 => null
-      case 1 => selects.head
-      case _ => Union(selects)
+    if (selects.length == 1) {
+      selects.head
+    } else {
+      Union(selects)
     }
   }
 
@@ -475,6 +473,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     Filter(expression(ctx.booleanExpression), plan)
   }
 
+  /**
+   * Add a hive-style transform (SELECT TRANSFORM/MAP/REDUCE) query specification to a logical plan.
+   */
   private def withTransformQuerySpecification(
     ctx: TransformQuerySpecificationContext,
     relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
@@ -518,9 +519,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Add a query specification to a logical plan. The query specification is the core of the logical
-   * plan, this is where sourcing (FROM clause), transforming (SELECT TRANSFORM/MAP/REDUCE),
-   * projection (SELECT), aggregation (GROUP BY ... HAVING ...) and filtering (WHERE) takes place.
+   * Add a regular (SELECT) query specification to a logical plan. The query specification
+   * is the core of the logical plan, this is where sourcing (FROM clause), projection (SELECT),
+   * aggregation (GROUP BY ... HAVING ...) and filtering (WHERE) takes place.
    *
    * Note that query hints are ignored (both by the parser and the builder).
    */
@@ -533,7 +534,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     havingClause: HavingClauseContext,
     windowClause: WindowClauseContext,
     relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    // regular select
     // Add lateral views.
     val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
 
