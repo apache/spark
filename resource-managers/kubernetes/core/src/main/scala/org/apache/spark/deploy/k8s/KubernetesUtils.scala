@@ -32,7 +32,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{SPARK_RESOURCE_COUNT_SUFFIX, SPARK_RESOURCE_VENDOR_SUFFIX}
+import org.apache.spark.internal.config.{SPARK_RESOURCE_AMOUNT_SUFFIX, SPARK_RESOURCE_VENDOR_SUFFIX}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 import org.apache.spark.util.Utils.getHadoopFileSystem
@@ -228,7 +228,7 @@ private[spark] object KubernetesUtils extends Logging {
       sparkConf: SparkConf): Map[String, Quantity] = {
     val allResources = sparkConf.getAllWithPrefix(componentName)
     val vendors = SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_VENDOR_SUFFIX).toMap
-    val amounts = SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+    val amounts = SparkConf.getConfigsWithSuffix(allResources, SPARK_RESOURCE_AMOUNT_SUFFIX).toMap
     val uniqueResources = SparkConf.getBaseOfConfigs(allResources)
 
     uniqueResources.map { rName =>
