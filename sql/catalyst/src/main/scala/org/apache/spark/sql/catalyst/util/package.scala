@@ -93,9 +93,9 @@ package object util extends Logging {
   }
 
   def stringToFile(file: File, str: String): File = {
-    val out = new PrintWriter(file)
-    out.write(str)
-    out.close()
+    Utils.tryWithResource(new PrintWriter(file)) { out =>
+      out.write(str)
+    }
     file
   }
 
@@ -115,9 +115,10 @@ package object util extends Logging {
 
   def stackTraceToString(t: Throwable): String = {
     val out = new java.io.ByteArrayOutputStream
-    val writer = new PrintWriter(out)
-    t.printStackTrace(writer)
-    writer.flush()
+    Utils.tryWithResource(new PrintWriter(out)) { writer =>
+      t.printStackTrace(writer)
+      writer.flush()
+    }
     new String(out.toByteArray, StandardCharsets.UTF_8)
   }
 

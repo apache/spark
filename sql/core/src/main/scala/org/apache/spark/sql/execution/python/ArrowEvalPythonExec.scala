@@ -23,7 +23,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types.StructType
@@ -58,20 +57,10 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
 }
 
 /**
- * A logical plan that evaluates a [[PythonUDF]].
- */
-case class ArrowEvalPython(
-    udfs: Seq[PythonUDF],
-    output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-  override def producedAttributes: AttributeSet = AttributeSet(output.drop(child.output.length))
-}
-
-/**
  * A physical plan that evaluates a [[PythonUDF]].
  */
-case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
-  extends EvalPythonExec(udfs, output, child) {
+case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
+  extends EvalPythonExec(udfs, resultAttrs, child) {
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone

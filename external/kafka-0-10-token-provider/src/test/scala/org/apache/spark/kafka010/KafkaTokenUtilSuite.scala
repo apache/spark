@@ -29,21 +29,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 
 class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
-  private val identifier1 = "cluster1"
-  private val identifier2 = "cluster2"
-  private val tokenService1 = KafkaTokenUtil.getTokenService(identifier1)
-  private val tokenService2 = KafkaTokenUtil.getTokenService(identifier2)
-  private val bootStrapServers = "127.0.0.1:0"
-  private val matchingTargetServersRegex = "127.0.0.*:0"
-  private val nonMatchingTargetServersRegex = "127.0.1.*:0"
-  private val trustStoreLocation = "/path/to/trustStore"
-  private val trustStorePassword = "trustStoreSecret"
-  private val keyStoreLocation = "/path/to/keyStore"
-  private val keyStorePassword = "keyStoreSecret"
-  private val keyPassword = "keySecret"
-  private val keytab = "/path/to/keytab"
-  private val principal = "user@domain.com"
-
   private var sparkConf: SparkConf = null
 
   override def beforeEach(): Unit = {
@@ -68,7 +53,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
 
   test("createAdminClientProperties with SASL_PLAINTEXT protocol should not include " +
       "keystore and truststore config") {
-    val clusterConf = createClusterConf(SASL_PLAINTEXT.name)
+    val clusterConf = createClusterConf(identifier1, SASL_PLAINTEXT.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -84,7 +69,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties with SASL_SSL protocol should include truststore config") {
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -103,7 +88,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
 
   test("createAdminClientProperties with SSL protocol should include keystore and truststore " +
       "config") {
-    val clusterConf = createClusterConf(SSL.name)
+    val clusterConf = createClusterConf(identifier1, SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -121,7 +106,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties with global config should not set dynamic jaas config") {
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
     setGlobalKafkaClientConfig()
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
@@ -137,7 +122,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   test("createAdminClientProperties with keytab should set keytab dynamic jaas config") {
     sparkConf.set(KEYTAB, keytab)
     sparkConf.set(PRINCIPAL, principal)
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -155,7 +140,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("createAdminClientProperties without keytab should set ticket cache dynamic jaas config") {
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
 
@@ -225,7 +210,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
 
   test("getTokenJaasParams with token should return scram module") {
     addTokenToUGI(tokenService1)
-    val clusterConf = createClusterConf(SASL_SSL.name)
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
 
@@ -233,20 +218,5 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(jaasParams.contains("tokenauth=true"))
     assert(jaasParams.contains(tokenId))
     assert(jaasParams.contains(tokenPassword))
-  }
-
-  private def createClusterConf(securityProtocol: String): KafkaTokenClusterConf = {
-    KafkaTokenClusterConf(
-      identifier1,
-      bootStrapServers,
-      KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX,
-      securityProtocol,
-      KafkaTokenSparkConf.DEFAULT_SASL_KERBEROS_SERVICE_NAME,
-      Some(trustStoreLocation),
-      Some(trustStorePassword),
-      Some(keyStoreLocation),
-      Some(keyStorePassword),
-      Some(keyPassword),
-      KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
   }
 }

@@ -499,6 +499,14 @@ object OverwritePartitionsDynamic {
   }
 }
 
+/**
+ * Drop a table.
+ */
+case class DropTable(
+    catalog: TableCatalog,
+    ident: Identifier,
+    ifExists: Boolean) extends Command
+
 
 /**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the

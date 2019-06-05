@@ -42,14 +42,14 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-hive_${scala.binary.version}</artifactId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <artifactId>spark-hive_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
@@ -69,6 +69,15 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-beeline</artifactId>
+    </dependency>
+    <!-- Explicit listing hive-contrib and hive-hcatalog-core. Otherwise the maven test fails. -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-contrib</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}.hcatalog</groupId>
+      <artifactId>hive-hcatalog-core</artifactId>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>

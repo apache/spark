@@ -1143,6 +1143,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     case _: Repartition => true
     case _: ScriptTransformation => true
     case _: Sort => true
+    case _: BatchEvalPython => true
+    case _: ArrowEvalPython => true
     case _ => false
   }
 
