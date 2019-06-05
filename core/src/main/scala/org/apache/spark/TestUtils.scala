@@ -38,6 +38,7 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.log4j.PropertyConfigurator
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -311,6 +312,16 @@ private[spark] object TestUtils {
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 
+  /**
+   * Set task resource requirement.
+   */
+  def setTaskResourceRequirement(
+      conf: SparkConf,
+      resourceName: String,
+      resourceCount: Int): SparkConf = {
+    val key = s"${SPARK_TASK_RESOURCE_PREFIX}${resourceName}${SPARK_RESOURCE_COUNT_SUFFIX}"
+    conf.set(key, resourceCount.toString)
+  }
 }
 
 

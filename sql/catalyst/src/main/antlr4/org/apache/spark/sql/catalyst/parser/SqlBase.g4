@@ -114,17 +114,28 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (ident=errorCapturingIdentifier |
-        FOR COLUMNS identifierSeq |
-        FOR ALL COLUMNS)?                                              #analyze
-    | ALTER TABLE tableIdentifier
-        ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
+        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+    | ALTER TABLE multipartIdentifier
+        ADD (COLUMN | COLUMNS)
+        columns=qualifiedColTypeWithPositionList                       #addTableColumns
+    | ALTER TABLE multipartIdentifier
+        ADD (COLUMN | COLUMNS)
+        '(' columns=qualifiedColTypeWithPositionList ')'               #addTableColumns
+    | ALTER TABLE multipartIdentifier
+        RENAME COLUMN from=qualifiedName TO to=identifier              #renameTableColumn
+    | ALTER TABLE multipartIdentifier
+        DROP (COLUMN | COLUMNS) '(' columns=qualifiedNameList ')'      #dropTableColumns
+    | ALTER TABLE multipartIdentifier
+        DROP (COLUMN | COLUMNS) columns=qualifiedNameList              #dropTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
         RENAME TO to=tableIdentifier                                   #renameTable
-    | ALTER (TABLE | VIEW) tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
-    | ALTER (TABLE | VIEW) tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
+    | ALTER TABLE multipartIdentifier
+        (ALTER | CHANGE) COLUMN? qualifiedName
+        (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
     | ALTER TABLE tableIdentifier partitionSpec?
         CHANGE COLUMN?
         colName=errorCapturingIdentifier colType colPosition?          #changeColumn
@@ -142,7 +153,8 @@ statement
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
     | ALTER VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
-    | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
+    | ALTER TABLE multipartIdentifier SET locationSpec                 #setTableLocation
+    | ALTER TABLE tableIdentifier partitionSpec SET locationSpec       #setPartitionLocation
     | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
     | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
@@ -725,7 +737,7 @@ intervalUnit
     ;
 
 colPosition
-    : FIRST | AFTER errorCapturingIdentifier
+    : FIRST | AFTER qualifiedName
     ;
 
 dataType
@@ -733,6 +745,14 @@ dataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
+    ;
+
+qualifiedColTypeWithPositionList
+    : qualifiedColTypeWithPosition (',' qualifiedColTypeWithPosition)*
+    ;
+
+qualifiedColTypeWithPosition
+    : name=qualifiedName dataType (COMMENT comment=STRING)? colPosition?
     ;
 
 colTypeList
@@ -785,6 +805,10 @@ frameBound
     : UNBOUNDED boundType=(PRECEDING | FOLLOWING)
     | boundType=CURRENT ROW
     | expression boundType=(PRECEDING | FOLLOWING)
+    ;
+
+qualifiedNameList
+    : qualifiedName (',' qualifiedName)*
     ;
 
 qualifiedName
@@ -1262,6 +1286,7 @@ nonReserved
     | TRANSFORM
     | TRUE
     | TRUNCATE
+    | TYPE
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
@@ -1517,6 +1542,7 @@ TRANSACTIONS: 'TRANSACTIONS';
 TRANSFORM: 'TRANSFORM';
 TRUE: 'TRUE';
 TRUNCATE: 'TRUNCATE';
+TYPE: 'TYPE';
 UNARCHIVE: 'UNARCHIVE';
 UNBOUNDED: 'UNBOUNDED';
 UNCACHE: 'UNCACHE';

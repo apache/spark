@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
 
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
@@ -29,6 +29,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.ResourceName.GPU
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
@@ -78,6 +79,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
     setupSchedulerWithMaster("local", confs: _*)
+  }
+
+  def setupScheduler(numCores: Int, confs: (String, String)*): TaskSchedulerImpl = {
+    setupSchedulerWithMaster(s"local[$numCores]", confs: _*)
   }
 
   def setupSchedulerWithMaster(master: String, confs: (String, String)*): TaskSchedulerImpl = {
@@ -1237,5 +1242,38 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail a task from the stage attempt.
     tsm.handleFailedTask(tsm.taskAttempts.head.head.taskId, TaskState.FAILED, TaskKilled("test"))
     assert(tsm.isZombie)
+  }
+
+  test("Scheduler correctly accounts for GPUs per task") {
+    val taskCpus = 1
+    val taskGpus = 1
+    val executorGpus = 4
+    val executorCpus = 4
+    val taskScheduler = setupScheduler(numCores = executorCpus,
+      config.CPUS_PER_TASK.key -> taskCpus.toString,
+      s"${config.SPARK_TASK_RESOURCE_PREFIX}${GPU}${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
+        taskGpus.toString,
+      s"${config.SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${config.SPARK_RESOURCE_COUNT_SUFFIX}" ->
+        executorGpus.toString,
+      config.EXECUTOR_CORES.key -> executorCpus.toString)
+    val taskSet = FakeTask.createTaskSet(3)
+
+    val numFreeCores = 2
+    val resources = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
+    val singleCoreWorkerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
+    val zeroGpuWorkerOffers =
+      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, Map.empty))
+    taskScheduler.submitTasks(taskSet)
+    // WorkerOffer doesn't contain GPU resource, don't launch any task.
+    var taskDescriptions = taskScheduler.resourceOffers(zeroGpuWorkerOffers).flatten
+    assert(0 === taskDescriptions.length)
+    assert(!failedTaskSet)
+    // Launch tasks on executor that satisfies resource requirements.
+    taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
+    assert(2 === taskDescriptions.length)
+    assert(!failedTaskSet)
+    assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)
+    assert(ArrayBuffer("1") === taskDescriptions(1).resources.get(GPU).get.addresses)
   }
 }
