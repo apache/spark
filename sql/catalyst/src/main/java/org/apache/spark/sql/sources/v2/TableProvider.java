@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.DataSourceRegister;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -56,13 +55,7 @@ public interface TableProvider {
    * @throws UnsupportedOperationException
    */
   default Table getTable(CaseInsensitiveStringMap options, StructType schema) {
-    String name;
-    if (this instanceof DataSourceRegister) {
-      name = ((DataSourceRegister) this).shortName();
-    } else {
-      name = this.getClass().getName();
-    }
     throw new UnsupportedOperationException(
-      name + " source does not support user-specified schema");
+      this.getClass().getSimpleName() + " source does not support user-specified schema");
   }
 }
