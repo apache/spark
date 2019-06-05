@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.arrow
+package org.apache.spark.sql.util
 
-import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
+import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
