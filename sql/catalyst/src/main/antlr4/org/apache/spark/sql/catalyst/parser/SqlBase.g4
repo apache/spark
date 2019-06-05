@@ -21,7 +21,7 @@ grammar SqlBase;
    * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
    */
-  public boolean legacy_setops_precedence_enbled = false;
+  public boolean legacy_setops_precedence_enabled = false;
 
   /**
    * Verify whether current token is a valid decimal token (which contains dot).
@@ -382,22 +382,27 @@ multiInsertQueryBody
     ;
 
 selectStatement
-    : selectNoFromQuerySpecification queryOrganization
+    : selectClause
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?
+      queryOrganization
     ;
 
 queryTerm
     : queryPrimary                                                                       #queryTermDefault
-    | left=queryTerm {legacy_setops_precedence_enbled}?
+    | left=queryTerm {legacy_setops_precedence_enabled}?
         operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enbled}?
+    | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enbled}?
+    | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
 queryPrimary
-    : transformQuerySpecification                                           #queryPrimaryTransform
-    | selectWithFromQuerySpecification                                      #queryPrimarySelect
+    : querySpecification                                                    #queryPrimaryDefault
     | TABLE tableIdentifier                                                 #table
     | inlineTable                                                           #inlineTableDefault1
     | '(' queryNoWith  ')'                                                  #subquery
@@ -407,29 +412,17 @@ sortItem
     : expression ordering=(ASC | DESC)? (NULLS nullOrder=(LAST | FIRST))?
     ;
 
-transformQuerySpecification
+querySpecification
     : transformClause
       fromClause?
-      whereClause?
-    ;
-
-selectWithFromQuerySpecification
-    : selectClause
+      whereClause?                                                          #transformQuerySpecification
+    | selectClause
       fromClause?
       lateralView*
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?
-    ;
-
-selectNoFromQuerySpecification
-    : selectClause
-      lateralView*
-      whereClause?
-      aggregationClause?
-      havingClause?
-      windowClause?
+      windowClause?                                                         #regularQuerySpecification
     ;
 
 hint
