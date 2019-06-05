@@ -274,24 +274,24 @@ object KinesisInputDStream {
     }
 
     /**
-      * Sets the AWS DynamoDB endpoint URL. Defaults to
-      * "https://dynamodb.us-east-1.amazonaws.com" if no custom value is specified
-      *
-      * @param url DynamoDB endpoint URL to use
-      * @return Reference to this [[KinesisInputDStream.Builder]]
-      */
+     * Sets the AWS DynamoDB endpoint URL. Defaults to
+     * "https://dynamodb.us-east-1.amazonaws.com" if no custom value is specified
+     *
+     * @param url DynamoDB endpoint URL to use
+     * @return Reference to this [[KinesisInputDStream.Builder]]
+     */
     def dynamoDBEndpointUrl(url: String): Builder = {
       dynamoDBEndpointUrl = Option(url)
       this
     }
 
     /**
-      * Sets the AWS CloudWatch MetricsLevel. Defaults to
-      * MetricsLevel.DETAILED if no custom value is specified
-      *
-      * @param metricsLevel CloudWatch MetricsLevel to use
-      * @return Reference to this [[KinesisInputDStream.Builder]]
-      */
+     * Sets the AWS CloudWatch MetricsLevel. Defaults to
+     * MetricsLevel.DETAILED if no custom value is specified
+     *
+     * @param metricsLevel CloudWatch MetricsLevel to use
+     * @return Reference to this [[KinesisInputDStream.Builder]]
+     */
     def cloudWatchMetricsLevel(metricsLevel: MetricsLevel): Builder = {
       cloudWatchMetricsLevel = Option(metricsLevel)
       this
