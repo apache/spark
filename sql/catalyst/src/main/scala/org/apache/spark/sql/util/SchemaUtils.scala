@@ -88,4 +88,33 @@ private[spark] object SchemaUtils {
         s"Found duplicate column(s) $colType: ${duplicateColumns.mkString(", ")}")
     }
   }
+
+  /**
+   * Checks if the two provided schemas have columns with matching names. If yes, also the
+   * data type has to match otherwise an exception is raised
+   *
+   * @param schemaOne first schema to compare
+   * @param schemaTwo second schema to compare
+   * @param resolver resolver used to determine if two identifiers are equal
+   */
+  def checkDataTypeMatchesForSameColumnName(
+    schemaOne: StructType, schemaTwo: StructType, resolver: Resolver): Unit = {
+    checkDataTypeMatchesForSameColumnName(schemaOne, schemaTwo, isCaseSensitiveAnalysis(resolver))
+  }
+
+  def checkDataTypeMatchesForSameColumnName(
+    schemaOne: StructType, schemaTwo: StructType, caseSensitiveAnalysis: Boolean): Unit = {
+    for (s1 <- schemaOne; s2 <- schemaTwo) {
+      // scalastyle:off caselocale
+      val schemaOneColumName = if (caseSensitiveAnalysis) s1.name else s1.name.toLowerCase
+      val schemaTwoColumName = if (caseSensitiveAnalysis) s2.name else s2.name.toLowerCase
+      // scalastyle:on caselocale
+
+      if (schemaOneColumName == schemaTwoColumName & s1.dataType != s2.dataType) {
+        throw new AnalysisException(
+          s"Column `$schemaOneColumName` type doesn't match between schemas ($s1 <> $s2)")
+      }
+    }
+  }
+
 }

@@ -176,7 +176,11 @@ case class AlterTableRenameCommand(
 
 abstract class AlterTableAddReplaceColumnsCommandsBase extends RunnableCommand {
   /**
-   * Ensure the columns to add/replace meet requirements.
+   * Ensure the columns to add/replace meet requirements:
+   * - columns to add should not have conflicting names with existing columns
+   * - columns to replace should have distinct names
+   * - if a column to replace exists already in the table, the data type has to match
+   * - column names have to match the given datasource format specifications
    */
   protected def verifyColumnsToAddReplace(
     table: TableIdentifier,
@@ -186,6 +190,11 @@ abstract class AlterTableAddReplaceColumnsCommandsBase extends RunnableCommand {
     SchemaUtils.checkColumnNameDuplication(
       colsToVerify.map(_.name),
       "in the table definition of " + table.identifier,
+      conf.caseSensitiveAnalysis)
+
+    SchemaUtils.checkDataTypeMatchesForSameColumnName(
+      StructType(colsToVerify),
+      catalogTable.dataSchema,
       conf.caseSensitiveAnalysis)
 
     DDLUtils.checkDataColNames(catalogTable, colsToVerify.map(_.name))

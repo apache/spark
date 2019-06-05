@@ -82,4 +82,48 @@ class SchemaUtilsSuite extends SparkFunSuite {
 
     checkNoExceptionCases("a INT, b INT, c INT", caseSensitive = false)
   }
+
+  test(s"Test checkDataTypeMatchesForSameColumnName") {
+    def compareSchemas(schema1_str: String, schema2_str: String,
+      caseSensitive: Boolean, shouldRaiseException: Boolean): Unit = {
+      val schema1 = StructType.fromDDL(schema1_str)
+      val schema2 = StructType.fromDDL(schema2_str)
+
+      if (shouldRaiseException) {
+        val msg = intercept[AnalysisException] {
+          SchemaUtils.checkDataTypeMatchesForSameColumnName(schema1, schema2, caseSensitive)
+        }.getMessage
+        assert(msg.contains("type doesn't match between schemas"))
+      }
+      else SchemaUtils.checkDataTypeMatchesForSameColumnName(schema1, schema2, caseSensitive)
+
+    }
+    // pass when datatype is the same
+    compareSchemas("a int, b string", "a int, B string",
+      caseSensitive = false, shouldRaiseException = false)
+    compareSchemas("a int, b string, B int", "a int, b string, B int",
+      caseSensitive = true, shouldRaiseException = false)
+
+    // fail when there's at least one mismatch
+    compareSchemas("a int, b string", "a string, b string",
+      caseSensitive = false, shouldRaiseException = true)
+    compareSchemas("a int, b string", "a int, b string, B int",
+      caseSensitive = false, shouldRaiseException = true)
+
+    // work as expected when schemas structures differ
+    compareSchemas("a int, b string", "c string, D int, A int",
+      caseSensitive = true, shouldRaiseException = false)
+    compareSchemas("a int, b string", "b string",
+      caseSensitive = false, shouldRaiseException = false)
+    compareSchemas("a int, b string", "B string",
+      caseSensitive = false, shouldRaiseException = false)
+    compareSchemas("a int, b string", "a string",
+      caseSensitive = true, shouldRaiseException = true)
+    compareSchemas("a int, b string", "A string",
+      caseSensitive = false, shouldRaiseException = true)
+    compareSchemas("a int", "a int, A string",
+      caseSensitive = true, shouldRaiseException = false)
+    compareSchemas("b string", "b string, B int",
+      caseSensitive = false, shouldRaiseException = true)
+  }
 }
