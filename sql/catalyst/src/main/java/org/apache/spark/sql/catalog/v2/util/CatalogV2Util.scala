@@ -122,21 +122,21 @@ object CatalogV2Util {
 
   private def replace(
       struct: StructType,
-      path: Seq[String],
+      fieldNames: Seq[String],
       update: StructField => Option[StructField]): StructType = {
 
-    val pos = struct.getFieldIndex(path.head)
-        .getOrElse(throw new IllegalArgumentException(s"Cannot find field: ${path.head}"))
+    val pos = struct.getFieldIndex(fieldNames.head)
+        .getOrElse(throw new IllegalArgumentException(s"Cannot find field: ${fieldNames.head}"))
     val field = struct.fields(pos)
-    val replacement: Option[StructField] = if (path.tail.isEmpty) {
+    val replacement: Option[StructField] = if (fieldNames.tail.isEmpty) {
       update(field)
     } else {
       field.dataType match {
         case nestedStruct: StructType =>
-          val updatedType: StructType = replace(nestedStruct, path.tail, update)
+          val updatedType: StructType = replace(nestedStruct, fieldNames.tail, update)
           Some(StructField(field.name, updatedType, field.nullable, field.metadata))
         case _ =>
-          throw new IllegalArgumentException(s"Not a struct: ${path.head}")
+          throw new IllegalArgumentException(s"Not a struct: ${fieldNames.head}")
       }
     }
 
