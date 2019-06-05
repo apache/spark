@@ -238,8 +238,13 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: getTablesByName") {
-      assert(client.getTablesByName("default", Seq("src", "tgt"))
-        .map(_.identifier.table) == Seq("src", "tgt"))
+      assert(client.getTablesByName("default", Seq("src")).head
+        == client.getTableOption("default", "src").get)
+    }
+
+    test(s"$version: getTablesByName when multiple tables") {
+      assert(client.getTablesByName("default", Seq("src", "temporary"))
+        .map(_.identifier.table) == Seq("src", "temporary"))
     }
 
     test(s"$version: getTablesByName when some tables do not exist") {
