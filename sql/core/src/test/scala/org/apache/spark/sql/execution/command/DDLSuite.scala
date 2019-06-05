@@ -2597,7 +2597,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t1 (c1 string) USING $provider")
       sql("INSERT INTO t1 VALUES ('1')")
       sql("ALTER TABLE t1 REPLACE COLUMNS (c2 int, c3 string)")
-      val e = intercept[AnalysisException] {
+      // c1 is dropped, c2 c3 are added
+      var e = intercept[AnalysisException] {
         sql("SELECT c1 from t1")
       }.getMessage
       assert(e.contains("cannot resolve '`c1`' given input columns"))
@@ -2605,6 +2606,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       checkAnswer(
         sql("SELECT * FROM t1 where c3 = '3'"),
         Seq(Row(2, "3"))
+      )
+      // fails to replace c3 as type doesn't match
+      e = intercept[AnalysisException]{
+        sql("ALTER TABLE t1 REPLACE COLUMNS (c2 int, c3 int, c4 string)")
+      }.getMessage
+      assert(e.contains("StructField(c3,IntegerType,true) <> StructField(c3,StringType,true)"))
+      // c1 is added back, c2 is replaced with the same definition
+      sql("ALTER TABLE t1 REPLACE COLUMNS (c1 string, c2 int)")
+      checkAnswer(
+        sql("SELECT c1, c2 FROM t1"),
+        Seq(Row("1", null), Row(null, 2))
       )
     }
   }
@@ -2631,23 +2643,36 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 int, c2 int, p int) USING $provider PARTITIONED BY (p)")
       sql("INSERT INTO t1 PARTITION(p = 1) VALUES (1, 2)")
-      sql("ALTER TABLE t1 REPLACE COLUMNS (c4 int, c3 string, c2 string)")
-      val e = intercept[AnalysisException] {
+      sql("ALTER TABLE t1 REPLACE COLUMNS (c4 int, c3 string, c2 int)")
+      // c1 is dropped, c2 c3 c4 are added
+      var e = intercept[AnalysisException] {
         sql("SELECT c1 from t1")
       }.getMessage
       assert(e.contains("cannot resolve '`c1`' given input columns"))
       checkAnswer(
         sql("SELECT c2, c3, c4 FROM t1 WHERE p = 1"),
-        Seq(Row("2", null, null))
+        Seq(Row(2, null, null))
       )
-      sql("INSERT INTO t1 PARTITION(p = 2) VALUES (4, '3', '2')")
+      sql("INSERT INTO t1 PARTITION(p = 2) VALUES (4, '3', 2)")
       checkAnswer(
         sql("SELECT * FROM t1 WHERE p = 2"),
-        Seq(Row(4, "3", "2", 2))
+        Seq(Row(4, "3", 2, 2))
       )
       checkAnswer(
         sql("SELECT * FROM t1 WHERE c3 = '3'"),
-        Seq(Row(4, "3", "2", 2))
+        Seq(Row(4, "3", 2, 2))
+      )
+      // fails to replace c2 as type doesn't match
+      e = intercept[AnalysisException] {
+        sql("ALTER TABLE t1 REPLACE COLUMNS (c3 string, c2 string)")
+      }.getMessage
+      assert(e.contains("StructField(c2,StringType,true) <> StructField(c2,IntegerType,true)"
+      ))
+      // c1 is added back, c2 is replaced with itself
+      sql("ALTER TABLE t1 REPLACE COLUMNS (c1 int, c2 int)")
+      checkAnswer(
+        sql("SELECT c1, c2 FROM t1"),
+        Seq(Row(1, 2), Row(null, 2))
       )
     }
   }
@@ -2692,7 +2717,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       if (provider == "text" | provider.endsWith("TextFileFormat")) {
         testReplaceColumnPartitionedTextProvider()
       }
-      else testReplaceColumn(provider)
+      else testReplaceColumnPartitioned(provider)
     }
   }
 
@@ -2743,8 +2768,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("alter table replace columns with duplicated column names") {
    withTable("t1") {
      sql("CREATE TABLE t1 (c1 int) USING PARQUET")
-     sql("ALTER TABLE t1 REPLACE COLUMNS (c1 string)")
-     assert(spark.table("t1").schema == new StructType().add("c1", StringType))
+     sql("ALTER TABLE t1 REPLACE COLUMNS (c1 int)")
+     assert(spark.table("t1").schema == new StructType().add("c1", IntegerType))
      val e = intercept[AnalysisException] {
        sql("ALTER TABLE t1 REPLACE COLUMNS (c2 string, c2 string)")
      }.getMessage
@@ -2827,12 +2852,26 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTable("t1") {
           sql("CREATE TABLE t1 (c1 int) USING PARQUET")
           if (!caseSensitive) {
-            sql("ALTER TABLE t1 REPLACE COLUMNS (C1 string)")
-            assert(spark.table("t1").schema == new StructType().add("C1", StringType))
+            // C1 replaces c1
+            sql("ALTER TABLE t1 REPLACE COLUMNS (C1 integer)")
+            assert(spark.table("t1").schema == new StructType().add("C1", IntegerType))
+            // C1 doesn't replace c1 as type doesn't match
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 REPLACE COLUMNS (C1 string)")
+            }.getMessage
+            assert(e.contains(
+              "StructField(C1,StringType,true) <> StructField(C1,IntegerType,true)"))
           } else {
-            sql("ALTER TABLE t1 REPLACE COLUMNS (c1 string, C1 string)")
+            // c1 replaces c1, C1 is added
+            sql("ALTER TABLE t1 REPLACE COLUMNS (c1 int, C1 string)")
             assert(spark.table("t1").schema ==
-              new StructType().add("c1", StringType).add("C1", StringType))
+              new StructType().add("c1", IntegerType).add("C1", StringType))
+            // c1 replaces c1, C1 doesn't replace C1 as type doesn't match
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 REPLACE COLUMNS (c1 int, C1 int)")
+            }.getMessage
+            assert(e.contains(
+              "StructField(C1,IntegerType,true) <> StructField(C1,StringType,true)"))
           }
         }
       }
