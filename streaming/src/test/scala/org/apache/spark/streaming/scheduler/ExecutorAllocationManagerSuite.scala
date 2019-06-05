@@ -388,7 +388,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   }
 
   private def withStreamingContext(conf: SparkConf)(body: StreamingContext => Unit): Unit = {
-    conf.setMaster("myDummyLocalExternalClusterManager")
+    conf.setMaster("local-cluster[1,1,1024]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 

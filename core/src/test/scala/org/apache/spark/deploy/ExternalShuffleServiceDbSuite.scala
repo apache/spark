@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.CharStreams
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
 import org.apache.spark.network.shuffle.TestShuffleDataContext
 import org.apache.spark.util.Utils
@@ -70,10 +71,12 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     }
   }
 
+  def shuffleServiceConf: SparkConf = sparkConf.clone().set(SHUFFLE_SERVICE_PORT, 0)
+
   def registerExecutor(): Unit = {
     try {
       sparkConf.set("spark.shuffle.service.db.enabled", "true")
-      externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
+      externalShuffleService = new ExternalShuffleService(shuffleServiceConf, securityManager)
 
       // external Shuffle Service start
       externalShuffleService.start()
@@ -94,7 +97,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     "shuffle service restart") {
     try {
       sparkConf.set("spark.shuffle.service.db.enabled", "true")
-      externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
+      externalShuffleService = new ExternalShuffleService(shuffleServiceConf, securityManager)
       // externalShuffleService restart
       externalShuffleService.start()
       blockHandler = externalShuffleService.getBlockHandler
@@ -120,7 +123,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     " shuffle service restart") {
     try {
       sparkConf.set("spark.shuffle.service.db.enabled", "false")
-      externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
+      externalShuffleService = new ExternalShuffleService(shuffleServiceConf, securityManager)
       // externalShuffleService restart
       externalShuffleService.start()
       blockHandler = externalShuffleService.getBlockHandler

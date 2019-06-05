@@ -24,6 +24,7 @@ import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.immutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
@@ -369,6 +370,7 @@ class ExecutorSuite extends SparkFunSuite
       addedFiles = Map[String, Long](),
       addedJars = Map[String, Long](),
       properties = new Properties,
+      resources = immutable.Map[String, ResourceInformation](),
       serializedTask)
   }
 

@@ -35,7 +35,6 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType}
-import org.apache.hive.service.cli.thrift.TCLIService.Client
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
@@ -66,7 +65,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val protocol = new TBinaryProtocol(transport)
-    val client = new ThriftCLIServiceClient(new Client(protocol))
+    val client = new ThriftCLIServiceClient(new ThriftserverShimUtils.Client(protocol))
 
     transport.open()
     try f(client) finally transport.close()
@@ -536,7 +535,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      if (HiveUtils.isHive23) {
+        assert(conf.get("spark.sql.hive.version") === Some("2.3.5"))
+      } else {
+        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      }
     }
   }
 
@@ -549,7 +552,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      if (HiveUtils.isHive23) {
+        assert(conf.get("spark.sql.hive.version") === Some("2.3.5"))
+      } else {
+        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      }
     }
   }
 
@@ -627,7 +634,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val sessionHandle = client.openSession(user, "")
       val sessionID = sessionHandle.getSessionId
 
-      assert(pipeoutFileList(sessionID).length == 1)
+      if (HiveUtils.isHive23) {
+        assert(pipeoutFileList(sessionID).length == 2)
+      } else {
+        assert(pipeoutFileList(sessionID).length == 1)
+      }
 
       client.closeSession(sessionHandle)
 
