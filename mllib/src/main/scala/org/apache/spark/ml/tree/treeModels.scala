@@ -78,6 +78,24 @@ private[spark] trait DecisionTreeModel {
 
   /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   private[spark] def toOld: OldDecisionTreeModel
+
+  /** Returns an iterator that traverses (DFS, left to right) the leaves
+   *  in the subtree of this node.
+   */
+  private def leafIterator(node: Node): Iterator[LeafNode] = {
+    node match {
+      case l: LeafNode => Iterator.single(l)
+      case n: InternalNode =>
+        leafIterator(n.leftChild) ++ leafIterator(n.rightChild)
+    }
+  }
+
+  @transient private[ml] lazy val leafIndices: Map[LeafNode, Int] =
+    leafIterator(rootNode).zipWithIndex.toMap
+
+  private[ml] def predictLeafIndexImpl(features: Vector): Double = {
+    leafIndices(rootNode.predictImpl(features)).toDouble
+  }
 }
 
 /**
@@ -118,6 +136,9 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
+
+  private[ml] def predictLeafIndicesImpl(features: Vector): Vector =
+    Vectors.dense(trees.map(_.predictLeafIndexImpl(features)))
 }
 
 private[ml] object TreeEnsembleModel {
