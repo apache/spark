@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.DataType
 object ResolveOutputRelation extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
     case append @ AppendData(table, query, isByName)
-      if table.resolved && query.resolved && !append.outputResolved =>
+        if table.resolved && query.resolved && !append.outputResolved =>
       val projection = resolveOutputColumns(table.name, table.output, query, isByName)
 
       if (projection != query) {
@@ -47,7 +47,7 @@ object ResolveOutputRelation extends Rule[LogicalPlan] {
       }
 
     case overwrite @ OverwriteByExpression(table, _, query, isByName)
-      if table.resolved && query.resolved && !overwrite.outputResolved =>
+        if table.resolved && query.resolved && !overwrite.outputResolved =>
       val projection = resolveOutputColumns(table.name, table.output, query, isByName)
 
       if (projection != query) {
@@ -57,7 +57,7 @@ object ResolveOutputRelation extends Rule[LogicalPlan] {
       }
 
     case overwrite @ OverwritePartitionsDynamic(table, query, isByName)
-      if table.resolved && query.resolved && !overwrite.outputResolved =>
+        if table.resolved && query.resolved && !overwrite.outputResolved =>
       val projection = resolveOutputColumns(table.name, table.output, query, isByName)
 
       if (projection != query) {
