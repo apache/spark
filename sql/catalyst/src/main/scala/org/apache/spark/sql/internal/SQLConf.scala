@@ -1778,9 +1778,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_INSERT_TABLE_FORCIBLE_CAST = buildConf("spark.sql.legacy.insertTable.forcibleCast")
-    .doc("When inserting data to a table, Spark will cast the data type of input query to " +
-      "the data type of target table forcibly if this config is true.")
+  val LEGACY_INSERT_TABLE_TYPE_COERCION = buildConf("spark.sql.legacy.insertTable.typeCoercion")
+    .doc("When true, Spark will cast the data type of input query of table insertion to " +
+      "the data type of target table by coercion; otherwise, only upcasting is allowed, e.g. " +
+      "`int` -> `long` and `int` -> `string` are allowed, while `long` -> `int` or " +
+      "`string` -> `int` are not allowed.")
     .booleanConf
     .createWithDefault(false)
 }

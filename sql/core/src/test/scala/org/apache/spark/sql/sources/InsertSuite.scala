@@ -567,7 +567,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
   test("SPARK-24583 Wrong schema type in InsertIntoDataSourceCommand") {
     // This test needs to write null value to a non-nullable column.
-    withSQLConf(SQLConf.LEGACY_INSERT_TABLE_FORCIBLE_CAST.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_INSERT_TABLE_TYPE_COERCION.key -> "true") {
       withTable("test_table") {
         val schema = new StructType()
           .add("i", LongType, false)
@@ -607,7 +607,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       }
       assert(e.message.contains("Cannot write incompatible data to table"))
 
-      withSQLConf(SQLConf.LEGACY_INSERT_TABLE_FORCIBLE_CAST.key -> "true") {
+      withSQLConf(SQLConf.LEGACY_INSERT_TABLE_TYPE_COERCION.key -> "true") {
         sql("INSERT INTO t VALUES (2L, 'a')")
         checkAnswer(spark.table("t"), Row(1, "1") :: Row(2, "a") :: Nil)
       }

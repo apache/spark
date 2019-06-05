@@ -358,7 +358,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
-    val newQuery = if (conf.getConf(SQLConf.LEGACY_INSERT_TABLE_FORCIBLE_CAST)) {
+    val newQuery = if (conf.getConf(SQLConf.LEGACY_INSERT_TABLE_TYPE_COERCION)) {
       DDLPreprocessingUtils.castAndRenameQueryOutput(insert.query, expectedColumns, conf)
     } else {
       val errors = new mutable.ArrayBuffer[String]()

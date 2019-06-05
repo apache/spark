@@ -175,6 +175,8 @@ abstract class BaseSessionStateBuilder(
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:
+        // In the rule `PreprocessTableInsertion`, the fields of input query might be converted as
+        // unresolved `UpCast`s. The following rule `ResolveUpCast` would resolve those `UpCast`s.
         ResolveUpCast +:
         DataSourceAnalysis(conf) +:
         customPostHocResolutionRules
