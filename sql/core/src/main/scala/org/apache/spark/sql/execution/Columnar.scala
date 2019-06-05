@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.{broadcast, TaskContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder, SpecializedGetters, UnsafeProjection}
@@ -33,7 +32,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 /**
- * :: Experimental ::
  * Holds a user defined rule that can be used to inject columnar implementations of various
  * operators in the plan. The [[pre]] function can be used to replace [[SparkPlan]] instances with
  * versions that support a columnar implementation. After this Spark will insert any transitions
@@ -43,15 +41,12 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
  * inserting stages to build larger batches for more efficient processing, or stages that
  * transition the data to/from an accelerator's memory.
  */
-@Experimental
-@Unstable
 class ColumnarRule {
-  def pre(plan: SparkPlan): SparkPlan = plan
-  def post(plan: SparkPlan): SparkPlan = plan
+  def pre: Rule[SparkPlan] = plan => plan
+  def post: Rule[SparkPlan] = plan => plan
 }
 
 /**
- * :: Experimental ::
  * Provides a common executor to translate an [[RDD]] of [[ColumnarBatch]] into an [[RDD]] of
  * [[InternalRow]]. This is inserted whenever such a transition is determined to be needed.
  *
@@ -59,8 +54,6 @@ class ColumnarRule {
  * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]], and
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
-@Experimental
-@Unstable
 case class ColumnarToRowExec(child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
@@ -251,12 +244,9 @@ case class ColumnarToRowExec(child: SparkPlan)
 }
 
 /**
- * :: Experimental ::
  * Provides an optimized set of APIs to append row based data to an array of
  * [[WritableColumnVector]].
  */
-@Experimental
-@Unstable
 private[execution] class RowToColumnConverter(schema: StructType) extends Serializable {
   private val converters = schema.fields.map {
     f => RowToColumnConverter.getConverterForType(f.dataType)
@@ -272,12 +262,9 @@ private[execution] class RowToColumnConverter(schema: StructType) extends Serial
 }
 
 /**
- * :: Experimental ::
  * Provides an optimized set of APIs to extract a column from a row and append it to a
  * [[WritableColumnVector]].
  */
-@Experimental
-@Unstable
 private object RowToColumnConverter {
   private abstract class TypeConverter extends Serializable {
     def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit
@@ -468,7 +455,6 @@ private object RowToColumnConverter {
 }
 
 /**
- * :: Experimental ::
  * Provides a common executor to translate an [[RDD]] of [[InternalRow]] into an [[RDD]] of
  * [[ColumnarBatch]]. This is inserted whenever such a transition is determined to be needed.
  *
@@ -485,8 +471,6 @@ private object RowToColumnConverter {
  * populate with [[RowToColumnConverter]], but the performance requirements are different and it
  * would only be to reduce code.
  */
-@Experimental
-@Unstable
 case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
@@ -565,13 +549,9 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
 }
 
 /**
- * :: DeveloperApi ::
  * Apply any user defined [[ColumnarRule]]s and find the correct place to insert transitions
  * to/from columnar formatted data.
  */
-@DeveloperApi
-@Experimental
-@Unstable
 case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: Seq[ColumnarRule])
   extends Rule[SparkPlan] {
 
