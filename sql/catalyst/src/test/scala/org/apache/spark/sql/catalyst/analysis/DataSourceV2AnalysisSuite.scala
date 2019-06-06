@@ -250,7 +250,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write", "'table-name'",
-      "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
+      "Cannot safely cast", "'x'", "'y'", "double to float"))
   }
 
   test("byName: insert safe cast") {
@@ -298,7 +298,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
-      "Cannot safely cast", "'x'", "DoubleType to FloatType",
+      "Cannot safely cast", "'x'", "double to float",
       "Cannot write nullable values to non-null column", "'x'",
       "Cannot find data for output column", "'y'"))
   }
@@ -396,7 +396,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write", "'table-name'",
-      "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
+      "Cannot safely cast", "'x'", "'y'", "double to float"))
   }
 
   test("byPosition: insert safe cast") {
@@ -449,7 +449,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
       "Cannot write nullable values to non-null column", "'x'",
-      "Cannot safely cast", "'x'", "DoubleType to FloatType"))
+      "Cannot safely cast", "'x'", "double to float"))
   }
 
   test("bypass output column resolution") {
