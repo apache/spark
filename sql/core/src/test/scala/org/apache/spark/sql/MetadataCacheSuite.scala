@@ -38,8 +38,7 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSQLContext {
     oneFile.foreach(_.delete())
   }
 
-  test("SPARK-16336,SPARK-27504 Suggest doing table refresh " +
-    "when encountering FileNotFoundException") {
+  test("SPARK-16336,SPARK-27961 Suggest fixing FileNotFoundException") {
     withTempPath { (location: File) =>
       // Create an ORC directory
       spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
