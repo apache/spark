@@ -187,7 +187,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val conf = new SparkConf()
       .set(EXECUTOR_CORES, 3)
-      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_COUNT_SUFFIX, "3")
+      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_AMOUNT_SUFFIX, "3")
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
       .setMaster(
       "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")

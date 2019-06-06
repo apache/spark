@@ -319,7 +319,7 @@ private[spark] object TestUtils {
       conf: SparkConf,
       resourceName: String,
       resourceCount: Int): SparkConf = {
-    val key = s"${SPARK_TASK_RESOURCE_PREFIX}${resourceName}${SPARK_RESOURCE_COUNT_SUFFIX}"
+    val key = s"${SPARK_TASK_RESOURCE_PREFIX}${resourceName}${SPARK_RESOURCE_AMOUNT_SUFFIX}"
     conf.set(key, resourceCount.toString)
   }
 }
