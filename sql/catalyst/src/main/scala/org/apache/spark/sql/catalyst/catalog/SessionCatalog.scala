@@ -446,8 +446,11 @@ class SessionCatalog(
     if (names.nonEmpty) {
       val dbs = names.map(_.database.getOrElse(getCurrentDatabase))
       if (dbs.distinct.size != 1) {
+        val tables = names.map(name => formatTableName(name.table))
+        dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}
         throw new AnalysisException(
-          s"Only the tables/views belong to one same database can be retrieved."
+          s"Only the tables/views belong to one same database can be retrieved. Querying " +
+          s"tables/views are ${dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}}"
         )
       }
       val db = formatDatabaseName(dbs.head)
