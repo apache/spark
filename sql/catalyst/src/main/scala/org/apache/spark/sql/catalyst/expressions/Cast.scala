@@ -242,11 +242,23 @@ case class Cast(
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
-  private lazy val dateFormatter = format.map(DateFormatter(_)).getOrElse(DateFormatter())
+  private lazy val dateFormatter =
+    format.flatMap { f =>
+      (child.dataType, dataType) match {
+        case (StringType, DateType) => Some(DateFormatter(f))
+        case (DateType, StringType) => Some(DateFormatter(f))
+        case _ => None
+      }
+    }.getOrElse(DateFormatter())
+
   private lazy val timestampFormatter =
-    format
-      .map(TimestampFormatter(_, zoneId))
-      .getOrElse(TimestampFormatter.getFractionFormatter(zoneId))
+    format.flatMap { f =>
+      (child.dataType, dataType) match {
+        case (StringType, TimestampType) => Some(TimestampFormatter(f, zoneId))
+        case (TimestampType, StringType) => Some(TimestampFormatter(f, zoneId))
+        case _ => None
+      }
+    }.getOrElse(TimestampFormatter.getFractionFormatter(zoneId))
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -903,32 +915,46 @@ case class Cast(
         val df = JavaCode.global(
           ctx.addReferenceObj("dateFormatter", dateFormatter),
           dateFormatter.getClass)
-        (c, evPrim, evNull) =>
+        (c, evPrim, evNull) => {
+          val (nullName, nullValue) =
+            if (evNull == null) {
+              (evPrim, "UTF8String.EMPTY_UTF8")
+            } else {
+              (evNull, "true")
+            }
           code"""
-                |try {
-                |  $evPrim = UTF8String.fromString($df.format($c));
-                |} catch (java.lang.IllegalArgumentException e) {
-                |  $evNull = true;
-                } catch (java.time.DateTimeException e) {
-                |  $evNull = true;
-                |}
+             |try {
+             |  $evPrim = UTF8String.fromString($df.format($c));
+             |} catch (java.lang.IllegalArgumentException e) {
+             |  $nullName = $nullValue;
+             |} catch (java.time.DateTimeException e) {
+             |  $nullName = $nullValue;
+             |}
              """.stripMargin
+        }
       case TimestampType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),
           timestampFormatter.getClass)
-        (c, evPrim, evNull) =>
+        (c, evPrim, evNull) => {
+          val (nullName, nullvalue) =
+            if (evNull == null) {
+              (evPrim, "UTF8String.EMPTY_UTF8")
+            } else {
+              (evNull, "true")
+            }
           code"""
-                |try {
-                |  $evPrim = UTF8String.fromString($tf.format($c));
-                |} catch (java.lang.IllegalArgumentException e) {
-                |  $evNull = true;
-                |} catch (java.time.DateTimeException e) {
-                |  $evNull = true;
-                |} catch (ArithmeticException e) {
-                |  $evNull = true;
-                |}
+             |try {
+             |  $evPrim = UTF8String.fromString($tf.format($c));
+             |} catch (java.lang.IllegalArgumentException e) {
+             |  $nullName = $nullvalue;
+             |} catch (java.time.DateTimeException e) {
+             |  $nullName = $nullvalue;
+             |} catch (ArithmeticException e) {
+             |  $nullName = $nullvalue;
+             |}
              """.stripMargin
+        }
       case ArrayType(et, _) =>
         (c, evPrim, evNull) => {
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
