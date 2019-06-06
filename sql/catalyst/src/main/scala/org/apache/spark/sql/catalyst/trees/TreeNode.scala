@@ -74,9 +74,8 @@ object CurrentOrigin {
   }
 }
 
-// The name of the tree node tag. This is preferred over using string directly, as we can easily
-// find all the defined tags.
-case class TreeNodeTagName(name: String)
+// A tag of a `TreeNode`, which defines name and type
+case class TreeNodeTag[T](name: String)
 
 // scalastyle:off
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
@@ -89,7 +88,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
    */
-  val tags: mutable.Map[TreeNodeTagName, Any] = mutable.Map.empty
+  private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
+
+  protected def copyTagsFrom(other: BaseType): Unit = {
+    tags ++= other.tags
+  }
+
+  def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
+    tags(tag) = value
+  }
+
+  def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
+    tags.get(tag).map(_.asInstanceOf[T])
+  }
 
   /**
    * Returns a Seq of the children of this node.
@@ -418,7 +429,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     try {
       CurrentOrigin.withOrigin(origin) {
         val res = defaultCtor.newInstance(allArgs.toArray: _*).asInstanceOf[BaseType]
-        res.tags ++= this.tags
+        res.copyTagsFrom(this)
         res
       }
     } catch {

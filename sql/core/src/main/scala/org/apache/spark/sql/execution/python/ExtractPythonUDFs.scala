@@ -158,21 +158,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
       // If there aren't any, we are done.
       plan
     } else {
-      val inputsForPlan = plan.references ++ plan.outputSet
-      val prunedChildren = plan.children.map { child =>
-        val allNeededOutput = inputsForPlan.intersect(child.outputSet).toSeq
-        if (allNeededOutput.length != child.output.length) {
-          Project(allNeededOutput, child)
-        } else {
-          child
-        }
-      }
-      val planWithNewChildren = plan.withNewChildren(prunedChildren)
-
       val attributeMap = mutable.HashMap[PythonUDF, Expression]()
-      val splitFilter = trySplitFilter(planWithNewChildren)
       // Rewrite the child that has the input required for the UDF
-      val newChildren = splitFilter.children.map { child =>
+      val newChildren = plan.children.map { child =>
         // Pick the UDF we are going to evaluate
         val validUdfs = udfs.filter { udf =>
           // Check to make sure that the UDF can be evaluated with only the input of this child.
@@ -191,9 +179,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             _.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
           ) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
-              ArrowEvalPython(vectorizedUdfs, child.output ++ resultAttrs, child)
+              ArrowEvalPython(vectorizedUdfs, resultAttrs, child)
             case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
-              BatchEvalPython(plainUdfs, child.output ++ resultAttrs, child)
+              BatchEvalPython(plainUdfs, resultAttrs, child)
             case _ =>
               throw new AnalysisException(
                 "Expected either Scalar Pandas UDFs or Batched UDFs but got both")
@@ -211,7 +199,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
         sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
-      val rewritten = splitFilter.withNewChildren(newChildren).transformExpressions {
+      val rewritten = plan.withNewChildren(newChildren).transformExpressions {
         case p: PythonUDF if attributeMap.contains(p) =>
           attributeMap(p)
       }
@@ -224,24 +212,6 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         newPlan
       }
-    }
-  }
-
-  // Split the original FilterExec to two FilterExecs. Only push down the first few predicates
-  // that are all deterministic.
-  private def trySplitFilter(plan: LogicalPlan): LogicalPlan = {
-    plan match {
-      case filter: Filter =>
-        val (candidates, nonDeterministic) =
-          splitConjunctivePredicates(filter.condition).partition(_.deterministic)
-        val (pushDown, rest) = candidates.partition(!hasScalarPythonUDF(_))
-        if (pushDown.nonEmpty) {
-          val newChild = Filter(pushDown.reduceLeft(And), filter.child)
-          Filter((rest ++ nonDeterministic).reduceLeft(And), newChild)
-        } else {
-          filter
-        }
-      case o => o
     }
   }
 }

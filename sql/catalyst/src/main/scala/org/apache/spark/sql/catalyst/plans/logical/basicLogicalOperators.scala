@@ -408,6 +408,17 @@ trait V2WriteCommand extends Command {
 }
 
 /**
+ * Create a new table with a v2 catalog.
+ */
+case class CreateV2Table(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    properties: Map[String, String],
+    ignoreIfExists: Boolean) extends Command
+
+/**
  * Create a new table from a select query with a v2 catalog.
  */
 case class CreateTableAsSelect(
@@ -487,6 +498,14 @@ object OverwritePartitionsDynamic {
     OverwritePartitionsDynamic(table, query, isByName = false)
   }
 }
+
+/**
+ * Drop a table.
+ */
+case class DropTable(
+    catalog: TableCatalog,
+    ident: Identifier,
+    ifExists: Boolean) extends Command
 
 
 /**
@@ -1083,7 +1102,7 @@ case class OneRowRelation() extends LeafNode {
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
   override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = {
     val newCopy = OneRowRelation()
-    newCopy.tags ++= this.tags
+    newCopy.copyTagsFrom(this)
     newCopy
   }
 }

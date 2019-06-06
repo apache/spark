@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.File
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -36,15 +37,16 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
+import org.apache.spark.internal.config
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExternalShuffleClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
@@ -111,8 +113,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1))
     val memManager = UnifiedMemoryManager(bmConf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, bmConf)
+    val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", 0)
+      Some(new ExternalShuffleClient(transConf, bmSecurityMgr,
+        bmSecurityMgr.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
+    } else {
+      None
+    }
     val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, bmConf,
-      memManager, mapOutputTracker, shuffleManager, transfer, bmSecurityMgr, 0)
+      memManager, mapOutputTracker, shuffleManager, transfer, bmSecurityMgr, externalShuffleClient)
     memManager.setMemoryStore(blockManager.memoryStore)
     allStores += blockManager
     blockManager.initialize("app-id")
@@ -135,7 +144,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     when(sc.conf).thenReturn(conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf))), conf, true)
+        new LiveListenerBus(conf), None)), conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
@@ -894,7 +903,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
-      shuffleManager, transfer, securityMgr, 0)
+      shuffleManager, transfer, securityMgr, None)
     allStores += store
     store.initialize("app-id")
 
@@ -943,7 +952,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
       val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
         serializerManager, conf, memoryManager, mapOutputTracker,
-        shuffleManager, transfer, securityMgr, 0)
+        shuffleManager, transfer, securityMgr, None)
       try {
         blockManager.initialize("app-id")
         testPutBlockDataAsStream(blockManager, storageLevel)
@@ -1353,6 +1362,58 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations("item").nonEmpty)
     assert(store2.getRemoteBytes("item").isEmpty)
     assert(master.getLocations("item").isEmpty)
+  }
+
+  test("SPARK-25888: serving of removed file not detected by shuffle service") {
+    // although the existence of the file is checked before serving it but a delete can happen
+    // somewhere after that check
+    val store = makeBlockManager(8000, "executor1")
+    val emptyBlockFetcher = new MockBlockTransferService(0) {
+      override def fetchBlockSync(
+        host: String,
+        port: Int,
+        execId: String,
+        blockId: String,
+        tempFileManager: DownloadFileManager): ManagedBuffer = {
+        val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 1)
+        // empty ManagedBuffer
+        new FileSegmentManagedBuffer(transConf, new File("missing.file"), 0, 0)
+      }
+    }
+    val store2 = makeBlockManager(8000, "executor2", this.master, Some(emptyBlockFetcher))
+    store.putSingle("item", "value", StorageLevel.DISK_ONLY, tellMaster = true)
+    assert(master.getLocations("item").nonEmpty)
+    assert(store2.getRemoteBytes("item").isEmpty)
+  }
+
+  test("test sorting of block locations") {
+    val localHost = "localhost"
+    val otherHost = "otherHost"
+    val store = makeBlockManager(8000, "executor1")
+    val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
+    val port = store.blockTransferService.port
+    val rack = Some("rack")
+    val blockManagerWithTopolgyInfo = BlockManagerId(
+      store.blockManagerId.executorId,
+      store.blockManagerId.host,
+      store.blockManagerId.port,
+      rack)
+    store.blockManagerId = blockManagerWithTopolgyInfo
+    val locations = Seq(
+      BlockManagerId("executor4", otherHost, externalShuffleServicePort, rack),
+      BlockManagerId("executor3", otherHost, port, rack),
+      BlockManagerId("executor6", otherHost, externalShuffleServicePort),
+      BlockManagerId("executor5", otherHost, port),
+      BlockManagerId("executor2", localHost, externalShuffleServicePort),
+      BlockManagerId("executor1", localHost, port))
+    val sortedLocations = Seq(
+      BlockManagerId("executor1", localHost, port),
+      BlockManagerId("executor2", localHost, externalShuffleServicePort),
+      BlockManagerId("executor3", otherHost, port, rack),
+      BlockManagerId("executor4", otherHost, externalShuffleServicePort, rack),
+      BlockManagerId("executor5", otherHost, port),
+      BlockManagerId("executor6", otherHost, externalShuffleServicePort))
+    assert(store.sortLocations(locations) === sortedLocations)
   }
 
   test("SPARK-20640: Shuffle registration timeout and maxAttempts conf are working") {
