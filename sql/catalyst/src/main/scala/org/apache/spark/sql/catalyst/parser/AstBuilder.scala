@@ -133,10 +133,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     With(plan, ctes)
   }
 
+  /**
+   * Create a logical query plan for a hive-style FROM statement body.
+   */
   private def withFromStatementBody(
       ctx: FromStatementBodyContext, plan: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    // two cases for transforms and selects because otherwise we can't get the table
-    // info before visiting these query bodies
+    // two cases for transforms and selects
     if (ctx.transformClause != null) {
       withTransformQuerySpecification(
         ctx,
@@ -173,7 +175,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  override def visitNoWithQuery(ctx: NoWithQueryContext): LogicalPlan = withOrigin(ctx) {
+  override def visitQueryNoWith(ctx: QueryNoWithContext): LogicalPlan = withOrigin(ctx) {
     plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
   }
 
@@ -209,8 +211,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val inserts = ctx.multiInsertQueryBody.asScala.map { body =>
       withInsertInto(body.insertInto,
         withFromStatementBody(body.fromStatementBody, from).
-         // Add organization statements.
-         optionalMap(body.fromStatementBody.queryOrganization)(withQueryResultClauses))
+          optionalMap(body.fromStatementBody.queryOrganization)(withQueryResultClauses))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -455,7 +456,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a logical plan using a having clause.
    */
   private def withHavingClause(
-    ctx: HavingClauseContext, plan: LogicalPlan): LogicalPlan = {
+      ctx: HavingClauseContext, plan: LogicalPlan): LogicalPlan = {
     // Note that we add a cast to non-predicate expressions. If the expression itself is
     // already boolean, the optimizer will get rid of the unnecessary cast.
     val predicate = expression(ctx.booleanExpression) match {
@@ -476,9 +477,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Add a hive-style transform (SELECT TRANSFORM/MAP/REDUCE) query specification to a logical plan.
    */
   private def withTransformQuerySpecification(
-    ctx: ParserRuleContext,
-    transformClause: TransformClauseContext,
-    whereClause: WhereClauseContext,
+      ctx: ParserRuleContext,
+      transformClause: TransformClauseContext,
+      whereClause: WhereClauseContext,
     relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Add where.
     val withFilter = relation.optionalMap(whereClause)(withWhereClause)

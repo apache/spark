@@ -378,7 +378,7 @@ dmlStatementNoWith
     ;
 
 queryNoWith
-    : queryTerm queryOrganization                                               #noWithQuery
+    : queryTerm queryOrganization
     ;
 
 queryOrganization
@@ -446,15 +446,6 @@ querySpecification
       windowClause?                                                         #regularQuerySpecification
     ;
 
-hint
-    : '/*+' hintStatements+=hintStatement (','? hintStatements+=hintStatement)* '*/'
-    ;
-
-hintStatement
-    : hintName=identifier
-    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
-    ;
-
 transformClause
     : (SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
             | kind=MAP namedExpressionSeq
@@ -471,16 +462,25 @@ selectClause
     : SELECT (hints+=hint)* setQuantifier? namedExpressionSeq
     ;
 
-fromClause
-    : FROM relation (',' relation)* lateralView* pivotClause?
-    ;
-
 whereClause
     : WHERE booleanExpression
     ;
 
 havingClause
     : HAVING booleanExpression
+    ;
+
+hint
+    : '/*+' hintStatements+=hintStatement (','? hintStatements+=hintStatement)* '*/'
+    ;
+
+hintStatement
+    : hintName=identifier
+    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
+    ;
+
+fromClause
+    : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
 aggregationClause
