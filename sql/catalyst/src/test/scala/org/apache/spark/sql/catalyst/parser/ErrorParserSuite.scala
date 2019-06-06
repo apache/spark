@@ -84,7 +84,6 @@ class ErrorParserSuite extends SparkFunSuite {
         |ALTER DATABASE my-database
         |SET DBPROPERTIES ('p1'='v1')""".stripMargin, 2, 17, 18, "my-database")
     intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute")
-    intercept("ALTER TABLE test ADD COLUMNS (h-col BIGINT)", 1, 31, 32, msg + " h-col")
     intercept(
       """
         |CREATE TABLE IF NOT EXISTS mydb.page-view
