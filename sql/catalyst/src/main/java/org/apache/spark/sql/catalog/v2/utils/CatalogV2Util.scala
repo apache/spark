@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalog.v2.util
+package org.apache.spark.sql.catalog.v2.utils
 
 import java.util
 import java.util.Collections

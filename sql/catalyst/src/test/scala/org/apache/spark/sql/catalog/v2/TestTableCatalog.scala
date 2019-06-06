@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalog.v2.expressions.Transform
-import org.apache.spark.sql.catalog.v2.util.CatalogV2Util
+import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.sources.v2.{Table, TableCapability}
 import org.apache.spark.sql.types.StructType
