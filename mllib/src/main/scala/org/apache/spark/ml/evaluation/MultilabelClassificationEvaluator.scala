@@ -68,8 +68,10 @@ class MultilabelClassificationEvaluator (override val uid: String)
       "f1MeasureByLabel. Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
+  /** @group getParam */
   def getLabel: Double = $(label)
 
+  /** @group setParam */
   def setLabel(value: Double): this.type = set(label, value)
 
   setDefault(label -> 0.0)
