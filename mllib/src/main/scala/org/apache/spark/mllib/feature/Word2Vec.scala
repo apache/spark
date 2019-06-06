@@ -233,7 +233,7 @@ class Word2Vec extends Serializable with Logging {
       a += 1
     }
     while (a < 2 * vocabSize) {
-      count(a) = 1e9.toInt
+      count(a) = Int.MaxValue
       a += 1
     }
     var pos1 = vocabSize - 1
