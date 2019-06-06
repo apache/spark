@@ -48,7 +48,7 @@ object BuildCommons {
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
-  val graphProjects@Seq(graph, graph-api, cypher) = 
+  val graphProjects@Seq(graph, graphApi, cypher) =
     Seq("graph", "graph-api", "cypher").map(ProjectRef(buildLocation, _))
   
   val allProjects@Seq(
@@ -335,7 +335,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, kvstore, avro, graph, graph-api, cypher
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, kvstore, avro, graph, graphApi, cypher
     ).contains(x)
   }
 
