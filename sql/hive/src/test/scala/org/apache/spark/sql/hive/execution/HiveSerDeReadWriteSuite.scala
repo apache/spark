@@ -52,7 +52,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
   private def checkNumericTypes(fileFormat: String, dataType: String, value: Any): Unit = {
     withTable("hive_serde") {
       hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 $dataType) STORED AS $fileFormat")
-      hiveClient.runSqlHive(s"INSERT INTO TABLE hive_serde values(1)")
+      hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values(1)")
       checkAnswer(spark.table("hive_serde"), Row(1))
       spark.sql(s"INSERT INTO TABLE hive_serde VALUES(CAST($value AS $dataType))")
       checkAnswer(spark.table("hive_serde"), Seq(Row(1), Row(value)))
