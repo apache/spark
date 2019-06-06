@@ -31,14 +31,13 @@ import org.apache.spark.sql.types._
  * :: Experimental ::
  * Evaluator for ranking, which expects two input columns: prediction and label.
  */
-@Since("3.0.0")
 @Experimental
-class RankingEvaluator @Since("3.0.0") (override val uid: String)
+@Since("3.0.0")
+class RankingEvaluator (override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol with DefaultParamsWritable {
 
   import RankingEvaluator.supportedMetricNames
 
-  @Since("3.0.0")
   def this() = this(Identifiable.randomUID("rankEval"))
 
   /**
@@ -46,7 +45,6 @@ class RankingEvaluator @Since("3.0.0") (override val uid: String)
    * `"meanAveragePrecisionAtK"`, `"precisionAtK"`, `"ndcgAtK"`, `"recallAtK"`)
    * @group param
    */
-  @Since("3.0.0")
   final val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(supportedMetricNames)
     new Param(this, "metricName", "metric name in evaluation " +
@@ -54,11 +52,9 @@ class RankingEvaluator @Since("3.0.0") (override val uid: String)
   }
 
   /** @group getParam */
-  @Since("3.0.0")
   def getMetricName: String = $(metricName)
 
   /** @group setParam */
-  @Since("3.0.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
   setDefault(metricName -> "meanAveragePrecision")
@@ -69,17 +65,27 @@ class RankingEvaluator @Since("3.0.0") (override val uid: String)
     " Must be > 0.",
     ParamValidators.gt(0))
 
-  @Since("3.0.0")
+  /** @group getParam */
   def getK: Int = $(k)
 
-  @Since("3.0.0")
+  /** @group setParam */
   def setK(value: Int): this.type = set(k, value)
 
-  @Since("3.0.0")
+  setDefault(k -> 10)
+
+  /** @group setParam */
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
+
   override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
-    SchemaUtils.checkColumnType(schema, $(predictionCol), ArrayType(DoubleType, false))
-    SchemaUtils.checkColumnType(schema, $(labelCol), ArrayType(DoubleType, false))
+    SchemaUtils.checkColumnTypes(schema, $(predictionCol),
+      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
+    SchemaUtils.checkColumnTypes(schema, $(labelCol),
+      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
 
     val predictionAndLabels =
       dataset.select(col($(predictionCol)), col($(labelCol)))
@@ -97,7 +103,6 @@ class RankingEvaluator @Since("3.0.0") (override val uid: String)
     metric
   }
 
-  @Since("3.0.0")
   override def copy(extra: ParamMap): RankingEvaluator = defaultCopy(extra)
 }
 
@@ -108,6 +113,5 @@ object RankingEvaluator extends DefaultParamsReadable[RankingEvaluator] {
   private val supportedMetricNames = Array("meanAveragePrecision",
     "meanAveragePrecisionAtK", "precisionAtK", "ndcgAtK", "recallAtK")
 
-  @Since("3.0.0")
   override def load(path: String): RankingEvaluator = super.load(path)
 }
