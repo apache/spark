@@ -96,7 +96,7 @@ class HiveMvCatalog extends MvCatalog {
   // Check if MV was modified
   private val modifiedChecker = new mutable.HashMap[TableIdentifier, CatalogTable].empty
   private val attributeRefMap = new mutable.HashMap[ExprId, AttributeReference].empty
-  private var sparkSession: SparkSession = null // will be set by the session which loads
+  private var sparkSession: SparkSession = SparkSession.getActiveSession.get
 
   override def init(session: Any): Unit = {
     val sparkSession = session.asInstanceOf[SparkSession]
@@ -108,15 +108,10 @@ class HiveMvCatalog extends MvCatalog {
     this.sparkSession = null
   }
 
-  override def getMaterializedViewsOfTable(metaInfos: Seq[String]): Seq[CatalogTable] = {
-    metaInfos match {
-      case dbName :: tblNames =>
-        tblNames.map { name =>
-          sparkSession.sessionState.catalog.externalCatalog.getTable(dbName, name)
-        }
-      case  _ =>
-        Seq.empty
-    }
+  override def getMaterializedViewsOfTable(metaInfos: CatalogCreationData): Seq[CatalogTable] = {
+    val db = (metaInfos.mvDetails(0))._1
+    val tbls = (metaInfos.mvDetails)(1)._2
+    Seq(sparkSession.sessionState.catalog.externalCatalog.getTable(db, tbls.split("\\.")(1)))
   }
 
   override def getMaterializedViewPlan(catalogTable: CatalogTable): Option[(LogicalPlan,

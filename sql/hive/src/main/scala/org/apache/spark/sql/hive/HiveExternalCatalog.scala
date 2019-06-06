@@ -1309,7 +1309,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.listFunctions(db, pattern)
   }
 
-  override def getMaterializedViewForTable(db: String, tblName: String): Seq[String] = {
+  override def getMaterializedViewForTable(db: String, tblName: String): CatalogCreationData = {
     client.getMaterializedViewForTable(db, tblName)
   }
 

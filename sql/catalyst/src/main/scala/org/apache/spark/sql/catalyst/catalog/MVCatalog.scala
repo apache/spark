@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
 /*
  * Interface for the catalog of MaterializedViews.
  *
@@ -28,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  */
 trait MvCatalog {
 
-  def getMaterializedViewsOfTable(metaInfos: Seq[String]): Seq[CatalogTable]
+  def getMaterializedViewsOfTable(metaInfos: CatalogCreationData): Seq[CatalogTable]
 
   def getMaterializedViewPlan(catalogTable: CatalogTable): Any
 

@@ -896,7 +896,8 @@ private[hive] class HiveClientImpl(
     shim.listFunctions(client, db, pattern)
   }
 
-  override def getMaterializedViewForTable(db: String, tblName: String): Seq[String] = {
+  override def getMaterializedViewForTable(db: String,
+       tblName: String): CatalogCreationData = withHiveState {
     shim.getMaterializedView(client, db, tblName)
   }
 

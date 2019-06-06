@@ -105,46 +105,9 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     */
   override protected def optimizer: Optimizer = {
     new SparkOptimizer(catalog, experimentalMethods) {
-      override def defaultBatches: Seq[Batch] = {
-        if (conf.mvOSEnabled) {
-          var newBatches: List[Batch] = List()
-          val oldBatches = super.defaultBatches.toArray
-          oldBatches.foreach(oldBatch => {
-            var batch = oldBatch
-            /*
-            Why MV rule is added to "Operator Optimization after Inferring Filters" batch
-            query: select * from a join b where a.id = b.id and b.id = 1
-            scala> df.queryExecution.optimizedPlan
-              res0: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
-              Join Inner, (id#0 = id#3)
-              :- Filter (isnotnull(id#0) && (id#0 = 5))
-              :  +- Relation[id#0,col1#1,col2#2] csv
-              +- Filter (isnotnull(id#3) && (id#3 = 5))
-                 +- Relation[id#3,col1#4,col2#5] csv
-              In the above query though an explicit filter was not part of a, it got introduced due to
-              InferFiltersFromConstraints, as a result mv of a table got used
-             */
-            if (oldBatch.name.equalsIgnoreCase("Operator Optimization after Inferring Filters")) {
-              val newRules =
-                SubstituteMaterializedOSView(session, mvCatalog) +: oldBatch.rules.toArray
-              batch = Batch("Operator Optimization after Inferring Filters",
-                oldBatch.strategy, newRules: _*)
-            }
-            newBatches :+= batch
-          })
-          newBatches
-        } else {
-          super.defaultBatches
-        }
-      }
+      override def preOptimizationBatches: Seq[Batch] = super.preOptimizationBatches ++
+        Seq(Batch("Materialized view", Once, SubstituteMaterializedOSView(mvCatalog)))
 
-      /**
-      All methods overriden in the super class(BaseSessionStateBuilder)
-        needs to be overriden in similar manner(copied) since we are creating
-        new instance of SparkOptimizer
-        */
-      override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
-        super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
   }
 

@@ -281,7 +281,7 @@ private[hive] trait HiveClient {
   def listFunctions(db: String, pattern: String): Seq[String]
 
   /** Return the names of all MVs for a given table. */
-  def getMaterializedViewForTable(db: String, tblName: String): Seq[String]
+  def getMaterializedViewForTable(db: String, tblName: String): CatalogCreationData
 
   /** Add a jar into class loader */
   def addJar(path: String): Unit

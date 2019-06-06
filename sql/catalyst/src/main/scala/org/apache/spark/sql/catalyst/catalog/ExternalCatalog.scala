@@ -292,5 +292,5 @@ trait ExternalCatalog {
 
   def listFunctions(db: String, pattern: String): Seq[String]
 
-  def getMaterializedViewForTable(db: String, tblName: String): Seq[String]
+  def getMaterializedViewForTable(db: String, tblName: String): CatalogCreationData
 }

@@ -16,49 +16,43 @@
  */
 package org.apache.spark.sql.hive
 
-;
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 
-case class SubstituteMaterializedOSView(spark: SparkSession, mvCatalog: HiveMvCatalog)
+case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
   extends Rule[LogicalPlan] {
 
+  val spark = SparkSession.getActiveSession.get
   val conf = spark.sqlContext.conf
 
   def apply(plan: LogicalPlan): LogicalPlan = if (isMvOsEnabled) {
-
     plan transformDown {
-      case op@PhysicalOperation(projects, filters, logicalPlan) =>
+      case op@PhysicalOperation(projects, filters, leafPlan) =>
         if (filters.isEmpty) {
           op
         } else {
-          logicalPlan match {
-            // do we want to transform MVs also?
-            case relation@HiveTableRelation(table, _, _) =>
-              if (!isMVTable(Some(table))) {
-                transformToMV(projects, filters, relation, table).getOrElse(op)
-              } else {
-                op
-              }
-            case relation@LogicalRelation(_, _, tableOpt, _) =>
-              if (!isMVTable(tableOpt)) {
-                // tableOpt is not empty otherwise isMVTable would have been false
-                transformToMV(projects, filters, relation, tableOpt.get).getOrElse(op)
-              } else {
-                op
-              }
+
+          val rel = getRelation(leafPlan)
+          rel match {
+            case Some(relation@HiveTableRelation(table, _, _)) if (isMVTable(Option(table))) =>
+              transformToMV(projects, filters, relation, table).getOrElse(op)
+            case Some(relation@LogicalRelation(_, _, tableOpt, _)) =>
+              transformToMV(projects, filters, relation, tableOpt.get).getOrElse(op)
             case _ => op
           }
         }
     }
   } else {
     plan
+  }
+
+  def getRelation(plan: LogicalPlan): Option[LogicalPlan] = {
+    plan.find(x => x.isInstanceOf[HiveTableRelation] || x.isInstanceOf[LogicalRelation])
   }
 
   def transformToMV(projects: Seq[NamedExpression], filters: Seq[Expression],
@@ -74,7 +68,7 @@ case class SubstituteMaterializedOSView(spark: SparkSession, mvCatalog: HiveMvCa
 
     val ident = catalogTable.identifier
     val mv = spark.sessionState.catalog.externalCatalog.
-      getMaterializedViewForTable(ident.database.get, ident.table)
+          getMaterializedViewForTable(ident.database.get, ident.table)
 
     val attrs = filters.flatMap {
       filter =>
@@ -104,15 +98,11 @@ case class SubstituteMaterializedOSView(spark: SparkSession, mvCatalog: HiveMvCa
 
 
   private def isMVTable(table: Option[CatalogTable]): Boolean = {
-    table match {
-      case Some(catalogTable) =>
-        catalogTable.tableType == CatalogTableType.MV
-      case _ =>
-        false
-    }
+    table.isDefined && table.get.tableType == CatalogTableType.MV
   }
 
   private def isMvOsEnabled(): Boolean = {
     spark.sqlContext.conf.mvOSEnabled
+    true
   }
 }

@@ -364,6 +364,14 @@ case class CatalogTable(
   }
 }
 
+case class CatalogCreationData(srcDb: String, srcTbl: String, mvDetails: Seq[(String, String)])
+
+object CatalogCreationData {
+
+  def empty: CatalogCreationData = CatalogCreationData("", "", Seq.empty)
+
+}
+
 object CatalogTable {
   val VIEW_DEFAULT_DATABASE = "view.default.database"
   val VIEW_QUERY_OUTPUT_PREFIX = "view.query.out."

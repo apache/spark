@@ -42,7 +42,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogCreationData, CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, IntegralType, StringType}
@@ -165,7 +165,7 @@ private[client] sealed abstract class Shim {
     klass.getMethod(name, args: _*)
   }
 
-  def getMaterializedView(hive: Hive, dbName: String, tbl: String): Seq[String]
+  def getMaterializedView(hive: Hive, dbName: String, tbl: String): CatalogCreationData
 }
 
 private[client] class Shim_v0_12 extends Shim with Logging {
@@ -458,7 +458,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 
   override def getMaterializedView(hive: Hive,
-      dbName: String, tbl: String): Seq[String] = {
+      dbName: String, tbl: String): CatalogCreationData = {
     throw new AnalysisException("Hive 0.12 doesn't support Materialized views. " +
       "Please use Hive 3.0 or higher.")
   }
@@ -1216,11 +1216,16 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
   private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
     "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
 
-  private lazy val getMaterializedViewsMethod =
+  private lazy val getMaterializedViewsMethod = {
+    classOf[Hive].getMethods.map(_.toString)
+      .filter(_.contains("ateriali"))
+      .foreach(println)
     findMethod(
       classOf[Hive],
-      "getAllMaterializedViewObjects"
-      )
+      "getAllMaterializedViewObjects",
+      classOf[String]
+    )
+  }
 
 
   private lazy val loadPartitionMethod =
@@ -1333,19 +1338,26 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
   }
 
   override def getMaterializedView(hive: Hive,
-       dbName: String, tbl: String): Seq[String] = {
-    val seq = getMaterializedViewsMethod.invoke(hive).asInstanceOf[JList[Table]].asScala.toSeq
-    val creationMetadata = classOf[Table].getMethod("getCreationMetadata").invoke(seq(0))
-    val dbName = creationMetadata.getClass.getMethod("getDbName")
-    val tables = creationMetadata.getClass.getMethod("getTablesUsed")
-      .asInstanceOf[JSet[String]]
-      .asScala.toSeq
-    if (tables.nonEmpty && tables.size == 1) {
-      return dbName :: tables(0) :: Nil
+       dbName: String, tbl: String): CatalogCreationData = {
+    val seq = getMaterializedViewsMethod.invoke(hive, "default").asInstanceOf[JList[Table]].asScala
+    val mvs = seq.filter {
+      mv =>
+        val creationMetadata = classOf[Table].getMethod("getCreationMetadata").invoke(seq(0))
+        val db = creationMetadata
+          .getClass.getMethod("getDbName")
+          .invoke(creationMetadata).asInstanceOf[String]
+        val tables = creationMetadata.getClass.getMethod("getTablesUsed").invoke(creationMetadata)
+          .asInstanceOf[JSet[String]]
+          .asScala.toSeq
+        tables.contains(tbl)
     }
-    return Seq.empty;
-  }
 
+    val mvCreationDatas = mvs.map {
+      mv =>
+      CatalogCreationData(dbName, tbl, Seq((mv.getDbName, mv.getTableName)))
+    }
+    mvCreationDatas(0)
+  }
 }
 
 private[client] class Shim_v3_1 extends Shim_v3_0
