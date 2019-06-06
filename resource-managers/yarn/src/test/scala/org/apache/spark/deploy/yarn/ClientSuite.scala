@@ -390,7 +390,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     }
   }
 
-  test(s"custom driver resource request yarn config and spark config fails") {
+  test("custom driver resource request yarn config and spark config fails") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
     ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
@@ -413,7 +413,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       " please use spark.driver.resource.gpu.amount"))
   }
 
-  test(s"custom executor resource request yarn config and spark config fails") {
+  test("custom executor resource request yarn config and spark config fails") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu", YARN_FPGA_RESOURCE_CONFIG -> "fpga")
     ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
@@ -437,7 +437,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
 
-  test(s"custom resources spark config mapped to yarn config") {
+  test("custom resources spark config mapped to yarn config") {
     assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     val yarnMadeupResource = "yarn.io/madeup"
     val resources = Map(YARN_GPU_RESOURCE_CONFIG -> "gpu",
