@@ -139,6 +139,8 @@ private[deploy] object HadoopFSDelegationTokenProvider {
   def hadoopFSsToAccess(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Set[FileSystem] = {
+    val defaultFS = FileSystem.get(hadoopConf)
+
     val filesystemsToAccess = sparkConf.get(KERBEROS_FILESYSTEMS_TO_ACCESS)
       .map(new Path(_).getFileSystem(hadoopConf))
       .toSet
@@ -150,6 +152,6 @@ private[deploy] object HadoopFSDelegationTokenProvider {
       None
     }
 
-    filesystemsToAccess ++ stagingFS
+    filesystemsToAccess ++ stagingFS + defaultFS
   }
 }
