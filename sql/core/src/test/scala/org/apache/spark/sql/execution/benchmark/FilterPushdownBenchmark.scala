@@ -394,6 +394,13 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     }
 
     runBenchmark(s"Pushdown benchmark with many filters") {
+      // This benchmark and the next one are similar in that they both test predicate pushdown
+      // where the filter itself is very large. There have been cases where the filter conversion
+      // would take minutes to hours for large filters due to it being implemented with exponential
+      // complexity in the height of the filter tree.
+      // The difference between these two benchmarks is that this one benchmarks pushdown with a
+      // large string filter (`a AND b AND c ...`), whereas the next one benchmarks pushdown with
+      // a large Column-based filter (`col(a) || (col(b) || (col(c)...))`).
       val numRows = 1
       val width = 500
 
