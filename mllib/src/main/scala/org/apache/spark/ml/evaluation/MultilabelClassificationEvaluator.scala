@@ -34,13 +34,12 @@ import org.apache.spark.sql.types._
  */
 @Since("3.0.0")
 @Experimental
-class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: String)
+class MultilabelClassificationEvaluator (override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol
     with DefaultParamsWritable {
 
   import MultilabelClassificationEvaluator.supportedMetricNames
 
-  @Since("3.0.0")
   def this() = this(Identifiable.randomUID("mlcEval"))
 
   /**
@@ -50,7 +49,6 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: Strin
    * `"microF1Measure"`)
    * @group param
    */
-  @Since("3.0.0")
   final val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(supportedMetricNames)
     new Param(this, "metricName", "metric name in evaluation " +
@@ -58,39 +56,31 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: Strin
   }
 
   /** @group getParam */
-  @Since("3.0.0")
   def getMetricName: String = $(metricName)
 
   /** @group setParam */
-  @Since("3.0.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
   setDefault(metricName -> "f1Measure")
 
-  @Since("3.0.0")
   final val label: DoubleParam = new DoubleParam(this, "label",
     "The label whose metric will be computed in precisionByLabel|recallByLabel|" +
       "f1MeasureByLabel. Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
-  @Since("3.0.0")
   def getLabel: Double = $(label)
 
-  @Since("3.0.0")
   def setLabel(value: Double): this.type = set(label, value)
 
   setDefault(label -> 0.0)
 
   /** @group setParam */
-  @Since("3.0.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
-  @Since("3.0.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
 
-  @Since("3.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(predictionCol),
@@ -121,7 +111,6 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: Strin
     metric
   }
 
-  @Since("3.0.0")
   override def isLargerBetter: Boolean = {
     $(metricName) match {
       case "hammingLoss" => false
@@ -129,7 +118,6 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (override val uid: Strin
     }
   }
 
-  @Since("3.0.0")
   override def copy(extra: ParamMap): MultilabelClassificationEvaluator = defaultCopy(extra)
 }
 
@@ -143,6 +131,5 @@ object MultilabelClassificationEvaluator
     "precisionByLabel", "recallByLabel", "f1MeasureByLabel",
     "microPrecision", "microRecall", "microF1Measure")
 
-  @Since("3.0.0")
   override def load(path: String): MultilabelClassificationEvaluator = super.load(path)
 }
