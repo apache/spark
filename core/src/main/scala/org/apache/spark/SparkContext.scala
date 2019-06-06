@@ -391,7 +391,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     // verify the resources we discovered are what the user requested
     val driverReqResourcesAndCounts =
-      SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+      SparkConf.getConfigsWithSuffix(allDriverResourceConfs, SPARK_RESOURCE_AMOUNT_SUFFIX).toMap
     ResourceDiscoverer.checkActualResourcesMeetRequirements(driverReqResourcesAndCounts, _resources)
 
     logInfo("===============================================================================")
@@ -2725,7 +2725,7 @@ object SparkContext extends Logging {
       // executor and resources required by each task.
       val taskResourcesAndCount = sc.conf.getTaskResourceRequirements()
       val executorResourcesAndCounts = sc.conf.getAllWithPrefixAndSuffix(
-        SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_COUNT_SUFFIX).toMap
+        SPARK_EXECUTOR_RESOURCE_PREFIX, SPARK_RESOURCE_AMOUNT_SUFFIX).toMap
       var numSlots = execCores / taskCores
       var limitingResourceName = "CPU"
       taskResourcesAndCount.foreach { case (rName, taskCount) =>
@@ -2733,17 +2733,17 @@ object SparkContext extends Logging {
         val execCount = executorResourcesAndCounts.getOrElse(rName,
           throw new SparkException(
             s"The executor resource config: " +
-              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
+              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_AMOUNT_SUFFIX} " +
               "needs to be specified since a task requirement config: " +
-              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} was specified")
+              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_AMOUNT_SUFFIX} was specified")
         )
         // Make sure the executor resources are large enough to launch at least one task.
         if (execCount.toLong < taskCount.toLong) {
           throw new SparkException(
             s"The executor resource config: " +
-              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} " +
+              s"${SPARK_EXECUTOR_RESOURCE_PREFIX + rName + SPARK_RESOURCE_AMOUNT_SUFFIX} " +
               s"= $execCount has to be >= the task config: " +
-              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_COUNT_SUFFIX} = $taskCount")
+              s"${SPARK_TASK_RESOURCE_PREFIX + rName + SPARK_RESOURCE_AMOUNT_SUFFIX} = $taskCount")
         }
         // Compare and update the max slots each executor can provide.
         val resourceNumSlots = execCount.toInt / taskCount
