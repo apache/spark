@@ -89,22 +89,24 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrors: Seq[String],
       caseSensitive: Boolean = true): Unit = {
-    val analyzer = getAnalyzer(caseSensitive)
-    val e = intercept[AnalysisException] {
-      analyzer.checkAnalysis(analyzer.execute(inputPlan))
-    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      val analyzer = getAnalyzer(caseSensitive)
+      val e = intercept[AnalysisException] {
+        analyzer.checkAnalysis(analyzer.execute(inputPlan))
+      }
 
-    if (!expectedErrors.map(_.toLowerCase(Locale.ROOT)).forall(
-        e.getMessage.toLowerCase(Locale.ROOT).contains)) {
-      fail(
-        s"""Exception message should contain the following substrings:
-           |
-           |  ${expectedErrors.mkString("\n  ")}
-           |
-           |Actual exception message:
-           |
-           |  ${e.getMessage}
-         """.stripMargin)
+      if (!expectedErrors.map(_.toLowerCase(Locale.ROOT)).forall(
+          e.getMessage.toLowerCase(Locale.ROOT).contains)) {
+        fail(
+          s"""Exception message should contain the following substrings:
+             |
+             |  ${expectedErrors.mkString("\n  ")}
+             |
+             |Actual exception message:
+             |
+             |  ${e.getMessage}
+           """.stripMargin)
+      }
     }
   }
 }

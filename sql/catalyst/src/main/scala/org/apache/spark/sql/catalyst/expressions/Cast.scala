@@ -126,7 +126,7 @@ object Cast {
    */
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
-    case (NullType, _) => true
+    case (NullType, _) => false
 
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
@@ -164,7 +164,7 @@ object Cast {
 
   def canNullSafeCastToDecimal(from: DataType, to: DecimalType): Boolean = from match {
     case from: BooleanType if to.isWiderThan(DecimalType.BooleanDecimal) => true
-    case from: IntegralType if to.isWiderThan(from) => true
+    case from: NumericType if to.isWiderThan(from) => true
     case from: DecimalType =>
       // truncating or precision lose
       (to.precision - to.scale) > (from.precision - from.scale)

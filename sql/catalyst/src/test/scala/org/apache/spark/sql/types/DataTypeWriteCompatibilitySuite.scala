@@ -53,7 +53,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
   test("Check NullType is incompatible with all other types") {
     allNonNullTypes.foreach { t =>
       assertSingleError(NullType, t, "nulls", s"Should not allow writing None to type $t") { err =>
-        assert(err.contains(s"incompatible with $t"))
+        assert(err.contains(s"Cannot safely cast 'nulls': null to ${t.simpleString}"))
       }
     }
   }
@@ -75,8 +75,8 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
             s"Should not allow writing $w to $r because cast is not safe") { err =>
             assert(err.contains("'t'"), "Should include the field name context")
             assert(err.contains("Cannot safely cast"), "Should identify unsafe cast")
-            assert(err.contains(s"$w"), "Should include write type")
-            assert(err.contains(s"$r"), "Should include read type")
+            assert(err.contains(s"${w.simpleString}"), "Should include write type")
+            assert(err.contains(s"${r.simpleString}"), "Should include read type")
           }
         }
       }
@@ -325,7 +325,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
     assertNumErrors(writeType, readType, "top", "Should catch 14 errors", 14) { errs =>
       assert(errs(0).contains("'top.a.element'"), "Should identify bad type")
       assert(errs(0).contains("Cannot safely cast"))
-      assert(errs(0).contains("StringType to DoubleType"))
+      assert(errs(0).contains("string to double"))
 
       assert(errs(1).contains("'top.a'"), "Should identify bad type")
       assert(errs(1).contains("Cannot write nullable elements to array of non-nulls"))
@@ -338,15 +338,15 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       assert(errs(3).contains("Cannot write nullable elements to array of non-nulls"))
 
       assert(errs(4).contains("'top.bad_nested_type'"), "Should identify bad type")
-      assert(errs(4).contains("is incompatible with"))
+      assert(errs(4).contains("Cannot safely cast"))
 
       assert(errs(5).contains("'top.m.key'"), "Should identify bad type")
       assert(errs(5).contains("Cannot safely cast"))
-      assert(errs(5).contains("DoubleType to LongType"))
+      assert(errs(5).contains("double to bigint"))
 
       assert(errs(6).contains("'top.m.value'"), "Should identify bad type")
       assert(errs(6).contains("Cannot safely cast"))
-      assert(errs(6).contains("DoubleType to FloatType"))
+      assert(errs(6).contains("double to float"))
 
       assert(errs(7).contains("'top.m'"), "Should identify bad type")
       assert(errs(7).contains("Cannot write nullable values to map of non-nulls"))
@@ -364,7 +364,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
 
       assert(errs(11).contains("'top.x'"), "Should identify bad type")
       assert(errs(11).contains("Cannot safely cast"))
-      assert(errs(11).contains("LongType to IntegerType"))
+      assert(errs(11).contains("bigint to int"))
 
       assert(errs(12).contains("'top'"), "Should identify bad type")
       assert(errs(12).contains("expected 'x', found 'y'"), "Should detect name mismatch")
