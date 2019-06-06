@@ -379,7 +379,6 @@ dmlStatementNoWith
 
 queryNoWith
     : queryTerm queryOrganization                                               #noWithQuery
-    | fromClause selectStatement+                                               #queryWithFrom
     ;
 
 queryOrganization
@@ -392,17 +391,7 @@ queryOrganization
     ;
 
 multiInsertQueryBody
-    : insertInto selectStatement
-    ;
-
-selectStatement
-    : selectClause
-      lateralView*
-      whereClause?
-      aggregationClause?
-      havingClause?
-      windowClause?
-      queryOrganization
+    : insertInto fromStatementBody
     ;
 
 queryTerm
@@ -417,6 +406,7 @@ queryTerm
 
 queryPrimary
     : querySpecification                                                    #queryPrimaryDefault
+    | fromStatement                                                         #fromStmt
     | TABLE tableIdentifier                                                 #table
     | inlineTable                                                           #inlineTableDefault1
     | '(' queryNoWith  ')'                                                  #subquery
@@ -424,6 +414,23 @@ queryPrimary
 
 sortItem
     : expression ordering=(ASC | DESC)? (NULLS nullOrder=(LAST | FIRST))?
+    ;
+
+fromStatement
+    : fromClause fromStatementBody+
+    ;
+
+fromStatementBody
+    : transformClause
+      whereClause?
+      queryOrganization
+    | selectClause
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?
+      queryOrganization
     ;
 
 querySpecification

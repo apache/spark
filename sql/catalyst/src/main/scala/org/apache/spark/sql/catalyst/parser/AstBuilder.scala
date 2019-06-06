@@ -133,20 +133,37 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     With(plan, ctes)
   }
 
-  override def visitQueryWithFrom(ctx: QueryWithFromContext): LogicalPlan = withOrigin(ctx) {
-    val from = visitFromClause(ctx.fromClause)
-    val selects = ctx.selectStatement.asScala.map { select =>
+  private def withFromStatementBody(
+      ctx: FromStatementBodyContext, plan: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    // two cases for transforms and selects because otherwise we can't get the table
+    // info before visiting these query bodies
+    if (ctx.transformClause != null) {
+      withTransformQuerySpecification(
+        ctx,
+        ctx.transformClause,
+        ctx.whereClause,
+        plan
+      )
+    } else {
       withSelectQuerySpecification(
-        select,
-        select.selectClause,
-        select.lateralView,
-        select.whereClause,
-        select.aggregationClause,
-        select.havingClause,
-        select.windowClause,
-        from).
+        ctx,
+        ctx.selectClause,
+        ctx.lateralView,
+        ctx.whereClause,
+        ctx.aggregationClause,
+        ctx.havingClause,
+        ctx.windowClause,
+        plan
+      )
+    }
+  }
+
+  override def visitFromStatement(ctx: FromStatementContext): LogicalPlan = withOrigin(ctx) {
+    val from = visitFromClause(ctx.fromClause)
+    val selects = ctx.fromStatementBody.asScala.map { body =>
+      withFromStatementBody(body, from).
         // Add organization statements.
-        optionalMap(select.queryOrganization)(withQueryResultClauses)
+        optionalMap(body.queryOrganization)(withQueryResultClauses)
     }
     // If there are multiple SELECT just UNION them together into one query.
     if (selects.length == 1) {
@@ -189,20 +206,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val from = visitFromClause(ctx.fromClause)
 
     // Build the insert clauses.
-    val inserts = ctx.multiInsertQueryBody().asScala.map { body =>
-      val select = body.selectStatement
+    val inserts = ctx.multiInsertQueryBody.asScala.map { body =>
       withInsertInto(body.insertInto,
-        withSelectQuerySpecification(
-          select,
-          select.selectClause,
-          select.lateralView,
-          select.whereClause,
-          select.aggregationClause,
-          select.havingClause,
-          select.windowClause,
-          from).
+        withFromStatementBody(body.fromStatementBody, from).
          // Add organization statements.
-         optionalMap(body.selectStatement.queryOrganization)(withQueryResultClauses))
+         optionalMap(body.fromStatementBody.queryOrganization)(withQueryResultClauses))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -411,19 +419,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     throw new ParseException("DISTRIBUTE BY is not supported", ctx)
   }
 
-  /**
-   * Create a logical plan using a query specification.
-   */
   override def visitTransformQuerySpecification(
       ctx: TransformQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
-    withTransformQuerySpecification(ctx, from)
+    withTransformQuerySpecification(ctx, ctx.transformClause, ctx.whereClause, from)
   }
 
   override def visitRegularQuerySpecification(
-    ctx: RegularQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
+      ctx: RegularQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
@@ -440,7 +445,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   override def visitNamedExpressionSeq(
-    ctx: NamedExpressionSeqContext): Seq[Expression] = {
+      ctx: NamedExpressionSeqContext): Seq[Expression] = {
     Option(ctx).toSeq
       .flatMap(_.namedExpression.asScala)
       .map(typedVisit[Expression])
@@ -471,11 +476,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Add a hive-style transform (SELECT TRANSFORM/MAP/REDUCE) query specification to a logical plan.
    */
   private def withTransformQuerySpecification(
-    ctx: TransformQuerySpecificationContext,
+    ctx: ParserRuleContext,
+    transformClause: TransformClauseContext,
+    whereClause: WhereClauseContext,
     relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    import ctx._
     // Add where.
-    val withFilter = relation.optionalMap(ctx.whereClause)(withWhereClause)
+    val withFilter = relation.optionalMap(whereClause)(withWhereClause)
 
     // Create the transform.
     val expressions = visitNamedExpressionSeq(transformClause.namedExpressionSeq)
@@ -583,7 +589,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a (Hive based) [[ScriptInputOutputSchema]].
    */
   protected def withScriptIOSchema(
-      ctx: TransformQuerySpecificationContext,
+      ctx: ParserRuleContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,
