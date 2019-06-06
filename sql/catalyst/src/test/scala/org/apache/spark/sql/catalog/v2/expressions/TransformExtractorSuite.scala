@@ -42,20 +42,10 @@ class TransformExtractorSuite extends SparkFunSuite {
   /**
    * Creates a Transform using an anonymous class.
    */
-  def transform(func: String, ref: NamedReference): Transform = new Transform {
+  private def transform(func: String, ref: NamedReference): Transform = new Transform {
     override def name: String = func
     override def references: Array[NamedReference] = Array(ref)
     override def arguments: Array[Expression] = Array(ref)
-    override def describe: String = ref.describe
-  }
-
-  /**
-   * Creates a bucket Transform using an anonymous class.
-   */
-  def bucket(numBuckets: Int, ref: NamedReference): Transform = new Transform {
-    override def name: String = "bucket"
-    override def references: Array[NamedReference] = Array(ref)
-    override def arguments: Array[Expression] = Array(lit(numBuckets), ref)
     override def describe: String = ref.describe
   }
 
@@ -71,7 +61,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case IdentityTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 
@@ -87,7 +77,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case YearsTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 
@@ -103,7 +93,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case MonthsTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 
@@ -119,7 +109,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       case DaysTransform(FieldReference(_)) =>
         fail("Matched unknown transform")
       case _ =>
-      // expected
+        // expected
     }
   }
 
@@ -140,7 +130,15 @@ class TransformExtractorSuite extends SparkFunSuite {
   }
 
   test("Bucket extractor") {
-    bucket(16, ref("a", "b")) match {
+    val col = ref("a", "b")
+    val bucketTransform = new Transform {
+      override def name: String = "bucket"
+      override def references: Array[NamedReference] = Array(col)
+      override def arguments: Array[Expression] = Array(lit(16), col)
+      override def describe: String = s"bucket(16, ${col.describe})"
+    }
+
+    bucketTransform match {
       case BucketTransform(numBuckets, FieldReference(seq)) =>
         assert(numBuckets === 16)
         assert(seq === Seq("a", "b"))
