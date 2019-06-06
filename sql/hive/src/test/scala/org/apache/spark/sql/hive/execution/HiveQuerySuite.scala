@@ -374,6 +374,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
       sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
+      // The `Cast` operator will be eliminated by optimization rule `ConstantFolding`.
       val optimizedPlan = sql(
         """
         |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
