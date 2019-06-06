@@ -80,9 +80,11 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       " Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
+  /** @group getParam */
   @Since("3.0.0")
   def getLabel: Double = $(label)
 
+  /** @group setParam */
   @Since("3.0.0")
   def setLabel(value: Double): this.type = set(label, value)
 
@@ -94,9 +96,11 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       "Must be > 0. The default value is 1.",
     ParamValidators.gt(0.0))
 
+  /** @group getParam */
   @Since("3.0.0")
   def getBeta: Double = $(beta)
 
+  /** @group setParam */
   @Since("3.0.0")
   def setBeta(value: Double): this.type = set(beta, value)
 
@@ -150,8 +154,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 object MulticlassClassificationEvaluator
   extends DefaultParamsReadable[MulticlassClassificationEvaluator] {
 
-  @Since("3.0.0")
-  val supportedMetricNames = Array("f1", "accuracy", "weightedPrecision", "weightedRecall",
+  private val supportedMetricNames = Array("f1", "accuracy", "weightedPrecision", "weightedRecall",
     "weightedTruePositiveRate", "weightedFalsePositiveRate", "weightedFMeasure",
     "truePositiveRateByLabel", "falsePositiveRateByLabel", "precisionByLabel", "recallByLabel",
     "fMeasureByLabel")
