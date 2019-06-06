@@ -20,12 +20,13 @@ package org.apache.hive.service.cli.operation;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.cli.FetchOrientation;
@@ -37,14 +38,16 @@ import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class Operation {
   protected final HiveSession parentSession;
   private OperationState state = OperationState.INITIALIZED;
   private final OperationHandle opHandle;
   private HiveConf configuration;
-  public static final Log LOG = LogFactory.getLog(Operation.class.getName());
+  public static final Logger LOG = LoggerFactory.getLogger(Operation.class.getName());
   public static final FetchOrientation DEFAULT_FETCH_ORIENTATION = FetchOrientation.FETCH_NEXT;
   public static final long DEFAULT_FETCH_MAX_ROWS = 100;
   protected boolean hasResultSet;
@@ -53,20 +56,35 @@ public abstract class Operation {
   protected volatile Future<?> backgroundHandle;
   protected OperationLog operationLog;
   protected boolean isOperationLogEnabled;
+  protected Map<String, String> confOverlay = new HashMap<String, String>();
 
   private long operationTimeout;
   private long lastAccessTime;
 
+  protected final QueryState queryState;
+
   protected static final EnumSet<FetchOrientation> DEFAULT_FETCH_ORIENTATION_SET =
       EnumSet.of(FetchOrientation.FETCH_NEXT,FetchOrientation.FETCH_FIRST);
 
-  protected Operation(HiveSession parentSession, OperationType opType, boolean runInBackground) {
+  protected Operation(HiveSession parentSession, OperationType opType) {
+    this(parentSession, null, opType);
+  }
+
+  protected Operation(HiveSession parentSession, Map<String, String> confOverlay,
+      OperationType opType) {
+    this(parentSession, confOverlay, opType, false);
+  }
+
+  protected Operation(HiveSession parentSession,
+      Map<String, String> confOverlay, OperationType opType, boolean runInBackground) {
     this.parentSession = parentSession;
+    this.confOverlay = confOverlay;
     this.runAsync = runInBackground;
     this.opHandle = new OperationHandle(opType, parentSession.getProtocolVersion());
     lastAccessTime = System.currentTimeMillis();
     operationTimeout = HiveConf.getTimeVar(parentSession.getHiveConf(),
         HiveConf.ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS);
+    queryState = new QueryState(parentSession.getHiveConf(), confOverlay, runInBackground);
   }
 
   public Future<?> getBackgroundHandle() {
@@ -318,5 +336,9 @@ public abstract class Operation {
       ex.initCause(response.getException());
     }
     return ex;
+  }
+
+  protected Map<String, String> getConfOverlay() {
+    return confOverlay;
   }
 }

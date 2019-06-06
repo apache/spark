@@ -155,6 +155,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private case class RegularTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase
 
+  /** A PostgreSQL test case. */
+  private case class PgSQLTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase
+
   /** A UDF test case. */
   private case class UDFTestCase(
       name: String, inputFile: String, resultFile: String, udf: TestUDF) extends TestCase
@@ -252,6 +256,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     loadTestData(localSparkSession)
     testCase match {
       case udfTestCase: UDFTestCase => registerTestUDF(udfTestCase.udf, localSparkSession)
+      case _: PgSQLTestCase =>
+        // booleq/boolne used by boolean.sql
+        localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
+        localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
       case _ => // Don't add UDFs in Regular tests.
     }
 
@@ -391,6 +399,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
             absPath,
             resultFile,
             TestScalarPandasUDF(name = "udf")))
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+        PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }

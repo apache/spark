@@ -55,7 +55,7 @@ object YarnSparkHadoopUtil {
       ): Map[String, String] = {
     Map("gpu" -> YARN_GPU_RESOURCE_CONFIG, "fpga" -> YARN_FPGA_RESOURCE_CONFIG).map {
       case (rName, yarnName) =>
-        val resourceCountSparkConf = s"${confPrefix}${rName}${SPARK_RESOURCE_COUNT_SUFFIX}"
+        val resourceCountSparkConf = s"${confPrefix}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}"
         (yarnName -> sparkConf.get(resourceCountSparkConf, "0"))
     }.filter { case (_, count) => count.toLong > 0 }
   }

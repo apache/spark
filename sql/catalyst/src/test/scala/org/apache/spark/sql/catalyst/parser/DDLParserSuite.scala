@@ -17,16 +17,28 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DDLParserSuite extends AnalysisTest {
   import CatalystSqlParser._
+
+  private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
+    val e = intercept[ParseException] {
+      parsePlan(sql)
+    }
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
+    containsThesePhrases.foreach { p =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
+    }
+  }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)
@@ -389,5 +401,196 @@ class DDLParserSuite extends AnalysisTest {
       DropViewStatement(Seq("db", "view"), ifExists = true))
     parseCompare(s"DROP VIEW view", DropViewStatement(Seq("view"), ifExists = false))
     parseCompare(s"DROP VIEW IF EXISTS view", DropViewStatement(Seq("view"), ifExists = true))
+  }
+
+  // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+  test("alter view: alter view properties") {
+    val sql1_view = "ALTER VIEW table_name SET TBLPROPERTIES ('test' = 'test', " +
+        "'comment' = 'new_comment')"
+    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+
+    comparePlans(parsePlan(sql1_view),
+      AlterViewSetPropertiesStatement(
+      Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+    comparePlans(parsePlan(sql2_view),
+      AlterViewUnsetPropertiesStatement(
+      Seq("table_name"), Seq("comment", "test"), ifExists = false))
+    comparePlans(parsePlan(sql3_view),
+      AlterViewUnsetPropertiesStatement(
+      Seq("table_name"), Seq("comment", "test"), ifExists = true))
+  }
+
+  // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
+  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
+  test("alter table: alter table properties") {
+    val sql1_table = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
+        "'comment' = 'new_comment')"
+    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+
+    comparePlans(
+      parsePlan(sql1_table),
+      AlterTableSetPropertiesStatement(
+        Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+    comparePlans(
+      parsePlan(sql2_table),
+      AlterTableUnsetPropertiesStatement(
+        Seq("table_name"), Seq("comment", "test"), ifExists = false))
+    comparePlans(
+      parsePlan(sql3_table),
+      AlterTableUnsetPropertiesStatement(
+        Seq("table_name"), Seq("comment", "test"), ifExists = true))
+  }
+
+  test("alter table: add column") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x"), IntegerType, None)
+      )))
+  }
+
+  test("alter table: add multiple columns") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x"), IntegerType, None),
+        QualifiedColType(Seq("y"), StringType, None)
+      )))
+  }
+
+  test("alter table: add column with COLUMNS") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x"), IntegerType, None)
+      )))
+  }
+
+  test("alter table: add column with COLUMNS (...)") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x"), IntegerType, None)
+      )))
+  }
+
+  test("alter table: add column with COLUMNS (...) and COMMENT") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x"), IntegerType, Some("doc"))
+      )))
+  }
+
+  test("alter table: add column with COMMENT") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x"), IntegerType, Some("doc"))
+      )))
+  }
+
+  test("alter table: add column with nested column name") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc'"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc"))
+      )))
+  }
+
+  test("alter table: add multiple columns with nested column name") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc', a.b string"),
+      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
+        QualifiedColType(Seq("x", "y", "z"), IntegerType, Some("doc")),
+        QualifiedColType(Seq("a", "b"), StringType, None)
+      )))
+  }
+
+  test("alter table: add column at position (not supported)") {
+    assertUnsupported("ALTER TABLE table_name ADD COLUMNS name bigint COMMENT 'doc' FIRST, a.b int")
+    assertUnsupported("ALTER TABLE table_name ADD COLUMN name bigint COMMENT 'doc' FIRST")
+    assertUnsupported("ALTER TABLE table_name ADD COLUMN name string AFTER a.b")
+  }
+
+  test("alter table: set location") {
+    val sql1 = "ALTER TABLE table_name SET LOCATION 'new location'"
+    val parsed1 = parsePlan(sql1)
+    val expected1 = AlterTableSetLocationStatement(Seq("table_name"), "new location")
+    comparePlans(parsed1, expected1)
+  }
+
+  test("alter table: rename column") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),
+      AlterTableRenameColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        "d"))
+  }
+
+  test("alter table: update column type using ALTER") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(LongType),
+        None))
+  }
+
+  test("alter table: update column type") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint"),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(LongType),
+        None))
+  }
+
+  test("alter table: update column comment") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c COMMENT 'new comment'"),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        None,
+        Some("new comment")))
+  }
+
+  test("alter table: update column type and comment") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name CHANGE COLUMN a.b.c TYPE bigint COMMENT 'new comment'"),
+      AlterTableAlterColumnStatement(
+        Seq("table_name"),
+        Seq("a", "b", "c"),
+        Some(LongType),
+        Some("new comment")))
+  }
+
+  test("alter table: change column position (not supported)") {
+    assertUnsupported("ALTER TABLE table_name CHANGE COLUMN name COMMENT 'doc' FIRST")
+    assertUnsupported("ALTER TABLE table_name CHANGE COLUMN name TYPE INT AFTER other_col")
+  }
+
+  test("alter table: drop column") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
+      AlterTableDropColumnsStatement(Seq("table_name"), Seq(Seq("a", "b", "c"))))
+  }
+
+  test("alter table: drop multiple columns") {
+    val sql = "ALTER TABLE table_name DROP COLUMN x, y, a.b.c"
+    Seq(sql, sql.replace("COLUMN", "COLUMNS")).foreach { drop =>
+      comparePlans(
+        parsePlan(drop),
+        AlterTableDropColumnsStatement(
+          Seq("table_name"),
+          Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
+    }
   }
 }

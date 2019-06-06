@@ -18,13 +18,23 @@
 
 package org.apache.hive.service.cli;
 
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hive.service.cli.thrift.TColumn;
-import org.apache.hive.service.cli.thrift.TRow;
-import org.apache.hive.service.cli.thrift.TRowSet;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
+import org.apache.hadoop.hive.serde2.thrift.ColumnBuffer;
+import org.apache.hadoop.hive.serde2.thrift.Type;
+import org.apache.hive.service.rpc.thrift.TColumn;
+import org.apache.hive.service.rpc.thrift.TRow;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.transport.TIOStreamTransport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * ColumnBasedSet.
@@ -33,41 +43,80 @@ public class ColumnBasedSet implements RowSet {
 
   private long startOffset;
 
-  private final Type[] types; // non-null only for writing (server-side)
-  private final List<Column> columns;
+  private final TypeDescriptor[] descriptors; // non-null only for writing (server-side)
+  private final List<ColumnBuffer> columns;
+  private byte[] blob;
+  private boolean isBlobBased = false;
+  public static final Logger LOG = LoggerFactory.getLogger(ColumnBasedSet.class);
 
   public ColumnBasedSet(TableSchema schema) {
-    types = schema.toTypes();
-    columns = new ArrayList<Column>();
+    descriptors = schema.toTypeDescriptors();
+    columns = new ArrayList<ColumnBuffer>();
     for (ColumnDescriptor colDesc : schema.getColumnDescriptors()) {
-      columns.add(new Column(colDesc.getType()));
+      columns.add(new ColumnBuffer(colDesc.getType()));
     }
   }
 
-  public ColumnBasedSet(TRowSet tRowSet) {
-    types = null;
-    columns = new ArrayList<Column>();
-    for (TColumn tvalue : tRowSet.getColumns()) {
-      columns.add(new Column(tvalue));
+  public ColumnBasedSet(TRowSet tRowSet) throws TException {
+    descriptors = null;
+    columns = new ArrayList<ColumnBuffer>();
+    // Use TCompactProtocol to read serialized TColumns
+    if (tRowSet.isSetBinaryColumns()) {
+      TProtocol protocol =
+          new TCompactProtocol(new TIOStreamTransport(new ByteArrayInputStream(
+              tRowSet.getBinaryColumns())));
+      // Read from the stream using the protocol for each column in final schema
+      for (int i = 0; i < tRowSet.getColumnCount(); i++) {
+        TColumn tvalue = new TColumn();
+        try {
+          tvalue.read(protocol);
+        } catch (TException e) {
+          LOG.error(e.getMessage(), e);
+          throw new TException("Error reading column value from the row set blob", e);
+        }
+        columns.add(new ColumnBuffer(tvalue));
+      }
+    }
+    else {
+      if (tRowSet.getColumns() != null) {
+        for (TColumn tvalue : tRowSet.getColumns()) {
+          columns.add(new ColumnBuffer(tvalue));
+        }
+      }
     }
     startOffset = tRowSet.getStartRowOffset();
   }
 
-  private ColumnBasedSet(Type[] types, List<Column> columns, long startOffset) {
-    this.types = types;
+  private ColumnBasedSet(TypeDescriptor[] descriptors, List<ColumnBuffer> columns, long startOffset) {
+    this.descriptors = descriptors;
     this.columns = columns;
     this.startOffset = startOffset;
   }
 
+  public ColumnBasedSet(TableSchema schema, boolean isBlobBased) {
+    this(schema);
+    this.isBlobBased = isBlobBased;
+  }
+
   @Override
   public ColumnBasedSet addRow(Object[] fields) {
-    for (int i = 0; i < fields.length; i++) {
-      columns.get(i).addValue(types[i], fields[i]);
+    if (isBlobBased) {
+      this.blob = (byte[]) fields[0];
+    } else {
+      for (int i = 0; i < fields.length; i++) {
+        TypeDescriptor descriptor = descriptors[i];
+        Object field = fields[i];
+        if (field != null && descriptor.getType() == Type.DECIMAL_TYPE) {
+          int scale = descriptor.getDecimalDigits();
+          field = ((HiveDecimal) field).toFormatString(scale);
+        }
+        columns.get(i).addValue(descriptor.getType(), field);
+      }
     }
     return this;
   }
 
-  public List<Column> getColumns() {
+  public List<ColumnBuffer> getColumns() {
     return columns;
   }
 
@@ -85,11 +134,11 @@ public class ColumnBasedSet implements RowSet {
   public ColumnBasedSet extractSubset(int maxRows) {
     int numRows = Math.min(numRows(), maxRows);
 
-    List<Column> subset = new ArrayList<Column>();
+    List<ColumnBuffer> subset = new ArrayList<ColumnBuffer>();
     for (int i = 0; i < columns.size(); i++) {
-      subset.add(columns.get(i).extractSubset(0, numRows));
+      subset.add(columns.get(i).extractSubset(numRows));
     }
-    ColumnBasedSet result = new ColumnBasedSet(types, subset, startOffset);
+    ColumnBasedSet result = new ColumnBasedSet(descriptors, subset, startOffset);
     startOffset += numRows;
     return result;
   }
@@ -106,8 +155,14 @@ public class ColumnBasedSet implements RowSet {
 
   public TRowSet toTRowSet() {
     TRowSet tRowSet = new TRowSet(startOffset, new ArrayList<TRow>());
-    for (int i = 0; i < columns.size(); i++) {
-      tRowSet.addToColumns(columns.get(i).toTColumn());
+    if (isBlobBased) {
+      tRowSet.setColumns(null);
+      tRowSet.setBinaryColumns(blob);
+      tRowSet.setColumnCount(numColumns());
+    } else {
+      for (int i = 0; i < columns.size(); i++) {
+        tRowSet.addToColumns(columns.get(i).toTColumn());
+      }
     }
     return tRowSet;
   }
