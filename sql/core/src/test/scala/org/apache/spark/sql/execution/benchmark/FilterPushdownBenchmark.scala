@@ -411,35 +411,6 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       }
     }
 
-    runBenchmark(s"Predicate conversion benchmark with unbalanced Column") {
-      // This benchmark tests a very isolated part of the predicate pushdown process - specifically,
-      // the individual action of converting a Spark `Expression` to an ORC `SearchArgument`.
-      // This results in more granular numbers that can help highlight small performance
-      // differences in this part of the code that would be hidden by slower components that
-      // get run when a full Spark job is executed.
-      // The benchmark below runs a more complete, end-to-end test which covers the whole pipeline
-      // and can uncover high-level performance problems, but is bad at discriminating details.
-      val numRows = 1
-      val width = 2000
-
-      val columns = (1 to width).map(i => s"id c$i")
-      val df = spark.range(1).selectExpr(columns: _*)
-      Seq(25, 5000, 15000).foreach { numFilter =>
-        val whereColumn = (1 to numFilter)
-            .map(i => col("c1") === lit(i))
-            .foldLeft(lit(false))(_ || _)
-        val benchmark = new Benchmark(
-          s"Convert a filter with $numFilter columns to ORC filter",
-          numRows, minNumIters = 5, output = output)
-        val name = s"Native ORC Vectorized (Pushdown)"
-        benchmark.addCase(name) { _ =>
-          OrcFilters.createFilter(df.schema,
-            DataSourceStrategy.translateFilter(whereColumn.expr).toSeq)
-        }
-        benchmark.run()
-      }
-    }
-
     runBenchmark(s"Pushdown benchmark with unbalanced Column") {
       val numRows = 1
       val width = 200
