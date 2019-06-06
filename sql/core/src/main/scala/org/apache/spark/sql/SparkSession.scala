@@ -719,7 +719,7 @@ class SparkSession private(
     SparkSession.clearActiveSession()
     if (SparkSession.numActiveSessions.get() == 0) {
       sparkContext.stop()
-    } 
+    }
   }
 
   /**
