@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.command.DropTableCommand
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DropTableCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
 
 case class DataSourceResolution(
     conf: SQLConf,
@@ -98,6 +98,26 @@ case class DataSourceResolution(
 
     case DropViewStatement(AsTableIdentifier(tableName), ifExists) =>
       DropTableCommand(tableName, ifExists, isView = true, purge = false)
+
+    case AlterTableSetPropertiesStatement(AsTableIdentifier(table), properties) =>
+      AlterTableSetPropertiesCommand(table, properties, isView = false)
+
+    case AlterViewSetPropertiesStatement(AsTableIdentifier(table), properties) =>
+      AlterTableSetPropertiesCommand(table, properties, isView = true)
+
+    case AlterTableUnsetPropertiesStatement(AsTableIdentifier(table), propertyKeys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(table, propertyKeys, ifExists, isView = false)
+
+    case AlterViewUnsetPropertiesStatement(AsTableIdentifier(table), propertyKeys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(table, propertyKeys, ifExists, isView = true)
+
+    case AlterTableSetLocationStatement(AsTableIdentifier(table), newLocation) =>
+      AlterTableSetLocationCommand(table, None, newLocation)
+
+    case AlterTableAddColumnsStatement(AsTableIdentifier(table), newColumns)
+        if newColumns.forall(_.name.size == 1) =>
+      // only top-level adds are supported using AlterTableAddColumnsCommand
+      AlterTableAddColumnsCommand(table, newColumns.map(convertToStructField))
   }
 
   object V1WriteProvider {
@@ -232,5 +252,21 @@ case class DataSourceResolution(
     location.orElse(options.get("path")).map(loc => tableProperties += ("location" -> loc))
 
     tableProperties.toMap
+  }
+
+  private def convertToStructField(col: QualifiedColType): StructField = {
+    val builder = new MetadataBuilder
+    col.comment.foreach(builder.putString("comment", _))
+
+    val cleanedDataType = HiveStringType.replaceCharType(col.dataType)
+    if (col.dataType != cleanedDataType) {
+      builder.putString(HIVE_TYPE_STRING, col.dataType.catalogString)
+    }
+
+    StructField(
+      col.name.head,
+      cleanedDataType,
+      nullable = true,
+      builder.build())
   }
 }

@@ -18,12 +18,12 @@
 
 package org.apache.hive.service;
 
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.logging.LogFactory;
-import org.apache.commons.logging.Log;
-
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+
+import org.apache.commons.codec.binary.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The cookie signer generates a signature based on SHA digest
@@ -32,9 +32,9 @@ import java.security.NoSuchAlgorithmException;
  */
 public class CookieSigner {
   private static final String SIGNATURE = "&s=";
-  private static final String SHA_STRING = "SHA";
+  private static final String SHA_STRING = "SHA-256";
   private byte[] secretBytes;
-  private static final Log LOG = LogFactory.getLog(CookieSigner.class);
+  private static final Logger LOG = LoggerFactory.getLogger(CookieSigner.class);
 
   /**
    * Constructor

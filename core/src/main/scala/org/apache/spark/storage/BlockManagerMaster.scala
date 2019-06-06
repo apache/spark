@@ -222,15 +222,6 @@ class BlockManagerMaster(
     timeout.awaitResult(future)
   }
 
-  /**
-   * Find out if the executor has cached blocks which are not available via the external shuffle
-   * service.
-   * This method does not consider broadcast blocks, since they are not reported to the master.
-   */
-  def hasExclusiveCachedBlocks(executorId: String): Boolean = {
-    driverEndpoint.askSync[Boolean](HasExclusiveCachedBlocks(executorId))
-  }
-
   /** Stop the driver endpoint, called only on the Spark driver node */
   def stop() {
     if (driverEndpoint != null && isDriver) {

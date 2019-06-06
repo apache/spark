@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.Serializable
 import java.util.Properties
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Evolving}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
@@ -175,6 +175,13 @@ abstract class TaskContext extends Serializable {
    * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String
+
+  /**
+   * Resources allocated to the task. The key is the resource name and the value is information
+   * about the resource. Please refer to [[ResourceInformation]] for specifics.
+   */
+  @Evolving
+  def resources(): Map[String, ResourceInformation]
 
   @DeveloperApi
   def taskMetrics(): TaskMetrics
