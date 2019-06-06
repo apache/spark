@@ -78,40 +78,42 @@ create temporary view int4_tbl as select * from values
 --   BIT_OR(y)   AS "1101"
 -- FROM bitwise_test;
 
--- [SPARK-27880] Implement boolean aggregates(BOOL_AND/booland_statefunc, BOOL_OR/boolor_statefunc and EVERY)
 --
 -- test boolean aggregates
 --
 -- first test all possible transition and final states
 
--- SELECT
-     -- boolean and transitions
-     -- null because strict
---   booland_statefunc(NULL, NULL)  IS NULL AS "t",
---   booland_statefunc(TRUE, NULL)  IS NULL AS "t",
---   booland_statefunc(FALSE, NULL) IS NULL AS "t",
---   booland_statefunc(NULL, TRUE)  IS NULL AS "t",
---   booland_statefunc(NULL, FALSE) IS NULL AS "t",
-     -- and actual computations
---   booland_statefunc(TRUE, TRUE) AS "t",
---   NOT booland_statefunc(TRUE, FALSE) AS "t",
---   NOT booland_statefunc(FALSE, TRUE) AS "t",
---   NOT booland_statefunc(FALSE, FALSE) AS "t";
+-- The result is inconsistent with PostgreSQL because our AND does not have strict mode
+SELECT
+  -- boolean and transitions
+  -- null because strict
+  (NULL AND NULL) IS NULL AS `t`,
+  (TRUE AND NULL) IS NULL AS `t`,
+  (FALSE AND NULL) IS NULL AS `t`,
+  (NULL AND TRUE) IS NULL AS `t`,
+  (NULL AND FALSE) IS NULL AS `t`,
+  -- and actual computations
+  (TRUE AND TRUE) AS `t`,
+  NOT (TRUE AND FALSE) AS `t`,
+  NOT (FALSE AND TRUE) AS `t`,
+  NOT (FALSE AND FALSE) AS `t`;
 
--- SELECT
-     -- boolean or transitions
-     -- null because strict
---   boolor_statefunc(NULL, NULL)  IS NULL AS "t",
---   boolor_statefunc(TRUE, NULL)  IS NULL AS "t",
---   boolor_statefunc(FALSE, NULL) IS NULL AS "t",
---   boolor_statefunc(NULL, TRUE)  IS NULL AS "t",
---   boolor_statefunc(NULL, FALSE) IS NULL AS "t",
-     -- actual computations
---   boolor_statefunc(TRUE, TRUE) AS "t",
---   boolor_statefunc(TRUE, FALSE) AS "t",
---   boolor_statefunc(FALSE, TRUE) AS "t",
---   NOT boolor_statefunc(FALSE, FALSE) AS "t";
+-- The result is inconsistent with PostgreSQL because our OR does not have strict mode
+SELECT
+  -- boolean or transitions
+  -- null because strict
+  (NULL OR NULL) IS NULL AS `t`,
+  (TRUE OR NULL) IS NULL AS `t`,
+  (FALSE OR NULL) IS NULL AS `t`,
+  (NULL OR TRUE) IS NULL AS `t`,
+  (NULL OR FALSE) IS NULL AS `t`,
+  -- actual computations
+  (TRUE OR TRUE) AS `t`,
+  (TRUE OR FALSE) AS `t`,
+  (FALSE OR TRUE) AS `t`,
+  NOT (FALSE OR FALSE) AS `t`;
 
+-- [SPARK-27880] Implement boolean aggregates(BOOL_AND, BOOL_OR and EVERY)
 -- CREATE TEMPORARY TABLE bool_test(
 --   b1 BOOL,
 --   b2 BOOL,
