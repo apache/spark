@@ -198,7 +198,7 @@ private[spark] class ExecutorAllocationManager(
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
       if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING)) {
         logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
-      } else {
+      } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires the external " +
           "shuffle service. You may enable this through spark.shuffle.service.enabled.")
       }
