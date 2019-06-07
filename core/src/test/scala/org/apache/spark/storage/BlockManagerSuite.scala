@@ -646,8 +646,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         val blockSize = inv.getArguments()(2).asInstanceOf[Long]
         val res = store1.readDiskBlockFromSameHostExecutor(blockId, localDirs, blockSize)
         assert(res.isDefined)
+        val file = ExecutorDiskUtils.getFile(localDirs, store1.subDirsPerLocalDir, blockId.name)
         // delete the file behind the blockId
-        ExecutorDiskUtils.getFile(localDirs, store1.subDirsPerLocalDir, blockId.name).delete()
+        assert(file.delete())
         sameHostExecutorTried = true
         res
       }.when(spiedStore1).readDiskBlockFromSameHostExecutor(mc.any(), mc.any(), mc.any())

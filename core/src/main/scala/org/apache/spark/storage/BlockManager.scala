@@ -29,7 +29,7 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
-import scala.util.{Random, Try}
+import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
@@ -875,13 +875,13 @@ private[spark] class BlockManager(
         val blockDataOption =
           readDiskBlockFromSameHostExecutor(blockId, localDirs, locationsAndStatus.status.diskSize)
         val res = blockDataOption.flatMap { blockData =>
-          Try(bufferTransformer(blockData))
-            .fold( { throwable =>
-              logDebug("Block from the same host executor cannot be opened: ", throwable)
+          try {
+            Some(bufferTransformer(blockData))
+          } catch {
+            case NonFatal(e) =>
+              logDebug("Block from the same host executor cannot be opened: ", e)
               None
-            }, { block =>
-              Some(block)
-            })
+          }
         }
         logInfo(s"Read $blockId from the disk of a same host executor is " +
           (if (res.isDefined) "successful." else "failed."))
@@ -1012,7 +1012,7 @@ private[spark] class BlockManager(
             new EncryptedBlockData(file, blockSize, conf, key))
 
         case _ =>
-          val transportConf = SparkTransportConf.fromSparkConf(conf, "files")
+          val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
       Some(mangedBuffer)
