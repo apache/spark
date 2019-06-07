@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, Long
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns the number of `TRUE` values for the expression.
-      This function is equivalent to `count(CASE WHEN x THEN 1 END)`.
+      This function is equivalent to `count(CASE WHEN expr THEN 1 END)`.
   """,
   examples = """
     Examples:

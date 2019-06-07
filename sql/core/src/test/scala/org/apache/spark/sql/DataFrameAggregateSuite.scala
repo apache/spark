@@ -912,6 +912,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
           "COUNT_IF(y IS NULL) FROM tempView GROUP BY x"),
         Row("a", 0L, 1L, 2L, 1L) :: Row("b", 0L, 2L, 1L, 1L) :: Nil)
 
+      checkAnswer(
+        sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(y % 2 = 0) = 1"),
+        Row("a"))
+
+      checkAnswer(
+        sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(y % 2 = 0) = 2"),
+        Row("b"))
+
+      checkAnswer(
+        sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(y IS NULL) > 0"),
+        Row("a") :: Row("b") :: Nil)
+
+      checkAnswer(
+        sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(NULL) > 0"),
+        Nil)
+
       val error = intercept[AnalysisException] {
         sql("SELECT COUNT_IF(x) FROM tempView")
       }
