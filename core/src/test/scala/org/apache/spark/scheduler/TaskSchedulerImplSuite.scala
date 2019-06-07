@@ -29,8 +29,8 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
-import org.apache.spark.internal.config._
 import org.apache.spark.ResourceUtils._
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
