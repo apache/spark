@@ -109,7 +109,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val error = intercept[SparkException] {
       val executor = step.configurePod(SparkPod.initialPod())
     }.getMessage()
-    assert(error.contains("Resource: gpu was requested, but amount was not specified"))
+    assert(error.contains("You must specify an amount for gpu"))
   }
 
   test("basic executor pod with resources") {
@@ -117,7 +117,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val gpuExecutorResourceID = ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
     val gpuResources =
       Map(("nvidia.com/gpu" -> TestResourceInformation(gpuExecutorResourceID, "2", "nvidia.com")),
-      ("foo.com/fpga" -> TestResourceInformation(fpgaResourceID, "f1", "foo.com")))
+      ("foo.com/fpga" -> TestResourceInformation(fpgaResourceID, "1", "foo.com")))
     gpuResources.foreach { case (_, testRInfo) =>
       setResourceAmountConf(baseConf, testRInfo.rId, testRInfo.count)
       setResourceVendorConf(baseConf, testRInfo.rId, testRInfo.vendor)
