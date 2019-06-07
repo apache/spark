@@ -577,7 +577,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: sql create index and reset") {
       // HIVE-18448 Since Hive 3.0, INDEX is not supported.
-      if (version != "3.1") {
+      if (version != "3.0" && version != "3.1") {
         client.runSqlHive("CREATE TABLE indexed_table (key INT)")
         client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
           "as 'COMPACT' WITH DEFERRED REBUILD")
@@ -587,9 +587,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: sql read hive materialized view") {
       // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
       if (version == "2.3" || version == "3.0" || version == "3.1") {
-        // Since HIVE-14498(Hive 3.0), Automatic rewriting for materialized view cannot be enabled
-        // if the materialized view uses non-transactional tables.
-        val disableRewrite = if (version == "2.3") "" else "DISABLE REWRITE"
+        // Since HIVE-18394(Hive 3.1), "Create Materialized View" should default to rewritable ones
+        val disableRewrite = if (version == "2.3" || version == "3.0") "" else "DISABLE REWRITE"
         client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
         client.runSqlHive(
           s"CREATE MATERIALIZED VIEW mv1 $disableRewrite AS SELECT * FROM materialized_view_tbl")
