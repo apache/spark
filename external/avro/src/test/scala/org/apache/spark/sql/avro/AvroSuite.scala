@@ -29,16 +29,13 @@ import org.apache.avro.Schema
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
-import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
-import org.apache.avro.io.EncoderFactory
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
-import org.apache.spark.sql.{functions => sql_functions}
 import org.apache.spark.sql.TestingUDT.{IntervalData, NullData, NullUDT}
-import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -1493,39 +1490,5 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       |  ]
       |}
     """.stripMargin)
-  }
-
-  test("SPARK-27798: from_avro produces same value when converted to local relation") {
-    val simpleSchema =
-      """
-        |{
-        |"type": "record",
-        |"name" : "Payload",
-        |"fields" : [ {"name" : "message", "type" : "string" } ]
-        |}
-      """.stripMargin
-
-    def generateBinary(message: String, avroSchema: String): Array[Byte] = {
-      val schema = new Schema.Parser().parse(avroSchema)
-      val out = new ByteArrayOutputStream()
-      val writer = new GenericDatumWriter[GenericRecord](schema)
-      val encoder = EncoderFactory.get().binaryEncoder(out, null)
-      val rootRecord = new GenericRecordBuilder(schema).set("message", message).build()
-      writer.write(rootRecord, encoder)
-      encoder.flush()
-      out.toByteArray
-    }
-
-    // This bug is hit when the rule `ConvertToLocalRelation` is run. But the rule was excluded
-    // in `SharedSparkSession`.
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
-      val df = Seq("one", "two", "three", "four").map(generateBinary(_, simpleSchema))
-        .toDF()
-        .withColumn("value",
-          functions.from_avro(sql_functions.col("value"), simpleSchema))
-
-      assert(df.queryExecution.executedPlan.isInstanceOf[LocalTableScanExec])
-      assert(df.collect().map(_.get(0)) === Seq(Row("one"), Row("two"), Row("three"), Row("four")))
-    }
   }
 }
