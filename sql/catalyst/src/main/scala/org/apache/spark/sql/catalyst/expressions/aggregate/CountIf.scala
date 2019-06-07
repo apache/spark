@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, LongType}
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the number of rows that the supplied expression is non-null and true.
+    _FUNC_(expr) - Returns the number of `TRUE` values for the expression.
+      This function is equivalent to `count(CASE WHEN x THEN 1 END)`.
   """,
   examples = """
     Examples:
@@ -36,20 +37,20 @@ import org.apache.spark.sql.types._
 case class CountIf(predicate: Expression) extends UnevaluableAggregate with ImplicitCastInputTypes {
   override def prettyName: String = "count_if"
 
-  override def children: Seq[Expression] = predicate :: Nil
+  override def children: Seq[Expression] = Seq(predicate)
 
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType
 
-  override def inputTypes: Seq[AbstractDataType] = BooleanType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
 
   override def checkInputDataTypes(): TypeCheckResult = predicate.dataType match {
     case BooleanType =>
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
-        s"function ${prettyName} requires boolean type, not ${predicate.dataType.catalogString}"
+        s"function $prettyName requires boolean type, not ${predicate.dataType.catalogString}"
       )
   }
 }

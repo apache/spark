@@ -895,12 +895,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-27425: count_if function") {
-    def checkError(df: => DataFrame): Unit = {
-      val thrownException = the [AnalysisException] thrownBy df.queryExecution.analyzed
-      assert(thrownException.message.contains("function count_if requires boolean type"))
-    }
-
+  test("count_if") {
     withTempView("tempView") {
       Seq(("a", None), ("a", Some(1)), ("a", Some(2)), ("a", Some(3)),
         ("b", None), ("b", Some(4)), ("b", Some(5)), ("b", Some(6)))
@@ -917,7 +912,10 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
           "COUNT_IF(y IS NULL) FROM tempView GROUP BY x"),
         Row("a", 0L, 1L, 2L, 1L) :: Row("b", 0L, 2L, 1L, 1L) :: Nil)
 
-      checkError(sql("SELECT COUNT_IF(x) FROM tempView"))
+      val error = intercept[AnalysisException] {
+        sql("SELECT COUNT_IF(x) FROM tempView")
+      }
+      assert(error.message.contains("function count_if requires boolean type"))
     }
   }
 }
