@@ -2715,6 +2715,10 @@ object SparkContext extends Logging {
         // Compare and update the max slots each executor can provide.
         val resourceNumSlots = execCount / taskReq.count
         if (resourceNumSlots < numSlots) {
+          logWarning(s"The configuration of resource: ${taskReq.resourceName} " +
+            s"(limits tasks to $resourceNumSlots) will result in wasted resources of resource " +
+            s"${limitingResourceName} (would allow for $numSlots tasks). " +
+            "Please adjust your configuration.")
           numSlots = resourceNumSlots
           limitingResourceName = taskReq.resourceName
         }
