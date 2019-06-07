@@ -63,9 +63,9 @@ case class ParquetScanBuilder(
     this.filters
   }
 
-  // The actual filter push down happens in [[ParquetPartitionReaderFactory]].
+  // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
   // It requires the Parquet physical schema to determine whether a filter is convertible.
-  // So here we simply mark that all the filters are pushed down.
+  // All filters that can be converted to Parquet are pushed down.
   override def pushedFilters(): Array[Filter] = _pushedFilters
 
   override def build(): Scan = {

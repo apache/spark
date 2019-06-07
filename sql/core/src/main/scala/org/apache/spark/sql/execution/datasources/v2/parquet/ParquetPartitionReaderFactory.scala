@@ -176,8 +176,8 @@ case class ParquetPartitionReaderFactory(
     reader
   }
 
-  private def createRowBaseReader(file: PartitionedFile): ParquetRecordReader[UnsafeRow] = {
-    buildReaderBase(file, createRowBaseReader0).asInstanceOf[ParquetRecordReader[UnsafeRow]]
+  private def createRowBaseReader(file: PartitionedFile): RecordReader[Void, UnsafeRow] = {
+    buildReaderBase(file, createRowBaseReader0)
   }
 
   private def createRowBaseReader0(
@@ -185,7 +185,7 @@ case class ParquetPartitionReaderFactory(
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
-      convertTz: Option[TimeZone]): ParquetRecordReader[UnsafeRow] = {
+      convertTz: Option[TimeZone]): RecordReader[Void, UnsafeRow] = {
     logDebug(s"Falling back to parquet-mr")
     val taskContext = Option(TaskContext.get())
     // ParquetRecordReader returns UnsafeRow
