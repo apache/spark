@@ -534,7 +534,7 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
-        val extraResources = sched.resourcesPerTask.map { taskReq =>
+        val extraResources = sched.resourcesReqsPerTask.map { taskReq =>
           val rName = taskReq.resourceName
           val count = taskReq.count
           val rAddresses = availableResources.getOrElse(rName, Seq.empty)

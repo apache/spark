@@ -93,7 +93,7 @@ private[spark] class TaskSchedulerImpl(
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
   // Resources to request per task
-  val resourcesPerTask = ResourceUtils.parseTaskResourceRequirements(sc.conf)
+  val resourcesReqsPerTask = ResourceUtils.parseTaskResourceRequirements(sc.conf)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
@@ -382,7 +382,7 @@ private[spark] class TaskSchedulerImpl(
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
    */
   private def resourcesMeetTaskRequirements(resources: Map[String, Buffer[String]]): Boolean = {
-    resourcesPerTask.forall { req =>
+    resourcesReqsPerTask.forall { req =>
       resources.contains(req.resourceName) && resources(req.resourceName).size >= req.count
     }
   }

@@ -30,7 +30,6 @@ import org.apache.spark._
 import org.apache.spark.ResourceUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.SPARK_TASK_PREFIX
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ManualClock}
