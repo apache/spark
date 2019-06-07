@@ -67,7 +67,7 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
 
-  test("SPARK-16337,SPARK-27504 temporary view refresh") {
+  test("SPARK-16337 temporary view refresh") {
     withTempView("view_refresh") { withTempPath { (location: File) =>
       // Create an ORC directory
       spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
