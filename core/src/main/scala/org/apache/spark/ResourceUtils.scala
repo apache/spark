@@ -134,8 +134,7 @@ private[spark] object ResourceUtils extends Logging {
       sparkConf: SparkConf,
       componentName: String,
       resourcesFileOpt: Option[String]): Seq[ResourceAllocation] = {
-    val allocated1 = resourcesFileOpt.map(parseAllocatedFromJsonFile(_))
-    val allocated = allocated1
+    val allocated = resourcesFileOpt.map(parseAllocatedFromJsonFile(_))
       .getOrElse(Seq.empty[ResourceAllocation])
       .filter(_.id.componentName == componentName)
     val otherResourceIds = listResourceIds(sparkConf, componentName).diff(allocated.map(_.id))

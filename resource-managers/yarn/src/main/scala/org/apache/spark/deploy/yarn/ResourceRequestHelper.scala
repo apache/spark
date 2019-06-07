@@ -25,8 +25,7 @@ import scala.util.Try
 
 import org.apache.hadoop.yarn.api.records.Resource
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.ResourceID
+import org.apache.spark.{ResourceID, SparkConf, SparkException}
 import org.apache.spark.ResourceUtils._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
@@ -80,6 +79,7 @@ private object ResourceRequestHelper extends Logging {
         s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${YARN_GPU_RESOURCE_CONFIG}"))
 
     val errorMessage = new mutable.StringBuilder()
+
     resourceDefinitions.foreach { case (sparkName, resourceRequest) =>
       if (sparkConf.contains(resourceRequest)) {
         errorMessage.append(s"Error: Do not use $resourceRequest, " +

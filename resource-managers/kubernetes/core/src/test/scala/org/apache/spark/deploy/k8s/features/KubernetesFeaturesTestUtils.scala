@@ -20,11 +20,11 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}
-import org.apache.spark.ResourceID
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
+import org.apache.spark.ResourceID
 import org.apache.spark.deploy.k8s.SparkPod
 
 object KubernetesFeaturesTestUtils {

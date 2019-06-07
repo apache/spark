@@ -2725,10 +2725,9 @@ object SparkContext extends Logging {
         val execCount = executorResourcesAndCounts(taskReq.resourceName)
         if (taskReq.count * numSlots < execCount) {
           val message = s"The configuration of resource: ${taskReq.resourceName} " +
-            s"(exec = ${execCount}, " +
-            s"task = ${taskReq.count}) will result in wasted resources due to resource " +
-            s"${limitingResourceName} limiting the number of runnable tasks per executor to: " +
-            s"${numSlots}. Please adjust your configuration."
+            s"(exec = ${execCount}, task = ${taskReq.count}) will result in wasted " +
+            s"resources due to resource ${limitingResourceName} limiting the number of " +
+            s"runnable tasks per executor to: ${numSlots}. Please adjust your configuration."
           if (Utils.isTesting) {
             throw new SparkException(message)
           } else {

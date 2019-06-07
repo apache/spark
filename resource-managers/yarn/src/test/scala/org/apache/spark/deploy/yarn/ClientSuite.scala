@@ -423,7 +423,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}", "2")
     }
     resources.values.foreach { rName =>
-      conf.set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+      setExecutorResourceAmountConf(conf, rName, "3")
     }
 
     val error = intercept[SparkException] {
