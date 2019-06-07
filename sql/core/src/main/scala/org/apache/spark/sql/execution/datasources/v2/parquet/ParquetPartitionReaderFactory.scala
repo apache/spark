@@ -51,7 +51,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param dataSchema Schema of Parquet files.
  * @param readDataSchema Required schema of Parquet files.
  * @param partitionSchema Schema of partitions.
- * @param filters Filters of the batch scan.
+ * @param filters Filters to be pushed down in the batch scan.
  */
 case class ParquetPartitionReaderFactory(
     sqlConf: SQLConf,

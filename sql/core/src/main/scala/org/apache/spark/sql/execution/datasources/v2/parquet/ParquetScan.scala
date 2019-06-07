@@ -39,7 +39,6 @@ case class ParquetScan(
     dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
-    filters: Array[Filter],
     pushedFilters: Array[Filter],
     options: CaseInsensitiveStringMap)
   extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
@@ -77,14 +76,14 @@ case class ParquetScan(
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
     ParquetPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, filters)
+      dataSchema, readDataSchema, readPartitionSchema, pushedFilters)
   }
 
   override def equals(obj: Any): Boolean = obj match {
     case p: ParquetScan =>
       fileIndex == p.fileIndex && dataSchema == p.dataSchema &&
         readDataSchema == p.readDataSchema && readPartitionSchema == p.readPartitionSchema &&
-        options == p.options && equivalentFilters(filters, p.filters)
+        options == p.options && equivalentFilters(pushedFilters, p.pushedFilters)
     case _ => false
   }
 
