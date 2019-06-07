@@ -33,17 +33,18 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 /**
  * Holds a user defined rule that can be used to inject columnar implementations of various
- * operators in the plan. The [[pre]] function can be used to replace [[SparkPlan]] instances with
- * versions that support a columnar implementation. After this Spark will insert any transitions
- * necessary. This includes transitions from row to columnar [[RowToColumnarExec]] and from
- * columnar to row [[ColumnarToRowExec]].  After this the [[post]] function is called to allow
- * replacing any of the implementations of the transitions or doing cleanup of the plan, like
- * inserting stages to build larger batches for more efficient processing, or stages that
- * transition the data to/from an accelerator's memory.
+ * operators in the plan. The [[preColumnarTransitions]] [[Rule]] can be used to replace
+ * [[SparkPlan]] instances with versions that support a columnar implementation. After this
+ * Spark will insert any transitions necessary. This includes transitions from row to columnar
+ * [[RowToColumnarExec]] and from columnar to row [[ColumnarToRowExec]]. At this point the
+ * [[postColumnarTransitions]] [[Rule]] is called to allow replacing any of the implementations
+ * of the transitions or doing cleanup of the plan, like inserting stages to build larger batches
+ * for more efficient processing, or stages that transition the data to/from an accelerator's
+ * memory.
  */
 class ColumnarRule {
-  def pre: Rule[SparkPlan] = plan => plan
-  def post: Rule[SparkPlan] = plan => plan
+  def preColumnarTransitions: Rule[SparkPlan] = plan => plan
+  def postColumnarTransitions: Rule[SparkPlan] = plan => plan
 }
 
 /**
@@ -601,9 +602,11 @@ case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: 
 
   def apply(plan: SparkPlan): SparkPlan = {
     var preInsertPlan: SparkPlan = plan
-    columnarRules.foreach((r : ColumnarRule) => preInsertPlan = r.pre(preInsertPlan))
+    columnarRules.foreach((r : ColumnarRule) =>
+      preInsertPlan = r.preColumnarTransitions(preInsertPlan))
     var postInsertPlan = insertTransitions(preInsertPlan)
-    columnarRules.reverse.foreach((r : ColumnarRule) => postInsertPlan = r.post(postInsertPlan))
+    columnarRules.reverse.foreach((r : ColumnarRule) =>
+      postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan
   }
 }

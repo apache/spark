@@ -79,15 +79,15 @@ public abstract class ColumnVector implements AutoCloseable {
   public final void close() {
     refCount--;
     if (refCount == 0) {
-      doClose();
+      cleanupResources();
     }
   }
 
   /**
-   * Actually cleans up memory for this column vector. The column vector is really not usable after
-   * this.
+   * Clean up memory or other resources associated with this column vector. This is called from
+   * close when teh reference count reaches 0.  The column vector is not usable after this.
    */
-  protected abstract void doClose();
+  protected abstract void cleanupResources();
 
   /**
    * Returns true if this column vector contains any null values.

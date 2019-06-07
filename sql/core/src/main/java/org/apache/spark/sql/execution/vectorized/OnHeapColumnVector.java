@@ -81,8 +81,8 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  protected void doClose() {
-    super.doClose();
+  protected void cleanupResources() {
+    super.cleanupResources();
     nulls = null;
     byteData = null;
     shortData = null;

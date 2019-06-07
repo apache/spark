@@ -65,7 +65,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   @Override
-  protected void doClose() {
+  protected void cleanupResources() {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
         childColumns[i].close();
