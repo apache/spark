@@ -227,8 +227,6 @@ class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.
     """
-    def __init__(self, flush_timely=False):
-        self.flush_timely = flush_timely
 
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
@@ -239,10 +237,13 @@ class ArrowStreamSerializer(Serializer):
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
-                flush_time = time.time()
-                if self.flush_timely and (flush_time - last_flush_time > 0.1):
+                current_time = time.time()
+                # If it takes time to compute each input batch but per-batch data is very small,
+                # the data might stay in the buffer for long and downstream reader cannot read it.
+                # We want to flush timely in this case.
+                if current_time - last_flush_time > 0.1:
                     stream.flush()
-                    last_flush_time = flush_time
+                    last_flush_time = current_time
         finally:
             if writer is not None:
                 writer.close()
@@ -266,8 +267,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     :param assign_cols_by_name: If True, then Pandas DataFrames will get columns by name
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, flush_timely=False):
-        super(ArrowStreamPandasSerializer, self).__init__(flush_timely=flush_timely)
+    def __init__(self, timezone, safecheck, assign_cols_by_name):
+        super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
@@ -372,10 +373,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     Serializer used by Python worker to evaluate Pandas UDFs
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, df_for_struct=False,
-                 flush_timely=False):
+    def __init__(self, timezone, safecheck, assign_cols_by_name, df_for_struct=False):
         super(ArrowStreamPandasUDFSerializer, self) \
-            .__init__(timezone, safecheck, assign_cols_by_name, flush_timely=flush_timely)
+            .__init__(timezone, safecheck, assign_cols_by_name)
         self._df_for_struct = df_for_struct
 
     def arrow_to_pandas(self, arrow_column):
@@ -881,11 +881,16 @@ class ChunkedStream(object):
                 byte_pos = new_byte_pos
                 self.current_pos = 0
 
-    def close(self):
-        # if there is anything left in the buffer, write it out first
+    def flush(self):
         if self.current_pos > 0:
             write_int(self.current_pos, self.wrapped)
             self.wrapped.write(self.buffer[:self.current_pos])
+            self.current_pos = 0
+        self.wrapped.flush()
+
+    def close(self):
+        # If there is anything left in the buffer, write it out first.
+        self.flush()
         # -1 length indicates to the receiving end that we're done.
         write_int(-1, self.wrapped)
         self.wrapped.close()

@@ -99,6 +99,9 @@ class ByteArrayOutput(object):
     def write(self, b):
         self.buffer += b
 
+    def flush(self):
+        pass
+
     def close(self):
         pass
 

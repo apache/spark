@@ -78,23 +78,20 @@ class ArrowPythonRunner(
           val arrowWriter = ArrowWriter.create(root)
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
-
-          val flushTimely = evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-
           var lastFlushTime = System.currentTimeMillis()
-          while (inputIterator.hasNext) {
-            val nextBatch = inputIterator.next()
-
-            while (nextBatch.hasNext) {
-              arrowWriter.write(nextBatch.next())
+          inputIterator.foreach { batch =>
+            batch.foreach { row =>
+              arrowWriter.write(row)
             }
-
             arrowWriter.finish()
             writer.writeBatch()
-            val flushTime = System.currentTimeMillis()
-            if (flushTimely && flushTime - lastFlushTime > 100) {
+            val currentTime = System.currentTimeMillis()
+            // If it takes time to compute each input batch but per-batch data is very small,
+            // the data might stay in the buffer for long and downstream reader cannot read it.
+            // We want to flush timely in this case.
+            if (currentTime - lastFlushTime > 100) {
               dataOut.flush()
-              lastFlushTime = flushTime
+              lastFlushTime = currentTime
             }
             arrowWriter.reset()
           }
