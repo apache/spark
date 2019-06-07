@@ -379,6 +379,31 @@ case class ArrayFilter(
   override def prettyName: String = "filter"
 }
 
+trait ArrayExistsForAllBase
+extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  def check(cond: Boolean): Boolean
+
+  override def dataType: DataType = BooleanType
+  override def functionType: AbstractDataType = BooleanType
+
+  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData]
+    val f = functionForEval
+    var continue = true
+    var i = 0
+    while (i < arr.numElements && continue) {
+      elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (check(f.eval(inputRow).asInstanceOf[Boolean])) {
+        continue = !continue
+      }
+      i += 1
+    }
+    !check(continue)
+  }
+}
+
 /**
  * Tests whether a predicate holds for one or more elements in the array.
  */
@@ -393,35 +418,13 @@ case class ArrayFilter(
 case class ArrayExists(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def dataType: DataType = BooleanType
-
-  override def functionType: AbstractDataType = BooleanType
-
+  extends ArrayExistsForAllBase {
+  override def prettyName: String = "exists"
+  override def check(cond: Boolean): Boolean = cond
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayExists = {
     val ArrayType(elementType, containsNull) = argument.dataType
     copy(function = f(function, (elementType, containsNull) :: Nil))
   }
-
-  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
-
-  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
-    val arr = argumentValue.asInstanceOf[ArrayData]
-    val f = functionForEval
-    var exists = false
-    var i = 0
-    while (i < arr.numElements && !exists) {
-      elementVar.value.set(arr.get(i, elementVar.dataType))
-      if (f.eval(inputRow).asInstanceOf[Boolean]) {
-        exists = true
-      }
-      i += 1
-    }
-    exists
-  }
-
-  override def prettyName: String = "exists"
 }
 
 /**
@@ -440,35 +443,13 @@ case class ArrayExists(
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  override def dataType: DataType = BooleanType
-
-  override def functionType: AbstractDataType = BooleanType
-
+  extends ArrayExistsForAllBase {
+  override def prettyName: String = "forall"
+  override def check(cond: Boolean): Boolean = !cond
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayForAll = {
     val ArrayType(elementType, containsNull) = argument.dataType
     copy(function = f(function, (elementType, containsNull) :: Nil))
   }
-
-  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
-
-  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
-    val arr = argumentValue.asInstanceOf[ArrayData]
-    val f = functionForEval
-    var forall = true
-    var i = 0
-    while (i < arr.numElements && forall) {
-      elementVar.value.set(arr.get(i, elementVar.dataType))
-      if (!f.eval(inputRow).asInstanceOf[Boolean]) {
-        forall = false
-      }
-      i += 1
-    }
-    forall
-  }
-
-  override def prettyName: String = "forall"
 }
 
 /**
