@@ -3,7 +3,7 @@
 --
 --
 -- AGGREGATES [Part 1]
--- https://github.com/postgres/postgres/blob/02ddd499322ab6f2f0d58692955dc9633c2150fc/src/test/regress/sql/aggregates.sql#L1-L143
+-- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql#L1-L143
 
 -- avoid bit-exact output here because operations may not be bit-exact.
 -- SET extra_float_digits = 0;

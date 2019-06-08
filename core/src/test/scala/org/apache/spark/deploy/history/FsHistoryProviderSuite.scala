@@ -770,11 +770,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
     // write out one totally bogus hidden file
     val hiddenGarbageFile = new File(testDir, ".garbage")
-    val out = new PrintWriter(hiddenGarbageFile)
-    // scalastyle:off println
-    out.println("GARBAGE")
-    // scalastyle:on println
-    out.close()
+    Utils.tryWithResource(new PrintWriter(hiddenGarbageFile)) { out =>
+      // scalastyle:off println
+      out.println("GARBAGE")
+      // scalastyle:on println
+    }
 
     // also write out one real event log file, but since its a hidden file, we shouldn't read it
     val tmpNewAppFile = newLogFile("hidden", None, inProgress = false)

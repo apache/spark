@@ -29,8 +29,9 @@ import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 import org.apache.spark._
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.arrow.{ArrowUtils, ArrowWriter}
+import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
@@ -77,16 +78,21 @@ class ArrowPythonRunner(
           val arrowWriter = ArrowWriter.create(root)
           val writer = new ArrowStreamWriter(root, null, dataOut)
           writer.start()
-
-          while (inputIterator.hasNext) {
-            val nextBatch = inputIterator.next()
-
-            while (nextBatch.hasNext) {
-              arrowWriter.write(nextBatch.next())
+          var lastFlushTime = System.currentTimeMillis()
+          inputIterator.foreach { batch =>
+            batch.foreach { row =>
+              arrowWriter.write(row)
             }
-
             arrowWriter.finish()
             writer.writeBatch()
+            val currentTime = System.currentTimeMillis()
+            // If it takes time to compute each input batch but per-batch data is very small,
+            // the data might stay in the buffer for long and downstream reader cannot read it.
+            // We want to flush timely in this case.
+            if (currentTime - lastFlushTime > 100) {
+              dataOut.flush()
+              lastFlushTime = currentTime
+            }
             arrowWriter.reset()
           }
           // end writes footer to the output stream and doesn't clean any resources.

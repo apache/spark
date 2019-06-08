@@ -44,7 +44,7 @@ public abstract class MetadataOperation extends Operation {
   private static final char SEARCH_STRING_ESCAPE = '\\';
 
   protected MetadataOperation(HiveSession parentSession, OperationType opType) {
-    super(parentSession, opType, false);
+    super(parentSession, opType);
     setHasResultSet(true);
   }
 

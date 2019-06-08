@@ -23,8 +23,9 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, TableCatalog, TableChange, TestTableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
@@ -85,8 +86,8 @@ class TestInMemoryTableCatalog extends TableCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     Option(tables.get(ident)) match {
       case Some(table) =>
-        val properties = TestTableCatalog.applyPropertiesChanges(table.properties, changes)
-        val schema = TestTableCatalog.applySchemaChanges(table.schema, changes)
+        val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
+        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
         val newTable = new InMemoryTable(table.name, schema, properties, table.data)
 
         tables.put(ident, newTable)
