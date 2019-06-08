@@ -63,11 +63,9 @@ public final class Platform {
     }
   }
 
-  private static final int majorVersion;
-  static {
-    // Split java.version on non-digit chars:
-    majorVersion = Integer.parseInt(System.getProperty("java.version").split("\\D+")[0]);
-  }
+  // Split java.version on non-digit chars:
+  private static final int majorVersion =
+    Integer.parseInt(System.getProperty("java.version").split("\\D+")[0]);
 
   private static final Method CLEANER_CREATE_METHOD;
   static {
