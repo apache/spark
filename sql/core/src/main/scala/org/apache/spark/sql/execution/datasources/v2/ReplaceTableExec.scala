@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TransactionalTableCatalog}
+import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 case class ReplaceTableExec(
     catalog: TableCatalog,
@@ -35,19 +36,34 @@ case class ReplaceTableExec(
     tableProperties: Map[String, String]) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    catalog match {
-      case transactional: TransactionalTableCatalog =>
-        transactional.stageReplace(
-          identifier,
-          tableSchema,
-          partitioning.toArray,
-          tableProperties.asJava).commitStagedChanges()
-      case _ =>
-        if (catalog.tableExists(identifier)) {
-          catalog.dropTable(identifier)
-        }
-        catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+    if (catalog.tableExists(identifier)) {
+      catalog.dropTable(identifier)
     }
+    catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+    sqlContext.sparkContext.parallelize(Seq.empty, 1)
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+case class ReplaceTableStagingExec(
+    catalog: StagingTableCatalog,
+    identifier: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    tableProperties: Map[String, String]) extends LeafExecNode {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val stagedReplace = catalog.stageReplace(
+      identifier,
+      tableSchema,
+      partitioning.toArray,
+      tableProperties.asJava)
+    Utils.tryWithSafeFinallyAndFailureCallbacks({
+      stagedReplace.commitStagedChanges()
+    })(catchBlock = {
+      stagedReplace.abortStagedChanges()
+    })
 
     sqlContext.sparkContext.parallelize(Seq.empty, 1)
   }

@@ -17,9 +17,36 @@
 
 package org.apache.spark.sql.sources.v2;
 
+import java.util.Map;
+import org.apache.spark.sql.catalog.v2.Identifier;
+import org.apache.spark.sql.catalog.v2.StagingTableCatalog;
+import org.apache.spark.sql.catalog.v2.expressions.Transform;
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+
+/**
+ * Represents a table which is staged for being committed to the metastore.
+ * <p>
+ * This is used to implement atomic CREATE TABLE AS SELECT and REPLACE TABLE AS SELECT queries. The
+ * planner will create one of these via
+ * {@link StagingTableCatalog#stageCreate(Identifier, StructType, Transform[], Map)} or
+ * {@link StagingTableCatalog#stageReplace(Identifier, StructType, Transform[], Map)} to prepare the
+ * table for being written to. This table should usually implement {@link SupportsWrite}. A new
+ * writer will be constructed via {@link SupportsWrite#newWriteBuilder(CaseInsensitiveStringMap)},
+ * and the write will be committed. The job concludes with a call to {@link #commitStagedChanges()},
+ * at which point implementations are expected to commit the table's metadata into the metastore
+ * along with the data that was written by the writes from the write builder this table created.
+ */
 public interface StagedTable extends Table {
 
+  /**
+   * Finalize the creation or replacement of this table.
+   */
   void commitStagedChanges();
 
+  /**
+   * Abort the changes that were staged, both in metadata and from temporary outputs of this
+   * table's writers.
+   */
   void abortStagedChanges();
 }

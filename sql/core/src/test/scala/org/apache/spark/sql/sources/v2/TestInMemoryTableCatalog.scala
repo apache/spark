@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, TableCatalog, TableChange, TestTableCatalog, TransactionalTableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, StagingTableCatalog, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
@@ -211,15 +211,15 @@ object TestInMemoryTableCatalog {
   }
 }
 
-class TestTransactionalInMemoryCatalog
-  extends TestInMemoryTableCatalog with TransactionalTableCatalog {
+class TestStagingInMemoryCatalog
+  extends TestInMemoryTableCatalog with StagingTableCatalog {
 
   override def stageCreate(
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
-    newStagedTable(ident, schema, partitions, properties, false)
+    newStagedTable(ident, schema, partitions, properties, replaceIfExists = false)
   }
 
   override def stageReplace(
@@ -227,7 +227,7 @@ class TestTransactionalInMemoryCatalog
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
-    newStagedTable(ident, schema, partitions, properties, true)
+    newStagedTable(ident, schema, partitions, properties, replaceIfExists = true)
   }
 
   private def newStagedTable(

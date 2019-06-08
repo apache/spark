@@ -49,7 +49,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("create/replace table using - schema") {
     val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet"
-    val replaceSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet"
+    val replaceSql = "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
       Some(new StructType()

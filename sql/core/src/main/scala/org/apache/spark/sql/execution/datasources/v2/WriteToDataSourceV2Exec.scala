@@ -26,7 +26,7 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TransactionalTableCatalog}
+import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -51,14 +51,13 @@ case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
 }
 
 /**
- * Physical plan node for v2 create table as select.
+ * Physical plan node for v2 create table as select when the catalog does not support staging
+ * the table creation.
  *
  * A new table will be created using the schema of the query, and rows from the query are appended.
- * If either table creation or the append fails, the table will be deleted. The CTAS operation is
- * atomic if the catalog supports atomic operations, where the creation of the table is staged and
- * the commit of the write should bundle the commitment of the metadata and the table contents in
- * a single unit. Otherwise, the table is created, and if the write fails, the table is
- * subsequently dropped.
+ * If either table creation or the append fails, the table will be deleted. This implementation is
+ * not atomic; for an atomic variant for catalogs that support the appropriate features, see
+ * CreateTableAsSelectStagingExec.
  */
 case class CreateTableAsSelectExec(
     catalog: TableCatalog,
@@ -67,7 +66,7 @@ case class CreateTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    ifNotExists: Boolean) extends StagedTableWriteExec {
+    ifNotExists: Boolean) extends V2TableWriteExec {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
@@ -79,44 +78,69 @@ case class CreateTableAsSelectExec(
 
       throw new TableAlreadyExistsException(ident)
     }
-    catalog match {
-      case txnCatalog: TransactionalTableCatalog =>
-        val stagedTable = txnCatalog.stageCreate(
-            ident, query.schema, partitioning.toArray, properties.asJava)
-        writeToStagedTable(stagedTable, writeOptions, ident)
-      case _ =>
-        Utils.tryWithSafeFinallyAndFailureCallbacks({
-          catalog.createTable(
-              ident, query.schema, partitioning.toArray, properties.asJava) match {
-            case table: SupportsWrite =>
-              val batchWrite = table.newWriteBuilder(writeOptions)
-                .withInputDataSchema(query.schema)
-                .withQueryId(UUID.randomUUID().toString)
-                .buildForBatch()
+    Utils.tryWithSafeFinallyAndFailureCallbacks({
+      catalog.createTable(
+        ident, query.schema, partitioning.toArray, properties.asJava) match {
+        case table: SupportsWrite =>
+          val batchWrite = table.newWriteBuilder(writeOptions)
+            .withInputDataSchema(query.schema)
+            .withQueryId(UUID.randomUUID().toString)
+            .buildForBatch()
 
-              doWrite(batchWrite)
+          doWrite(batchWrite)
 
-            case _ =>
-              // table does not support writes
-              throw new SparkException(
-                s"Table implementation does not support writes: ${ident.quoted}")
-          }
-        })(catchBlock = {
-          catalog.dropTable(ident)
-        })
-    }
+        case _ =>
+          // table does not support writes
+          throw new SparkException(
+            s"Table implementation does not support writes: ${ident.quoted}")
+      }
+    })(catchBlock = {
+      catalog.dropTable(ident)
+    })
   }
 }
 
 /**
- * Physical plan node for v2 replace table as select.
+ * Physical plan node for v2 create table as select, when the catalog is determined to support
+ * staging table creation.
+ *
+ * A new table will be created using the schema of the query, and rows from the query are appended.
+ * The CTAS operation is atomic. The creation of the table is staged and the commit of the write
+ * should bundle the commitment of the metadata and the table contents in a single unit. If the
+ * write fails, the table is instructed to roll back all staged changes.
+ */
+case class CreateTableAsSelectStagingExec (
+    catalog: StagingTableCatalog,
+    ident: Identifier,
+    partitioning: Seq[Transform],
+    query: SparkPlan,
+    properties: Map[String, String],
+    writeOptions: CaseInsensitiveStringMap,
+    ifNotExists: Boolean) extends StagedTableWriteExec {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (catalog.tableExists(ident)) {
+      if (ifNotExists) {
+        return sparkContext.parallelize(Seq.empty, 1)
+      }
+
+      throw new TableAlreadyExistsException(ident)
+    }
+    val stagedTable = catalog.stageCreate(
+      ident, query.schema, partitioning.toArray, properties.asJava)
+    writeToStagedTable(stagedTable, writeOptions, ident)
+  }
+}
+
+/**
+ * Physical plan node for v2 replace table as select when the catalog does not support staging
+ * table replacement.
  *
  * A new table will be created using the schema of the query, and rows from the query are appended.
  * If the table exists, its contents and schema should be replaced with the schema and the contents
- * of the query. If the catalog supports atomic replacement of tables, the plugin's transactional
- * implementation is used so that the plugin can avoid losing previously committed data if any
- * part of the write fails. The non-atomic implementation will drop the table and then run
- * non-atomic CTAS.
+ * of the query. This is a non-atomic implementation that drops the table and then runs non-atomic
+ * CTAS. For an atomic implementation for catalogs with the appropriate support, see
+ * ReplaceTableAsSelectStagingExec.
  */
 case class ReplaceTableAsSelectExec(
     catalog: TableCatalog,
@@ -129,44 +153,64 @@ case class ReplaceTableAsSelectExec(
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
   override protected def doExecute(): RDD[InternalRow] = {
-    catalog match {
-      case txnCatalog: TransactionalTableCatalog =>
-        val stagedTable = txnCatalog.stageReplace(
-          ident, query.schema, partitioning.toArray, properties.asJava)
-        writeToStagedTable(stagedTable, writeOptions, ident)
-      case _ =>
-        // Note that this operation is potentially unsafe, but these are the strict semantics of
-        // RTAS if the catalog does not support atomic operations.
-        //
-        // There are numerous cases we concede to where the table will be dropped and irrecoverable:
-        //
-        // 1. Creating the new table fails,
-        // 2. Writing to the new table fails,
-        // 3. The table returned by catalog.createTable doesn't support writing.
-        if (catalog.tableExists(ident)) {
-            catalog.dropTable(ident)
-        }
-
-        Utils.tryWithSafeFinallyAndFailureCallbacks({
-          catalog.createTable(
-              ident, query.schema, partitioning.toArray, properties.asJava) match {
-            case table: SupportsWrite =>
-              val batchWrite = table.newWriteBuilder(writeOptions)
-                .withInputDataSchema(query.schema)
-                .withQueryId(UUID.randomUUID().toString)
-                .buildForBatch()
-
-              doWrite(batchWrite)
-
-            case _ =>
-              // table does not support writes
-              throw new SparkException(
-                s"Table implementation does not support writes: ${ident.quoted}")
-          }
-        })(catchBlock = {
-          catalog.dropTable(ident)
-        })
+    // Note that this operation is potentially unsafe, but these are the strict semantics of
+    // RTAS if the catalog does not support atomic operations.
+    //
+    // There are numerous cases we concede to where the table will be dropped and irrecoverable:
+    //
+    // 1. Creating the new table fails,
+    // 2. Writing to the new table fails,
+    // 3. The table returned by catalog.createTable doesn't support writing.
+    if (catalog.tableExists(ident)) {
+        catalog.dropTable(ident)
     }
+    val createdTable = catalog.createTable(
+      ident, query.schema, partitioning.toArray, properties.asJava)
+    Utils.tryWithSafeFinallyAndFailureCallbacks({
+      createdTable match {
+        case table: SupportsWrite =>
+          val batchWrite = table.newWriteBuilder(writeOptions)
+            .withInputDataSchema(query.schema)
+            .withQueryId(UUID.randomUUID().toString)
+            .buildForBatch()
+
+          doWrite(batchWrite)
+
+        case _ =>
+          // table does not support writes
+          throw new SparkException(
+            s"Table implementation does not support writes: ${ident.quoted}")
+      }
+    })(catchBlock = {
+      catalog.dropTable(ident)
+    })
+  }
+}
+
+/**
+ *
+ * Physical plan node for v2 replace table as select when the catalog supports staging
+ * table replacement.
+ *
+ * A new table will be created using the schema of the query, and rows from the query are appended.
+ * If the table exists, its contents and schema should be replaced with the schema and the contents
+ * of the query. This implementation is atomic. The table replacement is staged, and the commit
+ * operation at the end should perform tne replacement of the table's metadata and contents. If the
+ * write fails, the table is instructed to roll back staged changes and any previously written table
+ * is left untouched.
+ */
+case class ReplaceTableAsSelectStagingExec(
+    catalog: StagingTableCatalog,
+    ident: Identifier,
+    partitioning: Seq[Transform],
+    query: SparkPlan,
+    properties: Map[String, String],
+    writeOptions: CaseInsensitiveStringMap) extends StagedTableWriteExec {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val stagedTable = catalog.stageReplace(
+      ident, query.schema, partitioning.toArray, properties.asJava)
+    writeToStagedTable(stagedTable, writeOptions, ident)
   }
 }
 
@@ -421,11 +465,12 @@ trait StagedTableWriteExec extends V2TableWriteExec {
           stagedTable.commitStagedChanges()
           writtenRows
         case _ =>
-          // table does not support writes
+          // Table does not support writes - staged changes are also rolled back below.
           throw new SparkException(
             s"Table implementation does not support writes: ${ident.quoted}")
       }
     })(catchBlock = {
+      // Failure rolls back the staged writes and metadata changes.
       stagedTable.abortStagedChanges()
     })
   }

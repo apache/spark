@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 case class CreateTableExec(
     catalog: TableCatalog,
@@ -41,6 +42,39 @@ case class CreateTableExec(
     if (!catalog.tableExists(identifier)) {
       try {
         catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+      } catch {
+        case _: TableAlreadyExistsException if ignoreIfExists =>
+          logWarning(s"Table ${identifier.quoted} was created concurrently. Ignoring.")
+      }
+    } else if (!ignoreIfExists) {
+      throw new TableAlreadyExistsException(identifier)
+    }
+
+    sqlContext.sparkContext.parallelize(Seq.empty, 1)
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+case class CreateTableStagingExec(
+    catalog: StagingTableCatalog,
+    identifier: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    tableProperties: Map[String, String],
+    ignoreIfExists: Boolean) extends LeafExecNode {
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (!catalog.tableExists(identifier)) {
+      try {
+        val stagedCreate = catalog.stageCreate(
+          identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+        Utils.tryWithSafeFinallyAndFailureCallbacks({
+          stagedCreate.commitStagedChanges()
+        })(catchBlock = {
+          stagedCreate.abortStagedChanges()
+        })
       } catch {
         case _: TableAlreadyExistsException if ignoreIfExists =>
           logWarning(s"Table ${identifier.quoted} was created concurrently. Ignoring.")

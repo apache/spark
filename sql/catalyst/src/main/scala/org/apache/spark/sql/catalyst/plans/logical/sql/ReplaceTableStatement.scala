@@ -38,12 +38,7 @@ case class ReplaceTableStatement(
     provider: String,
     options: Map[String, String],
     location: Option[String],
-    comment: Option[String]) extends ParsedStatement {
-
-  override def output: Seq[Attribute] = Seq.empty
-
-  override def children: Seq[LogicalPlan] = Seq.empty
-}
+    comment: Option[String]) extends ParsedStatement
 
 /**
  * A REPLACE TABLE AS SELECT command, as parsed from SQL.
@@ -58,8 +53,6 @@ case class ReplaceTableAsSelectStatement(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String]) extends ParsedStatement {
-
-  override def output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)
 }
