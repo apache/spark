@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.avro
 
-import org.apache.avro.Schema
+import java.io.ByteArrayOutputStream
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.functions.struct
+import org.apache.avro.Schema
+import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.io.EncoderFactory
+
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.LocalTableScanExec
+import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class AvroFunctionsSuite extends QueryTest with SharedSQLContext {
@@ -79,5 +85,38 @@ class AvroFunctionsSuite extends QueryTest with SharedSQLContext {
     val readBackOne = dfOne.select(to_avro($"array").as("avro"))
       .select(from_avro($"avro", avroTypeArrStruct).as("array"))
     checkAnswer(dfOne, readBackOne)
+  }
+
+  test("SPARK-27798: from_avro produces same value when converted to local relation") {
+    val simpleSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name" : "Payload",
+        |  "fields" : [ {"name" : "message", "type" : "string" } ]
+        |}
+      """.stripMargin
+
+    def generateBinary(message: String, avroSchema: String): Array[Byte] = {
+      val schema = new Schema.Parser().parse(avroSchema)
+      val out = new ByteArrayOutputStream()
+      val writer = new GenericDatumWriter[GenericRecord](schema)
+      val encoder = EncoderFactory.get().binaryEncoder(out, null)
+      val rootRecord = new GenericRecordBuilder(schema).set("message", message).build()
+      writer.write(rootRecord, encoder)
+      encoder.flush()
+      out.toByteArray
+    }
+
+    // This bug is hit when the rule `ConvertToLocalRelation` is run. But the rule was excluded
+    // in `SharedSparkSession`.
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      val df = Seq("one", "two", "three", "four").map(generateBinary(_, simpleSchema))
+        .toDF()
+        .withColumn("value", from_avro(col("value"), simpleSchema))
+
+      assert(df.queryExecution.executedPlan.isInstanceOf[LocalTableScanExec])
+      assert(df.collect().map(_.get(0)) === Seq(Row("one"), Row("two"), Row("three"), Row("four")))
+    }
   }
 }
