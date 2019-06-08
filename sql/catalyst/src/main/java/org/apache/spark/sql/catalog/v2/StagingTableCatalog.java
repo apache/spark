@@ -101,5 +101,5 @@ public interface StagingTableCatalog extends TableCatalog {
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties);
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
 }
