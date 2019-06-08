@@ -314,7 +314,7 @@ public final class Platform {
       try {
         Class<?> bitsClass =
           Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
-        if (_UNSAFE != null && 9 <= majorVersion && majorVersion <= 12) {
+        if (_UNSAFE != null && majorVersion >= 9) {
           // Java 9/10 and 11/12 have different field names.
           Field unalignedField =
             bitsClass.getDeclaredField(majorVersion >= 11 ? "UNALIGNED" : "unaligned");
