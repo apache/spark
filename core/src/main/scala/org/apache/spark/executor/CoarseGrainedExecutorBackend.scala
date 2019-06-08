@@ -66,6 +66,13 @@ private[spark] class CoarseGrainedExecutorBackend(
   // to be changed so that we don't share the serializer instance across threads
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
+  /**
+   * Map each taskId to the information about the resource allocated to it, Please refer to
+   * [[ResourceInformation]] for specifics.
+   * Exposed for testing only.
+   */
+  private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
+
   override def onStart() {
     logInfo("Connecting to driver: " + driverUrl)
     val resources = parseOrFindResources(resourcesFile)
@@ -87,25 +94,11 @@ private[spark] class CoarseGrainedExecutorBackend(
   def parseOrFindResources(resourcesFile: Option[String]): Map[String, ResourceInformation] = {
     // only parse the resources if a task requires them
     val resourceInfo = if (env.conf.getAllWithPrefix(SPARK_TASK_RESOURCE_PREFIX).nonEmpty) {
-      val actualExecResources = resourcesFile.map { resourceFileStr => {
-        val source = new BufferedInputStream(new FileInputStream(resourceFileStr))
-        val resourceMap = try {
-          val parsedJson = parse(source).asInstanceOf[JArray].arr
-          parsedJson.map { json =>
-            val name = (json \ "name").extract[String]
-            val addresses = (json \ "addresses").extract[Array[String]]
-            new ResourceInformation(name, addresses)
-          }.map(x => (x.name -> x)).toMap
-        } catch {
-          case e @ (_: MappingException | _: MismatchedInputException) =>
-            throw new SparkException(
-              s"Exception parsing the resources in $resourceFileStr", e)
-        } finally {
-          source.close()
-        }
-        resourceMap
-      }}.getOrElse(ResourceDiscoverer.discoverResourcesInformation(env.conf,
-        SPARK_EXECUTOR_RESOURCE_PREFIX))
+      val actualExecResources = resourcesFile.map { rFile => {
+        ResourceDiscoverer.parseAllocatedFromJsonFile(rFile)
+      }}.getOrElse {
+        ResourceDiscoverer.discoverResourcesInformation(env.conf, SPARK_EXECUTOR_RESOURCE_PREFIX)
+      }
 
       if (actualExecResources.isEmpty) {
         throw new SparkException("User specified resources per task via: " +
@@ -113,7 +106,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
       val execReqResourcesAndCounts =
         env.conf.getAllWithPrefixAndSuffix(SPARK_EXECUTOR_RESOURCE_PREFIX,
-          SPARK_RESOURCE_COUNT_SUFFIX).toMap
+          SPARK_RESOURCE_AMOUNT_SUFFIX).toMap
 
       ResourceDiscoverer.checkActualResourcesMeetRequirements(execReqResourcesAndCounts,
         actualExecResources)
@@ -165,6 +158,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
+        taskResources(taskDesc.taskId) = taskDesc.resources
         executor.launchTask(this, taskDesc)
       }
 
@@ -211,7 +205,11 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
-    val msg = StatusUpdate(executorId, taskId, state, data)
+    val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
+    val msg = StatusUpdate(executorId, taskId, state, data, resources)
+    if (TaskState.isFinished(state)) {
+      taskResources.remove(taskId)
+    }
     driver match {
       case Some(driverRef) => driverRef.send(msg)
       case None => logWarning(s"Drop $msg because has not yet connected to driver")

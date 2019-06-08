@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -38,7 +37,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
  * CheckAnalysis classes.
  */
-class ExpressionParserSuite extends PlanTest {
+class ExpressionParserSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
@@ -51,12 +50,8 @@ class ExpressionParserSuite extends PlanTest {
     compareExpressions(parser.parseExpression(sqlCommand), e)
   }
 
-  def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](defaultParser.parseExpression(sqlCommand))
-    messages.foreach { message =>
-      assert(e.message.contains(message))
-    }
-  }
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(defaultParser.parseExpression)(sqlCommand, messages: _*)
 
   def assertEval(
       sqlCommand: String,
