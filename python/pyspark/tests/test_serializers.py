@@ -225,16 +225,6 @@ class SerializersTest(unittest.TestCase):
                 # ends with a -1
                 self.assertEqual(dest.buffer[-4:], write_int(-1))
 
-    def test_chunked_stream_flush(self):
-        wrapped = ByteArrayOutput()
-        stream = serializers.ChunkedStream(wrapped, 10)
-        stream.write(bytearray([0]))
-        self.assertEqual(len(wrapped.buffer), 0, "small write should be buffered")
-        stream.flush()
-        # Expect buffer size 4 bytes + buffer data 1 byte.
-        self.assertEqual(len(wrapped.buffer), 5, "flush should work")
-        stream.close()
-
 
 if __name__ == "__main__":
     from pyspark.tests.test_serializers import *
