@@ -986,9 +986,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return this;
     }
     // At least one match was found. Estimate space needed for result.
-    int increase = replace.numBytes - search.numBytes;
-    increase = increase < 0 ? 0 : increase;
-    increase *= 16;
+    // The 16x multiplier here is chosen to match commons-lang3's implementation.
+    int increase = Math.max(0, replace.numBytes - search.numBytes) * 16;
     final UTF8StringBuilder buf = new UTF8StringBuilder(numBytes + increase);
     while (end != -1) {
       buf.appendBytes(this.base, this.offset + start, end - start);
