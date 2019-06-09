@@ -58,7 +58,6 @@ import types
 import collections
 import zlib
 import itertools
-import time
 
 if sys.version < '3':
     import cPickle as pickle
@@ -231,19 +230,11 @@ class ArrowStreamSerializer(Serializer):
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
         writer = None
-        last_flush_time = time.time()
         try:
             for batch in iterator:
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
-                current_time = time.time()
-                # If it takes time to compute each input batch but per-batch data is very small,
-                # the data might stay in the buffer for long and downstream reader cannot read it.
-                # We want to flush timely in this case.
-                if current_time - last_flush_time > 0.1:
-                    stream.flush()
-                    last_flush_time = current_time
         finally:
             if writer is not None:
                 writer.close()
@@ -881,16 +872,11 @@ class ChunkedStream(object):
                 byte_pos = new_byte_pos
                 self.current_pos = 0
 
-    def flush(self):
+    def close(self):
+        # if there is anything left in the buffer, write it out first
         if self.current_pos > 0:
             write_int(self.current_pos, self.wrapped)
             self.wrapped.write(self.buffer[:self.current_pos])
-            self.current_pos = 0
-        self.wrapped.flush()
-
-    def close(self):
-        # If there is anything left in the buffer, write it out first.
-        self.flush()
         # -1 length indicates to the receiving end that we're done.
         write_int(-1, self.wrapped)
         self.wrapped.close()
