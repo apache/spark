@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
@@ -33,6 +33,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -191,7 +192,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
   protected def testMergeSchemasInParallel(
       ignoreCorruptFiles: Boolean,
-      singleFileSchemaReader: (String, Configuration, Boolean) => Option[StructType]): Unit = {
+      parallelSchemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
     withSQLConf(
       SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles.toString,
       SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
@@ -210,10 +211,10 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         val fileStatuses =
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
-        val schema = OrcUtils.mergeSchemasInParallel(
+        val schema = SchemaMergeUtils.mergeSchemasInParallel(
           spark,
           fileStatuses,
-          singleFileSchemaReader)
+          parallelSchemaReader)
 
         assert(schema.isDefined == true)
         assert(schema.get == StructType(Seq(
@@ -224,10 +225,10 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   }
 
   protected def testMergeSchemasInParallel(
-      singleFileSchemaReader: (String, Configuration, Boolean) => Option[StructType]): Unit = {
-    testMergeSchemasInParallel(true, singleFileSchemaReader)
+      parallelSchemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+    testMergeSchemasInParallel(true, parallelSchemaReader)
     val exception = intercept[SparkException] {
-      testMergeSchemasInParallel(false, singleFileSchemaReader)
+      testMergeSchemasInParallel(false, parallelSchemaReader)
     }.getCause
     assert(exception.getCause.getMessage.contains("Could not read footer for file"))
   }
@@ -423,6 +424,6 @@ class OrcSourceSuite extends OrcSuite with SharedSQLContext {
   }
 
   test("SPARK-11412 read and merge orc schemas in parallel") {
-    testMergeSchemasInParallel(OrcUtils.singleFileSchemaReader)
+    testMergeSchemasInParallel(OrcUtils.readOrcSchemasInParallel)
   }
 }

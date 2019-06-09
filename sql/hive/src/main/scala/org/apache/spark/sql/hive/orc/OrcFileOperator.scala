@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.orc
 import java.io.IOException
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
@@ -29,6 +29,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 private[hive] object OrcFileOperator extends Logging {
   /**
@@ -102,16 +103,21 @@ private[hive] object OrcFileOperator extends Logging {
   }
 
   /**
-   * Read single ORC file schema using Hive ORC library
+   * Reads ORC file schemas in multi-threaded manner, using Hive ORC library.
+   * This is visible for testing.
    */
-  def singleFileSchemaReader(file: String, conf: Configuration, ignoreCorruptFiles: Boolean)
-    : Option[StructType] = {
-    getFileReader(file, Some(conf), ignoreCorruptFiles).map(reader => {
-      val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
-      val schema = readerInspector.getTypeName
-      logDebug(s"Reading schema from file $file, got Hive schema string: $schema")
-      CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
-    })
+  def readOrcSchemasInParallel(
+    partFiles: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean)
+    : Seq[StructType] = {
+    ThreadUtils.parmap(partFiles, "readingOrcSchemas", 8) { currentFile =>
+      val file = currentFile.getPath.toString
+      getFileReader(file, Some(conf), ignoreCorruptFiles).map(reader => {
+        val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
+        val schema = readerInspector.getTypeName
+        logDebug(s"Reading schema from file $file., got Hive schema string: $schema")
+        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+      })
+    }.flatten
   }
 
   def getObjectInspector(

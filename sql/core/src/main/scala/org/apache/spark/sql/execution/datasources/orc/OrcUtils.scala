@@ -33,6 +33,7 @@ import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
@@ -91,83 +92,23 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Read single ORC file schema using native version of ORC
+   * Reads ORC file schemas in multi-threaded manner, using native version of ORC.
    * This is visible for testing.
    */
-  def singleFileSchemaReader(file: String, conf: Configuration, ignoreCorruptFiles: Boolean)
-    : Option[StructType] = {
-    OrcUtils.readSchema(new Path(file), conf, ignoreCorruptFiles)
-      .map(s => CatalystSqlParser.parseDataType(s.toString).asInstanceOf[StructType])
-  }
-
-  /**
-   * Figures out a merged ORC schema with a distributed Spark job.
-   */
-  def mergeSchemasInParallel(
-      sparkSession: SparkSession,
-      files: Seq[FileStatus],
-      singleFileSchemaReader: (String, Configuration, Boolean) => Option[StructType])
-    : Option[StructType] = {
-    val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
-
-    val filePaths = files.map(_.getPath.toString)
-
-    // Set the number of partitions to prevent following schema reads from generating many tasks
-    // in case of a small number of orc files.
-    val numParallelism = Math.min(Math.max(filePaths.size, 1),
-      sparkSession.sparkContext.defaultParallelism)
-
-    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
-
-    // Issues a Spark job to read ORC schema in parallel.
-    val partiallyMergedSchemas =
-      sparkSession
-        .sparkContext
-        .parallelize(filePaths, numParallelism)
-        .mapPartitions { iterator =>
-          // Reads Orc schema in multi-threaded manner.
-          val partFiles = iterator.toSeq
-          val schemas = ThreadUtils.parmap(partFiles, "readingOrcSchemas", 8) { currentFile =>
-            singleFileSchemaReader(currentFile, serializedConf.value, ignoreCorruptFiles)
-          }.flatten
-
-          if (schemas.isEmpty) {
-            Iterator.empty
-          } else {
-            var mergedSchema = schemas.head
-            schemas.tail.foreach { schema =>
-              try {
-                mergedSchema = mergedSchema.merge(schema)
-              } catch { case cause: SparkException =>
-                throw new SparkException(
-                  s"Failed merging schema:\n${schema.treeString}", cause)
-              }
-            }
-            Iterator.single(mergedSchema)
-          }
-        }.collect()
-
-    if (partiallyMergedSchemas.isEmpty) {
-      None
-    } else {
-      var finalSchema = partiallyMergedSchemas.head
-      partiallyMergedSchemas.tail.foreach { schema =>
-        try {
-          finalSchema = finalSchema.merge(schema)
-        } catch { case cause: SparkException =>
-          throw new SparkException(
-            s"Failed merging schema:\n${schema.treeString}", cause)
-        }
-      }
-      Some(finalSchema)
-    }
+  def readOrcSchemasInParallel(
+    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
+    ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles)
+        .map(s => CatalystSqlParser.parseDataType(s.toString).asInstanceOf[StructType])
+    }.flatten
   }
 
   def inferSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
     if (orcOptions.mergeSchema) {
-      OrcUtils.mergeSchemasInParallel(sparkSession, files, OrcUtils.singleFileSchemaReader)
+      SchemaMergeUtils.mergeSchemasInParallel(
+        sparkSession, files, OrcUtils.readOrcSchemasInParallel)
     } else {
       OrcUtils.readSchema(sparkSession, files)
     }

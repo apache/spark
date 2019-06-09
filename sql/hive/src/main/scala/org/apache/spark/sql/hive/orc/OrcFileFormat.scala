@@ -48,7 +48,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcOptions
-import org.apache.spark.sql.execution.datasources.orc.OrcUtils
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types._
@@ -70,10 +69,10 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       files: Seq[FileStatus]): Option[StructType] = {
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
     if (orcOptions.mergeSchema) {
-      OrcUtils.mergeSchemasInParallel(
+      SchemaMergeUtils.mergeSchemasInParallel(
         sparkSession,
         files,
-        OrcFileOperator.singleFileSchemaReader)
+        OrcFileOperator.readOrcSchemasInParallel)
     } else {
       val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
       OrcFileOperator.readSchema(
