@@ -92,9 +92,10 @@ object OrcUtils extends Logging {
 
   /**
    * Read single ORC file schema using native version of ORC
+   * This is visible for testing.
    */
   def singleFileSchemaReader(file: String, conf: Configuration, ignoreCorruptFiles: Boolean)
-      : Option[StructType] = {
+    : Option[StructType] = {
     OrcUtils.readSchema(new Path(file), conf, ignoreCorruptFiles)
       .map(s => CatalystSqlParser.parseDataType(s.toString).asInstanceOf[StructType])
   }
@@ -106,7 +107,7 @@ object OrcUtils extends Logging {
       sparkSession: SparkSession,
       files: Seq[FileStatus],
       singleFileSchemaReader: (String, Configuration, Boolean) => Option[StructType])
-      : Option[StructType] = {
+    : Option[StructType] = {
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
     val filePaths = files.map(_.getPath.toString)

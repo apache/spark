@@ -105,7 +105,7 @@ private[hive] object OrcFileOperator extends Logging {
    * Read single ORC file schema using Hive ORC library
    */
   def singleFileSchemaReader(file: String, conf: Configuration, ignoreCorruptFiles: Boolean)
-      : Option[StructType] = {
+    : Option[StructType] = {
     getFileReader(file, Some(conf), ignoreCorruptFiles).map(reader => {
       val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
       val schema = readerInspector.getTypeName
