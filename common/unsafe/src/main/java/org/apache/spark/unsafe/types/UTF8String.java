@@ -974,7 +974,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String replace(UTF8String search, UTF8String replace) {
-    // This implementation loosely based on commons-lang3's StringUtils.replace().
+    // This implementation is loosely based on commons-lang3's StringUtils.replace().
     if (numBytes == 0 || search.numBytes == 0) {
       return this;
     }
