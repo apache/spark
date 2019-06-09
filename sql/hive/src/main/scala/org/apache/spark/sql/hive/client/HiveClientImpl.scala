@@ -488,6 +488,8 @@ private[hive] class HiveClientImpl(
         case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
         case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
         case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
+        case tableType if (tableType.toString.equals("MATERIALIZED_VIEW")) =>
+            CatalogTableType.MV
         case unsupportedType =>
           val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
           throw new AnalysisException(s"Hive $tableTypeStr is not supported.")

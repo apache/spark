@@ -108,7 +108,7 @@ abstract class LogicalPlan
   def resolve(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    outputAttributes.resolve(nameParts, resolver)
+      outputAttributes.resolve(nameParts, resolver)
 
   /**
    * Given an attribute name, split it to name parts by dot, but
