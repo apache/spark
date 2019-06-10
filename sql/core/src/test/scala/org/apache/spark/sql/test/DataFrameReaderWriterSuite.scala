@@ -225,21 +225,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("pass partitionBy as options") {
-    Seq(true, false).foreach { flag =>
-      withSQLConf(SQLConf.LEGACY_PASS_PARTITION_BY_AS_OPTIONS.key -> s"$flag") {
-        Seq(1).toDF.write
-          .format("org.apache.spark.sql.test")
-          .partitionBy("col1", "col2")
-          .save()
+    Seq(1).toDF.write
+      .format("org.apache.spark.sql.test")
+      .partitionBy("col1", "col2")
+      .save()
 
-        if (flag) {
-          val partColumns = LastOptions.parameters(DataSourceUtils.PARTITIONING_COLUMNS_KEY)
-          assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
-        } else {
-          assert(!LastOptions.parameters.contains(DataSourceUtils.PARTITIONING_COLUMNS_KEY))
-        }
-      }
-    }
+    val partColumns = LastOptions.parameters(DataSourceUtils.PARTITIONING_COLUMNS_KEY)
+    assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
   }
 
   test("save mode") {

@@ -316,12 +316,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveToV1Source(): Unit = {
-    if (SparkSession.active.sessionState.conf.getConf(
-      SQLConf.LEGACY_PASS_PARTITION_BY_AS_OPTIONS)) {
-      partitioningColumns.foreach { columns =>
-        extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
-          DataSourceUtils.encodePartitioningColumns(columns))
-      }
+    partitioningColumns.foreach { columns =>
+      extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
+        DataSourceUtils.encodePartitioningColumns(columns))
     }
 
     // Code path for data source v1.

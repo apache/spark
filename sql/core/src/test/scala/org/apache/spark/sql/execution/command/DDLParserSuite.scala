@@ -522,45 +522,6 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
     assert(plan.newName == TableIdentifier("tbl2", Some("db1")))
   }
 
-  // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
-  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-  // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
-  // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-  test("alter table/view: alter table/view properties") {
-    val sql1_table = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
-      "'comment' = 'new_comment')"
-    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
-    val sql1_view = sql1_table.replace("TABLE", "VIEW")
-    val sql2_view = sql2_table.replace("TABLE", "VIEW")
-    val sql3_view = sql3_table.replace("TABLE", "VIEW")
-
-    val parsed1_table = parser.parsePlan(sql1_table)
-    val parsed2_table = parser.parsePlan(sql2_table)
-    val parsed3_table = parser.parsePlan(sql3_table)
-    val parsed1_view = parser.parsePlan(sql1_view)
-    val parsed2_view = parser.parsePlan(sql2_view)
-    val parsed3_view = parser.parsePlan(sql3_view)
-
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1_table = AlterTableSetPropertiesCommand(
-      tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = false)
-    val expected2_table = AlterTableUnsetPropertiesCommand(
-      tableIdent, Seq("comment", "test"), ifExists = false, isView = false)
-    val expected3_table = AlterTableUnsetPropertiesCommand(
-      tableIdent, Seq("comment", "test"), ifExists = true, isView = false)
-    val expected1_view = expected1_table.copy(isView = true)
-    val expected2_view = expected2_table.copy(isView = true)
-    val expected3_view = expected3_table.copy(isView = true)
-
-    comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed3_table, expected3_table)
-    comparePlans(parsed1_view, expected1_view)
-    comparePlans(parsed2_view, expected2_view)
-    comparePlans(parsed3_view, expected3_view)
-  }
-
   test("alter table - property values must be set") {
     assertUnsupported(
       sql = "ALTER TABLE my_tab SET TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
@@ -758,22 +719,15 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
         "SET FILEFORMAT PARQUET")
   }
 
-  test("alter table: set location") {
-    val sql1 = "ALTER TABLE table_name SET LOCATION 'new location'"
+  test("alter table: set partition location") {
     val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
       "SET LOCATION 'new location'"
-    val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
     val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableSetLocationCommand(
-      tableIdent,
-      None,
-      "new location")
     val expected2 = AlterTableSetLocationCommand(
       tableIdent,
       Some(Map("dt" -> "2008-08-08", "country" -> "us")),
       "new location")
-    comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
   }
 
@@ -953,21 +907,6 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
       Some("/home/user/db"),
       None,
       Map("a" -> "1", "b" -> "0.1", "c" -> "true"))
-
-    comparePlans(parsed, expected)
-  }
-
-  test("support for other types in TBLPROPERTIES") {
-    val sql =
-      """
-        |ALTER TABLE table_name
-        |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE)
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableSetPropertiesCommand(
-      TableIdentifier("table_name"),
-      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
-      isView = false)
 
     comparePlans(parsed, expected)
   }
