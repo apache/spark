@@ -540,6 +540,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.keySet.toSeq
   }
 
+  override def isExecutorActive(id: String): Boolean = synchronized {
+    executorDataMap.contains(id) && !executorsPendingToRemove.contains(id)
+  }
+
   override def maxNumConcurrentTasks(): Int = {
     executorDataMap.values.map { executor =>
       executor.totalCores / scheduler.CPUS_PER_TASK

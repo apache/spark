@@ -35,7 +35,7 @@ package object config {
   private[spark] val SPARK_EXECUTOR_RESOURCE_PREFIX = "spark.executor.resource."
   private[spark] val SPARK_TASK_RESOURCE_PREFIX = "spark.task.resource."
 
-  private[spark] val SPARK_RESOURCE_COUNT_SUFFIX = ".count"
+  private[spark] val SPARK_RESOURCE_AMOUNT_SUFFIX = ".amount"
   private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX = ".discoveryScript"
   private[spark] val SPARK_RESOURCE_VENDOR_SUFFIX = ".vendor"
 
@@ -357,11 +357,15 @@ package object config {
 
   private[spark] val DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.cachedExecutorIdleTimeout")
-      .timeConf(TimeUnit.SECONDS).createWithDefault(Integer.MAX_VALUE)
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.executorIdleTimeout")
-      .timeConf(TimeUnit.SECONDS).createWithDefault(60)
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefault(60)
 
   private[spark] val DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.schedulerBacklogTimeout")

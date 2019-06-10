@@ -112,7 +112,6 @@ def determine_modules_to_test(changed_modules):
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ...   # doctest: +SKIP
     ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
      'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
@@ -123,14 +122,8 @@ def determine_modules_to_test(changed_modules):
     # If we need to run all of the tests, then we should short-circuit and return 'root'
     if modules.root in modules_to_test:
         return [modules.root]
-    changed_modules = toposort_flatten(
+    return toposort_flatten(
         {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
-
-    # TODO: Skip hive-thriftserver module for hadoop-3.2. remove this once hadoop-3.2 support it
-    if modules.hadoop_version == "hadoop3.2":
-        changed_modules = [m for m in changed_modules if m.name != "hive-thriftserver"]
-
-    return changed_modules
 
 
 def determine_tags_to_exclude(changed_modules):

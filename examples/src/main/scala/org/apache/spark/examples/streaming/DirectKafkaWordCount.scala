@@ -40,7 +40,7 @@ object DirectKafkaWordCount {
   def main(args: Array[String]) {
     if (args.length < 3) {
       System.err.println(s"""
-        |Usage: DirectKafkaWordCount <brokers> <topics>
+        |Usage: DirectKafkaWordCount <brokers> <groupId> <topics>
         |  <brokers> is a list of one or more Kafka brokers
         |  <groupId> is a consumer group name to consume from topics
         |  <topics> is a list of one or more kafka topics to consume from

@@ -97,7 +97,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     // test missing vendor
     gpuResources.foreach { case (_, testRInfo) =>
       baseConf.set(
-        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_COUNT_SUFFIX}",
+        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}",
         testRInfo.count)
     }
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
@@ -127,7 +127,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ("foo.com/fpga" -> TestResourceInformation("fpga", "f1", "foo.com")))
     gpuResources.foreach { case (_, testRInfo) =>
       baseConf.set(
-        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_COUNT_SUFFIX}",
+        s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}",
         testRInfo.count)
       baseConf.set(
         s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_VENDOR_SUFFIX}",
