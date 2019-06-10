@@ -184,7 +184,7 @@ statement
     | SHOW COLUMNS (FROM | IN) tableIdentifier
         ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
-    | SHOW func=errorCapturingIdentifier? FUNCTIONS
+    | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
@@ -202,7 +202,7 @@ statement
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
     | MSCK REPAIR TABLE tableIdentifier                                #repairTable
-    | op=(ADD | LIST) resourceType=errorCapturingIdentifier .*?        #manageResource
+    | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
@@ -297,7 +297,7 @@ partitionSpec
     ;
 
 partitionVal
-    : name=errorCapturingIdentifier (EQ constant)?
+    : identifier (EQ constant)?
     ;
 
 database
@@ -314,7 +314,7 @@ describeFuncName
     ;
 
 describeColName
-    : nameParts+=errorCapturingIdentifier ('.' nameParts+=errorCapturingIdentifier)*
+    : nameParts+=identifier ('.' nameParts+=identifier)*
     ;
 
 ctes
@@ -338,7 +338,7 @@ tableProperty
     ;
 
 tablePropertyKey
-    : errorCapturingIdentifier ('.' errorCapturingIdentifier)*
+    : identifier ('.' identifier)*
     | STRING
     ;
 
@@ -364,7 +364,7 @@ createFileFormat
 
 fileFormat
     : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING    #tableFileFormat
-    | fmt=errorCapturingIdentifier                           #genericFileFormat
+    | identifier                                             #genericFileFormat
     ;
 
 storageHandler
@@ -372,7 +372,7 @@ storageHandler
     ;
 
 resource
-    : resourceType=errorCapturingIdentifier STRING
+    : identifier STRING
     ;
 
 dmlStatementNoWith
@@ -449,8 +449,8 @@ hint
     ;
 
 hintStatement
-    : hintName=errorCapturingIdentifier
-    | hintName=errorCapturingIdentifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
+    : hintName=identifier
+    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
     ;
 
 fromClause
@@ -475,16 +475,16 @@ pivotClause
     ;
 
 pivotColumn
-    : identifiers+=errorCapturingIdentifier
-    | '(' identifiers+=errorCapturingIdentifier (',' identifiers+=errorCapturingIdentifier)* ')'
+    : identifiers+=identifier
+    | '(' identifiers+=identifier (',' identifiers+=identifier)* ')'
     ;
 
 pivotValue
-    : expression (AS? alias=errorCapturingIdentifier)?
+    : expression (AS? identifier)?
     ;
 
 lateralView
-    : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=errorCapturingIdentifier (AS? colName+=errorCapturingIdentifier (',' colName+=errorCapturingIdentifier)*)?
+    : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)?
     ;
 
 setQuantifier
@@ -524,7 +524,7 @@ sampleMethod
     : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
     | expression ROWS                                                             #sampleByRows
     | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
-        (ON (ident=errorCapturingIdentifier | qualifiedName '(' ')'))?            #sampleByBucket
+        (ON (identifier | qualifiedName '(' ')'))?                                #sampleByBucket
     | bytes=expression                                                            #sampleByBytes
     ;
 
@@ -549,7 +549,7 @@ identifierCommentList
     ;
 
 identifierComment
-    : ident=errorCapturingIdentifier (COMMENT STRING)?
+    : identifier (COMMENT STRING)?
     ;
 
 relationPrimary
@@ -608,7 +608,7 @@ transformList
 
 transform
     : qualifiedName                                                           #identityTransform
-    | transformName=errorCapturingIdentifier
+    | transformName=identifier
       '(' argument+=transformArgument (',' argument+=transformArgument)* ')'  #applyTransform
     ;
 
@@ -768,7 +768,7 @@ complexColTypeList
     ;
 
 complexColType
-    : colName=errorCapturingIdentifier ':' dataType (COMMENT STRING)?
+    : identifier ':' dataType (COMMENT STRING)?
     ;
 
 whenClause

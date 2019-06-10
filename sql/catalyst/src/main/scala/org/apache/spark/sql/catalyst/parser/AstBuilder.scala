@@ -308,7 +308,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
-      val name = pVal.name.getText
+      val name = pVal.identifier.getText
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
     }
@@ -682,7 +682,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       .flatMap(_.namedExpression.asScala)
       .map(typedVisit[Expression])
     val pivotColumn = if (ctx.pivotColumn.identifiers.size == 1) {
-      UnresolvedAttribute.quoted(ctx.pivotColumn.identifiers.asScala.head.getText)
+      UnresolvedAttribute.quoted(ctx.pivotColumn.identifier.getText)
     } else {
       CreateStruct(
         ctx.pivotColumn.identifiers.asScala.map(
@@ -697,8 +697,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitPivotValue(ctx: PivotValueContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
-    if (ctx.alias != null) {
-      Alias(e, ctx.alias.getText)()
+    if (ctx.identifier != null) {
+      Alias(e, ctx.identifier.getText)()
     } else {
       e
     }
@@ -815,7 +815,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         }
 
       case ctx: SampleByBucketContext if ctx.ON() != null =>
-        if (ctx.ident != null) {
+        if (ctx.identifier != null) {
           throw new ParseException(
             "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported", ctx)
         } else {
@@ -1019,8 +1019,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Both un-targeted (global) and targeted aliases are supported.
    */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
-    UnresolvedStar(Option(ctx.qualifiedName())
-      .map(_.identifier.asScala.map(_.getText)))
+    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText)))
   }
 
   /**
@@ -1387,7 +1386,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a function database (optional) and name pair.
    */
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
-    ctx.identifier.asScala.map(_.getText) match {
+    ctx.identifier().asScala.map(_.getText) match {
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
       case Seq(fn) => FunctionIdentifier(fn, None)
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
@@ -1914,8 +1913,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitComplexColType(ctx: ComplexColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val structField = StructField(colName.getText,
-      typedVisit(dataType), nullable = true)
+    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
     if (STRING == null) structField else structField.withComment(string(STRING))
   }
 
@@ -2051,7 +2049,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     def getFieldReference(
         ctx: ApplyTransformContext,
         arg: v2.expressions.Expression): FieldReference = {
-      lazy val name: String = ctx.transformName.getText
+      lazy val name: String = ctx.identifier.getText
       arg match {
         case ref: FieldReference =>
           ref
@@ -2064,7 +2062,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     def getSingleFieldReference(
         ctx: ApplyTransformContext,
         arguments: Seq[v2.expressions.Expression]): FieldReference = {
-      lazy val name: String = ctx.transformName.getText
+      lazy val name: String = ctx.identifier.getText
       if (arguments.size > 1) {
         throw new ParseException(s"Too many arguments for transform $name", ctx)
       } else if (arguments.isEmpty) {
@@ -2081,7 +2079,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case applyCtx: ApplyTransformContext =>
         val arguments = applyCtx.argument.asScala.map(visitTransformArgument)
 
-        applyCtx.transformName.getText match {
+        applyCtx.identifier.getText match {
           case "bucket" =>
             val numBuckets: Int = arguments.head match {
               case LiteralValue(shortValue, ShortType) =>

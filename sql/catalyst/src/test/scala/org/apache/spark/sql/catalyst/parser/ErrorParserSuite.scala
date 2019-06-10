@@ -75,14 +75,19 @@ class ErrorParserSuite extends SparkFunSuite {
 
   test("hyphen in identifier - DDL tests") {
     val msg = "unquoted identifier"
-    // ddl tests
     intercept("USE test-test", 1, 8, 9, msg + " test-test")
-    intercept("CREATE DATABASE IF NOT EXISTS my-database", 1, 32, 33, "my-database")
-    intercept("DROP DATABASE my-database", 1, 16, 17, "my-database")
+    intercept("CREATE DATABASE IF NOT EXISTS my-database", 1, 32, 33, msg + " my-database")
     intercept(
       """
         |ALTER DATABASE my-database
-        |SET DBPROPERTIES ('p1'='v1')""".stripMargin, 2, 17, 18, "my-database")
+        |SET DBPROPERTIES ('p1'='v1')""".stripMargin, 2, 17, 18, msg + " my-database")
+    intercept("DROP DATABASE my-database", 1, 16, 17, msg + " my-database")
+    intercept(
+      """
+        |ALTER TABLE t
+        |CHANGE COLUMN
+        |test-col BIGINT
+      """.stripMargin, 4, 4, 5, msg + " test-col")
     intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute")
     intercept(
       """
@@ -92,12 +97,12 @@ class ErrorParserSuite extends SparkFunSuite {
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
         |AS SELECT * FROM src""".stripMargin, 2, 36, 37, msg + " page-view")
+    intercept("SHOW TABLES IN hyphen-database", 1, 21, 22, msg + " hyphen-database")
+    intercept("SHOW TABLE EXTENDED IN hyphen-db LIKE \"str\"", 1, 29, 30, msg + " hyphen-db")
+    intercept("SHOW COLUMNS IN t FROM test-db", 1, 27, 28, msg + " test-db")
+    intercept("DESC SCHEMA EXTENDED test-db", 1, 25, 26, msg + " test-db")
     intercept("ANALYZE TABLE test-table PARTITION (part1)", 1, 18, 19, msg + " test-table")
-    intercept("ANALYZE TABLE test PARTITION (part-i)", 1, 34, 35, msg + " part-i")
-    intercept("DROP FUNCTION my-func IF EXISTS", 1, 16, 17, " my-func")
-    intercept("SHOW TABLES IN hyphen-database", 1, 21, 22, " hyphen-database")
-    intercept("SHOW test-id FUNCTIONS LIKE \"str\" ", 1, 9, 10, " test-id")
-    intercept("LOAD DATA INPATH \"path\" INTO TABLE my-tab", 1, 37, 38, " my-tab")
+    intercept("LOAD DATA INPATH \"path\" INTO TABLE my-tab", 1, 37, 38, msg + " my-tab")
   }
 
   test("hyphen in identifier - DML tests") {
@@ -106,9 +111,24 @@ class ErrorParserSuite extends SparkFunSuite {
     intercept("SELECT * FROM table-with-hyphen", 1, 19, 25, msg + " table-with-hyphen")
     // special test case: minus in expression shouldn't be treated as hyphen in identifiers
     intercept("SELECT a-b FROM table-with-hyphen", 1, 21, 27, msg + " table-with-hyphen")
+    intercept("SELECT a-b AS a-b FROM t", 1, 15, 16, msg + " a-b")
     intercept("SELECT a-b FROM table-hyphen WHERE a-b = 0", 1, 21, 22, msg + " table-hyphen")
     intercept("SELECT (a - test_func(b-c)) FROM test-table", 1, 37, 38, msg + " test-table")
     intercept("WITH a-b AS (SELECT 1 FROM s) SELECT * FROM s;", 1, 6, 7, msg + " a-b")
+    intercept(
+      """
+        |SELECT a, b
+        |FROM t1 JOIN t2
+        |USING (a, b, at-tr)
+      """.stripMargin, 4, 15, 16, msg + " at-tr"
+    )
+    intercept(
+      """
+        |SELECT product, category, dense_rank()
+        |OVER (PARTITION BY category ORDER BY revenue DESC) as hyphen-rank
+        |FROM productRevenue
+      """.stripMargin, 3, 60, 61, msg + " hyphen-rank"
+    )
     intercept(
       """
         |SELECT a, b
@@ -132,23 +152,20 @@ class ErrorParserSuite extends SparkFunSuite {
     intercept(
       """
         |SELECT * FROM tab
-        |WINDOW hyphen-window as
+        |WINDOW hyphen-window AS
         |  (PARTITION BY a, b ORDER BY c rows BETWEEN 1 PRECEDING AND 1 FOLLOWING)
       """.stripMargin, 3, 13, 14, msg + " hyphen-window")
+    intercept(
+      """
+        |SELECT * FROM tab
+        |WINDOW window_ref AS window-ref
+      """.stripMargin, 3, 27, 28, msg + " window-ref")
     intercept(
       """
         |SELECT tb.*
         |FROM t-a INNER JOIN tb
         |ON ta.a = tb.a AND ta.tag = tb.tag
       """.stripMargin, 3, 6, 7, msg + " t-a")
-    intercept(
-      """
-        |SELECT * FROM courseSales
-        |PIVOT (
-        |  sum(earnings)
-        |  FOR ye-ar IN (2012, 2013)
-        |);
-      """.stripMargin, 5, 8, 9, msg + " ye-ar")
     intercept(
       """
         |FROM test-table
