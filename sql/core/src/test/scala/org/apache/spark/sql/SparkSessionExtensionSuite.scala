@@ -325,112 +325,53 @@ case class NoCloseColumnVector(wrapped: ColumnVector) extends ColumnVector(wrapp
     // Empty
   }
 
-  /**
-   * Returns true if this column vector contains any null values.
-   */
+
   override def hasNull: Boolean = wrapped.hasNull
 
-  /**
-   * Returns the number of nulls in this column vector.
-   */
+
   override def numNulls(): Int = wrapped.numNulls
 
-  /**
-   * Returns whether the value at rowId is NULL.
-   */
+
   override def isNullAt(rowId: Int): Boolean = wrapped.isNullAt(rowId)
 
-  /**
-   * Returns the boolean type value for rowId. The return value is undefined and can be anything,
-   * if the slot for rowId is null.
-   */
+
   override def getBoolean(rowId: Int): Boolean = wrapped.getBoolean(rowId)
 
-  /**
-   * Returns the byte type value for rowId. The return value is undefined and can be anything,
-   * if the slot for rowId is null.
-   */
+
   override def getByte(rowId: Int): Byte = wrapped.getByte(rowId)
 
-  /**
-   * Returns the short type value for rowId. The return value is undefined and can be anything,
-   * if the slot for rowId is null.
-   */
+
   override def getShort(rowId: Int): Short = wrapped.getShort(rowId)
 
-  /**
-   * Returns the int type value for rowId. The return value is undefined and can be anything,
-   * if the slot for rowId is null.
-   */
+
   override def getInt(rowId: Int): Int = wrapped.getInt(rowId)
 
-  /**
-   * Returns the long type value for rowId. The return value is undefined and can be anything,
-   * if the slot for rowId is null.
-   */
+
   override def getLong(rowId: Int): Long = wrapped.getLong(rowId)
 
-  /**
-   * Returns the float type value for rowId. The return value is undefined and can be anything,
-   * if the slot for rowId is null.
-   */
+
   override def getFloat(rowId: Int): Float = wrapped.getFloat(rowId)
 
-  /**
-   * Returns the double type value for rowId. The return value is undefined and can be anything,
-   * if the slot for rowId is null.
-   */
+
   override def getDouble(rowId: Int): Double = wrapped.getDouble(rowId)
 
-  /**
-   * Returns the array type value for rowId. If the slot for rowId is null, it should return null.
-   *
-   * To support array type, implementations must construct an {@link ColumnarArray} and return it in
-   * this method. {@link ColumnarArray} requires a {@link ColumnVector} that stores the data of all
-   * the elements of all the arrays in this vector, and an offset and length which points to a range
-   * in that {@link ColumnVector}, and the range represents the array for rowId. Implementations
-   * are free to decide where to put the data vector and offsets and lengths. For example, we can
-   * use the first child vector as the data vector, and store offsets and lengths in 2 int arrays in
-   * this vector.
-   */
+
   override def getArray(rowId: Int): ColumnarArray = wrapped.getArray(rowId)
 
-  /**
-   * Returns the map type value for rowId. If the slot for rowId is null, it should return null.
-   *
-   * In Spark, map type value is basically a key data array and a value data array. A key from the
-   * key array with a index and a value from the value array with the same index contribute to
-   * an entry of this map type value.
-   *
-   * To support map type, implementations must construct a {@link ColumnarMap} and return it in
-   * this method. {@link ColumnarMap} requires a {@link ColumnVector} that stores the data of all
-   * the keys of all the maps in this vector, and another {@link ColumnVector} that stores the data
-   * of all the values of all the maps in this vector, and a pair of offset and length which
-   * specify the range of the key/value array that belongs to the map type value at rowId.
-   */
+
   override def getMap(ordinal: Int): ColumnarMap = wrapped.getMap(ordinal)
 
-  /**
-   * Returns the decimal type value for rowId. If the slot for rowId is null, it should return null.
-   */
+
   override def getDecimal(rowId: Int, precision: Int, scale: Int): Decimal =
     wrapped.getDecimal(rowId, precision, scale)
 
-  /**
-   * Returns the string type value for rowId. If the slot for rowId is null, it should return null.
-   * Note that the returned UTF8String may point to the data of this column vector, please copy it
-   * if you want to keep it after this column vector is freed.
-   */
+
   override def getUTF8String(rowId: Int): UTF8String = wrapped.getUTF8String(rowId)
 
-  /**
-   * Returns the binary type value for rowId. If the slot for rowId is null, it should return null.
-   */
+
   override def getBinary(rowId: Int): Array[Byte] = wrapped.getBinary(rowId)
 
-  /**
-   * @return child [[ColumnVector]] at the given ordinal.
-   */
+
   override protected def getChild(ordinal: Int): ColumnVector = wrapped.getChild(ordinal)
 }
 
