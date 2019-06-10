@@ -2636,12 +2636,14 @@ private[spark] object Utils extends Logging {
       case (key: String, value: String) =>
         redactionPattern.findFirstIn(key)
           .orElse(redactionPattern.findFirstIn(value))
-          .map { _ => (key.asInstanceOf[K], REDACTION_REPLACEMENT_TEXT.asInstanceOf[V]) }
-          .getOrElse((key.asInstanceOf[K], value.asInstanceOf[V]))
+          .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+          .getOrElse((key, value))
+          .asInstanceOf[(K, V)]
       case (key, value: String) =>
         redactionPattern.findFirstIn(value)
-          .map { _ => (key, REDACTION_REPLACEMENT_TEXT.asInstanceOf[V]) }
-          .getOrElse((key, value.asInstanceOf[V]))
+          .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+          .getOrElse((key, value))
+          .asInstanceOf[(K, V)]
       case (key, value) =>
         (key, value)
     }

@@ -17,27 +17,25 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.sql
 
-import org.scalatest.Matchers._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 
 class ParsedStatementSuite extends SparkFunSuite with SQLHelper {
 
-  test("Map[String, String] field in child class") {
+  test("Redact Map[String, String] field in child class") {
     case class TestStatement(p: Map[String, String]) extends ParsedStatement
 
     withSQLConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN.key -> "my.password") {
-      TestStatement(Map("spark.my.password" -> "secret")).toString should not contain ("secret")
+      assert(!TestStatement(Map("spark.my.password" -> "secret")).toString.contains("secret"))
     }
   }
 
-  test("Map[Int, String] field in child class") {
+  test("Redact Map[Int, String] field in child class") {
     case class TestStatement(p: Map[Int, String]) extends ParsedStatement
 
     withSQLConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN.key -> "my.password") {
-      TestStatement(Map(12345 -> "spark.my.password=secret")).toString should not contain ("secret")
+      assert(!TestStatement(Map(12345 -> "spark.my.password=secret")).toString.contains("secret"))
     }
   }
 
@@ -46,12 +44,5 @@ class ParsedStatementSuite extends SparkFunSuite with SQLHelper {
 
     // Expect no exception
     TestStatement(Map("abc" -> 1)).toString
-  }
-
-  test("Map[String, Option[String]] field in child class") {
-    case class TestStatement(p: Map[String, Option[String]]) extends ParsedStatement
-
-    // Expect no exception
-    TestStatement(Map("abc" -> Some("1"))).toString
   }
 }
