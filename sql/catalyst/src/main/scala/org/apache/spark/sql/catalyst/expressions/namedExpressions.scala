@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnarBatch
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -153,10 +152,6 @@ case class Alias(child: Expression, name: String)(
   override lazy val resolved =
     childrenResolved && checkInputDataTypes().isSuccess && !child.isInstanceOf[Generator]
 
-  override def supportsColumnar: Boolean = child.supportsColumnar
-
-  override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
-
   override def eval(input: InternalRow): Any = child.eval(input)
 
   /** Just a simple passthrough for code generation. */
@@ -242,10 +237,6 @@ case class AttributeReference(
 
   // currently can only handle qualifier of length 2
   require(qualifier.length <= 2)
-
-  override def supportsColumnar: Boolean = true
-  // No columnar eval is needed because this must be bound before it is evaluated
-
   /**
    * Returns true iff the expression id is the same for both attributes.
    */

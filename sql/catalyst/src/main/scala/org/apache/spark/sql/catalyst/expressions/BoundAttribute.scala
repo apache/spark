@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value
@@ -36,15 +35,6 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
   private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
-
-  override def supportsColumnar: Boolean = true
-
-  override def columnarEval(batch: ColumnarBatch): Any = {
-    // Because of the convention that the returned ColumnVector must be closed by the
-    // caller we increment the reference count for columns taken directly from a batch, so that
-    // the call to close by the caller does not actually release the column's resources.
-    batch.column(ordinal).incRefCount()
-  }
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {

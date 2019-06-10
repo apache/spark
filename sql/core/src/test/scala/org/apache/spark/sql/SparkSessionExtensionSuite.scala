@@ -20,13 +20,13 @@ import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, BindReferences, Expression, ExpressionInfo, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, AttributeSeq, BindReferences, BoundReference, Expression, ExpressionInfo, ExprId, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ColumnarRule, ProjectExec, SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 /**
@@ -301,24 +301,130 @@ case class CloseableColumnBatchIterator(itr: Iterator[ColumnarBatch],
   }
 }
 
+trait ColumnarExpression extends Expression with Serializable {
+  /**
+   * Returns true if this expression supports columnar processing through [[columnarEval]].
+   */
+  def supportsColumnar: Boolean = true
+
+  /**
+   * Returns the result of evaluating this expression on the entire [[ColumnarBatch]]. The result of
+   * calling this may be a single [[org.apache.spark.sql.vectorized.ColumnVector]] or a scalar
+   * value. Scalar values typically happen if they are a part of the expression i.e. col("a") + 100.
+   * In this case the 100 is a [[Literal]] that [[Add]] would have to be able to handle.
+   *
+   * By convention any [[org.apache.spark.sql.vectorized.ColumnVector]] returned by [[columnarEval]]
+   * is owned by the caller and will need to be closed by them. This can happen by putting it into
+   * a [[ColumnarBatch]] and closing the batch or by closing the vector directly if it is a
+   * temporary value.
+   */
+  def columnarEval(batch: ColumnarBatch): Any = {
+    throw new IllegalStateException(s"Internal Error ${this.getClass} has column support mismatch")
+  }
+
+  // We need to override equals because we are subclassing a case class
+  override def equals(other: Any): Boolean = {
+    if (!super.equals(other)) {
+      return false
+    }
+    return other.isInstanceOf[ColumnarExpression]
+  }
+
+  override def hashCode(): Int = super.hashCode()
+
+}
+
+object ColumnarBindReferences extends Logging {
+
+  // Mostly copied from BoundAttribute.scala so we can do columnar processing
+  def bindReference[A <: ColumnarExpression](
+      expression: A,
+      input: AttributeSeq,
+      allowFailures: Boolean = false): A = {
+    expression.transform { case a: AttributeReference =>
+      val ordinal = input.indexOf(a.exprId)
+      if (ordinal == -1) {
+        if (allowFailures) {
+          a
+        } else {
+          sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
+        }
+      } else {
+        new ColumnarBoundReference(ordinal, a.dataType, input(ordinal).nullable)
+      }
+    }.asInstanceOf[A]
+  }
+
+  /**
+   * A helper function to bind given expressions to an input schema.
+   */
+  def bindReferences[A <: ColumnarExpression](
+      expressions: Seq[A],
+      input: AttributeSeq): Seq[A] = {
+    expressions.map(ColumnarBindReferences.bindReference(_, input))
+  }
+}
+
+class ColumnarBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
+  extends BoundReference(ordinal, dataType, nullable) with ColumnarExpression {
+
+  override def columnarEval(batch: ColumnarBatch): Any = {
+    // Because of the convention that the returned ColumnVector must be closed by the
+    // caller we increment the reference count for columns taken directly from a batch, so that
+    // the call to close by the caller does not actually release the column's resources.
+    batch.column(ordinal).incRefCount()
+  }
+}
+
+class ColumnarAlias(child: ColumnarExpression, name: String)(
+    override val exprId: ExprId = NamedExpression.newExprId,
+    override val qualifier: Seq[String] = Seq.empty,
+    override val explicitMetadata: Option[Metadata] = None)
+  extends Alias(child, name)(exprId, qualifier, explicitMetadata)
+  with ColumnarExpression {
+
+  override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
+}
+
+class ColumnarAttributeReference(
+    name: String,
+    dataType: DataType,
+    nullable: Boolean = true,
+    override val metadata: Metadata = Metadata.empty)(
+    override val exprId: ExprId = NamedExpression.newExprId,
+    override val qualifier: Seq[String] = Seq.empty[String])
+  extends AttributeReference(name, dataType, nullable, metadata)(exprId, qualifier)
+  with ColumnarExpression {
+
+  // No columnar eval is needed because this must be bound before it is evaluated
+}
+
+class ColumnarLiteral (value: Any, dataType: DataType) extends Literal(value, dataType)
+  with ColumnarExpression {
+  override def columnarEval(batch: ColumnarBatch): Any = value
+}
+
 /**
  * A version of ProjectExec that adds in columnar support.
  */
 class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends ProjectExec(projectList, child) {
 
-  override def supportsColumnar: Boolean = true
+  override def supportsColumnar: Boolean =
+    projectList.forall(_.asInstanceOf[ColumnarExpression].supportsColumnar)
 
   // Disable code generation
   override def supportCodegen: Boolean = false
 
   override def doExecuteColumnar() : RDD[ColumnarBatch] = {
-    val boundProjectList: Seq[Any] = BindReferences.bindReferences(projectList, child.output)
+    val boundProjectList: Seq[Any] =
+      ColumnarBindReferences.bindReferences(
+        projectList.asInstanceOf[Seq[ColumnarExpression]], child.output)
     val rdd = child.executeColumnar()
     rdd.mapPartitions((itr) => CloseableColumnBatchIterator(itr,
       (cb) => {
         val newColumns = boundProjectList.map(
-          expr => expr.asInstanceOf[Expression].columnarEval(cb).asInstanceOf[ColumnVector]
+          expr => expr.asInstanceOf[ColumnarExpression].columnarEval(cb).asInstanceOf[ColumnVector]
         ).toArray
         new ColumnarBatch(newColumns, cb.numRows())
       })
@@ -342,7 +448,9 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 /**
  * A version of add that supports columnar processing for longs.
  */
-class ColumnarAdd(left: Expression, right: Expression) extends Add(left, right) {
+class ColumnarAdd(left: ColumnarExpression, right: ColumnarExpression) extends Add(left, right)
+  with ColumnarExpression {
+
   override def supportsColumnar(): Boolean = left.supportsColumnar && right.supportsColumnar
 
   override def columnarEval(batch: ColumnarBatch): Any = {
@@ -395,27 +503,22 @@ class ColumnarAdd(left: Expression, right: Expression) extends Add(left, right) 
     }
     ret
   }
+}
 
-  // Again we need to override equals because we are subclassing a case class
-  override def equals(other: Any): Boolean = {
-    if (!super.equals(other)) {
-      return false
-    }
-    return other.isInstanceOf[ColumnarAdd]
-  }
+class CannotReplaceException(str: String) extends RuntimeException(str) {
 
-  override def hashCode(): Int = super.hashCode()
 }
 
 case class PreRuleReplaceAdd() extends Rule[SparkPlan] {
-  def replaceWithColumnarExpression(exp: Expression): Expression = exp match {
+  def replaceWithColumnarExpression(exp: Expression): ColumnarExpression = exp match {
     case a: Alias =>
-      Alias(replaceWithColumnarExpression(a.child),
+      new ColumnarAlias(replaceWithColumnarExpression(a.child),
         a.name)(a.exprId, a.qualifier, a.explicitMetadata)
     case att: AttributeReference =>
-      att // No sub expressions and already supports columnar so just return it
+      new ColumnarAttributeReference(att.name, att.dataType, att.nullable,
+        att.metadata)(att.exprId, att.qualifier)
     case lit: Literal =>
-      lit // No sub expressions and already supports columnar so just return it
+      new ColumnarLiteral(lit.value, lit.dataType)
     case add: Add if (add.dataType == LongType) &&
       (add.left.dataType == LongType) &&
       (add.right.dataType == LongType) =>
@@ -423,20 +526,27 @@ case class PreRuleReplaceAdd() extends Rule[SparkPlan] {
       new ColumnarAdd(replaceWithColumnarExpression(add.left),
         replaceWithColumnarExpression(add.right))
     case exp =>
-      logWarning(s"Columnar Processing for expression ${exp.getClass} ${exp} " +
-        "is not currently supported.")
-      exp
+      throw new CannotReplaceException(s"expression " +
+        s"${exp.getClass} ${exp} is not currently supported.")
   }
 
-  def replaceWithColumnarPlan(plan: SparkPlan): SparkPlan = plan match {
-    case plan: ProjectExec =>
-      new ColumnarProjectExec(plan.projectList.map((exp) =>
-        replaceWithColumnarExpression(exp).asInstanceOf[NamedExpression]),
-        replaceWithColumnarPlan(plan.child))
-    case p =>
-      logWarning(s"Columnar Processing for ${p.getClass} is not currently supported.")
-      p.withNewChildren(p.children.map(replaceWithColumnarPlan))
-  }
+  def replaceWithColumnarPlan(plan: SparkPlan): SparkPlan =
+    try {
+      plan match {
+        case plan: ProjectExec =>
+          new ColumnarProjectExec(plan.projectList.map((exp) =>
+            replaceWithColumnarExpression(exp).asInstanceOf[NamedExpression]),
+            replaceWithColumnarPlan(plan.child))
+        case p =>
+          logWarning(s"Columnar processing for ${p.getClass} is not currently supported.")
+          p.withNewChildren(p.children.map(replaceWithColumnarPlan))
+      }
+    } catch {
+      case exp: CannotReplaceException =>
+        logWarning(s"Columnar processing for ${plan.getClass} is not currently supported" +
+          s"because ${exp.getMessage}")
+        plan
+    }
 
   override def apply(plan: SparkPlan): SparkPlan = replaceWithColumnarPlan(plan)
 }

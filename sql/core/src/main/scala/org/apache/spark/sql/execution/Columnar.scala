@@ -560,18 +560,13 @@ case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: 
    * Checks if the plan supports columnar, and that all of its children support it too.
    */
   private def supportsColumnar(plan: SparkPlan): Boolean = {
-    if (!plan.supportsColumnar) {
-      false
-    } else {
-      // FileSourceScanExec is very special because operations that are pushed into it
-      // are executed by the FileFormat and not by FileSourceScanExec.  It does this
-      // so the FileFormat can avoid reading unnecessary data while it also executes the
-      // given expressions.  This means that if a FileSourceScanExec says that it supports
-      // columnar processing, the FileFormat inside it is already going to execute those
-      // operations in a columnar way and we don't have to worry about checking them.
-      plan.isInstanceOf[FileSourceScanExec] ||
-        !plan.expressions.exists(_.find(e => !e.supportsColumnar).isDefined)
-    }
+    // FileSourceScanExec is very special because operations that are pushed into it
+    // are executed by the FileFormat and not by FileSourceScanExec.  It does this
+    // so the FileFormat can avoid reading unnecessary data while it also executes the
+    // given expressions.  This means that if a FileSourceScanExec says that it supports
+    // columnar processing, the FileFormat inside it is already going to execute those
+    // operations in a columnar way and we don't have to worry about checking them.
+    plan.isInstanceOf[FileSourceScanExec] || plan.supportsColumnar
   }
 
   /**

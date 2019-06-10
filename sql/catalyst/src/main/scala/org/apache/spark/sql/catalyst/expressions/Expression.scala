@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.ColumnarBatch
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -81,7 +80,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * - [[ComplexTypeMergingExpression]]: to resolve output types of the complex expressions
  *                                     (e.g., [[CaseWhen]]).
  */
-abstract class Expression extends TreeNode[Expression] with Serializable {
+abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -95,26 +94,6 @@ abstract class Expression extends TreeNode[Expression] with Serializable {
    *  - A [[Cast]] or [[UnaryMinus]] is foldable if its child is foldable
    */
   def foldable: Boolean = false
-
-  /**
-   * Returns true if this expression supports columnar processing through [[columnarEval]].
-   */
-  def supportsColumnar: Boolean = false
-
-  /**
-   * Returns the result of evaluating this expression on the entire [[ColumnarBatch]]. The result of
-   * calling this may be a single [[org.apache.spark.sql.vectorized.ColumnVector]] or a scalar
-   * value. Scalar values typically happen if they are a part of the expression i.e. col("a") + 100.
-   * In this case the 100 is a [[Literal]] that [[Add]] would have to be able to handle.
-   *
-   * By convention any [[org.apache.spark.sql.vectorized.ColumnVector]] returned by [[columnarEval]]
-   * is owned by the caller and will need to be closed by them. This can happen by putting it into
-   * a [[ColumnarBatch]] and closing the batch or by closing the vector directly if it is a
-   * temporary value.
-   */
-  def columnarEval(batch: ColumnarBatch): Any = {
-    throw new IllegalStateException(s"Internal Error ${this.getClass} has column support mismatch")
-  }
 
   /**
    * Returns true when the current expression always return the same result for fixed inputs from
@@ -306,9 +285,6 @@ abstract class Expression extends TreeNode[Expression] with Serializable {
 trait Unevaluable extends Expression {
 
   final override def eval(input: InternalRow = null): Any =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
-
-  final override def columnarEval(batch: ColumnarBatch): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
