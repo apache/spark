@@ -58,6 +58,8 @@ abstract class PartitioningAwareFileIndex(
 
   protected lazy val pathGlobFilter = parameters.get("pathGlobFilter").map(new GlobFilter(_))
 
+  protected lazy val recursive = parameters.getOrElse("recursive", "false").toBoolean
+
   protected def matchGlobPattern(file: FileStatus): Boolean = {
     pathGlobFilter.forall(_.accept(file.getPath))
   }
@@ -70,6 +72,10 @@ abstract class PartitioningAwareFileIndex(
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
       PartitionDirectory(InternalRow.empty, allFiles().filter(isNonEmptyFile)) :: Nil
     } else {
+      if (recursive) {
+        throw new IllegalArgumentException(
+          "Datasource with partition do not allow recursive file loading.")
+      }
       prunePartitions(partitionFilters, partitionSpec()).map {
         case PartitionPath(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
@@ -96,30 +102,36 @@ abstract class PartitioningAwareFileIndex(
 
   def allFiles(): Seq[FileStatus] = {
     val files = if (partitionSpec().partitionColumns.isEmpty) {
-      // For each of the root input paths, get the list of files inside them
-      rootPaths.flatMap { path =>
-        // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
-        val fs = path.getFileSystem(hadoopConf)
-        val qualifiedPathPre = fs.makeQualified(path)
-        val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
-          // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
-          // because the `leafFile.getParent` would have returned an absolute path with the
-          // separator at the end.
-          new Path(qualifiedPathPre, Path.SEPARATOR)
-        } else {
-          qualifiedPathPre
+      if (recursive) {
+        leafFiles.values.toSeq
+      } else {
+        // For each of the root input paths, get the list of files inside them
+        rootPaths.flatMap { path =>
+          // Make the path qualified (consistent with listLeafFiles and bulkListLeafFiles).
+          val fs = path.getFileSystem(hadoopConf)
+          val qualifiedPathPre = fs.makeQualified(path)
+          val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
+            // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
+            // because the `leafFile.getParent` would have returned an absolute path with the
+            // separator at the end.
+            new Path(qualifiedPathPre, Path.SEPARATOR)
+          } else {
+            qualifiedPathPre
+          }
+
+          // There are three cases possible with each path
+          // 1. The path is a directory and has children files in it. Then it must be present in
+          //    leafDirToChildrenFiles as those children files will have been found as leaf files.
+          //    Find its children files from leafDirToChildrenFiles and include them.
+          // 2. The path is a file, then it will be present in leafFiles. Include this path.
+          // 3. The path is a directory, but has no children files. Do not include this path.
+
+          leafDirToChildrenFiles.get(qualifiedPath)
+            .orElse {
+              leafFiles.get(qualifiedPath).map(Array(_))
+            }
+            .getOrElse(Array.empty)
         }
-
-        // There are three cases possible with each path
-        // 1. The path is a directory and has children files in it. Then it must be present in
-        //    leafDirToChildrenFiles as those children files will have been found as leaf files.
-        //    Find its children files from leafDirToChildrenFiles and include them.
-        // 2. The path is a file, then it will be present in leafFiles. Include this path.
-        // 3. The path is a directory, but has no children files. Do not include this path.
-
-        leafDirToChildrenFiles.get(qualifiedPath)
-          .orElse { leafFiles.get(qualifiedPath).map(Array(_)) }
-          .getOrElse(Array.empty)
       }
     } else {
       leafFiles.values.toSeq
@@ -128,23 +140,27 @@ abstract class PartitioningAwareFileIndex(
   }
 
   protected def inferPartitioning(): PartitionSpec = {
-    // We use leaf dirs containing data files to discover the schema.
-    val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
-      files.exists(f => isDataPath(f.getPath))
-    }.keys.toSeq
+    if (recursive) {
+      PartitionSpec.emptySpec
+    } else {
+      // We use leaf dirs containing data files to discover the schema.
+      val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
+        files.exists(f => isDataPath(f.getPath))
+      }.keys.toSeq
 
-    val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
-    val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
-      .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
+      val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
+      val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
+        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
-    PartitioningUtils.parsePartitions(
-      leafDirs,
-      typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
-      basePaths = basePaths,
-      userSpecifiedSchema = userSpecifiedSchema,
-      caseSensitive = sparkSession.sqlContext.conf.caseSensitiveAnalysis,
-      validatePartitionColumns = sparkSession.sqlContext.conf.validatePartitionColumns,
-      timeZoneId = timeZoneId)
+      PartitioningUtils.parsePartitions(
+        leafDirs,
+        typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
+        basePaths = basePaths,
+        userSpecifiedSchema = userSpecifiedSchema,
+        caseSensitive = sparkSession.sqlContext.conf.caseSensitiveAnalysis,
+        validatePartitionColumns = sparkSession.sqlContext.conf.validatePartitionColumns,
+        timeZoneId = timeZoneId)
+    }
   }
 
   private def prunePartitions(

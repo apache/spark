@@ -30,6 +30,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // Single column of images named "image"
   private lazy val imagePath = "../data/mllib/images/partitioned"
+  private lazy val recursiveImagePath = "../data/mllib/images/recursive"
 
   test("image datasource count test") {
     val df1 = spark.read.format("image").load(imagePath)
@@ -102,6 +103,30 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
     }.toSet
 
     assert(firstBytes20Set === expectedFirstBytes20Set)
+  }
+
+  test("recursive loading") {
+    val imagesPath = spark.read.format("image")
+      .option("dropInvalid", true)
+      .option("recursive", true)
+      .load(recursiveImagePath)
+      .select(col("image.origin"))
+      .collect()
+      .map { row =>
+        val path = row.getString(0)
+        val keyStr = "images/recursive/"
+        path.substring(path.indexOf(keyStr) + keyStr.length)
+      }
+    assert(Set(imagesPath: _*) === Set(
+      "multi-channel/chr30.4.184.jpg",
+      "multi-channel/m1/m2/grayscale.jpg",
+      "kittens/54893.jpg",
+      "DP802813.jpg",
+      "kittens/29.5.a_b_EGDP022204.jpg",
+      "kittens/k1/DP153539.jpg",
+      "multi-channel/BGRA_alpha_60.png",
+      "multi-channel/m1/BGRA.png"
+    ))
   }
 
   // number of channels and first 20 bytes of OpenCV representation
