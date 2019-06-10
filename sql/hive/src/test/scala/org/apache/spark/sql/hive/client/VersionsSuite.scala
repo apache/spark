@@ -103,7 +103,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   }
 
   private val versions =
-    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.1")
+    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.0", "3.1")
 
   private var client: HiveClient = null
 
@@ -119,11 +119,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // hive.metastore.schema.verification from false to true since 2.0
       // For details, see the JIRA HIVE-6113 and HIVE-12463
       if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3" ||
-          version == "3.1") {
+          version == "3.0" || version == "3.1") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
       }
-      if (version == "3.1") {
+      if (version == "3.0" || version == "3.1") {
         // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
         hadoopConf.set("hive.in.test", "true")
         // Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
@@ -577,7 +577,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: sql create index and reset") {
       // HIVE-18448 Since Hive 3.0, INDEX is not supported.
-      if (version != "3.1") {
+      if (version != "3.0" && version != "3.1") {
         client.runSqlHive("CREATE TABLE indexed_table (key INT)")
         client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
           "as 'COMPACT' WITH DEFERRED REBUILD")
@@ -586,10 +586,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: sql read hive materialized view") {
       // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
-      if (version == "2.3" || version == "3.1") {
-        // Since HIVE-14498(Hive 3.0), Automatic rewriting for materialized view cannot be enabled
-        // if the materialized view uses non-transactional tables.
-        val disableRewrite = if (version == "2.3") "" else "DISABLE REWRITE"
+      if (version == "2.3" || version == "3.0" || version == "3.1") {
+        // Since HIVE-18394(Hive 3.1), "Create Materialized View" should default to rewritable ones
+        val disableRewrite = if (version == "2.3" || version == "3.0") "" else "DISABLE REWRITE"
         client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
         client.runSqlHive(
           s"CREATE MATERIALIZED VIEW mv1 $disableRewrite AS SELECT * FROM materialized_view_tbl")

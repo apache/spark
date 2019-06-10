@@ -147,18 +147,6 @@ class BlockManagerMasterEndpoint(
 
     case BlockManagerHeartbeat(blockManagerId) =>
       context.reply(heartbeatReceived(blockManagerId))
-
-    case HasExclusiveCachedBlocks(executorId) =>
-      blockManagerIdByExecutor.get(executorId) match {
-        case Some(bm) =>
-          if (blockManagerInfo.contains(bm)) {
-            val bmInfo = blockManagerInfo(bm)
-            context.reply(bmInfo.exclusiveCachedBlocks.nonEmpty)
-          } else {
-            context.reply(false)
-          }
-        case None => context.reply(false)
-      }
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
@@ -589,12 +577,6 @@ private[spark] class BlockManagerInfo(
   // Mapping from block id to its status.
   private val _blocks = new JHashMap[BlockId, BlockStatus]
 
-  /**
-   * Cached blocks which are not available via the external shuffle service.
-   * This does not include broadcast blocks.
-   */
-  private val _exclusiveCachedBlocks = new mutable.HashSet[BlockId]
-
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
 
   def updateLastSeenMs() {
@@ -662,15 +644,6 @@ private[spark] class BlockManagerInfo(
         }
       }
 
-      if (!blockId.isBroadcast) {
-        if (!externalShuffleServiceEnabled || !storageLevel.useDisk) {
-          _exclusiveCachedBlocks += blockId
-        } else if (blockExists) {
-          // removing block from the exclusive cached blocks when updated to non-exclusive
-          _exclusiveCachedBlocks -= blockId
-        }
-      }
-
       externalShuffleServiceBlockStatus.foreach { shuffleServiceBlocks =>
         if (!blockId.isBroadcast && blockStatus.diskSize > 0) {
           shuffleServiceBlocks.put(blockId, blockStatus)
@@ -679,7 +652,6 @@ private[spark] class BlockManagerInfo(
     } else if (blockExists) {
       // If isValid is not true, drop the block.
       _blocks.remove(blockId)
-      _exclusiveCachedBlocks -= blockId
       externalShuffleServiceBlockStatus.foreach { blockStatus =>
         blockStatus.remove(blockId)
       }
@@ -703,7 +675,6 @@ private[spark] class BlockManagerInfo(
         blockStatus.remove(blockId)
       }
     }
-    _exclusiveCachedBlocks -= blockId
   }
 
   def remainingMem: Long = _remainingMem
@@ -711,8 +682,6 @@ private[spark] class BlockManagerInfo(
   def lastSeenMs: Long = _lastSeenMs
 
   def blocks: JHashMap[BlockId, BlockStatus] = _blocks
-
-  def exclusiveCachedBlocks: collection.Set[BlockId] = _exclusiveCachedBlocks
 
   override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 

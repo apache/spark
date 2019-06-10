@@ -209,6 +209,15 @@ class SparkContext(object):
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
+        if sys.version_info < (3, 0):
+            with warnings.catch_warnings():
+                warnings.simplefilter("once")
+                warnings.warn(
+                    "Support for Python 2 is deprecated as of Spark 3.0. "
+                    "See the plan for dropping Python 2 support at "
+                    "https://spark.apache.org/news/plan-for-dropping-python-2-support.html.",
+                    DeprecationWarning)
+
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
