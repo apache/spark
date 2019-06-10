@@ -657,7 +657,7 @@ primaryExpression
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
     | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
-    | (SUBSTR | SUBSTRING) '(' field=valueExpression (FROM | ',') pos=valueExpression
+    | (SUBSTR | SUBSTRING) '(' str=valueExpression (FROM | ',') pos=valueExpression
       ((FOR|',') len=valueExpression)? ')'                                                     #substring
     ;
 
