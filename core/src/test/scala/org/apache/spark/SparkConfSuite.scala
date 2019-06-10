@@ -425,7 +425,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     setTaskResourceAmountConf(conf, GPU, "2")
     setTaskResourceAmountConf(conf, FPGA, "1")
     var taskResourceRequirement =
-      parseTaskResourceRequirements(sc.conf).map(req => (req.resourceName, req.count)).toMap
+      parseTaskResourceRequirements(conf).map(req => (req.resourceName, req.count)).toMap
 
     assert(taskResourceRequirement.size == 2)
     assert(taskResourceRequirement(GPU) == 2)
@@ -435,15 +435,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     // Ignore invalid prefix
     setResourceAmountConf(conf, ResourceID("spark.invalid.prefix", FPGA), "1")
     taskResourceRequirement =
-      parseTaskResourceRequirements(sc.conf).map(req => (req.resourceName, req.count)).toMap
-    assert(taskResourceRequirement.size == 1)
-    assert(taskResourceRequirement.get(FPGA).isEmpty)
-
-    // Ignore invalid suffix
-    val fpgaId = ResourceID(SPARK_TASK_PREFIX, FPGA)
-    conf.set(s"${fpgaId.confPrefix}invalid.suffix", "1")
-    taskResourceRequirement =
-      parseTaskResourceRequirements(sc.conf).map(req => (req.resourceName, req.count)).toMap
+      parseTaskResourceRequirements(conf).map(req => (req.resourceName, req.count)).toMap
     assert(taskResourceRequirement.size == 1)
     assert(taskResourceRequirement.get(FPGA).isEmpty)
   }

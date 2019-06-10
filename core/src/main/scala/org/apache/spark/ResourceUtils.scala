@@ -104,7 +104,7 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   def hasTaskResourceRequirements(sparkConf: SparkConf): Boolean = {
-    sparkConf.getAllWithPrefix(SPARK_TASK_PREFIX).nonEmpty
+    sparkConf.getAllWithPrefix(s"$SPARK_TASK_PREFIX.resource.").nonEmpty
   }
 
   def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
