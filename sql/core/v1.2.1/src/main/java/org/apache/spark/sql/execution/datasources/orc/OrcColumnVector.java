@@ -74,8 +74,8 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  protected void cleanupResources() {
-    // Empty
+  public void close() {
+
   }
 
   @Override

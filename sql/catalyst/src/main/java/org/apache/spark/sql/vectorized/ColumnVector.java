@@ -50,44 +50,19 @@ import org.apache.spark.unsafe.types.UTF8String;
 @Evolving
 public abstract class ColumnVector implements AutoCloseable {
 
-  private int refCount = 1;
-
   /**
    * Returns the data type of this column vector.
    */
   public final DataType dataType() { return type; }
 
   /**
-   * Increment the reference count for this vector. This is an implementation detail and
-   * only BoundReference should call this directly.
-   * @return this for easy chaining.
-   */
-  public final ColumnVector incRefCount() {
-    refCount++;
-    return this;
-  }
-
-  /**
    * Cleans up memory for this column vector. The column vector is not usable after this.
-   * In reality it decrements the reference count and if it reaches 0 the resources are released
-   * but this is an implementation detail that most code should just ignore.
    *
    * This overwrites `AutoCloseable.close` to remove the `throws` clause, as column vector is
    * in-memory and we don't expect any exception to happen during closing.
    */
   @Override
-  public final void close() {
-    refCount--;
-    if (refCount == 0) {
-      cleanupResources();
-    }
-  }
-
-  /**
-   * Clean up memory or other resources associated with this column vector. This is called from
-   * close when teh reference count reaches 0.  The column vector is not usable after this.
-   */
-  protected abstract void cleanupResources();
+  public abstract void close();
 
   /**
    * Returns true if this column vector contains any null values.
@@ -312,7 +287,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * @return child [[ColumnVector]] at the given ordinal.
    */
-  protected abstract ColumnVector getChild(int ordinal);
+  public abstract ColumnVector getChild(int ordinal);
 
   /**
    * Data type for this column.

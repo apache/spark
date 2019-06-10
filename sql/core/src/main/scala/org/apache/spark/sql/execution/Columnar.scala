@@ -557,23 +557,10 @@ case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: 
   extends Rule[SparkPlan] {
 
   /**
-   * Checks if the plan supports columnar, and that all of its children support it too.
-   */
-  private def supportsColumnar(plan: SparkPlan): Boolean = {
-    // FileSourceScanExec is very special because operations that are pushed into it
-    // are executed by the FileFormat and not by FileSourceScanExec.  It does this
-    // so the FileFormat can avoid reading unnecessary data while it also executes the
-    // given expressions.  This means that if a FileSourceScanExec says that it supports
-    // columnar processing, the FileFormat inside it is already going to execute those
-    // operations in a columnar way and we don't have to worry about checking them.
-    plan.isInstanceOf[FileSourceScanExec] || plan.supportsColumnar
-  }
-
-  /**
    * Inserts an transition to columnar formatted data.
    */
   private def insertRowToColumnar(plan: SparkPlan): SparkPlan = {
-    if (!supportsColumnar(plan)) {
+    if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
       RowToColumnarExec(insertTransitions(plan))
@@ -586,7 +573,7 @@ case class ApplyColumnarRulesAndInsertTransitions(conf: SQLConf, columnarRules: 
    * Inserts RowToColumnarExecs and ColumnarToRowExecs where needed.
    */
   private def insertTransitions(plan: SparkPlan): SparkPlan = {
-    if (supportsColumnar(plan)) {
+    if (plan.supportsColumnar) {
       // The tree feels kind of backwards
       // This is the end of the columnar processing so go back to rows
       ColumnarToRowExec(insertRowToColumnar(plan))
