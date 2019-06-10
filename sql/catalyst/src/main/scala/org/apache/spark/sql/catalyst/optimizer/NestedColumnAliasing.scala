@@ -91,9 +91,9 @@ object NestedColumnAliasing {
    * Check `SelectedField` to see which expressions should be listed here.
    */
   private def collectRootReferenceAndExtractValue(e: Expression): Seq[Expression] = e match {
-    case _: AttributeReference |
-         GetStructField(_: ExtractValue | _: AttributeReference, _, _) |
-         GetArrayStructFields(_: MapValues |
+    case _: AttributeReference => Seq(e)
+    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) => Seq(e)
+    case GetArrayStructFields(_: MapValues |
                               _: MapKeys |
                               _: ExtractValue |
                               _: AttributeReference, _, _, _, _) => Seq(e)
