@@ -1124,22 +1124,24 @@ private[hive] object HiveClientImpl {
     // For non-views, we need to do some extra fixes
     if (!(HiveTableType.VIRTUAL_VIEW.toString == tTable.getTableType)) {
       // Fix the non-printable chars
-      val parameters: JMap[String, String] = tTable.getSd.getParameters
-      val sf: String = parameters.get(serdeConstants.SERIALIZATION_FORMAT)
-      if (sf != null) {
-        val b: Array[Char] = sf.toCharArray
-        if ((b.length == 1) && (b(0) < 10)) { // ^A, ^B, ^C, ^D, \t
-          parameters.put(serdeConstants.SERIALIZATION_FORMAT, Integer.toString(b(0)))
+      val parameters = tTable.getSd.getParameters
+      if (parameters != null) {
+        val sf = parameters.get(serdeConstants.SERIALIZATION_FORMAT)
+        if (sf != null) {
+          val b: Array[Char] = sf.toCharArray
+          if ((b.length == 1) && (b(0) < 10)) { // ^A, ^B, ^C, ^D, \t
+            parameters.put(serdeConstants.SERIALIZATION_FORMAT, Integer.toString(b(0)))
+          }
         }
       }
       // Use LazySimpleSerDe for MetadataTypedColumnsetSerDe.
       // NOTE: LazySimpleSerDe does not support tables with a single column of col
       // of type "array<string>". This happens when the table is created using
       // an earlier version of Hive.
-      if (classOf[MetadataTypedColumnsetSerDe].getName
-            == tTable.getSd.getSerdeInfo.getSerializationLib
-            && tTable.getSd.getColsSize > 0
-            && tTable.getSd.getCols.get(0).getType.indexOf('<') == -1) {
+      if (classOf[MetadataTypedColumnsetSerDe].getName ==
+        tTable.getSd.getSerdeInfo.getSerializationLib &&
+        tTable.getSd.getColsSize > 0 &&
+        tTable.getSd.getCols.get(0).getType.indexOf('<') == -1) {
         tTable.getSd.getSerdeInfo.setSerializationLib(classOf[LazySimpleSerDe].getName)
       }
     }

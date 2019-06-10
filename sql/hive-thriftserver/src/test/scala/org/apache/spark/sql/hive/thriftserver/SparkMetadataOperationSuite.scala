@@ -148,7 +148,6 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
     withJdbcStatement("table1", "table2") { statement =>
       Seq(
-        "DROP VIEW IF EXISTS view1",
         "CREATE TABLE table1(key INT, val STRING)",
         "CREATE TABLE table2(key INT, val STRING)",
         "CREATE VIEW view1 AS SELECT * FROM table2").foreach(statement.execute)

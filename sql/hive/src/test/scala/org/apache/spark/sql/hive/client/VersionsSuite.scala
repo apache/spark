@@ -252,6 +252,14 @@ class VersionsSuite extends SparkFunSuite with Logging {
         .map(_.identifier.table) == Seq("src"))
     }
 
+    test(s"$version: getTablesByName when contains invalid name") {
+      // scalastyle:off
+      val name = "砖"
+      // scalastyle:on
+      assert(client.getTablesByName("default", Seq("src", name))
+        .map(_.identifier.table) == Seq("src"))
+    }
+
     test(s"$version: getTablesByName when empty") {
       assert(client.getTablesByName("default", Seq.empty).isEmpty)
     }

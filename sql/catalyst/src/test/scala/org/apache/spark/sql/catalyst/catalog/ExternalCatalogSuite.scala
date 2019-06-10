@@ -287,6 +287,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       .map(_.identifier.table) == Seq("tbl1"))
   }
 
+  test("get tables by name when contains invalid name") {
+    // scalastyle:off
+    val name = "砖"
+    // scalastyle:on
+    assert(newBasicCatalog().getTablesByName("db2", Seq("tbl1", name))
+      .map(_.identifier.table) == Seq("tbl1"))
+  }
+
   test("get tables by name when empty table list") {
     assert(newBasicCatalog().getTablesByName("db2", Seq.empty).isEmpty)
   }

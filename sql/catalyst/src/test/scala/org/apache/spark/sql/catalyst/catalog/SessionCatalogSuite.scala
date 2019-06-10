@@ -547,6 +547,28 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
+  test("get tables by name when contains invalid name") {
+    // scalastyle:off
+    val name = "砖"
+    // scalastyle:on
+    withBasicCatalog { catalog =>
+      assert(catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1", Some("db2")),
+          TableIdentifier(name, Some("db2"))
+        )
+      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+      // Get table without explicitly specifying database
+      catalog.setCurrentDatabase("db2")
+      assert(catalog.getTablesByName(
+        Seq(
+          TableIdentifier("tbl1"),
+          TableIdentifier(name)
+        )
+      ) == catalog.externalCatalog.getTablesByName("db2", Seq("tbl1")))
+    }
+  }
+
   test("get tables by name when empty") {
     withBasicCatalog { catalog =>
       assert(catalog.getTablesByName(Seq.empty)

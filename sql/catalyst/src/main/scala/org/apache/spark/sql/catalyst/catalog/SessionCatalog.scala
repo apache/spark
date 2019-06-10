@@ -437,7 +437,7 @@ class SessionCatalog(
   /**
    * Retrieve all metadata of existing permanent tables/views. If no database is specified,
    * assume the table/view is in the current database.
-   * Only the tables/views belong to one same database that can be retrieved are returned.
+   * Only the tables/views belong to the same database that can be retrieved are returned.
    * For example, if none of the requested tables could be retrieved, an empty list is returned.
    * There is no guarantee of ordering of the returned tables.
    */
@@ -447,10 +447,10 @@ class SessionCatalog(
       val dbs = names.map(_.database.getOrElse(getCurrentDatabase))
       if (dbs.distinct.size != 1) {
         val tables = names.map(name => formatTableName(name.table))
-        dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}
+        val qualifiedTableNames = dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}
         throw new AnalysisException(
-          s"Only the tables/views belong to one same database can be retrieved. Querying " +
-          s"tables/views are ${dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}}"
+          s"Only the tables/views belong to the same database can be retrieved. Querying " +
+          s"tables/views are $qualifiedTableNames"
         )
       }
       val db = formatDatabaseName(dbs.head)
