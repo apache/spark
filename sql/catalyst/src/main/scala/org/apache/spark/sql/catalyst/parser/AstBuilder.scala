@@ -1337,13 +1337,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Substring/Substr expression.
    */
   override def visitSubstring(ctx: SubstringContext): Expression = withOrigin(ctx) {
-    val field = ctx.str
-    val pos = ctx.pos
-    val len = ctx.len
-    if (len != null) {
-      Substring(expression(field), expression(pos), expression(len))
+    if (ctx.len != null) {
+      Substring(expression(ctx.str), expression(ctx.pos), expression(ctx.len))
     } else {
-      new Substring(expression(field), expression(pos))
+      new Substring(expression(ctx.str), expression(ctx.pos))
     }
   }
 

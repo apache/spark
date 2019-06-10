@@ -109,7 +109,7 @@ struct<split(aa1cc2ee3, [1-9]+, 2):array<string>>
 
 
 -- !query 13
-SELECT substring('abcdefg', 1)
+SELECT substr('abcdefg', 1)
 -- !query 13 schema
 struct<substring(abcdefg, 1, 2147483647):string>
 -- !query 13 output
@@ -117,7 +117,7 @@ abcdefg
 
 
 -- !query 14
-SELECT substring('abcdefg', -1, 5)
+SELECT substr('abcdefg', -1, 5)
 -- !query 14 schema
 struct<substring(abcdefg, -1, 5):string>
 -- !query 14 output
@@ -125,7 +125,7 @@ g
 
 
 -- !query 15
-SELECT substr('abcdefg', 1)
+SELECT substr('abcdefg' from 1)
 -- !query 15 schema
 struct<substring(abcdefg, 1, 2147483647):string>
 -- !query 15 output
@@ -133,7 +133,7 @@ abcdefg
 
 
 -- !query 16
-SELECT substr('abcdefg', -1, 5)
+SELECT substr('abcdefg' from -1 for 5)
 -- !query 16 schema
 struct<substring(abcdefg, -1, 5):string>
 -- !query 16 output
@@ -141,7 +141,7 @@ g
 
 
 -- !query 17
-SELECT substring('abcdefg' from 1)
+SELECT substring('abcdefg', 1)
 -- !query 17 schema
 struct<substring(abcdefg, 1, 2147483647):string>
 -- !query 17 output
@@ -149,7 +149,7 @@ abcdefg
 
 
 -- !query 18
-SELECT substring('abcdefg' from -1 for 5)
+SELECT substring('abcdefg', -1, 5)
 -- !query 18 schema
 struct<substring(abcdefg, -1, 5):string>
 -- !query 18 output
@@ -157,7 +157,7 @@ g
 
 
 -- !query 19
-SELECT substr('abcdefg' from 1)
+SELECT substring('abcdefg' from 1)
 -- !query 19 schema
 struct<substring(abcdefg, 1, 2147483647):string>
 -- !query 19 output
@@ -165,7 +165,7 @@ abcdefg
 
 
 -- !query 20
-SELECT substr('abcdefg' from -1 for 5)
+SELECT substring('abcdefg' from -1 for 5)
 -- !query 20 schema
 struct<substring(abcdefg, -1, 5):string>
 -- !query 20 output
