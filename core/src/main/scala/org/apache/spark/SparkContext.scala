@@ -496,6 +496,15 @@ class SparkContext(config: SparkConf) extends Logging {
     _ui.foreach(_.bind())
 
     _hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(_conf)
+    // Performance optimization: this dummy call to .size() triggers eager evaluation of
+    // Configuration's internal  `properties` field, guaranteeing that it will be computed and
+    // cached before SessionState.newHadoopConf() uses `sc.hadoopConfiguration` to create
+    // a new per-session Configuration. If `properties` has not been computed by that time
+    // then each newly-created Configuration will perform its own expensive IO and XML
+    // parsing to load configuration defaults and populate its own properties. By ensuring
+    // that we've pre-computed the parent's properties, the child Configuration will simply
+    // clone the parent's properties.
+    _hadoopConfiguration.size()
 
     // Add each JAR given through the constructor
     if (jars != null) {
