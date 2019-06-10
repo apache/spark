@@ -711,7 +711,7 @@ class SparkSession private(
   // scalastyle:on
 
   /**
-   * Stop the underlying `SparkContext` if there are are no active sessions remaining.
+   * Stop the underlying `SparkContext` if there are no active sessions remaining.
    *
    * @since 2.0.0
    */
@@ -1008,9 +1008,6 @@ object SparkSession extends Logging {
     if (getActiveSession.isDefined) {
       activeThreadSession.remove()
       numActiveSessions.decrementAndGet()
-    } else {
-      logWarning("Calling clearActiveSession() on a SparkSession " +
-        "without an active session is a noop.")
     }
   }
 
@@ -1031,9 +1028,6 @@ object SparkSession extends Logging {
   def clearDefaultSession(): Unit = {
     if (getDefaultSession.isDefined) {
       defaultSession.set(null)
-    } else {
-      logWarning("Calling clearDefaultSession() on a SparkSession " +
-        "without an default session is a noop.")
     }
   }
 
