@@ -390,23 +390,23 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                        "precisionByLabel|recallByLabel|f1MeasureByLabel|microPrecision|"
                        "microRecall|microF1Measure)",
                        typeConverter=TypeConverters.toString)
-    label = Param(Params._dummy(), "label",
-                  "The label whose metric will be computed in precisionByLabel|"
-                  "recallByLabel|f1MeasureByLabel. "
-                  "Must be >= 0. The default value is 0.",
-                  typeConverter=TypeConverters.toFloat)
+    metricClass = Param(Params._dummy(), "metricClass",
+                        "The label whose metric will be computed in precisionByLabel|"
+                        "recallByLabel|f1MeasureByLabel. "
+                        "Must be >= 0. The default value is 0.",
+                        typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="f1Measure", label=0.0):
+                 metricName="f1Measure", metricClass=0.0):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="f1Measure", label=0.0)
+                 metricName="f1Measure", metricClass=0.0)
         """
         super(MultilabelClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MultilabelClassificationEvaluator", self.uid)
-        self._setDefault(metricName="f1Measure", label=0.0)
+        self._setDefault(metricName="f1Measure", metricClass=0.0)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -425,26 +425,26 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         return self.getOrDefault(self.metricName)
 
     @since("3.0.0")
-    def setLabel(self, value):
+    def setMetricClass(self, value):
         """
-        Sets the value of :py:attr:`label`.
+        Sets the value of :py:attr:`metricClass`.
         """
-        return self._set(label=value)
+        return self._set(metricClass=value)
 
     @since("3.0.0")
-    def getLabel(self):
+    def getMetricClass(self):
         """
-        Gets the value of label or its default value.
+        Gets the value of metricClass or its default value.
         """
-        return self.getOrDefault(self.label)
+        return self.getOrDefault(self.metricClass)
 
     @keyword_only
     @since("3.0.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="f1Measure", label=0.0):
+                  metricName="f1Measure", metricClass=0.0):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="f1Measure", label=0.0)
+                  metricName="f1Measure", metricClass=0.0)
         Sets params for multilabel classification evaluator.
         """
         kwargs = self._input_kwargs

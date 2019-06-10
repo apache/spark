@@ -63,18 +63,18 @@ class MultilabelClassificationEvaluator (override val uid: String)
 
   setDefault(metricName -> "f1Measure")
 
-  final val label: DoubleParam = new DoubleParam(this, "label",
-    "The label whose metric will be computed in precisionByLabel|recallByLabel|" +
+  final val metricClass: DoubleParam = new DoubleParam(this, "metricClass",
+    "The class whose metric will be computed in precisionByLabel|recallByLabel|" +
       "f1MeasureByLabel. Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
   /** @group getParam */
-  def getLabel: Double = $(label)
+  def getMetricClass: Double = $(metricClass)
 
   /** @group setParam */
-  def setLabel(value: Double): this.type = set(label, value)
+  def setMetricClass(value: Double): this.type = set(metricClass, value)
 
-  setDefault(label -> 0.0)
+  setDefault(metricClass -> 0.0)
 
   /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -96,21 +96,20 @@ class MultilabelClassificationEvaluator (override val uid: String)
         (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
       }
     val metrics = new MultilabelMetrics(predictionAndLabels)
-    val metric = $(metricName) match {
+    $(metricName) match {
       case "subsetAccuracy" => metrics.subsetAccuracy
       case "accuracy" => metrics.accuracy
       case "hammingLoss" => metrics.hammingLoss
       case "precision" => metrics.precision
       case "recall" => metrics.recall
       case "f1Measure" => metrics.f1Measure
-      case "precisionByLabel" => metrics.precision($(label))
-      case "recallByLabel" => metrics.recall($(label))
-      case "f1MeasureByLabel" => metrics.f1Measure($(label))
+      case "precisionByLabel" => metrics.precision($(metricClass))
+      case "recallByLabel" => metrics.recall($(metricClass))
+      case "f1MeasureByLabel" => metrics.f1Measure($(metricClass))
       case "microPrecision" => metrics.microPrecision
       case "microRecall" => metrics.microRecall
       case "microF1Measure" => metrics.microF1Measure
     }
-    metric
   }
 
   override def isLargerBetter: Boolean = {
