@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression, UpCast}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Project}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, NamedExpression, UpCast}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
  * Resolves columns of an output table from the data in a logical plan. This rule will:
@@ -124,12 +124,16 @@ object ResolveOutputRelation extends Rule[LogicalPlan] {
       addError: String => Unit): Option[NamedExpression] = {
 
     // run the type check first to ensure type errors are present
-    val canWrite = DataType.canWrite(
+    lazy val canWrite = DataType.canWrite(
       queryExpr.dataType, tableAttr.dataType, byName, resolver, tableAttr.name, addError)
 
     if (queryExpr.nullable && !tableAttr.nullable) {
       addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
       None
+
+    } else if (queryExpr.dataType == NullType && tableAttr.nullable) {
+      Some(Alias(Cast(queryExpr, tableAttr.dataType, Option(SQLConf.get.sessionLocalTimeZone)),
+        tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
 
     } else if (!canWrite) {
       None

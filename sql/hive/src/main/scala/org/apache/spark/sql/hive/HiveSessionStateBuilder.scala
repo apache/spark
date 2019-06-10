@@ -81,6 +81,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         RelationConversions(conf, catalog) +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:
+        // In the rule `PreprocessTableInsertion`, the fields of input query might be converted as
+        // unresolved `UpCast`s. The following rule `ResolveUpCast` would resolve those `UpCast`s.
         ResolveUpCast +:
         DataSourceAnalysis(conf) +:
         HiveAnalysis +:
