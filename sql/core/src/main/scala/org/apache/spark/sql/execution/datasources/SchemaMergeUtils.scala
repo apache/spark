@@ -69,7 +69,8 @@ object SchemaMergeUtils extends Logging {
           }.toSeq
 
           // Reads schemas in multi-threaded manner within each task
-          val schemas = parallelSchemaReader(fakeFileStatuses, serializedConf.value, ignoreCorruptFiles)
+          val schemas = parallelSchemaReader(
+            fakeFileStatuses, serializedConf.value, ignoreCorruptFiles)
 
           if (schemas.isEmpty) {
             Iterator.empty
