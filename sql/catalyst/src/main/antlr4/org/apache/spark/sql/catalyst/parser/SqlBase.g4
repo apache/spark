@@ -671,6 +671,8 @@ primaryExpression
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
     | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
+    | (SUBSTR | SUBSTRING) '(' str=valueExpression (FROM | ',') pos=valueExpression
+      ((FOR | ',') len=valueExpression)? ')'                                                   #substring
     ;
 
 constant
@@ -1001,6 +1003,8 @@ ansiNonReserved
     | STORED
     | STRATIFY
     | STRUCT
+    | SUBSTR
+    | SUBSTRING
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
@@ -1255,6 +1259,8 @@ nonReserved
     | STORED
     | STRATIFY
     | STRUCT
+    | SUBSTR
+    | SUBSTRING
     | TABLE
     | TABLES
     | TABLESAMPLE
@@ -1511,6 +1517,8 @@ STATISTICS: 'STATISTICS';
 STORED: 'STORED';
 STRATIFY: 'STRATIFY';
 STRUCT: 'STRUCT';
+SUBSTR: 'SUBSTR';
+SUBSTRING: 'SUBSTRING';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLESAMPLE: 'TABLESAMPLE';
