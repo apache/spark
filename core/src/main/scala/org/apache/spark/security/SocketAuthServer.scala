@@ -22,7 +22,6 @@ import java.net.{InetAddress, ServerSocket, Socket}
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.Try
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.ThreadUtils
@@ -64,6 +63,21 @@ private[spark] abstract class SocketAuthServer[T](
     ThreadUtils.awaitResult(promise.future, wait)
   }
 
+}
+
+/**
+ * Create a socket server class and run user function on the socket in a background thread.
+ * This is the same as calling SocketAuthServer.setupOneConnectionServer except it creates
+ * a server object that can then be synced from Python.
+ */
+private [spark] class SocketFuncServer(
+    authHelper: SocketAuthHelper,
+    threadName: String,
+    func: Socket => Unit) extends SocketAuthServer[Unit](authHelper, threadName) {
+
+  override def handleConnection(sock: Socket): Unit = {
+    func(sock)
+  }
 }
 
 private[spark] object SocketAuthServer {

@@ -3304,7 +3304,7 @@ class Dataset[T] private[sql](
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
     withAction("collectAsArrowToPython", queryExecution) { plan =>
-      PythonRDD.serveToStream("serve-Arrow") { outputStream =>
+      PythonRDD.serveToStreamWithSync("serve-Arrow") { outputStream =>
         val out = new DataOutputStream(outputStream)
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
 
@@ -3321,34 +3321,24 @@ class Dataset[T] private[sql](
             }
           }
 
-        var sparkException: Option[SparkException] = None
-        try {
+        Utils.tryWithSafeFinally {
           val arrowBatchRdd = toArrowBatchRdd(plan)
           sparkSession.sparkContext.runJob(
             arrowBatchRdd,
             (it: Iterator[Array[Byte]]) => it.toArray,
             handlePartitionBatches)
-        } catch {
-          case e: SparkException =>
-            sparkException = Some(e)
-        }
+        } {
+          // After processing all partitions, end the batch stream
+          batchWriter.end()
 
-        // After processing all partitions, end the batch stream
-        batchWriter.end()
-        sparkException match {
-          case Some(exception) =>
-            // Signal failure and write error message
-            out.writeInt(-1)
-            PythonRDD.writeUTF(exception.getMessage, out)
-          case None =>
-            // Write batch order indices
-            out.writeInt(batchOrder.length)
-            // Sort by (index of partition, batch index in that partition) tuple to get the
-            // overall_batch_index from 0 to N-1 batches, which can be used to put the
-            // transferred batches in the correct order
-            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
-              out.writeInt(overallBatchIndex)
-            }
+          // Write batch order indices
+          out.writeInt(batchOrder.length)
+          // Sort by (index of partition, batch index in that partition) tuple to get the
+          // overall_batch_index from 0 to N-1 batches, which can be used to put the
+          // transferred batches in the correct order
+          batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+            out.writeInt(overallBatchIndex)
+          }
         }
       }
     }

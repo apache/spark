@@ -2200,10 +2200,13 @@ class DataFrame(object):
         .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
-            sock_info = self._jdf.collectAsArrowToPython()
+            port, auth_secret, jserver_obj = self._jdf.collectAsArrowToPython()
 
         # Collect list of un-ordered batches where last element is a list of correct order indices
-        results = list(_load_from_socket(sock_info, ArrowCollectSerializer()))
+        from pyspark.rdd import _create_local_socket
+        sock_file = _create_local_socket((port, auth_secret))
+        results = list(ArrowCollectSerializer().load_stream(sock_file))
+        jserver_obj.getResult()  # Join serving thread and raise any exceptions
         batches = results[:-1]
         batch_order = results[-1]
 
