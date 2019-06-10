@@ -4,9 +4,10 @@
 --
 -- CASE
 -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/case.sql
--- Test the case statement
+-- Test the CASE statement
 --
--- There are 2 join condition is missing in this test case. we set spark.sql.crossJoin.enabled=true.
+-- This test suite contains two Cartesian products without using explicit CROSS JOIN syntax.
+-- Thus, we set spark.sql.crossJoin.enabled to true.
 set spark.sql.crossJoin.enabled=true;
 CREATE TABLE CASE_TBL (
   i integer,
@@ -63,10 +64,9 @@ SELECT '6' AS `One`,
     ELSE 7
   END AS `Two WHEN with default`;
 
--- [SPARK-27930] Add built-in Math Function: RANDOM
--- SELECT '7' AS `None`,
---   CASE WHEN random() < 0 THEN 1
---   END AS `NULL on no matches`;
+SELECT '7' AS `None`,
+  CASE WHEN rand() < 0 THEN 1
+  END AS `NULL on no matches`;
 
 -- Constant-expression folding shouldn't evaluate unreachable subexpressions
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
@@ -168,11 +168,6 @@ SELECT '' AS `Two`, *
 
 -- SELECT * FROM CASE_TBL;
 
--- We don't support the features below:
--- 1. CREATE FUNCTION ... returns ... as ...
--- 2. CREATE DOMAIN ...
--- 3. CREATE OPERATOR ...
--- 4. CREATE TYPE ...
 --
 -- Nested CASE expressions
 --
@@ -191,15 +186,20 @@ SELECT '' AS `Two`, *
 -- CREATE FUNCTION vol(text) returns text as
 --   'begin return $1; end' language plpgsql volatile;
 
--- SELECT CASE
---   (CASE vol('bar')
---     WHEN 'foo' THEN 'it was foo!'
---     WHEN vol(null) THEN 'null input'
---     WHEN 'bar' THEN 'it was bar!' END
---   )
---   WHEN 'it was foo!' THEN 'foo recognized'
---   WHEN 'it was bar!' THEN 'bar recognized'
---   ELSE 'unrecognized' END;
+SELECT CASE
+  (CASE vol('bar')
+    WHEN 'foo' THEN 'it was foo!'
+    WHEN vol(null) THEN 'null input'
+    WHEN 'bar' THEN 'it was bar!' END
+  )
+  WHEN 'it was foo!' THEN 'foo recognized'
+  WHEN 'it was bar!' THEN 'bar recognized'
+  ELSE 'unrecognized' END;
+
+-- We don't support the features below:
+-- 1. CREATE DOMAIN ...
+-- 2. CREATE OPERATOR ...
+-- 3. CREATE TYPE ...
 
 -- In this case, we can't inline the SQL function without confusing things.
 -- CREATE DOMAIN foodomain AS text;

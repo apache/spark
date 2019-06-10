@@ -260,6 +260,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
+        // vol used by boolean.sql
+        localSparkSession.udf.register("vol", (s: String) => s)
       case _ => // Don't add UDFs in Regular tests.
     }
 
