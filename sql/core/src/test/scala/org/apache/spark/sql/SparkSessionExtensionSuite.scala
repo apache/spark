@@ -441,15 +441,17 @@ trait ColumnarExpression extends Expression with Serializable {
   def supportsColumnar: Boolean = true
 
   /**
-   * Returns the result of evaluating this expression on the entire [[ColumnarBatch]]. The result of
+   * Returns the result of evaluating this expression on the entire
+   * [[org.apache.spark.sql.vectorized.ColumnarBatch]]. The result of
    * calling this may be a single [[org.apache.spark.sql.vectorized.ColumnVector]] or a scalar
    * value. Scalar values typically happen if they are a part of the expression i.e. col("a") + 100.
-   * In this case the 100 is a [[Literal]] that [[Add]] would have to be able to handle.
+   * In this case the 100 is a [[org.apache.spark.sql.catalyst.expressions.Literal]] that
+   * [[org.apache.spark.sql.catalyst.expressions.Add]] would have to be able to handle.
    *
    * By convention any [[org.apache.spark.sql.vectorized.ColumnVector]] returned by [[columnarEval]]
    * is owned by the caller and will need to be closed by them. This can happen by putting it into
-   * a [[ColumnarBatch]] and closing the batch or by closing the vector directly if it is a
-   * temporary value.
+   * a [[org.apache.spark.sql.vectorized.ColumnarBatch]] and closing the batch or by closing the
+   * vector directly if it is a temporary value.
    */
   def columnarEval(batch: ColumnarBatch): Any = {
     throw new IllegalStateException(s"Internal Error ${this.getClass} has column support mismatch")
