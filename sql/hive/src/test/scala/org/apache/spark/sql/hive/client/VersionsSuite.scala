@@ -237,6 +237,33 @@ class VersionsSuite extends SparkFunSuite with Logging {
       assert(client.getTableOption("default", "src").isDefined)
     }
 
+    test(s"$version: getTablesByName") {
+      assert(client.getTablesByName("default", Seq("src")).head
+        == client.getTableOption("default", "src").get)
+    }
+
+    test(s"$version: getTablesByName when multiple tables") {
+      assert(client.getTablesByName("default", Seq("src", "temporary"))
+        .map(_.identifier.table) == Seq("src", "temporary"))
+    }
+
+    test(s"$version: getTablesByName when some tables do not exist") {
+      assert(client.getTablesByName("default", Seq("src", "notexist"))
+        .map(_.identifier.table) == Seq("src"))
+    }
+
+    test(s"$version: getTablesByName when contains invalid name") {
+      // scalastyle:off
+      val name = "砖"
+      // scalastyle:on
+      assert(client.getTablesByName("default", Seq("src", name))
+        .map(_.identifier.table) == Seq("src"))
+    }
+
+    test(s"$version: getTablesByName when empty") {
+      assert(client.getTablesByName("default", Seq.empty).isEmpty)
+    }
+
     test(s"$version: alterTable(table: CatalogTable)") {
       val newTable = client.getTable("default", "src").copy(properties = Map("changed" -> ""))
       client.alterTable(newTable)
