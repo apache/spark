@@ -2089,9 +2089,9 @@ class DataFrame(object):
 
         .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
-        .. note:: When Arrow optimization is enabled, bytes and strings in Python 2 are considered
-            identically with Python 2 itself whereas PySpark takes them as strings. When
-            using strings in Python 2, use unicode `u""` as Python standard practice.
+        .. note:: When Arrow optimization is enabled, strings in Python 2 are converted
+            into bytes as they are bytes in Python 2 whereas PySpark produces them as strings.
+            When using strings in Python 2, use unicode `u""` as Python standard practice.
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
