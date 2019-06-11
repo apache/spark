@@ -290,7 +290,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
       StructField("y", DoubleType))).toAttributes)
 
     val query = TestRelation(StructType(Seq(
-      StructField("x", DoubleType),
+      StructField("x", FloatType),
       StructField("b", FloatType))).toAttributes)
 
     val parsedPlan = byName(xRequiredTable, query)
@@ -298,7 +298,6 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
-      "Cannot safely cast", "'x'", "double to float",
       "Cannot write nullable values to non-null column", "'x'",
       "Cannot find data for output column", "'y'"))
   }
@@ -440,7 +439,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
       StructField("y", DoubleType))).toAttributes)
 
     val query = TestRelation(StructType(Seq(
-      StructField("x", DoubleType),
+      StructField("x", FloatType),
       StructField("b", FloatType))).toAttributes)
 
     val parsedPlan = byPosition(xRequiredTable, query)
@@ -448,8 +447,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column", "'x'",
-      "Cannot safely cast", "'x'", "double to float"))
+      "Cannot write nullable values to non-null column", "'x'"))
   }
 
   test("bypass output column resolution") {
