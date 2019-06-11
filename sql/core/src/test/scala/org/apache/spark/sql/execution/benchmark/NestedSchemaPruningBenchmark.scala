@@ -41,7 +41,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     .range(N * 10)
     .sample(false, 0.1)
     .map { x =>
-      val col3 = (0 until 10).map(i => (x + i, s"$x" * 10))
+      val col3 = (0 until 5).map(i => (x + i, s"$x" * 5))
       (x, (x, s"$x" * 100), col3)
     }.toDF("col1", "col2", "col3")
 
@@ -55,7 +55,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
+      Seq(1, 2, 3).foreach { i =>
         df.write.format(dataSourceName).save(path + s"/$i")
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
@@ -64,7 +64,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
 
       addCase(benchmark, "Top-level column", "SELECT col1 FROM (SELECT col1 FROM t1)")
       addCase(benchmark, "Nested column", "SELECT col2._1 FROM (SELECT col2 FROM t2)")
-      addCase(benchmark, "Nested column in array", "SELECT col3._1 FROM (SELECT col3 FROM t2)")
+      addCase(benchmark, "Nested column in array", "SELECT col3._1 FROM (SELECT col3 FROM t3)")
 
       benchmark.run()
     }
@@ -74,7 +74,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
+      Seq(1, 2, 3).foreach { i =>
         df.write.format(dataSourceName).save(path + s"/$i")
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
@@ -86,7 +86,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
       addCase(benchmark, "Nested column",
         s"SELECT col2._1 FROM (SELECT col2 FROM t2 LIMIT ${Int.MaxValue})")
       addCase(benchmark, "Nested column in array",
-        s"SELECT col3._1 FROM (SELECT col3 FROM t2 LIMIT ${Int.MaxValue})")
+        s"SELECT col3._1 FROM (SELECT col3 FROM t3 LIMIT ${Int.MaxValue})")
 
       benchmark.run()
     }
@@ -96,7 +96,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
+      Seq(1, 2, 3).foreach { i =>
         df.write.format(dataSourceName).save(path + s"/$i")
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
@@ -108,7 +108,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
       addCase(benchmark, "Nested column",
         s"SELECT col2._1 FROM (SELECT /*+ REPARTITION(1) */ col2 FROM t2)")
       addCase(benchmark, "Nested column in array",
-        s"SELECT col3._1 FROM (SELECT /*+ REPARTITION(1) */ col3 FROM t2)")
+        s"SELECT col3._1 FROM (SELECT /*+ REPARTITION(1) */ col3 FROM t3)")
 
       benchmark.run()
     }
@@ -118,7 +118,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
+      Seq(1, 2, 3).foreach { i =>
         df.write.format(dataSourceName).save(path + s"/$i")
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
@@ -130,7 +130,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
       addCase(benchmark, "Nested column",
         s"SELECT col2._1 FROM (SELECT col2 FROM t2 DISTRIBUTE BY col2._1)")
       addCase(benchmark, "Nested column in array",
-        s"SELECT col3._1 FROM (SELECT col3 FROM t2 DISTRIBUTE BY col3._1)")
+        s"SELECT col3._1 FROM (SELECT col3 FROM t3 DISTRIBUTE BY col3._1)")
 
       benchmark.run()
     }
@@ -140,7 +140,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
+      Seq(1, 2, 3).foreach { i =>
         df.write.format(dataSourceName).save(path + s"/$i")
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
@@ -152,7 +152,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
       addCase(benchmark, "Nested column",
         s"SELECT col2._1 FROM (SELECT col2 FROM t2 TABLESAMPLE(100 percent))")
       addCase(benchmark, "Nested column in array",
-        s"SELECT col3._1 FROM (SELECT col3 FROM t2 TABLESAMPLE(100 percent))")
+        s"SELECT col3._1 FROM (SELECT col3 FROM t3 TABLESAMPLE(100 percent))")
 
       benchmark.run()
     }
@@ -162,7 +162,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      Seq(1, 2).foreach { i =>
+      Seq(1, 2, 3).foreach { i =>
         df.write.format(dataSourceName).save(path + s"/$i")
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
@@ -171,7 +171,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
 
       addCase(benchmark, "Top-level column", "SELECT col1 FROM t1 ORDER BY col1")
       addCase(benchmark, "Nested column", "SELECT col2._1 FROM t2 ORDER BY col2._1")
-      addCase(benchmark, "Nested column in array", "SELECT col3._1 FROM t2 ORDER BY col3._1")
+      addCase(benchmark, "Nested column in array", "SELECT col3._1 FROM t3 ORDER BY col3._1")
 
       benchmark.run()
     }
