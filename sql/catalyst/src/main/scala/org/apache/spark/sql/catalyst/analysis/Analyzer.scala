@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, LookupCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, LookupCatalog}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -96,18 +96,15 @@ object AnalysisContext {
 class Analyzer(
     catalog: SessionCatalog,
     conf: SQLConf,
-    maxIterations: Int,
-    override val lookupCatalog: Option[(String) => CatalogPlugin] = None)
+    maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  def this(lookupCatalog: Option[(String) => CatalogPlugin], catalog: SessionCatalog,
-      conf: SQLConf) = {
-    this(catalog, conf, conf.optimizerMaxIterations, lookupCatalog)
-  }
+  override protected def lookupCatalog(name: String): CatalogPlugin =
+    throw new CatalogNotFoundException("No catalog lookup function")
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
@@ -218,23 +215,26 @@ class Analyzer(
   object CTESubstitution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case With(child, relations) =>
-        substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
-          case (resolved, (name, relation)) =>
-            resolved :+ name -> executeSameContext(substituteCTE(relation, resolved))
-        })
+        // substitute CTE expressions right-to-left to resolve references to previous CTEs:
+        // with a as (select * from t), b as (select * from a) select * from b
+        relations.foldRight(child) {
+          case ((cteName, ctePlan), currentPlan) =>
+            substituteCTE(currentPlan, cteName, ctePlan)
+        }
       case other => other
     }
 
-    def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
-      plan resolveOperatorsDown {
+    def substituteCTE(plan: LogicalPlan, cteName: String, ctePlan: LogicalPlan): LogicalPlan = {
+      plan resolveOperatorsUp {
+        case UnresolvedRelation(TableIdentifier(table, None)) if resolver(cteName, table) =>
+          ctePlan
         case u: UnresolvedRelation =>
-          cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
-            .map(_._2).getOrElse(u)
+          u
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.plan, cteRelations))
+              e.withNewPlan(substituteCTE(e.plan, cteName, ctePlan))
           }
       }
     }
@@ -2327,7 +2327,7 @@ class Analyzer(
         expected.flatMap { tableAttr =>
           query.resolveQuoted(tableAttr.name, resolver) match {
             case Some(queryExpr) =>
-              checkField(tableAttr, queryExpr, err => errors += err)
+              checkField(tableAttr, queryExpr, byName, err => errors += err)
             case None =>
               errors += s"Cannot find data for output column '${tableAttr.name}'"
               None
@@ -2345,7 +2345,7 @@ class Analyzer(
 
         query.output.zip(expected).flatMap {
           case (queryExpr, tableAttr) =>
-            checkField(tableAttr, queryExpr, err => errors += err)
+            checkField(tableAttr, queryExpr, byName, err => errors += err)
         }
       }
 
@@ -2360,11 +2360,12 @@ class Analyzer(
     private def checkField(
         tableAttr: Attribute,
         queryExpr: NamedExpression,
+        byName: Boolean,
         addError: String => Unit): Option[NamedExpression] = {
 
       // run the type check first to ensure type errors are present
       val canWrite = DataType.canWrite(
-        queryExpr.dataType, tableAttr.dataType, resolver, tableAttr.name, addError)
+        queryExpr.dataType, tableAttr.dataType, byName, resolver, tableAttr.name, addError)
 
       if (queryExpr.nullable && !tableAttr.nullable) {
         addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
@@ -2562,7 +2563,7 @@ class Analyzer(
         case e => e.sql
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
+        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
         "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
@@ -2575,11 +2576,15 @@ class Analyzer(
       case p => p transformExpressions {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
-        case UpCast(child, dataType, walkedTypePath)
-          if Cast.mayTruncate(child.dataType, dataType) =>
+        case UpCast(child, dt: AtomicType, _)
+            if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
+              child.dataType == StringType =>
+          Cast(child, dt.asNullable)
+
+        case UpCast(child, dataType, walkedTypePath) if !Cast.canUpCast(child.dataType, dataType) =>
           fail(child, dataType, walkedTypePath)
 
-        case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
+        case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
     }
   }

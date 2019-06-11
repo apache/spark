@@ -129,7 +129,7 @@ class ParquetFileFormat
       conf.setEnum(ParquetOutputFormat.JOB_SUMMARY_LEVEL, JobSummaryLevel.NONE)
     }
 
-    if (ParquetOutputFormat.getJobSummaryLevel(conf) == JobSummaryLevel.NONE
+    if (ParquetOutputFormat.getJobSummaryLevel(conf) != JobSummaryLevel.NONE
       && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
       // output summary is requested, but the class is not a Parquet Committer
       logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot" +
@@ -372,13 +372,13 @@ class ParquetFileFormat
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = footerFileMetaData.getSchema
-        val parquetFilters = new ParquetFilters(pushDownDate, pushDownTimestamp, pushDownDecimal,
-          pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
+        val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
+          pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.
-          .flatMap(parquetFilters.createFilter(parquetSchema, _))
+          .flatMap(parquetFilters.createFilter(_))
           .reduceOption(FilterApi.and)
       } else {
         None

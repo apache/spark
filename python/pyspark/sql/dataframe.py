@@ -2087,7 +2087,7 @@ class DataFrame(object):
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
-        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
@@ -2104,7 +2104,7 @@ class DataFrame(object):
         else:
             timezone = None
 
-        if self.sql_ctx._conf.arrowEnabled():
+        if self.sql_ctx._conf.arrowPySparkEnabled():
             use_arrow = True
             try:
                 from pyspark.sql.types import to_arrow_schema
@@ -2114,28 +2114,28 @@ class DataFrame(object):
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if self.sql_ctx._conf.arrowFallbackEnabled():
+                if self.sql_ctx._conf.arrowPySparkFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
                         "failed by the reason below:\n  %s\n"
                         "Attempting non-optimization as "
-                        "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % _exception_message(e))
                     warnings.warn(msg)
                     use_arrow = False
                 else:
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                        "the error below and will not continue because automatic fallback "
-                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                        "reached the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
                         "false.\n  %s" % _exception_message(e))
                     warnings.warn(msg)
                     raise
 
             # Try to use Arrow optimization when the schema is supported and the required version
-            # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
+            # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
                     from pyspark.sql.types import _check_dataframe_localize_timestamps
@@ -2155,10 +2155,11 @@ class DataFrame(object):
                     # be executed. So, simply fail in this case for now.
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                        "the error below and can not continue. Note that "
-                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
-                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                        "reached the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' does not have an "
+                        "effect on failures in the middle of "
+                        "computation.\n  %s" % _exception_message(e))
                     warnings.warn(msg)
                     raise
 

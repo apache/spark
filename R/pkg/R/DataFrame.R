@@ -1179,7 +1179,7 @@ setMethod("collect",
           function(x, stringsAsFactors = FALSE) {
             connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
             useArrow <- FALSE
-            arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+            arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
             if (arrowEnabled) {
               useArrow <- tryCatch({
                 checkSchemaInArrow(schema(x))
@@ -1187,8 +1187,8 @@ setMethod("collect",
               }, error = function(e) {
                 warning(paste0("The conversion from Spark DataFrame to R DataFrame was attempted ",
                                "with Arrow optimization because ",
-                               "'spark.sql.execution.arrow.enabled' is set to true; however, ",
-                               "failed, attempting non-optimization. Reason: ",
+                               "'spark.sql.execution.arrow.sparkr.enabled' is set to true; ",
+                               "however, failed, attempting non-optimization. Reason: ",
                                e))
                 FALSE
               })
@@ -1476,7 +1476,7 @@ dapplyInternal <- function(x, func, schema) {
     schema <- structType(schema)
   }
 
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
   if (arrowEnabled) {
     if (inherits(schema, "structType")) {
       checkSchemaInArrow(schema)

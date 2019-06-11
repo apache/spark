@@ -511,6 +511,8 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "stored",
     "stratify",
     "struct",
+    "substr",
+    "substring",
     "table",
     "tables",
     "tablesample",

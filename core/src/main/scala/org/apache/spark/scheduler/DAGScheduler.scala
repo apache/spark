@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
 import scala.collection.Map
-import scala.collection.mutable.{ArrayStack, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
@@ -468,21 +468,21 @@ private[spark] class DAGScheduler(
 
   /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
   private def getMissingAncestorShuffleDependencies(
-      rdd: RDD[_]): ArrayStack[ShuffleDependency[_, _, _]] = {
-    val ancestors = new ArrayStack[ShuffleDependency[_, _, _]]
+      rdd: RDD[_]): ListBuffer[ShuffleDependency[_, _, _]] = {
+    val ancestors = new ListBuffer[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new ArrayStack[RDD[_]]
-    waitingForVisit.push(rdd)
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += rdd
     while (waitingForVisit.nonEmpty) {
-      val toVisit = waitingForVisit.pop()
+      val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         visited += toVisit
         getShuffleDependencies(toVisit).foreach { shuffleDep =>
           if (!shuffleIdToMapStage.contains(shuffleDep.shuffleId)) {
-            ancestors.push(shuffleDep)
-            waitingForVisit.push(shuffleDep.rdd)
+            ancestors.prepend(shuffleDep)
+            waitingForVisit.prepend(shuffleDep.rdd)
           } // Otherwise, the dependency and its ancestors have already been registered.
         }
       }
@@ -506,17 +506,17 @@ private[spark] class DAGScheduler(
       rdd: RDD[_]): HashSet[ShuffleDependency[_, _, _]] = {
     val parents = new HashSet[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
-    val waitingForVisit = new ArrayStack[RDD[_]]
-    waitingForVisit.push(rdd)
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += rdd
     while (waitingForVisit.nonEmpty) {
-      val toVisit = waitingForVisit.pop()
+      val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         visited += toVisit
         toVisit.dependencies.foreach {
           case shuffleDep: ShuffleDependency[_, _, _] =>
             parents += shuffleDep
           case dependency =>
-            waitingForVisit.push(dependency.rdd)
+            waitingForVisit.prepend(dependency.rdd)
         }
       }
     }
@@ -529,10 +529,10 @@ private[spark] class DAGScheduler(
    */
   private def traverseParentRDDsWithinStage(rdd: RDD[_], predicate: RDD[_] => Boolean): Boolean = {
     val visited = new HashSet[RDD[_]]
-    val waitingForVisit = new ArrayStack[RDD[_]]
-    waitingForVisit.push(rdd)
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += rdd
     while (waitingForVisit.nonEmpty) {
-      val toVisit = waitingForVisit.pop()
+      val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         if (!predicate(toVisit)) {
           return false
@@ -542,7 +542,7 @@ private[spark] class DAGScheduler(
           case _: ShuffleDependency[_, _, _] =>
             // Not within the same stage with current rdd, do nothing.
           case dependency =>
-            waitingForVisit.push(dependency.rdd)
+            waitingForVisit.prepend(dependency.rdd)
         }
       }
     }
@@ -554,7 +554,8 @@ private[spark] class DAGScheduler(
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new ArrayStack[RDD[_]]
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += stage.rdd
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
         visited += rdd
@@ -568,15 +569,14 @@ private[spark] class DAGScheduler(
                   missing += mapStage
                 }
               case narrowDep: NarrowDependency[_] =>
-                waitingForVisit.push(narrowDep.rdd)
+                waitingForVisit.prepend(narrowDep.rdd)
             }
           }
         }
       }
     }
-    waitingForVisit.push(stage.rdd)
     while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
+      visit(waitingForVisit.remove(0))
     }
     missing.toList
   }
@@ -2000,7 +2000,8 @@ private[spark] class DAGScheduler(
     val visitedRdds = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new ArrayStack[RDD[_]]
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += stage.rdd
     def visit(rdd: RDD[_]) {
       if (!visitedRdds(rdd)) {
         visitedRdds += rdd
@@ -2009,17 +2010,16 @@ private[spark] class DAGScheduler(
             case shufDep: ShuffleDependency[_, _, _] =>
               val mapStage = getOrCreateShuffleMapStage(shufDep, stage.firstJobId)
               if (!mapStage.isAvailable) {
-                waitingForVisit.push(mapStage.rdd)
+                waitingForVisit.prepend(mapStage.rdd)
               }  // Otherwise there's no need to follow the dependency back
             case narrowDep: NarrowDependency[_] =>
-              waitingForVisit.push(narrowDep.rdd)
+              waitingForVisit.prepend(narrowDep.rdd)
           }
         }
       }
     }
-    waitingForVisit.push(stage.rdd)
     while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
+      visit(waitingForVisit.remove(0))
     }
     visitedRdds.contains(target.rdd)
   }

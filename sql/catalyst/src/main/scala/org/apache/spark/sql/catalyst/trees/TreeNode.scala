@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 
 import java.util.UUID
 
-import scala.collection.Map
+import scala.collection.{mutable, Map}
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
-import org.apache.spark.sql.catalyst.util.StringUtils.{PlanStringConcat, StringConcat}
+import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -74,12 +74,33 @@ object CurrentOrigin {
   }
 }
 
+// A tag of a `TreeNode`, which defines name and type
+case class TreeNodeTag[T](name: String)
+
 // scalastyle:off
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 // scalastyle:on
   self: BaseType =>
 
   val origin: Origin = CurrentOrigin.get
+
+  /**
+   * A mutable map for holding auxiliary information of this tree node. It will be carried over
+   * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
+   */
+  private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
+
+  protected def copyTagsFrom(other: BaseType): Unit = {
+    tags ++= other.tags
+  }
+
+  def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
+    tags(tag) = value
+  }
+
+  def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
+    tags.get(tag).map(_.asInstanceOf[T])
+  }
 
   /**
    * Returns a Seq of the children of this node.
@@ -213,6 +234,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
     def mapChild(child: Any): Any = child match {
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
+      // CaseWhen Case or any tuple type
+      case (left, right) => (mapChild(left), mapChild(right))
       case nonChild: AnyRef => nonChild
       case null => null
     }
@@ -228,6 +251,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         // `mapValues` is lazy and we need to force it to materialize
         m.mapValues(mapChild).view.force
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
+      case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
       case null => null
     }
@@ -262,6 +286,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (this fastEquals afterRule) {
       mapChildren(_.transformDown(rule))
     } else {
+      // If the transform function replaces this node with a new one, carry over the tags.
+      afterRule.tags ++= this.tags
       afterRule.mapChildren(_.transformDown(rule))
     }
   }
@@ -275,7 +301,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRuleOnChildren = mapChildren(_.transformUp(rule))
-    if (this fastEquals afterRuleOnChildren) {
+    val newNode = if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
       }
@@ -284,6 +310,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
       }
     }
+    // If the transform function replaces this node with a new one, carry over the tags.
+    newNode.tags ++= this.tags
+    newNode
   }
 
   /**
@@ -353,7 +382,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         }.view.force // `mapValues` is lazy and we need to force it to materialize
         case d: DataType => d // Avoid unpacking Structs
         case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
-        case args: Traversable[_] => args.map(mapChild)
+        case args: Iterable[_] => args.map(mapChild)
         case nonChild: AnyRef => nonChild
         case null => null
       }
@@ -402,7 +431,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     try {
       CurrentOrigin.withOrigin(origin) {
-        defaultCtor.newInstance(allArgs.toArray: _*).asInstanceOf[BaseType]
+        val res = defaultCtor.newInstance(allArgs.toArray: _*).asInstanceOf[BaseType]
+        res.copyTagsFrom(this)
+        res
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
