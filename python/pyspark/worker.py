@@ -305,7 +305,10 @@ def read_udfs(pickleSer, infile, eval_type):
                     "Pandas iterator UDF generate more rows then read rows."
                 yield (result_batch, result_type)
             try:
-                iterator.__next__()
+                if sys.version >= '3':
+                    iterator.__next__()
+                else:
+                    iterator.next()
                 raise Exception("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator.")
             except StopIteration:
                 pass
