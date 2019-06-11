@@ -36,7 +36,7 @@ object CypherSession {
  *
  * @since 3.0.0
  */
-abstract class CypherSession {
+trait CypherSession {
 
   def sparkSession: SparkSession
 

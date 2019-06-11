@@ -31,8 +31,9 @@ object GraphElementFrame {
       df.schema(idColumnName).dataType match {
         case BinaryType => col
         case StringType | ByteType | ShortType | IntegerType | LongType => col.cast(BinaryType)
-        case other => throw new IllegalArgumentException(
-          s"Unsupported data type ${other.getClass.getSimpleName} for id column $idColumnName")
+        case other =>
+          throw new IllegalArgumentException(
+            s"Unsupported data type ${other.getClass.getSimpleName} for id column $idColumnName")
       }
     }
     val remainingColumnNames = df.columns.filterNot(idColumnNames.contains)
@@ -114,10 +115,7 @@ object NodeFrame {
    * @param labelSet  labels that are assigned to all nodes
    * @since 3.0.0
    */
-  def apply(
-             initialDf: DataFrame,
-             idColumn: String,
-             labelSet: Set[String]): NodeFrame = {
+  def apply(initialDf: DataFrame, idColumn: String, labelSet: Set[String]): NodeFrame = {
     val properties = (initialDf.columns.toSet - idColumn)
       .map(columnName => columnName -> columnName)
       .toMap
@@ -140,11 +138,11 @@ object NodeFrame {
  * @since 3.0.0
  */
 case class NodeFrame(
-                      initialDf: DataFrame,
-                      idColumn: String,
-                      labelSet: Set[String],
-                      properties: Map[String, String])
-  extends GraphElementFrame {
+    initialDf: DataFrame,
+    idColumn: String,
+    labelSet: Set[String],
+    properties: Map[String, String])
+    extends GraphElementFrame {
 
   override protected def idColumns: Seq[String] = Seq(idColumn)
 
@@ -165,11 +163,11 @@ object RelationshipFrame {
    * @since 3.0.0
    */
   def apply(
-             initialDf: DataFrame,
-             idColumn: String,
-             sourceIdColumn: String,
-             targetIdColumn: String,
-             relationshipType: String): RelationshipFrame = {
+      initialDf: DataFrame,
+      idColumn: String,
+      sourceIdColumn: String,
+      targetIdColumn: String,
+      relationshipType: String): RelationshipFrame = {
     val properties = (initialDf.columns.toSet - idColumn - sourceIdColumn - targetIdColumn)
       .map(columnName => columnName -> columnName)
       .toMap
@@ -199,13 +197,13 @@ object RelationshipFrame {
  * @since 3.0.0
  */
 case class RelationshipFrame(
-                              initialDf: DataFrame,
-                              idColumn: String,
-                              sourceIdColumn: String,
-                              targetIdColumn: String,
-                              relationshipType: String,
-                              properties: Map[String, String])
-  extends GraphElementFrame {
+    initialDf: DataFrame,
+    idColumn: String,
+    sourceIdColumn: String,
+    targetIdColumn: String,
+    relationshipType: String,
+    properties: Map[String, String])
+    extends GraphElementFrame {
 
   override protected def idColumns: Seq[String] = Seq(idColumn, sourceIdColumn, targetIdColumn)
 
