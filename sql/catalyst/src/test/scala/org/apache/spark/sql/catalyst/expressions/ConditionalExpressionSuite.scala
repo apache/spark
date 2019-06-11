@@ -222,7 +222,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     CaseWhen(Seq((Literal.create(false, BooleanType), Literal(1))), Literal(-1)).genCode(ctx)
     assert(ctx.inlinedMutableStates.size == 1)
   }
-  
+
   test("SPARK-27917 test semantic equals of CaseWhen") {
     val attrRef = AttributeReference("ACCESS_CHECK", StringType)()
     val aliasAttrRef = attrRef.withName("access_check")
