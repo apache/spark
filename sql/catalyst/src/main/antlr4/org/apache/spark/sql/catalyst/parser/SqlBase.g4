@@ -592,7 +592,7 @@ functionIdentifier
     ;
 
 namedExpression
-    : expression (AS? (identifier | identifierList))?
+    : expression (AS? (identifier | STRING | identifierList))?
     ;
 
 namedExpressionSeq

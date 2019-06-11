@@ -1030,6 +1030,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val e = expression(ctx.expression)
     if (ctx.identifier != null) {
       Alias(e, ctx.identifier.getText)()
+    } else if (ctx.STRING() != null) {
+      Alias(e, ctx.STRING().getText)()
     } else if (ctx.identifierList != null) {
       MultiAlias(e, visitIdentifierList(ctx.identifierList))
     } else {
