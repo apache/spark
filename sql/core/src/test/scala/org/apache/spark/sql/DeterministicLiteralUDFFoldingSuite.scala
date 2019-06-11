@@ -64,4 +64,29 @@ class DeterministicLiteralUDFFoldingSuite extends QueryTest with SharedSQLContex
       }
     }
   }
+
+  test("udf folding rule in join") {
+    withTempView("temp1") {
+      val df = sparkContext.parallelize((1 to 5).map(i => i.toString)).toDF("i1")
+      df.createOrReplaceTempView("temp1")
+      val foo = udf((x: String, i: Int) => x.length + i)
+      spark.udf.register("mystrlen1", foo)
+      assert(foo.deterministic)
+
+      val query = "SELECT mystrlen1(i1, 1) FROM temp1, " +
+        "(SELECT mystrlen1('abc', mystrlen1('c', 1)) AS ref) WHERE mystrlen1(i1, ref) > 1"
+      assert(sql(query).count() == 5)
+
+      withSQLConf(SQLConf.DETERMINISTIC_LITERAL_UDF_FOLDING_ENABLED.key -> "true") {
+        val exception = intercept[AnalysisException] {
+          sql(query).count()
+        }
+        assert(exception.message.startsWith("Detected implicit cartesian product"))
+
+        withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+          assert(sql(query).count() == 5)
+        }
+      }
+    }
+  }
 }
