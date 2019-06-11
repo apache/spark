@@ -160,7 +160,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         nondeterministic_pandas_iter_udf = self.spark.catalog.registerFunction(
             "randomPandasIterUDF", random_pandas_iter_udf)
         self.assertEqual(nondeterministic_pandas_iter_udf.deterministic, False)
-        self.assertEqual(nondeterministic_pandas_iter_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)
+        self.assertEqual(nondeterministic_pandas_iter_udf.evalType,
+                         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)
         [row] = self.spark.sql("SELECT randomPandasIterUDF(1)").collect()
         self.assertEqual(row[0], 7)
 
@@ -323,7 +324,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for id in it:
                 yield pd.DataFrame({'id': id, 'str': id.apply(unicode)})
 
-        for func, udf_type in [(scalar_func, PandasUDFType.SCALAR), (iter_func, PandasUDFType.SCALAR_ITER)]:
+        for func, udf_type in [(scalar_func, PandasUDFType.SCALAR),
+                               (iter_func, PandasUDFType.SCALAR_ITER)]:
             f = pandas_udf(func, returnType=return_type, functionType=udf_type)
 
             expected = df.select(struct(col('id'), col('id').cast('string').alias('str'))
@@ -405,7 +407,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for x, y in it:
                 yield x * y
 
-        for add, power2, mul in [(scalar_add, scalar_power2, scalar_mul), (iter_add, iter_power2, iter_mul)]:
+        for add, power2, mul in [(scalar_add, scalar_power2, scalar_mul),
+                                 (iter_add, iter_power2, iter_mul)]:
             res = df.select(add(col('a'), col('b')), power2(col('a')), mul(col('b'), col('c')))
             expected = df.select(expr('a + b'), expr('power(2, a)'), expr('b * c'))
             self.assertEquals(expected.collect(), res.collect())
@@ -450,8 +453,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         scalar_f = pandas_udf(lambda x: x + 1, LongType())
         scalar_g = pandas_udf(lambda x: x - 1, LongType())
 
-        iter_f = pandas_udf(lambda it: map(lambda x: x + 1, it), LongType(), PandasUDFType.SCALAR_ITER)
-        iter_g = pandas_udf(lambda it: map(lambda x: x - 1, it), LongType(), PandasUDFType.SCALAR_ITER)
+        iter_f = pandas_udf(lambda it: map(lambda x: x + 1, it), LongType(),
+                            PandasUDFType.SCALAR_ITER)
+        iter_g = pandas_udf(lambda it: map(lambda x: x - 1, it), LongType(),
+                            PandasUDFType.SCALAR_ITER)
 
         for f, g in [(scalar_f, scalar_g), (iter_f, iter_g)]:
             res = df.select(g(f(col('id'))))
@@ -494,7 +499,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
     def test_vectorized_udf_return_scalar(self):
         df = self.spark.range(10)
         scalar_f = pandas_udf(lambda x: 1.0, DoubleType())
-        iter_f = pandas_udf(lambda it: map(lambda x: 1.0, it), DoubleType(), PandasUDFType.SCALAR_ITER)
+        iter_f = pandas_udf(lambda it: map(lambda x: 1.0, it), DoubleType(),
+                            PandasUDFType.SCALAR_ITER)
         for f in [scalar_f, iter_f]:
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(Exception, 'Return.*type.*Series'):
@@ -552,7 +558,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 yield v[0]
 
         for f in [scalar_f, iter_f]:
-            res = df.select(f(col('id')))
+            res = df.select(f(col('id'), col('id')))
             self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_unsupported_types(self):
@@ -565,7 +571,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 with self.assertRaisesRegexp(
                         NotImplementedError,
                         'Invalid returnType.*scalar Pandas UDF.*ArrayType.StructType'):
-                    pandas_udf(lambda x: x, ArrayType(StructType([StructField('a', IntegerType())])), udf_type)
+                    pandas_udf(lambda x: x,
+                               ArrayType(StructType([StructField('a', IntegerType())])), udf_type)
 
     def test_vectorized_udf_dates(self):
         schema = StructType().add("idx", LongType()).add("date", DateType())
@@ -594,7 +601,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 yield scalar_check_data(idx, date, date_copy)
 
         pandas_scalar_check_data = pandas_udf(scalar_check_data, StringType())
-        pandas_iter_check_data = pandas_udf(iter_check_data, StringType(), PandasUDFType.SCALAR_ITER)
+        pandas_iter_check_data = pandas_udf(iter_check_data, StringType(),
+                                            PandasUDFType.SCALAR_ITER)
 
         for check_data, udf_type in [(pandas_scalar_check_data, PandasUDFType.SCALAR),
                                      (pandas_iter_check_data, PandasUDFType.SCALAR_ITER)]:
@@ -639,12 +647,15 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 yield scalar_check_data(idx, timestamp, timestamp_copy)
 
         pandas_scalar_check_data = pandas_udf(scalar_check_data, StringType())
-        pandas_iter_check_data = pandas_udf(iter_check_data, StringType(), PandasUDFType.SCALAR_ITER)
+        pandas_iter_check_data = pandas_udf(iter_check_data, StringType(),
+                                            PandasUDFType.SCALAR_ITER)
 
         for check_data, udf_type in [(pandas_scalar_check_data, PandasUDFType.SCALAR),
                                      (pandas_iter_check_data, PandasUDFType.SCALAR_ITER)]:
-            # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
-            f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType(), functionType=udf_type)
+            # Check that a timestamp passed through a pandas_udf will not be altered by timezone
+            # calc
+            f_timestamp_copy = pandas_udf(lambda t: t,
+                                          returnType=TimestampType(), functionType=udf_type)
             df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
             result = df.withColumn("check_data", check_data(col("idx"), col("timestamp"),
                                                             col("timestamp_copy"))).collect()
@@ -691,7 +702,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 for x in it:
                     yield pd.Series(x.size).repeat(x.size)
 
-            for check_records_per_batch in [scalar_check_records_per_batch, iter_check_records_per_batch]:
+            for check_records_per_batch in [scalar_check_records_per_batch,
+                                            iter_check_records_per_batch]:
                 result = df.select(check_records_per_batch(col("id"))).collect()
                 for (r,) in result:
                     self.assertTrue(r <= 3)
@@ -715,7 +727,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 yield ts.apply(lambda ts: ts.value if ts is not pd.NaT else None)
 
         for internal_value, udf_type in [(scalar_internal_value, PandasUDFType.SCALAR),
-                                     (iter_internal_value, PandasUDFType.SCALAR_ITER)]:
+                                         (iter_internal_value, PandasUDFType.SCALAR_ITER)]:
             f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType(), udf_type)
             timezone = "America/New_York"
             with self.sql_conf({
@@ -761,7 +773,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     def test_nondeterministic_vectorized_udf_in_aggregate(self):
         df = self.spark.range(10)
-        for random_udf in [self.nondeterministic_vectorized_udf, self.nondeterministic_vectorized_iter_udf]:
+        for random_udf in [self.nondeterministic_vectorized_udf,
+                           self.nondeterministic_vectorized_iter_udf]:
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
                     df.groupby(df.id).agg(sum(random_udf(df.id))).collect()
@@ -833,9 +846,15 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return x + 1
 
         @pandas_udf('int')
-        def f2(x):
+        def f2s(x):
             assert type(x) == pd.Series
             return x + 10
+
+        @pandas_udf('int', PandasUDFType.SCALAR_ITER)
+        def f2i(it):
+            for x in it:
+                assert type(x) == pd.Series
+                yield x + 10
 
         @udf('int')
         def f3(x):
@@ -843,66 +862,23 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return x + 100
 
         @pandas_udf('int')
-        def f4(x):
+        def f4s(x):
             assert type(x) == pd.Series
             return x + 1000
 
-        # Test single expression with chained UDFs
-        df_chained_1 = df.withColumn('f2_f1', f2(f1(df['v'])))
-        df_chained_2 = df.withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
-        df_chained_3 = df.withColumn('f4_f3_f2_f1', f4(f3(f2(f1(df['v'])))))
-        df_chained_4 = df.withColumn('f4_f2_f1', f4(f2(f1(df['v']))))
-        df_chained_5 = df.withColumn('f4_f3_f1', f4(f3(f1(df['v']))))
+        @pandas_udf('int', PandasUDFType.SCALAR_ITER)
+        def f4i(it):
+            for x in it:
+                assert type(x) == pd.Series
+                yield x + 1000
 
-        expected_chained_1 = df.withColumn('f2_f1', df['v'] + 11)
-        expected_chained_2 = df.withColumn('f3_f2_f1', df['v'] + 111)
-        expected_chained_3 = df.withColumn('f4_f3_f2_f1', df['v'] + 1111)
-        expected_chained_4 = df.withColumn('f4_f2_f1', df['v'] + 1011)
-        expected_chained_5 = df.withColumn('f4_f3_f1', df['v'] + 1101)
+        expected_chained_1 = df.withColumn('f2_f1', df['v'] + 11).collect()
+        expected_chained_2 = df.withColumn('f3_f2_f1', df['v'] + 111).collect()
+        expected_chained_3 = df.withColumn('f4_f3_f2_f1', df['v'] + 1111).collect()
+        expected_chained_4 = df.withColumn('f4_f2_f1', df['v'] + 1011).collect()
+        expected_chained_5 = df.withColumn('f4_f3_f1', df['v'] + 1101).collect()
 
-        self.assertEquals(expected_chained_1.collect(), df_chained_1.collect())
-        self.assertEquals(expected_chained_2.collect(), df_chained_2.collect())
-        self.assertEquals(expected_chained_3.collect(), df_chained_3.collect())
-        self.assertEquals(expected_chained_4.collect(), df_chained_4.collect())
-        self.assertEquals(expected_chained_5.collect(), df_chained_5.collect())
-
-        # Test multiple mixed UDF expressions in a single projection
-        df_multi_1 = df \
-            .withColumn('f1', f1(col('v'))) \
-            .withColumn('f2', f2(col('v'))) \
-            .withColumn('f3', f3(col('v'))) \
-            .withColumn('f4', f4(col('v'))) \
-            .withColumn('f2_f1', f2(col('f1'))) \
-            .withColumn('f3_f1', f3(col('f1'))) \
-            .withColumn('f4_f1', f4(col('f1'))) \
-            .withColumn('f3_f2', f3(col('f2'))) \
-            .withColumn('f4_f2', f4(col('f2'))) \
-            .withColumn('f4_f3', f4(col('f3'))) \
-            .withColumn('f3_f2_f1', f3(col('f2_f1'))) \
-            .withColumn('f4_f2_f1', f4(col('f2_f1'))) \
-            .withColumn('f4_f3_f1', f4(col('f3_f1'))) \
-            .withColumn('f4_f3_f2', f4(col('f3_f2'))) \
-            .withColumn('f4_f3_f2_f1', f4(col('f3_f2_f1')))
-
-        # Test mixed udfs in a single expression
-        df_multi_2 = df \
-            .withColumn('f1', f1(col('v'))) \
-            .withColumn('f2', f2(col('v'))) \
-            .withColumn('f3', f3(col('v'))) \
-            .withColumn('f4', f4(col('v'))) \
-            .withColumn('f2_f1', f2(f1(col('v')))) \
-            .withColumn('f3_f1', f3(f1(col('v')))) \
-            .withColumn('f4_f1', f4(f1(col('v')))) \
-            .withColumn('f3_f2', f3(f2(col('v')))) \
-            .withColumn('f4_f2', f4(f2(col('v')))) \
-            .withColumn('f4_f3', f4(f3(col('v')))) \
-            .withColumn('f3_f2_f1', f3(f2(f1(col('v'))))) \
-            .withColumn('f4_f2_f1', f4(f2(f1(col('v'))))) \
-            .withColumn('f4_f3_f1', f4(f3(f1(col('v'))))) \
-            .withColumn('f4_f3_f2', f4(f3(f2(col('v'))))) \
-            .withColumn('f4_f3_f2_f1', f4(f3(f2(f1(col('v'))))))
-
-        expected = df \
+        expected_multi = df \
             .withColumn('f1', df['v'] + 1) \
             .withColumn('f2', df['v'] + 10) \
             .withColumn('f3', df['v'] + 100) \
@@ -917,10 +893,61 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f4_f2_f1', df['v'] + 1011) \
             .withColumn('f4_f3_f1', df['v'] + 1101) \
             .withColumn('f4_f3_f2', df['v'] + 1110) \
-            .withColumn('f4_f3_f2_f1', df['v'] + 1111)
+            .withColumn('f4_f3_f2_f1', df['v'] + 1111) \
+            .collect()
 
-        self.assertEquals(expected.collect(), df_multi_1.collect())
-        self.assertEquals(expected.collect(), df_multi_2.collect())
+        for f2, f4 in [(f2s, f4s), (f2s, f4i), (f2i, f4s), (f2i, f4i)]:
+            # Test single expression with chained UDFs
+            df_chained_1 = df.withColumn('f2_f1', f2(f1(df['v'])))
+            df_chained_2 = df.withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
+            df_chained_3 = df.withColumn('f4_f3_f2_f1', f4(f3(f2(f1(df['v'])))))
+            df_chained_4 = df.withColumn('f4_f2_f1', f4(f2(f1(df['v']))))
+            df_chained_5 = df.withColumn('f4_f3_f1', f4(f3(f1(df['v']))))
+
+            self.assertEquals(expected_chained_1, df_chained_1.collect())
+            self.assertEquals(expected_chained_2, df_chained_2.collect())
+            self.assertEquals(expected_chained_3, df_chained_3.collect())
+            self.assertEquals(expected_chained_4, df_chained_4.collect())
+            self.assertEquals(expected_chained_5, df_chained_5.collect())
+
+            # Test multiple mixed UDF expressions in a single projection
+            df_multi_1 = df \
+                .withColumn('f1', f1(col('v'))) \
+                .withColumn('f2', f2(col('v'))) \
+                .withColumn('f3', f3(col('v'))) \
+                .withColumn('f4', f4(col('v'))) \
+                .withColumn('f2_f1', f2(col('f1'))) \
+                .withColumn('f3_f1', f3(col('f1'))) \
+                .withColumn('f4_f1', f4(col('f1'))) \
+                .withColumn('f3_f2', f3(col('f2'))) \
+                .withColumn('f4_f2', f4(col('f2'))) \
+                .withColumn('f4_f3', f4(col('f3'))) \
+                .withColumn('f3_f2_f1', f3(col('f2_f1'))) \
+                .withColumn('f4_f2_f1', f4(col('f2_f1'))) \
+                .withColumn('f4_f3_f1', f4(col('f3_f1'))) \
+                .withColumn('f4_f3_f2', f4(col('f3_f2'))) \
+                .withColumn('f4_f3_f2_f1', f4(col('f3_f2_f1')))
+
+            # Test mixed udfs in a single expression
+            df_multi_2 = df \
+                .withColumn('f1', f1(col('v'))) \
+                .withColumn('f2', f2(col('v'))) \
+                .withColumn('f3', f3(col('v'))) \
+                .withColumn('f4', f4(col('v'))) \
+                .withColumn('f2_f1', f2(f1(col('v')))) \
+                .withColumn('f3_f1', f3(f1(col('v')))) \
+                .withColumn('f4_f1', f4(f1(col('v')))) \
+                .withColumn('f3_f2', f3(f2(col('v')))) \
+                .withColumn('f4_f2', f4(f2(col('v')))) \
+                .withColumn('f4_f3', f4(f3(col('v')))) \
+                .withColumn('f3_f2_f1', f3(f2(f1(col('v'))))) \
+                .withColumn('f4_f2_f1', f4(f2(f1(col('v'))))) \
+                .withColumn('f4_f3_f1', f4(f3(f1(col('v'))))) \
+                .withColumn('f4_f3_f2', f4(f3(f2(col('v'))))) \
+                .withColumn('f4_f3_f2_f1', f4(f3(f2(f1(col('v'))))))
+
+            self.assertEquals(expected_multi, df_multi_1.collect())
+            self.assertEquals(expected_multi, df_multi_2.collect())
 
     def test_mixed_udf_and_sql(self):
         df = self.spark.range(0, 1).toDF('v')
@@ -937,25 +964,15 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return x + 10
 
         @pandas_udf('int')
-        def f3(x):
+        def f3s(x):
             assert type(x) == pd.Series
             return x + 100
 
-        df1 = df.withColumn('f1', f1(df['v'])) \
-            .withColumn('f2', f2(df['v'])) \
-            .withColumn('f3', f3(df['v'])) \
-            .withColumn('f1_f2', f1(f2(df['v']))) \
-            .withColumn('f1_f3', f1(f3(df['v']))) \
-            .withColumn('f2_f1', f2(f1(df['v']))) \
-            .withColumn('f2_f3', f2(f3(df['v']))) \
-            .withColumn('f3_f1', f3(f1(df['v']))) \
-            .withColumn('f3_f2', f3(f2(df['v']))) \
-            .withColumn('f1_f2_f3', f1(f2(f3(df['v'])))) \
-            .withColumn('f1_f3_f2', f1(f3(f2(df['v'])))) \
-            .withColumn('f2_f1_f3', f2(f1(f3(df['v'])))) \
-            .withColumn('f2_f3_f1', f2(f3(f1(df['v'])))) \
-            .withColumn('f3_f1_f2', f3(f1(f2(df['v'])))) \
-            .withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
+        @pandas_udf('int', PandasUDFType.SCALAR_ITER)
+        def f3i(it):
+            for x in it:
+                assert type(x) == pd.Series
+                yield x + 100
 
         expected = df.withColumn('f1', df['v'] + 1) \
             .withColumn('f2', df['v'] + 10) \
@@ -971,9 +988,27 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f2_f1_f3', df['v'] + 111) \
             .withColumn('f2_f3_f1', df['v'] + 111) \
             .withColumn('f3_f1_f2', df['v'] + 111) \
-            .withColumn('f3_f2_f1', df['v'] + 111)
+            .withColumn('f3_f2_f1', df['v'] + 111) \
+            .collect()
 
-        self.assertEquals(expected.collect(), df1.collect())
+        for f3 in [f3s, f3i]:
+            df1 = df.withColumn('f1', f1(df['v'])) \
+                .withColumn('f2', f2(df['v'])) \
+                .withColumn('f3', f3(df['v'])) \
+                .withColumn('f1_f2', f1(f2(df['v']))) \
+                .withColumn('f1_f3', f1(f3(df['v']))) \
+                .withColumn('f2_f1', f2(f1(df['v']))) \
+                .withColumn('f2_f3', f2(f3(df['v']))) \
+                .withColumn('f3_f1', f3(f1(df['v']))) \
+                .withColumn('f3_f2', f3(f2(df['v']))) \
+                .withColumn('f1_f2_f3', f1(f2(f3(df['v'])))) \
+                .withColumn('f1_f3_f2', f1(f3(f2(df['v'])))) \
+                .withColumn('f2_f1_f3', f2(f1(f3(df['v'])))) \
+                .withColumn('f2_f3_f1', f2(f3(f1(df['v'])))) \
+                .withColumn('f3_f1_f2', f3(f1(f2(df['v'])))) \
+                .withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
+
+            self.assertEquals(expected, df1.collect())
 
     # SPARK-24721
     @unittest.skipIf(not test_compiled, test_not_compiled_message)
