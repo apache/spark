@@ -30,6 +30,7 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.ResourceUtils._
+import org.apache.spark.TestResourceIDs._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
@@ -1249,13 +1250,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskGpus = 1
     val executorGpus = 4
     val executorCpus = 4
-    val gpuTaskResourceID = ResourceID(config.SPARK_TASK_PREFIX, GPU)
-    val gpuExecResourceID = ResourceID(config.SPARK_EXECUTOR_PREFIX, GPU)
 
     val taskScheduler = setupScheduler(numCores = executorCpus,
       config.CPUS_PER_TASK.key -> taskCpus.toString,
-      resourceAmountConfigName(gpuTaskResourceID) -> taskGpus.toString,
-      resourceAmountConfigName(gpuExecResourceID) -> executorGpus.toString,
+      TASK_GPU_ID.amountConf -> taskGpus.toString,
+      EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
       config.EXECUTOR_CORES.key -> executorCpus.toString)
     val taskSet = FakeTask.createTaskSet(3)
 

@@ -36,13 +36,22 @@ import org.apache.spark.util.Utils.executeAndGetOutput
  */
 private[spark] case class ResourceID(componentName: String, resourceName: String) {
   def confPrefix: String = s"$componentName.resource.$resourceName." // with ending dot
+  def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
+  def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
+  def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
 }
 
 private[spark] case class ResourceRequest(
     id: ResourceID,
-    count: Int,
+    amount: Int,
     discoveryScript: Option[String],
-    vendor: Option[String])
+    vendor: Option[String]) {
+  def toSparkConfEntries: Seq[(String, String)] = {
+    Seq(id.amountConf -> amount.toString) ++
+      discoveryScript.map(id.discoveryScriptConf -> _) ++
+      vendor.map(id.vendorConf -> _)
+  }
+}
 
 private[spark] case class TaskResourceRequirement(resourceName: String, count: Int)
 
@@ -147,10 +156,10 @@ private[spark] object ResourceUtils extends Logging {
   def assertResourceAllocationMeetsRequest(
       allocation: ResourceAllocation,
       request: ResourceRequest): Unit = {
-    require(allocation.id == request.id && allocation.addresses.size >= request.count,
+    require(allocation.id == request.id && allocation.addresses.size >= request.amount,
       s"Resource: ${allocation.id.resourceName}, with addresses: " +
       s"${allocation.addresses.mkString(",")} " +
-      s"is less than what the user requested: ${request.count})")
+      s"is less than what the user requested: ${request.amount})")
   }
 
   def assertAllResourceAllocationsMeetRequests(
@@ -199,62 +208,8 @@ private[spark] object ResourceUtils extends Logging {
     result
   }
 
-  def resourceAmountConfigName(id: ResourceID): String = s"${id.confPrefix}$AMOUNT"
-
-  def resourceDiscoveryScriptConfigName(id: ResourceID): String = {
-    s"${id.confPrefix}$DISCOVERY_SCRIPT"
-  }
-
-  def resourceVendorConfigName(id: ResourceID): String = s"${id.confPrefix}$VENDOR"
-
-  def setResourceAmountConf(conf: SparkConf, id: ResourceID, value: String) {
-    conf.set(resourceAmountConfigName(id), value)
-  }
-
-  def setResourceDiscoveryScriptConf(conf: SparkConf, id: ResourceID, value: String) {
-    conf.set(resourceDiscoveryScriptConfigName(id), value)
-  }
-
-  def setResourceVendorConf(conf: SparkConf, id: ResourceID, value: String) {
-    conf.set(resourceVendorConfigName(id), value)
-  }
-
-  def setDriverResourceAmountConf(conf: SparkConf, resourceName: String, value: String): Unit = {
-    val resourceId = ResourceID(SPARK_DRIVER_PREFIX, resourceName)
-    setResourceAmountConf(conf, resourceId, value)
-  }
-
-  def setDriverResourceDiscoveryConf(conf: SparkConf, resourceName: String, value: String): Unit = {
-    val resourceId = ResourceID(SPARK_DRIVER_PREFIX, resourceName)
-    setResourceDiscoveryScriptConf(conf, resourceId, value)
-  }
-
-  def setDriverResourceVendorConf(conf: SparkConf, resourceName: String, value: String): Unit = {
-    val resourceId = ResourceID(SPARK_DRIVER_PREFIX, resourceName)
-    setResourceVendorConf(conf, resourceId, value)
-  }
-
-  def setExecutorResourceAmountConf(conf: SparkConf, resourceName: String, value: String): Unit = {
-    val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, resourceName)
-    setResourceAmountConf(conf, resourceId, value)
-  }
-
-  def setExecutorResourceDiscoveryConf(
-      conf: SparkConf,
-      resourceName: String,
-      value: String): Unit = {
-    val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, resourceName)
-    setResourceDiscoveryScriptConf(conf, resourceId, value)
-  }
-
-  def setExecutorResourceVendorConf(conf: SparkConf, resourceName: String, value: String): Unit = {
-    val resourceId = ResourceID(SPARK_EXECUTOR_PREFIX, resourceName)
-    setResourceVendorConf(conf, resourceId, value)
-  }
-
-  def setTaskResourceAmountConf(conf: SparkConf, resourceName: String, value: String): Unit = {
-    val resourceId = ResourceID(SPARK_TASK_PREFIX, resourceName)
-    setResourceAmountConf(conf, resourceId, value)
+  def setResourceRequestConf(conf: SparkConf, request: ResourceRequest): Unit = {
+    conf.setAll(request.toSparkConfEntries)
   }
 
   // known types of resources

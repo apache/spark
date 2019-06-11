@@ -35,6 +35,7 @@ import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.ResourceUtils._
+import org.apache.spark.TestResourceIDs._
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
@@ -744,8 +745,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val conf = new SparkConf()
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
-      setDriverResourceAmountConf(conf, GPU, "1")
-      setDriverResourceDiscoveryConf(conf, GPU, scriptPath)
+      conf.set(DRIVER_GPU_ID.amountConf, "1")
+      conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
@@ -765,7 +766,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         """'{"name": "gpu","addresses":["5", "6"]}'""")
 
       val gpusAllocated =
-        ResourceAllocation(ResourceID(SPARK_DRIVER_PREFIX, GPU), Seq("0", "1", "8"))
+        ResourceAllocation(DRIVER_GPU_ID, Seq("0", "1", "8"))
       val ja = JArray(List(gpusAllocated.toJson))
       val resourcesFile = writeJsonToFile(dir, ja)
 
@@ -773,8 +774,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(DRIVER_RESOURCES_FILE, resourcesFile)
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
-      setDriverResourceAmountConf(conf, GPU, "1")
-      setDriverResourceDiscoveryConf(conf, GPU, scriptPath)
+      conf.set(DRIVER_GPU_ID.amountConf, "1")
+      conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
 
       sc = new SparkContext(conf)
 
@@ -793,7 +794,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
-    setTaskResourceAmountConf(conf, GPU, "1")
+    conf.set(TASK_GPU_ID.amountConf, "1")
 
     var error = intercept[SparkException] {
       sc = new SparkContext(conf)
@@ -808,8 +809,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
-    setTaskResourceAmountConf(conf, GPU, "2")
-    setExecutorResourceAmountConf(conf, GPU, "1")
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "1")
 
     var error = intercept[SparkException] {
       sc = new SparkContext(conf)
@@ -824,8 +825,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
-    setTaskResourceAmountConf(conf, GPU, "2")
-    setExecutorResourceAmountConf(conf, GPU, "4")
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "4")
 
     var error = intercept[SparkException] {
       sc = new SparkContext(conf)
@@ -848,9 +849,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val conf = new SparkConf()
         .setMaster("local-cluster[3, 3, 1024]")
         .setAppName("test-cluster")
-      setTaskResourceAmountConf(conf, GPU, "1")
-      setExecutorResourceAmountConf(conf, GPU, "3")
-      setExecutorResourceDiscoveryConf(conf, GPU, discoveryScript)
+      conf.set(TASK_GPU_ID.amountConf, "1")
+      conf.set(EXECUTOR_GPU_ID.amountConf, "3")
+      conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, discoveryScript)
 
       sc = new SparkContext(conf)
 
