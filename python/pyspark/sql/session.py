@@ -636,6 +636,10 @@ class SparkSession(object):
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
+        .. note:: When Arrow optimization is enabled, strings of Pandas DataFrame in Python 2 are
+            converted into bytes as they are bytes in Python 2 whereas PySpark takes them as
+            strings. When using strings in Python 2, use unicode `u""` as Python standard practice.
+
         :param data: an RDD of any kind of SQL data representation(e.g. row, tuple, int, boolean,
             etc.), or :class:`list`, or :class:`pandas.DataFrame`.
         :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
