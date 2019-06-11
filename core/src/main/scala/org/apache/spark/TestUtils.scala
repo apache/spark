@@ -38,6 +38,7 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.log4j.PropertyConfigurator
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -193,6 +194,20 @@ private[spark] object TestUtils {
   }
 
   /**
+   * Asserts that exception message contains the message. Please note this checks all
+   * exceptions in the tree.
+   */
+  def assertExceptionMsg(exception: Throwable, msg: String): Unit = {
+    var e = exception
+    var contains = e.getMessage.contains(msg)
+    while (e.getCause != null && !contains) {
+      e = e.getCause
+      contains = e.getMessage.contains(msg)
+    }
+    assert(contains, s"Exception tree doesn't contain the expected message: $msg")
+  }
+
+  /**
    * Test if a command is available.
    */
   def testCommandAvailable(command: String): Boolean = {
@@ -297,6 +312,16 @@ private[spark] object TestUtils {
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 
+  /**
+   * Set task resource requirement.
+   */
+  def setTaskResourceRequirement(
+      conf: SparkConf,
+      resourceName: String,
+      resourceCount: Int): SparkConf = {
+    val key = s"${SPARK_TASK_RESOURCE_PREFIX}${resourceName}${SPARK_RESOURCE_AMOUNT_SUFFIX}"
+    conf.set(key, resourceCount.toString)
+  }
 }
 
 

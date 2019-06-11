@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, LessThanOrEqual, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LeafNode, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Project}
-import org.apache.spark.sql.types.{DoubleType, FloatType, StructField, StructType}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types._
 
 class V2AppendDataAnalysisSuite extends DataSourceV2AnalysisSuite {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
@@ -102,6 +102,12 @@ class V2OverwriteByExpressionAnalysisSuite extends DataSourceV2AnalysisSuite {
 
 case class TestRelation(output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
   override def name: String = "table-name"
+}
+
+case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
+  extends LeafNode with NamedRelation {
+  override def name: String = "test-name"
+  override def skipSchemaResolution: Boolean = true
 }
 
 abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
@@ -444,6 +450,64 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Cannot write incompatible data to table", "'table-name'",
       "Cannot write nullable values to non-null column", "'x'",
       "Cannot safely cast", "'x'", "DoubleType to FloatType"))
+  }
+
+  test("bypass output column resolution") {
+    val table = TestRelationAcceptAnySchema(StructType(Seq(
+      StructField("a", FloatType, nullable = false),
+      StructField("b", DoubleType))).toAttributes)
+
+    val query = TestRelation(StructType(Seq(
+      StructField("s", StringType))).toAttributes)
+
+    withClue("byName") {
+      val parsedPlan = byName(table, query)
+      assertResolved(parsedPlan)
+      checkAnalysis(parsedPlan, parsedPlan)
+    }
+
+    withClue("byPosition") {
+      val parsedPlan = byPosition(table, query)
+      assertResolved(parsedPlan)
+      checkAnalysis(parsedPlan, parsedPlan)
+    }
+  }
+
+  test("check fields of struct type column") {
+    val tableWithStructCol = TestRelation(
+      new StructType().add(
+        "col", new StructType().add("a", IntegerType).add("b", IntegerType)
+      ).toAttributes
+    )
+
+    val query = TestRelation(
+      new StructType().add(
+        "col", new StructType().add("x", IntegerType).add("y", IntegerType)
+      ).toAttributes
+    )
+
+    withClue("byName") {
+      val parsedPlan = byName(tableWithStructCol, query)
+      assertNotResolved(parsedPlan)
+      assertAnalysisError(parsedPlan, Seq(
+        "Cannot write incompatible data to table", "'table-name'",
+        "Struct 'col' 0-th field name does not match", "expected 'a', found 'x'",
+        "Struct 'col' 1-th field name does not match", "expected 'b', found 'y'"))
+    }
+
+    withClue("byPosition") {
+      val parsedPlan = byPosition(tableWithStructCol, query)
+      assertNotResolved(parsedPlan)
+
+      val expectedQuery = Project(Seq(Alias(
+        Cast(
+          query.output.head,
+          new StructType().add("a", IntegerType).add("b", IntegerType),
+          Some(conf.sessionLocalTimeZone)),
+        "col")()),
+        query)
+      checkAnalysis(parsedPlan, byPosition(tableWithStructCol, expectedQuery))
+    }
   }
 
   def assertNotResolved(logicalPlan: LogicalPlan): Unit = {

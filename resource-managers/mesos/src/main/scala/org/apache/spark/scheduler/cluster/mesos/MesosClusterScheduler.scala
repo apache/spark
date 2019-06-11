@@ -33,7 +33,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.internal.config._
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.util.Utils
 
 /**
@@ -124,13 +124,13 @@ private[spark] class MesosClusterScheduler(
   extends Scheduler with MesosSchedulerUtils {
   var frameworkUrl: String = _
   private val metricsSystem =
-    MetricsSystem.createMetricsSystem("mesos_cluster", conf, new SecurityManager(conf))
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MESOS_CLUSTER, conf,
+      new SecurityManager(conf))
   private val master = conf.get("spark.master")
   private val appName = conf.get("spark.app.name")
   private val queuedCapacity = conf.get(config.MAX_DRIVERS)
   private val retainedDrivers = conf.get(config.RETAINED_DRIVERS)
   private val maxRetryWaitTime = conf.get(config.CLUSTER_RETRY_WAIT_MAX_SECONDS)
-  private val useFetchCache = conf.get(config.ENABLE_FETCHER_CACHE)
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   // Keyed by submission id
@@ -427,6 +427,8 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
+    val useFetchCache = desc.conf.get(config.ENABLE_FETCHER_CACHE) ||
+        conf.get(config.ENABLE_FETCHER_CACHE)
     val confUris = (conf.get(config.URIS_TO_DOWNLOAD) ++
       desc.conf.get(config.URIS_TO_DOWNLOAD) ++
       desc.conf.get(SUBMIT_PYTHON_FILES)).toList
@@ -458,7 +460,7 @@ private[spark] class MesosClusterScheduler(
     containerInfo
   }
 
-  private def getDriverCommandValue(desc: MesosDriverDescription): String = {
+  private[mesos] def getDriverCommandValue(desc: MesosDriverDescription): String = {
     val dockerDefined = desc.conf.contains(config.EXECUTOR_DOCKER_IMAGE)
     val executorUri = getDriverExecutorURI(desc)
     // Gets the path to run spark-submit, and the path to the Mesos sandbox.
@@ -498,7 +500,7 @@ private[spark] class MesosClusterScheduler(
       }
     }
 
-    val appArguments = desc.command.arguments.mkString(" ")
+    val appArguments = desc.command.arguments.map(shellEscape).mkString(" ")
 
     s"$executable $cmdOptions $primaryResource $appArguments"
   }
@@ -539,7 +541,7 @@ private[spark] class MesosClusterScheduler(
     // --conf
     val replicatedOptionsBlacklist = Set(
       JARS.key, // Avoids duplicate classes in classpath
-      "spark.submit.deployMode", // this would be set to `cluster`, but we need client
+      SUBMIT_DEPLOY_MODE.key, // this would be set to `cluster`, but we need client
       "spark.master" // this contains the address of the dispatcher, not master
     )
     val defaultConf = conf.getAllWithPrefix(config.DISPATCHER_DRIVER_DEFAULT_PREFIX).toMap
@@ -764,6 +766,10 @@ private[spark] class MesosClusterScheduler(
         val state = launchedDrivers(subId)
         // Check if the driver is supervise enabled and can be relaunched.
         if (state.driverDescription.supervise && shouldRelaunch(status.getState)) {
+          if (isTaskOutdated(taskId, state)) {
+            // Prevent outdated task from overwriting a more recent status
+            return
+          }
           removeFromLaunchedDrivers(subId)
           state.finishDate = Some(new Date())
           val retryState: Option[MesosClusterRetryState] = state.driverDescription.retryState
@@ -783,6 +789,16 @@ private[spark] class MesosClusterScheduler(
       }
     }
   }
+
+  /**
+   * Check if the task is outdated i.e. has already been launched or is pending
+   * If neither, the taskId is outdated and should be ignored
+   * This is to avoid scenarios where an outdated status update arrives
+   * after a supervised driver has already been relaunched
+   */
+  private def isTaskOutdated(taskId: String, state: MesosClusterSubmissionState): Boolean =
+    taskId != state.taskId.getValue &&
+      !pendingRetryDrivers.exists(_.submissionId == state.driverDescription.submissionId)
 
   private def retireDriver(
       submissionId: String,

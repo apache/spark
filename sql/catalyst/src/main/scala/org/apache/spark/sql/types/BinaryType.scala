@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
@@ -37,11 +36,8 @@ class BinaryType private() extends AtomicType {
 
   @transient private[sql] lazy val tag = typeTag[InternalType]
 
-  private[sql] val ordering = new Ordering[InternalType] {
-    def compare(x: Array[Byte], y: Array[Byte]): Int = {
-      TypeUtils.compareBinary(x, y)
-    }
-  }
+  private[sql] val ordering =
+    (x: Array[Byte], y: Array[Byte]) => TypeUtils.compareBinary(x, y)
 
   /**
    * The default size of a value of the BinaryType is 100 bytes.

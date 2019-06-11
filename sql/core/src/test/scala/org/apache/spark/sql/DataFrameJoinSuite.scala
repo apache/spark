@@ -84,6 +84,18 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.join(df2, Seq("int", "str"), "left_semi"),
       Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "semi"),
+      Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "left_anti"),
+      Row(3, "3", 4) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int", "str"), "anti"),
+      Row(3, "3", 4) :: Nil)
   }
 
   test("join - join using self join") {

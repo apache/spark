@@ -326,7 +326,6 @@ class UDFTests(ReusedSQLTestCase):
         my_copy = udf(lambda x: x, IntegerType())
         df = self.spark.range(10).orderBy("id")
         res = df.select(df.id, my_copy(df.id).alias("copy")).limit(1)
-        res.explain(True)
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
     def test_udf_registration_returns_udf(self):
@@ -599,6 +598,13 @@ class UDFTests(ReusedSQLTestCase):
             sql = self.spark.sql
             result = sql("select i from values(0L) as data(i) where i in (select id from v)")
             self.assertEqual(result.collect(), [Row(i=0)])
+
+    def test_udf_globals_not_overwritten(self):
+        @udf('string')
+        def f():
+            assert "itertools" not in str(map)
+
+        self.spark.range(1).select(f()).collect()
 
 
 class UDFInitializationTests(unittest.TestCase):

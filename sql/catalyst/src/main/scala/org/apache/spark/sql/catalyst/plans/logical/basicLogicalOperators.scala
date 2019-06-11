@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -229,10 +231,25 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     }
   }
 
+  def duplicateResolved: Boolean = {
+    children.map(_.outputSet.size).sum ==
+      AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
+  }
+
   // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] =
-    children.map(_.output).transpose.map(attrs =>
-      attrs.head.withNullability(attrs.exists(_.nullable)))
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -376,14 +393,50 @@ trait V2WriteCommand extends Command {
   override lazy val resolved: Boolean = outputResolved
 
   def outputResolved: Boolean = {
-    table.resolved && query.resolved && query.output.size == table.output.size &&
+    // If the table doesn't require schema match, we don't need to resolve the output columns.
+    table.skipSchemaResolution || {
+      table.resolved && query.resolved && query.output.size == table.output.size &&
         query.output.zip(table.output).forall {
           case (inAttr, outAttr) =>
             // names and types must match, nullability must be compatible
             inAttr.name == outAttr.name &&
-                DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
-                (outAttr.nullable || !inAttr.nullable)
+              DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+              (outAttr.nullable || !inAttr.nullable)
         }
+    }
+  }
+}
+
+/**
+ * Create a new table with a v2 catalog.
+ */
+case class CreateV2Table(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    properties: Map[String, String],
+    ignoreIfExists: Boolean) extends Command
+
+/**
+ * Create a new table from a select query with a v2 catalog.
+ */
+case class CreateTableAsSelect(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    partitioning: Seq[Transform],
+    query: LogicalPlan,
+    properties: Map[String, String],
+    writeOptions: Map[String, String],
+    ignoreIfExists: Boolean) extends Command {
+
+  override def children: Seq[LogicalPlan] = Seq(query)
+
+  override lazy val resolved: Boolean = {
+    // the table schema is created from the query schema, so the only resolution needed is to check
+    // that the columns referenced by the table's partitioning exist in the query schema
+    val references = partitioning.flatMap(_.references).toSet
+    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
   }
 }
 
@@ -445,6 +498,14 @@ object OverwritePartitionsDynamic {
     OverwritePartitionsDynamic(table, query, isByName = false)
   }
 }
+
+/**
+ * Drop a table.
+ */
+case class DropTable(
+    catalog: TableCatalog,
+    ident: Identifier,
+    ifExists: Boolean) extends Command
 
 
 /**
@@ -1039,7 +1100,11 @@ case class OneRowRelation() extends LeafNode {
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
-  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = OneRowRelation()
+  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = {
+    val newCopy = OneRowRelation()
+    newCopy.copyTagsFrom(this)
+    newCopy
+  }
 }
 
 /** A logical plan for `dropDuplicates`. */

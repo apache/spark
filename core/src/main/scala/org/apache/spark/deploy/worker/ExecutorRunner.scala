@@ -45,6 +45,7 @@ private[deploy] class ExecutorRunner(
     val memory: Int,
     val worker: RpcEndpointRef,
     val workerId: String,
+    val webUiScheme: String,
     val host: String,
     val webUiPort: Int,
     val publicAddress: String,
@@ -77,8 +78,8 @@ private[deploy] class ExecutorRunner(
     // Shutdown hook that kills actors on shutdown.
     shutdownHook = ShutdownHookManager.addShutdownHook { () =>
       // It's possible that we arrive here before calling `fetchAndRunExecutor`, then `state` will
-      // be `ExecutorState.RUNNING`. In this case, we should set `state` to `FAILED`.
-      if (state == ExecutorState.RUNNING) {
+      // be `ExecutorState.LAUNCHING`. In this case, we should set `state` to `FAILED`.
+      if (state == ExecutorState.LAUNCHING) {
         state = ExecutorState.FAILED
       }
       killProcess(Some("Worker shutting down")) }
@@ -165,7 +166,7 @@ private[deploy] class ExecutorRunner(
         if (conf.get(UI_REVERSE_PROXY)) {
           s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
         } else {
-          s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
+          s"$webUiScheme$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
         }
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
@@ -182,6 +183,8 @@ private[deploy] class ExecutorRunner(
       Files.write(header, stderr, StandardCharsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
+      state = ExecutorState.RUNNING
+      worker.send(ExecutorStateChanged(appId, execId, state, None, None))
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
       // or with nonzero exit code
       val exitCode = process.waitFor()

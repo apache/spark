@@ -20,19 +20,26 @@ package org.apache.spark
 import java.io.File
 import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files => JavaFiles}
+import java.nio.file.attribute.PosixFilePermission._
+import java.util.EnumSet
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.json4s.JsonAST.JArray
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.ResourceName.GPU
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
@@ -671,7 +678,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // task metrics via heartbeat to driver.
       .set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key, "false")
       // Set a short heartbeat interval to send SparkListenerExecutorMetricsUpdate fast
-      .set("spark.executor.heartbeatInterval", "1s")
+      .set(EXECUTOR_HEARTBEAT_INTERVAL.key, "1s")
     sc = new SparkContext(conf)
     sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
     @volatile var runningTaskIds: Seq[Long] = null
@@ -708,6 +715,187 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       assert(runningTaskIds != null)
       // Verify there is no running task.
       assert(runningTaskIds.isEmpty)
+    }
+  }
+
+  test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
+    val FAIL_REASON = s"has to be >= the task config: ${CPUS_PER_TASK.key}"
+    Seq(
+      ("local", 2, None),
+      ("local[2]", 3, None),
+      ("local[2, 1]", 3, None),
+      ("spark://test-spark-cluster", 2, Option(1)),
+      ("local-cluster[1, 1, 1000]", 2, Option(1)),
+      ("yarn", 2, Option(1))
+    ).foreach { case (master, cpusPerTask, executorCores) =>
+      val conf = new SparkConf()
+      conf.set(CPUS_PER_TASK, cpusPerTask)
+      executorCores.map(executorCores => conf.set(EXECUTOR_CORES, executorCores))
+      val ex = intercept[SparkException] {
+        sc = new SparkContext(master, "test", conf)
+      }
+      assert(ex.getMessage.contains(FAIL_REASON))
+      resetSparkContext()
+    }
+  }
+
+  test("test gpu driver discovery under local-cluster mode") {
+    withTempDir { dir =>
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val scriptPath = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu","addresses":["5", "6"]}'""")
+
+      val conf = new SparkConf()
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + GPU +
+          SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + GPU +
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
+        .setMaster("local-cluster[1, 1, 1024]")
+        .setAppName("test-cluster")
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.size == 1)
+      }
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))
+      assert(sc.resources.get(GPU).get.name === "gpu")
+    }
+  }
+
+  private def writeJsonFile(dir: File, strToWrite: JArray): String = {
+    val f1 = File.createTempFile("test-resource-parser1", "", dir)
+    JavaFiles.write(f1.toPath(), compact(render(strToWrite)).getBytes())
+    f1.getPath()
+  }
+
+  test("test gpu driver resource files and discovery under local-cluster mode") {
+    withTempDir { dir =>
+      val gpuFile = new File(dir, "gpuDiscoverScript")
+      val scriptPath = mockDiscoveryScript(gpuFile,
+        """'{"name": "gpu","addresses":["5", "6"]}'""")
+
+      val gpusAllocated =
+        ("name" -> "gpu") ~
+        ("addresses" -> Seq("0", "1", "8"))
+      val ja = JArray(List(gpusAllocated))
+      val resourcesFile = writeJsonFile(dir, ja)
+
+      val conf = new SparkConf()
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + GPU +
+          SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
+        .set(SPARK_DRIVER_RESOURCE_PREFIX + GPU +
+          SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
+        .set(DRIVER_RESOURCES_FILE, resourcesFile)
+        .setMaster("local-cluster[1, 1, 1024]")
+        .setAppName("test-cluster")
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.size == 1)
+      }
+      // driver gpu addresses config should take precedence over the script
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get(GPU).get.addresses === Array("0", "1", "8"))
+      assert(sc.resources.get(GPU).get.name === "gpu")
+    }
+  }
+
+  test("Test parsing resources task configs with missing executor config") {
+    val conf = new SparkConf()
+      .set(SPARK_TASK_RESOURCE_PREFIX + GPU +
+        SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount " +
+      "needs to be specified since a task requirement config: spark.task.resource.gpu.amount " +
+      "was specified"))
+  }
+
+  test("Test parsing resources executor config < task requirements") {
+    val conf = new SparkConf()
+      .set(SPARK_TASK_RESOURCE_PREFIX + GPU +
+        SPARK_RESOURCE_AMOUNT_SUFFIX, "2")
+      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU +
+        SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The executor resource config: " +
+      "spark.executor.resource.gpu.amount = 1 has to be >= the task config: " +
+      "spark.task.resource.gpu.amount = 2"))
+  }
+
+  test("Parse resources executor config not the same multiple numbers of the task requirements") {
+    val conf = new SparkConf()
+      .set(SPARK_TASK_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_AMOUNT_SUFFIX, "2")
+      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_AMOUNT_SUFFIX, "4")
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The configuration of resource: gpu (exec = 4, task = 2) will result " +
+      "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
+      "executor to: 1. Please adjust your configuration."))
+  }
+
+  def mockDiscoveryScript(file: File, result: String): String = {
+    Files.write(s"echo $result", file, StandardCharsets.UTF_8)
+    JavaFiles.setPosixFilePermissions(file.toPath(),
+      EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+    file.getPath()
+  }
+
+  test("test resource scheduling under local-cluster mode") {
+    import org.apache.spark.TestUtils._
+
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val resourceFile = new File(dir, "resourceDiscoverScript")
+      val resources = """'{"name": "gpu", "addresses": ["0", "1", "2"]}'"""
+      Files.write(s"echo $resources", resourceFile, StandardCharsets.UTF_8)
+      JavaFiles.setPosixFilePermissions(resourceFile.toPath(),
+        EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+      val discoveryScript = resourceFile.getPath()
+
+      val conf = new SparkConf()
+        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX}",
+          discoveryScript)
+        .setMaster("local-cluster[3, 3, 1024]")
+        .setAppName("test-cluster")
+      setTaskResourceRequirement(conf, GPU, 1)
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      eventually(timeout(60.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.size == 3)
+      }
+
+      val rdd = sc.makeRDD(1 to 10, 9).mapPartitions { it =>
+        val context = TaskContext.get()
+        context.resources().get(GPU).get.addresses.iterator
+      }
+      val gpus = rdd.collect()
+      assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
+
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+      }
     }
   }
 }

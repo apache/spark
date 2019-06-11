@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection, WalkedTypePath}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
@@ -80,7 +80,11 @@ object ExpressionEncoder {
    * name/positional binding is preserved.
    */
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
-    // TODO: check if encoders length is more than 22 and throw exception for it.
+    if (encoders.length > 22) {
+      throw new UnsupportedOperationException("Due to Scala's limited support of tuple, " +
+        "tuple with more than 22 elements are not supported.")
+    }
+
     encoders.foreach(_.assertUnresolved())
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
@@ -242,7 +246,7 @@ case class ExpressionEncoder[T](
   }
 
   // The schema after converting `T` to a Spark SQL row. This schema is dependent on the given
-  // serialier.
+  // serializer.
   val schema: StructType = StructType(serializer.map { s =>
     StructField(s.name, s.dataType, s.nullable)
   })

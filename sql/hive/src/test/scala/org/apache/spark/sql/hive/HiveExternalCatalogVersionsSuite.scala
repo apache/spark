@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import scala.sys.process._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
@@ -69,7 +70,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
           case _: Exception => None
         }
       }
-    val sites = mirrors.distinct :+ "https://archive.apache.org/dist"
+    val sites =
+      mirrors.distinct :+ "https://archive.apache.org/dist" :+ PROCESS_TABLES.releaseMirror
     logInfo(s"Trying to download Spark $version from $sites")
     for (site <- sites) {
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
@@ -169,6 +171,10 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       """.stripMargin.getBytes("utf8"))
     // scalastyle:on line.size.limit
 
+    if (PROCESS_TABLES.testingVersions.isEmpty) {
+      fail("Fail to get the lates Spark versions to test.")
+    }
+
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
       if (!sparkHome.exists()) {
@@ -180,6 +186,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--master", "local[2]",
         "--conf", "spark.ui.enabled=false",
         "--conf", "spark.master.rest.enabled=false",
+        "--conf", "spark.sql.hive.metastore.version=1.2.1",
+        "--conf", "spark.sql.hive.metastore.jars=maven",
         "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
@@ -197,6 +205,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--master", "local[2]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--conf", "spark.sql.hive.metastore.version=1.2.1",
+      "--conf", "spark.sql.hive.metastore.jars=maven",
       "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
       unusedJar.toString)
@@ -205,8 +215,21 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+  val releaseMirror = "https://dist.apache.org/repos/dist/release"
   // Tests the latest version of every release line.
-  val testingVersions = Seq("2.3.3", "2.4.0")
+  val testingVersions: Seq[String] = {
+    import scala.io.Source
+    try {
+      Source.fromURL(s"${releaseMirror}/spark").mkString
+        .split("\n")
+        .filter(_.contains("""<li><a href="spark-"""))
+        .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
+        .filter(_ < org.apache.spark.SPARK_VERSION)
+    } catch {
+      // do not throw exception during object initialization.
+      case NonFatal(_) => Nil
+    }
+  }
 
   protected var spark: SparkSession = _
 

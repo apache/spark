@@ -203,7 +203,7 @@ object StatFunctions extends Logging {
         // row.get(0) is column 1
         // row.get(1) is column 2
         // row.get(2) is the frequency
-        val columnIndex = distinctCol2.get(cleanElement(row.get(1))).get
+        val columnIndex = distinctCol2(cleanElement(row.get(1)))
         countsRow.setLong(columnIndex + 1, row.getLong(2))
       }
       // the value of col1 is the first value, the rest are the counts

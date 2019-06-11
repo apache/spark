@@ -253,7 +253,7 @@ abstract class Expression extends TreeNode[Expression] {
   def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
   protected def flatArguments: Iterator[Any] = productIterator.flatMap {
-    case t: Traversable[_] => t
+    case t: Iterable[_] => t
     case single => single :: Nil
   }
 
@@ -627,7 +627,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   def sqlOperator: String = symbol
 
-  override def toString: String = s"($left $symbol $right)"
+  override def toString: String = s"($left $sqlOperator $right)"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 

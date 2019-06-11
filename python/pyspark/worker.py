@@ -38,13 +38,15 @@ from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowStreamPandasSerializer
-from pyspark.sql.types import to_arrow_type
+    BatchedSerializer, ArrowStreamPandasUDFSerializer
+from pyspark.sql.types import to_arrow_type, StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
 
 if sys.version >= '3':
     basestring = str
+else:
+    from itertools import imap as map  # use iterator map by default
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -90,8 +92,9 @@ def wrap_scalar_pandas_udf(f, return_type):
     def verify_result_length(*a):
         result = f(*a)
         if not hasattr(result, "__len__"):
+            pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
             raise TypeError("Return type of the user-defined function should be "
-                            "Pandas.Series, but is {}".format(type(result)))
+                            "{}, but is {}".format(pd_type, type(result)))
         if len(result) != len(a[0]):
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
                                "expected %d, got %d" % (len(a[0]), len(result)))
@@ -100,10 +103,7 @@ def wrap_scalar_pandas_udf(f, return_type):
     return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
-def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
-    assign_cols_by_name = runner_conf.get(
-        "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")
-    assign_cols_by_name = assign_cols_by_name.lower() == "true"
+def wrap_grouped_map_pandas_udf(f, return_type, argspec):
 
     def wrapped(key_series, value_series):
         import pandas as pd
@@ -122,15 +122,9 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema. "
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
+        return result
 
-        # Assign result columns by schema name if user labeled with strings, else use position
-        if assign_cols_by_name and any(isinstance(name, basestring) for name in result.columns):
-            return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
-        else:
-            return [(result[result.columns[i]], to_arrow_type(field.dataType))
-                    for i, field in enumerate(return_type)]
-
-    return wrapped
+    return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
 
 
 def wrap_grouped_agg_pandas_udf(f, return_type):
@@ -224,7 +218,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = _get_argspec(row_func)  # signature was lost when wrapping it
-        return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
+        return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
@@ -254,7 +248,16 @@ def read_udfs(pickleSer, infile, eval_type):
         timezone = runner_conf.get("spark.sql.session.timeZone", None)
         safecheck = runner_conf.get("spark.sql.execution.pandas.arrowSafeTypeConversion",
                                     "false").lower() == 'true'
-        ser = ArrowStreamPandasSerializer(timezone, safecheck)
+        # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
+        assign_cols_by_name = runner_conf.get(
+            "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")\
+            .lower() == "true"
+
+        # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
+        # pandas Series. See SPARK-27240.
+        df_for_struct = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+        ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name,
+                                             df_for_struct)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 

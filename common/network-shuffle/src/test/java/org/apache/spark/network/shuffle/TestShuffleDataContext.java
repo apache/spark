@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.UUID;
 
 import com.google.common.io.Closeables;
 import com.google.common.io.Files;
@@ -97,13 +96,36 @@ public class TestShuffleDataContext {
 
   /** Creates spill file(s) within the local dirs. */
   public void insertSpillData() throws IOException {
-    String filename = "temp_local_" + UUID.randomUUID();
-    OutputStream dataStream = null;
+    String filename = "temp_local_uuid";
+    insertFile(filename);
+  }
 
+  public void insertBroadcastData() throws IOException {
+    String filename = "broadcast_12_uuid";
+    insertFile(filename);
+  }
+
+  public void insertTempShuffleData() throws IOException {
+    String filename = "temp_shuffle_uuid";
+    insertFile(filename);
+  }
+
+  public void insertCachedRddData(int rddId, int splitId, byte[] block) throws IOException {
+    String blockId = "rdd_" + rddId + "_" + splitId;
+    insertFile(blockId, block);
+  }
+
+  private void insertFile(String filename) throws IOException {
+    insertFile(filename, new byte[] { 42 });
+  }
+
+  private void insertFile(String filename, byte[] block) throws IOException {
+    OutputStream dataStream = null;
+    File file = ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename);
+    assert(!file.exists()) : "this test file has been already generated";
     try {
-      dataStream = new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename));
-      dataStream.write(42);
+      dataStream = new FileOutputStream(file);
+      dataStream.write(block);
     } finally {
       Closeables.close(dataStream, false);
     }

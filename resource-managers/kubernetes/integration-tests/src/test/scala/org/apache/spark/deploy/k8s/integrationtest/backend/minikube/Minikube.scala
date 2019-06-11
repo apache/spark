@@ -34,6 +34,10 @@ private[spark] object Minikube extends Logging {
   private val MINIKUBE_PREFIX = "minikube: "
   private val MINIKUBE_PATH = ".minikube"
 
+  def logVersion(): Unit = {
+    logInfo(executeMinikube("version").mkString("\n"))
+  }
+
   def getMinikubeIp: String = {
     val outputs = executeMinikube("ip")
       .filter(_.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"))
@@ -108,7 +112,12 @@ private[spark] object Minikube extends Logging {
 
   private def executeMinikube(action: String, args: String*): Seq[String] = {
     ProcessUtils.executeProcess(
-      Array("bash", "-c", s"minikube $action") ++ args, MINIKUBE_STARTUP_TIMEOUT_SECONDS)
+      Array("bash", "-c", s"minikube $action ${args.mkString(" ")}"),
+      MINIKUBE_STARTUP_TIMEOUT_SECONDS)
+  }
+
+  def minikubeServiceAction(args: String*): String = {
+    executeMinikube("service", args: _*).head
   }
 }
 

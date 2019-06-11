@@ -71,11 +71,9 @@ class ThreadUtilsSuite extends SparkFunSuite {
       keepAliveSeconds = 2)
     try {
       for (_ <- 1 to maxThreadNumber) {
-        cachedThreadPool.execute(new Runnable {
-          override def run(): Unit = {
-            startThreadsLatch.countDown()
-            latch.await(10, TimeUnit.SECONDS)
-          }
+        cachedThreadPool.execute(() => {
+          startThreadsLatch.countDown()
+          latch.await(10, TimeUnit.SECONDS)
         })
       }
       startThreadsLatch.await(10, TimeUnit.SECONDS)
@@ -84,11 +82,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
 
       // Submit a new task and it should be put into the queue since the thread number reaches the
       // limitation
-      cachedThreadPool.execute(new Runnable {
-        override def run(): Unit = {
-          latch.await(10, TimeUnit.SECONDS)
-        }
-      })
+      cachedThreadPool.execute(() => latch.await(10, TimeUnit.SECONDS))
 
       assert(cachedThreadPool.getActiveCount === maxThreadNumber)
       assert(cachedThreadPool.getQueue.size === 1)

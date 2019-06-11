@@ -84,9 +84,17 @@ object RankingMetricsExample {
     // Mean average precision
     println(s"Mean average precision = ${metrics.meanAveragePrecision}")
 
+    // Mean average precision at k
+    println(s"Mean average precision at 2 = ${metrics.meanAveragePrecisionAt(2)}")
+
     // Normalized discounted cumulative gain
     Array(1, 3, 5).foreach { k =>
       println(s"NDCG at $k = ${metrics.ndcgAt(k)}")
+    }
+
+    // Recall at K
+    Array(1, 3, 5).foreach { k =>
+      println(s"Recall at $k = ${metrics.recallAt(k)}")
     }
 
     // Get predictions for each data point

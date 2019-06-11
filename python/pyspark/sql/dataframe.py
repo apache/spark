@@ -28,7 +28,7 @@ else:
 import warnings
 
 from pyspark import copy_func, since, _NoValue
-from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
+from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket, ignore_unicode_prefix
 from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -528,7 +528,7 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.toPythonIterator()
-        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
+        return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -795,9 +795,9 @@ class DataFrame(object):
 
         >>> df = spark.range(10)
         >>> df.sample(0.5, 3).count()
-        4
+        7
         >>> df.sample(fraction=0.5, seed=3).count()
-        4
+        7
         >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
         1
         >>> df.sample(1.0).count()
@@ -865,8 +865,8 @@ class DataFrame(object):
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    5|
-        |  1|    9|
+        |  0|    3|
+        |  1|    6|
         +---+-----+
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
@@ -898,10 +898,10 @@ class DataFrame(object):
 
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
         >>> splits[0].count()
-        1
+        2
 
         >>> splits[1].count()
-        3
+        2
         """
         for w in weights:
             if w < 0.0:
@@ -1000,8 +1000,9 @@ class DataFrame(object):
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
-            ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
-            ``left_semi``, and ``left_anti``.
+            ``full``, ``fullouter``, ``full_outer``, ``left``, ``leftouter``, ``left_outer``,
+            ``right``, ``rightouter``, ``right_outer``, ``semi``, ``leftsemi``, ``left_semi``,
+            ``anti``, ``leftanti`` and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
@@ -1973,6 +1974,11 @@ class DataFrame(object):
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
 
+        .. note:: This method introduces a projection internally. Therefore, calling it multiple
+            times, for instance, via loops in order to add multiple columns can generate big
+            plans which can cause performance issues and even `StackOverflowException`.
+            To avoid this, use :func:`select` with the multiple columns at once.
+
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
 
@@ -2081,7 +2087,7 @@ class DataFrame(object):
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
-        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
@@ -2098,7 +2104,7 @@ class DataFrame(object):
         else:
             timezone = None
 
-        if self.sql_ctx._conf.arrowEnabled():
+        if self.sql_ctx._conf.arrowPySparkEnabled():
             use_arrow = True
             try:
                 from pyspark.sql.types import to_arrow_schema
@@ -2108,37 +2114,39 @@ class DataFrame(object):
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if self.sql_ctx._conf.arrowFallbackEnabled():
+                if self.sql_ctx._conf.arrowPySparkFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
                         "failed by the reason below:\n  %s\n"
                         "Attempting non-optimization as "
-                        "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % _exception_message(e))
                     warnings.warn(msg)
                     use_arrow = False
                 else:
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                        "the error below and will not continue because automatic fallback "
-                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                        "reached the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
                         "false.\n  %s" % _exception_message(e))
                     warnings.warn(msg)
                     raise
 
             # Try to use Arrow optimization when the schema is supported and the required version
-            # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
+            # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.types import _arrow_table_to_pandas, \
-                        _check_dataframe_localize_timestamps
+                    from pyspark.sql.types import _check_dataframe_localize_timestamps
                     import pyarrow
                     batches = self._collectAsArrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
-                        pdf = _arrow_table_to_pandas(table, self.schema)
+                        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+                        # values, but we should use datetime.date to match the behavior with when
+                        # Arrow optimization is disabled.
+                        pdf = table.to_pandas(date_as_object=True)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
@@ -2147,10 +2155,11 @@ class DataFrame(object):
                     # be executed. So, simply fail in this case for now.
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                        "the error below and can not continue. Note that "
-                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
-                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                        "reached the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' does not have an "
+                        "effect on failures in the middle of "
+                        "computation.\n  %s" % _exception_message(e))
                     warnings.warn(msg)
                     raise
 

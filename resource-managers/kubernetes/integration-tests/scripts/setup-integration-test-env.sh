@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+set -ex
 TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
 UNPACKED_SPARK_TGZ="$TEST_ROOT_DIR/target/spark-dist-unpacked"
 IMAGE_TAG_OUTPUT_FILE="$TEST_ROOT_DIR/target/image-tag.txt"
@@ -58,50 +59,59 @@ while (( "$#" )); do
   shift
 done
 
-if [[ $SPARK_TGZ == "N/A" ]];
+rm -rf "$UNPACKED_SPARK_TGZ"
+if [[ $SPARK_TGZ == "N/A" && $IMAGE_TAG == "N/A" ]];
 then
-  echo "Must specify a Spark tarball to build Docker images against with --spark-tgz." && exit 1;
+  # If there is no spark image tag to test with and no src dir, build from current
+  SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+  SPARK_INPUT_DIR="$(cd "$SCRIPT_DIR/"../../../../  >/dev/null 2>&1 && pwd )"
+  DOCKER_FILE_BASE_PATH="$SPARK_INPUT_DIR/resource-managers/kubernetes/docker/src/main/dockerfiles/spark"
+elif [[ $IMAGE_TAG == "N/A" ]];
+then
+  # If there is a test src tarball and no image tag we will want to build from that
+  mkdir -p $UNPACKED_SPARK_TGZ
+  tar -xzvf $SPARK_TGZ --strip-components=1 -C $UNPACKED_SPARK_TGZ;
+  SPARK_INPUT_DIR="$UNPACKED_SPARK_TGZ"
+  DOCKER_FILE_BASE_PATH="$SPARK_INPUT_DIR/kubernetes/dockerfiles/spark"
 fi
 
-rm -rf $UNPACKED_SPARK_TGZ
-mkdir -p $UNPACKED_SPARK_TGZ
-tar -xzvf $SPARK_TGZ --strip-components=1 -C $UNPACKED_SPARK_TGZ;
 
+# If there is a specific Spark image skip building and extraction/copy
 if [[ $IMAGE_TAG == "N/A" ]];
 then
   IMAGE_TAG=$(uuidgen);
-  cd $UNPACKED_SPARK_TGZ
+  cd $SPARK_INPUT_DIR
 
   # Build PySpark image
-  LANGUAGE_BINDING_BUILD_ARGS="-p $UNPACKED_SPARK_TGZ/kubernetes/dockerfiles/spark/bindings/python/Dockerfile"
+  LANGUAGE_BINDING_BUILD_ARGS="-p $DOCKER_FILE_BASE_PATH/bindings/python/Dockerfile"
 
-  # Build SparkR image
-  LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $UNPACKED_SPARK_TGZ/kubernetes/dockerfiles/spark/bindings/R/Dockerfile"
+  # Build SparkR image -- disabled since this fails, re-enable as part of SPARK-25152
+  # LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
 
   case $DEPLOY_MODE in
     cloud)
       # Build images
-      $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+      $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
 
       # Push images appropriately
       if [[ $IMAGE_REPO == gcr.io* ]] ;
       then
         gcloud docker -- push $IMAGE_REPO/spark:$IMAGE_TAG
       else
-        $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG push
+        $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG push
       fi
       ;;
 
     docker-for-desktop)
        # Only need to build as this will place it in our local Docker repo which is all
        # we need for Docker for Desktop to work so no need to also push
-       $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+       $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
        ;;
 
     minikube)
        # Only need to build and if we do this with the -m option for minikube we will
        # build the images directly using the minikube Docker daemon so no need to push
-       $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
+       $SPARK_INPUT_DIR/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG $LANGUAGE_BINDING_BUILD_ARGS build
        ;;
     *)
        echo "Unrecognized deploy mode $DEPLOY_MODE" && exit 1
