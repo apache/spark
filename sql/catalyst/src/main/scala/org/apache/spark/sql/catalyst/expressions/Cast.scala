@@ -126,7 +126,6 @@ object Cast {
    */
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
-
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f: NumericType, t: NumericType) if legalNumericPrecedence(f, t) => true
