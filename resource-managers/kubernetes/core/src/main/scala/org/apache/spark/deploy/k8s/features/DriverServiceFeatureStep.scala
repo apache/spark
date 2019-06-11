@@ -39,14 +39,15 @@ private[spark] class DriverServiceFeatureStep(
       "managed via a Kubernetes service.")
 
   private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
-  private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
+  private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH
+    && Character.isLetter(preferredServiceName.charAt(0))) {
     preferredServiceName
   } else {
     val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
     val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
     logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
-      s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
-      s"$shorterServiceName as the driver service's name.")
+      s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters) or is not a valid service name." +
+      s"Falling back to use $shorterServiceName as the driver service's name.")
     shorterServiceName
   }
 
