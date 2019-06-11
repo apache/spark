@@ -45,13 +45,7 @@ private[spark] case class ResourceRequest(
     id: ResourceID,
     amount: Int,
     discoveryScript: Option[String],
-    vendor: Option[String]) {
-  def toSparkConfEntries: Seq[(String, String)] = {
-    Seq(id.amountConf -> amount.toString) ++
-      discoveryScript.map(id.discoveryScriptConf -> _) ++
-      vendor.map(id.vendorConf -> _)
-  }
-}
+    vendor: Option[String])
 
 private[spark] case class TaskResourceRequirement(resourceName: String, count: Int)
 
@@ -208,10 +202,6 @@ private[spark] object ResourceUtils extends Logging {
         s"resource name: ${result.name} and we were expecting $resourceName")
     }
     result
-  }
-
-  def setResourceRequestConf(conf: SparkConf, request: ResourceRequest): Unit = {
-    conf.setAll(request.toSparkConfEntries)
   }
 
   // known types of resources
