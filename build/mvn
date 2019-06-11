@@ -134,12 +134,6 @@ install_scala() {
 # the environment
 ZINC_PORT=${ZINC_PORT:-"3030"}
 
-# Remove `--force` for backward compatibility.
-if [ "$1" == "--force" ]; then
-  echo "WARNING: '--force' is deprecated and ignored."
-  shift
-fi
-
 # Install the proper version of Scala, Zinc and Maven for the build
 install_zinc
 install_scala
