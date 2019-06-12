@@ -661,7 +661,7 @@ primaryExpression
 
 defaultValueExpression
     : constant
-    | (functionName=('CURRENT_DATE' | 'CURRENT_TIMESTAMP'))('()')?
+    | (functionName=('CURRENT_DATE' | 'CURRENT_TIMESTAMP'))('(' + ')')?
     ;
 
 constant
