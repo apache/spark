@@ -17,6 +17,12 @@
 
 package org.apache.spark.resource
 
+import scala.util.control.NonFatal
+
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods._
+
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
 
 /**
@@ -34,4 +40,26 @@ class ResourceInformation(
     val addresses: Array[String]) extends Serializable {
 
   override def toString: String = s"[name: ${name}, addresses: ${addresses.mkString(",")}]"
+}
+
+private[spark] object ResourceInformation {
+  /**
+   * Parses a JSON string into a [[ResourceInformation]] instance.
+   */
+  def parseJson(json: String): ResourceInformation = {
+    implicit val formats = DefaultFormats
+    try {
+      parse(json).extract[ResourceInformationJson].toResourceInformation
+    } catch {
+      case NonFatal(e) =>
+        throw new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n", e)
+    }
+  }
+}
+
+/** A case class to simplify JSON serialization of [[ResourceInformation]]. */
+private case class ResourceInformationJson(name: String, addresses: Seq[String]) {
+  def toResourceInformation: ResourceInformation = {
+    new ResourceInformation(name, addresses.toArray)
+  }
 }

@@ -17,10 +17,12 @@
 
 package org.apache.spark.resource
 
-import java.io.{BufferedInputStream, File, FileInputStream}
+import java.io.File
+import java.nio.file.{Files, Paths}
 
-import com.fasterxml.jackson.databind.exc.MismatchedInputException
-import org.json4s.{DefaultFormats, MappingException}
+import scala.util.control.NonFatal
+
+import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -70,12 +72,7 @@ private[spark] object ResourceUtils extends Logging {
   // internally we currently only support addresses, so its just an integer count
   val AMOUNT = "amount"
 
-  // case class to make extracting the JSON resource information easy
-  private case class JsonResourceInformation(name: String, addresses: Seq[String]) {
-    def toResourceInformation: ResourceInformation = {
-      new ResourceInformation(name, addresses.toArray)
-    }
-  }
+
 
   def parseResourceRequest(sparkConf: SparkConf, resourceId: ResourceID): ResourceRequest = {
     val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
@@ -109,24 +106,12 @@ private[spark] object ResourceUtils extends Logging {
 
   private def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
     implicit val formats = DefaultFormats
-    val resourceInput = new BufferedInputStream(new FileInputStream(resourcesFile))
+    val json = new String(Files.readAllBytes(Paths.get(resourcesFile)))
     try {
-      parse(resourceInput).extract[Seq[ResourceAllocation]]
+      parse(json).extract[Seq[ResourceAllocation]]
     } catch {
-      case e@(_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
-        throw new SparkException(s"Exception parsing the resources in $resourcesFile", e)
-    } finally {
-      resourceInput.close()
-    }
-  }
-
-  private def parseResourceInformationFromJson(resourcesJson: String): ResourceInformation = {
-    implicit val formats = DefaultFormats
-    try {
-      parse(resourcesJson).extract[JsonResourceInformation].toResourceInformation
-    } catch {
-      case e@(_: MappingException | _: MismatchedInputException | _: ClassCastException) =>
-        throw new SparkException(s"Exception parsing the resources in $resourcesJson", e)
+      case NonFatal(e) =>
+        throw new SparkException(s"error parsing resources file $resourcesFile", e)
     }
   }
 
@@ -187,7 +172,7 @@ private[spark] object ResourceUtils extends Logging {
       // check that script exists and try to execute
       if (scriptFile.exists()) {
         val output = executeAndGetOutput(Seq(script.get), new File("."))
-        parseResourceInformationFromJson(output)
+        ResourceInformation.parseJson(output)
       } else {
         throw new SparkException(s"Resource script: $scriptFile to discover $resourceName " +
           "doesn't exist!")
