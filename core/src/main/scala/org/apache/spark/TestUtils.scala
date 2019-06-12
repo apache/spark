@@ -38,7 +38,7 @@ import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.log4j.PropertyConfigurator
-import org.json4s.JsonAST.JArray
+import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
@@ -316,7 +316,7 @@ private[spark] object TestUtils {
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 
-  def writeJsonToFile(dir: File, strToWrite: JArray): String = {
+  def writeJsonToFile(dir: File, strToWrite: JValue): String = {
     val f1 = File.createTempFile("jsonResourceFile", "", dir)
     JavaFiles.write(f1.toPath(), compact(render(strToWrite)).getBytes())
     f1.getPath()

@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.json4s.JsonAST.JArray
+import org.json4s.{DefaultFormats, Extraction}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
@@ -765,9 +765,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val scriptPath = writeStringToFileAndSetPermissions(gpuFile,
         """'{"name": "gpu","addresses":["5", "6"]}'""")
 
+      implicit val formats = DefaultFormats
       val gpusAllocated =
         ResourceAllocation(DRIVER_GPU_ID, Seq("0", "1", "8"))
-      val ja = JArray(List(gpusAllocated.toJson))
+      val ja = Extraction.decompose(Seq(gpusAllocated))
       val resourcesFile = writeJsonToFile(dir, ja)
 
       val conf = new SparkConf()

@@ -21,8 +21,6 @@ import java.io.{BufferedInputStream, File, FileInputStream}
 
 import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import org.json4s.{DefaultFormats, MappingException}
-import org.json4s.JsonAST.JObject
-import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
@@ -49,16 +47,16 @@ private[spark] case class ResourceRequest(
 
 private[spark] case class TaskResourceRequirement(resourceName: String, amount: Int)
 
+/**
+ * Case class representing allocated resource addresses for a specific resource.
+ * Cluster manager uses the JSON serialization of this case class to pass allocated resource info to
+ * driver and executors.
+ *
+ * @see [[org.apache.spark.executor.CoarseGrainedExecutorBackend.resourcesFileOpt]]
+ */
 private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[String]) {
   def toResourceInfo: ResourceInformation = {
     new ResourceInformation(id.resourceName, addresses.toArray)
-  }
-
-  def toJson: JObject = {
-    ("id" ->
-      ("componentName" -> id.componentName) ~
-      ("resourceName" -> id.resourceName)) ~
-    ("addresses" -> addresses)
   }
 }
 
