@@ -144,12 +144,12 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
       .toDF("id", "col_name", "col_subject")
 
     val studentNF = NodeFrame(
-      initialDf = studentDF,
+      df = studentDF,
       idColumn = "id",
       labelSet = Set("Person", "Student"),
       properties = Map("name" -> "col_name", "age" -> "col_age"))
     val teacherNF = NodeFrame(
-      initialDf = teacherDF,
+      df = teacherDF,
       idColumn = "id",
       labelSet = Set("Person", "Teacher"),
       properties = Map("name" -> "col_name", "subject" -> "col_subject"))
@@ -159,7 +159,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
     val teachesDF = spark.createDataFrame(Seq((1, 2, 1))).toDF("id", "source", "target")
 
     val knowsRF = RelationshipFrame(
-      initialDf = knowsDF,
+      df = knowsDF,
       idColumn = "id",
       sourceIdColumn = "source",
       targetIdColumn = "target",
@@ -260,7 +260,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
         "subject",
         "age")
 
-    checkAnswer(nodeFrame.initialDf, expectedNodeDf)
+    checkAnswer(nodeFrame.df, expectedNodeDf)
   }
 
   test("select nodes via specific label set") {
@@ -270,7 +270,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
       .createDataFrame(Seq((2L, true, true, Some("Carol"), Some("CS"))))
       .toDF(ID_COLUMN, label("Person"), label("Teacher"), "name", "subject")
 
-    checkAnswer(nodeFrame.initialDf, expectedNodeDf)
+    checkAnswer(nodeFrame.df, expectedNodeDf)
   }
 
   test("select relationships via type") {
@@ -285,7 +285,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
           (3L, 3L, 0L, true),
           (4L, 3L, 1L, true)))
       .toDF(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN, label("KNOWS"))
-    checkAnswer(relationshipFrame.initialDf, expectedRelDf)
+    checkAnswer(relationshipFrame.df, expectedRelDf)
   }
 
   private def label(label: String): String = s"$LABEL_COLUMN_PREFIX$label"

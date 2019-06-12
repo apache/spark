@@ -67,7 +67,7 @@ abstract class GraphElementFrame {
    *
    * @since 3.0.0
    */
-  val elementDf: DataFrame = {
+  val df: DataFrame = {
     val mappedColumnNames = idColumns ++ properties.values.toSeq.sorted
     val mappedDf = if (mappedColumnNames == initialDf.columns.toSeq) {
       initialDf
