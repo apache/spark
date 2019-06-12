@@ -93,8 +93,6 @@ case class AdaptiveSparkPlanExec(
 
   @volatile private var isFinalPlan = false
 
-  @volatile private var fallback = false
-
   /**
    * Return type for `createQueryStages`
    * @param newPlan the new plan with created query stages.
@@ -119,14 +117,12 @@ case class AdaptiveSparkPlanExec(
   } else {
     lock.synchronized {
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
-      val (r, p) = createQueryStagesOrFallback(currentPhysicalPlan, currentLogicalPlan)
-      var result = r
-      var logicalPlan = p
+      var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[SparkException]()
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
-        currentLogicalPlan = logicalPlan
+        currentLogicalPlan = updateLogicalPlan(currentLogicalPlan, result.newStages)
         currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
         onUpdatePlan()
 
@@ -171,17 +167,13 @@ case class AdaptiveSparkPlanExec(
         }
 
         // Do re-planning and try creating new stages on the new physical plan.
-        val (newPhysicalPlan, newLogicalPlan) = reOptimize(currentLogicalPlan)
-        currentPhysicalPlan = newPhysicalPlan
-        currentLogicalPlan = newLogicalPlan
-        val (r, p) = createQueryStagesOrFallback(currentPhysicalPlan, currentLogicalPlan)
-        result = r
-        logicalPlan = p
+        reOptimize(currentLogicalPlan)
+        result = createQueryStages(currentPhysicalPlan)
       }
 
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
-      currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, logicalPlan)
+      currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
       logDebug(s"Final plan: $currentPhysicalPlan")
       onUpdatePlan()
       isFinalPlan = true
@@ -202,30 +194,6 @@ case class AdaptiveSparkPlanExec(
   }
 
   /**
-   * Try creating new query stages and updating the logical plan accordingly. Return the
-   * `CreateStageResult` along with the updated logical plan if successful; otherwise, turn on
-   * the "fallback" mode, which means no new stages will be created and we just wait for all the
-   * existing stages to complete and execute the rest of the plan.
-   */
-  private def createQueryStagesOrFallback(
-      physicalPlan: SparkPlan,
-      logicalPlan: LogicalPlan): (CreateStageResult, LogicalPlan) = {
-    var result = createQueryStages(physicalPlan)
-    var newLogicalPlan = logicalPlan
-    try {
-      newLogicalPlan = updateLogicalPlan(logicalPlan, result.newPlan, result.newStages)
-    } catch {
-      case e: AmbiguousLogicalMappingException =>
-        logWarning("Fall back to non-adaptive mode for the rest of the plan due to ambiguous " +
-          s"logical plan mapping for node ${e.plan}.")
-        fallback = true
-        result = createQueryStages(physicalPlan)
-        assert(result.newStages.isEmpty, "Fallback mode should not create new stages.")
-    }
-    (result, newLogicalPlan)
-  }
-
-  /**
    * This method is called recursively to traverse the plan tree bottom-up and create a new query
    * stage or try reusing an existing stage if the current node is an [[Exchange]] node and all of
    * its child stages have been materialized.
@@ -236,7 +204,7 @@ case class AdaptiveSparkPlanExec(
    * 3) A list of the new query stages that have been created.
    */
   private def createQueryStages(plan: SparkPlan): CreateStageResult = plan match {
-    case e: Exchange if !fallback =>
+    case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
       stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
@@ -337,7 +305,6 @@ case class AdaptiveSparkPlanExec(
    */
   private def updateLogicalPlan(
       logicalPlan: LogicalPlan,
-      physicalPlan: SparkPlan,
       newStages: Seq[(Exchange, QueryStageExec)]): LogicalPlan = {
     var currentLogicalPlan = logicalPlan
     newStages.foreach { case (exhange: Exchange, stage: QueryStageExec) =>
@@ -349,25 +316,27 @@ case class AdaptiveSparkPlanExec(
       })
       assert(logicalNodeOpt.isDefined)
       val logicalNode = logicalNodeOpt.get
-      val physicalNode = physicalPlan.collectFirst {
+      val physicalNode = currentPhysicalPlan.collectFirst {
         case p if p.eq(stage) || p.logicalLink.exists(logicalNode.eq) => p
       }
       assert(physicalNode.isDefined)
       // Replace the corresponding logical node with LogicalQueryStage
       val newLogicalNode = LogicalQueryStage(logicalNode, physicalNode.get)
-      var cnt = 0
+      // The logical plan may contain multiple identical subtree instances, because, e.g., rules
+      // like `PushDownPredicate` can push the same logical plan subtree instance into different
+      // branches of a Union. This hack is based on the fact that one physical stage should
+      // correspond to exactly one logical node and the Seq `newStages` is in the same order as
+      // that of the tree traversal by `transformDown`.
+      var transformed = false
       val newLogicalPlan = currentLogicalPlan.transformDown {
-        case p if p.eq(logicalNode) =>
-          cnt += 1
+        case p if !transformed && p.eq(logicalNode) =>
+          transformed = true
           newLogicalNode
       }
-      if (cnt > 1) {
-        throw AmbiguousLogicalMappingException(logicalNode)
-      }
-      assert(cnt == 1,
+      assert(newLogicalPlan != currentLogicalPlan,
         s"logicalNode: $logicalNode; " +
           s"logicalPlan: $currentLogicalPlan " +
-          s"physicalPlan: $physicalPlan" +
+          s"physicalPlan: $currentPhysicalPlan" +
           s"stage: $stage")
       currentLogicalPlan = newLogicalPlan
     }
@@ -377,13 +346,13 @@ case class AdaptiveSparkPlanExec(
   /**
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
-  private def reOptimize(logicalPlan: LogicalPlan): (SparkPlan, LogicalPlan) = {
+  private def reOptimize(logicalPlan: LogicalPlan): Unit = {
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     SparkSession.setActiveSession(session)
     val sparkPlan = session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
     val newPlan = applyPhysicalRules(sparkPlan, queryStagePreparationRules)
-    (newPlan, optimized)
+    currentPhysicalPlan = newPlan
   }
 
   /**
@@ -391,13 +360,10 @@ case class AdaptiveSparkPlanExec(
    */
   private def onUpdatePlan(): Unit = {
     executionId.foreach { id =>
-      val exec = SQLExecution.getQueryExecution(id)
-      if (exec != null) {
-        session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
-          id,
-          exec.toString,
-          SparkPlanInfo.fromSparkPlan(currentPhysicalPlan)))
-      }
+      session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
+        id,
+        SQLExecution.getQueryExecution(id).toString,
+        SparkPlanInfo.fromSparkPlan(currentPhysicalPlan)))
     }
   }
 }
@@ -439,8 +405,3 @@ case class StageSuccess(stage: QueryStageExec, result: Any) extends StageMateria
  * The materialization of a query stage hit an error and failed.
  */
 case class StageFailure(stage: QueryStageExec, error: Throwable) extends StageMaterializationEvent
-
-/**
- * Exception indicating that a stage maps to multiple sub-trees in the logical plan.
- */
-private case class AmbiguousLogicalMappingException(plan: LogicalPlan) extends Exception {}
