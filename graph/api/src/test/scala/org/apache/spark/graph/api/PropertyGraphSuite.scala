@@ -18,13 +18,16 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.graph.api.CypherSession.{ID_COLUMN, LABEL_COLUMN_PREFIX, SOURCE_ID_COLUMN, TARGET_ID_COLUMN}
+import org.apache.spark.graph.api.CypherSession.{
+  ID_COLUMN,
+  LABEL_COLUMN_PREFIX,
+  SOURCE_ID_COLUMN,
+  TARGET_ID_COLUMN
+}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
-
-  def cypherSession: CypherSession
 
   test("create graph from NodeFrame") {
     val nodeData = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
@@ -136,8 +139,9 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
     val studentDF = spark
       .createDataFrame(Seq((0, "Alice", 42), (1, "Bob", 23)))
       .toDF("id", "col_name", "col_age")
-    val teacherDF =
-      spark.createDataFrame(Seq((2, "Eve", "CS"))).toDF("id", "col_name", "col_subject")
+    val teacherDF = spark
+      .createDataFrame(Seq((2, "Eve", "CS")))
+      .toDF("id", "col_name", "col_subject")
 
     val studentNF = NodeFrame(
       initialDf = studentDF,
@@ -201,30 +205,87 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
     checkAnswer(graph.relationships, expectedRelDf)
   }
 
-  lazy val nodes: DataFrame = spark.createDataFrame(Seq(
-    (0L, true, true, false, false, Some("Alice"), None, Some(42), None),
-    (1L, true, true, false, false, Some("Bob"), None, Some(23), None),
-    (2L, true, false, true, false, Some("Carol"), Some("CS"), Some(22), None),
-    (3L, true, true, false, false, Some("Eve"), None, Some(19), None),
-    (4L, false, false, false, true, None, None, None, Some("UC Berkeley")),
-    (5L, false, false, false, true, None, None, None, Some("Stanford"))
-  )).toDF(ID_COLUMN, label("Person"), label("Student"), label("Teacher"), label("University"), "name", "subject", "age", "title")
+  lazy val nodes: DataFrame = spark
+    .createDataFrame(
+      Seq(
+        (0L, true, true, false, false, Some("Alice"), None, Some(42), None),
+        (1L, true, true, false, false, Some("Bob"), None, Some(23), None),
+        (2L, true, false, true, false, Some("Carol"), Some("CS"), Some(22), None),
+        (3L, true, true, false, false, Some("Eve"), None, Some(19), None),
+        (4L, false, false, false, true, None, None, None, Some("UC Berkeley")),
+        (5L, false, false, false, true, None, None, None, Some("Stanford"))))
+    .toDF(
+      ID_COLUMN,
+      label("Person"),
+      label("Student"),
+      label("Teacher"),
+      label("University"),
+      "name",
+      "subject",
+      "age",
+      "title")
 
-  lazy val relationships: DataFrame = spark.createDataFrame(Seq(
-    (0L, 0L, 1L, true, false),
-    (1L, 0L, 3L, true, false),
-    (2L, 1L, 3L, true, false),
-    (3L, 3L, 0L, true, false),
-    (4L, 3L, 1L, true, false),
-    (5L, 0L, 4L, false, true),
-    (6L, 1L, 4L, false, true),
-    (7L, 3L, 4L, false, true),
-    (8L, 2L, 5L, false, true),
-  )).toDF(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN, label("KNOWS"), label("STUDY_AT"))
+  lazy val relationships: DataFrame = spark
+    .createDataFrame(
+      Seq(
+        (0L, 0L, 1L, true, false),
+        (1L, 0L, 3L, true, false),
+        (2L, 1L, 3L, true, false),
+        (3L, 3L, 0L, true, false),
+        (4L, 3L, 1L, true, false),
+        (5L, 0L, 4L, false, true),
+        (6L, 1L, 4L, false, true),
+        (7L, 3L, 4L, false, true),
+        (8L, 2L, 5L, false, true)))
+    .toDF(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN, label("KNOWS"), label("STUDY_AT"))
 
-  test("select NodeFrame from label set") {
+  def cypherSession: CypherSession
+
+  test("select multiple nodes via parent label") {
     val graph = cypherSession.createGraph(nodes, relationships)
-    graph.nodeFrame(Set("Person"))
+    val nodeFrame = graph.nodeFrame(Set("Person"))
+    val expectedNodeDf = spark
+      .createDataFrame(
+        Seq(
+          (0L, true, true, false, Some("Alice"), None, Some(42)),
+          (1L, true, true, false, Some("Bob"), None, Some(23)),
+          (2L, true, false, true, Some("Carol"), Some("CS"), Some(22)),
+          (3L, true, true, false, Some("Eve"), None, Some(19))))
+      .toDF(
+        ID_COLUMN,
+        label("Person"),
+        label("Student"),
+        label("Teacher"),
+        "name",
+        "subject",
+        "age")
+
+    checkAnswer(nodeFrame.initialDf, expectedNodeDf)
+  }
+
+  test("select nodes via specific label set") {
+    val graph = cypherSession.createGraph(nodes, relationships)
+    val nodeFrame = graph.nodeFrame(Set("Teacher"))
+    val expectedNodeDf = spark
+      .createDataFrame(Seq((2L, true, true, Some("Carol"), Some("CS"))))
+      .toDF(ID_COLUMN, label("Person"), label("Teacher"), "name", "subject")
+
+    checkAnswer(nodeFrame.initialDf, expectedNodeDf)
+  }
+
+  test("select relationships via type") {
+    val graph = cypherSession.createGraph(nodes, relationships)
+    val relationshipFrame = graph.relationshipFrame("KNOWS")
+    val expectedRelDf = spark
+      .createDataFrame(
+        Seq(
+          (0L, 0L, 1L, true),
+          (1L, 0L, 3L, true),
+          (2L, 1L, 3L, true),
+          (3L, 3L, 0L, true),
+          (4L, 3L, 1L, true)))
+      .toDF(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN, label("KNOWS"))
+    checkAnswer(relationshipFrame.initialDf, expectedRelDf)
   }
 
   private def label(label: String): String = s"$LABEL_COLUMN_PREFIX$label"
