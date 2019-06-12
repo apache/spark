@@ -31,6 +31,17 @@ import org.apache.spark.util.Utils
 class ResourceUtilsSuite extends SparkFunSuite
     with LocalSparkContext {
 
+  test("ResourceID") {
+    val componentName = "spark.test"
+    val resourceName = "p100"
+    val id = ResourceID(componentName, resourceName)
+    val confPrefix = s"$componentName.resource.$resourceName."
+    assert(id.confPrefix === confPrefix)
+    assert(id.amountConf === s"${confPrefix}amount")
+    assert(id.discoveryScriptConf === s"${confPrefix}discoveryScript")
+    assert(id.vendorConf === s"${confPrefix}vendor")
+  }
+
   test("Resource discoverer no addresses errors") {
     val conf = new SparkConf
     assume(!(Utils.isWindows))
