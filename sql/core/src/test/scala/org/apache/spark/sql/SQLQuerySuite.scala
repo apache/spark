@@ -555,24 +555,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("SPARK-28002: CTE with non-existing column alias") {
-    intercept[AnalysisException] {
-      sql("""
-        |WITH t(x) AS (SELECT 1)
-        |SELECT * FROM t WHERE y = 1
-        """.stripMargin)
-    }
-  }
-
-  test("SPARK-28002: CTE with non-matching column alias") {
-    intercept[AnalysisException] {
-      sql("""
-        |WITH t(x, y) AS (SELECT 1)
-        |SELECT * FROM t WHERE x = 1
-        """.stripMargin)
-    }
-  }
-
   test("date row") {
     checkAnswer(sql(
       """select cast("2015-01-28" as date) from testData limit 1"""),
