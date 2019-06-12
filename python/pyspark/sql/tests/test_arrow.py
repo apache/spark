@@ -384,17 +384,16 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(pdf, df_from_pandas.toPandas())
 
     def test_timestamp_nat(self):
-        import pandas as pd
-        dt1 = [pd.NaT, pd.Timestamp('2019-06-11')] * 100
-        dt2 = [None, pd.Timestamp('2019-06-11')] * 100
-        pdf1 = pd.DataFrame({'time': dt1})
-        pdf2 = pd.DataFrame({'time': dt2})
+        dt = [pd.NaT, pd.Timestamp('2019-06-11'), None] * 100
+        pdf = pd.DataFrame({'time': dt})
 
-        df1 = self.spark.createDataFrame(pdf1)
-        df2 = self.spark.createDataFrame(pdf2)
+        with self.sql_conf({'spark.sql.execution.arrow.pyspark.enabled': "false"}):
+            df = self.spark.createDataFrame(pdf)
+            assert_frame_equal(pdf, df.toPandas())
 
-        assert_frame_equal(pdf1, df1.toPandas())
-        assert_frame_equal(pdf2, df2.toPandas())
+        with self.sql_conf({'spark.sql.execution.arrow.pyspark.enabled': "true"}):
+            df = self.spark.createDataFrame(pdf)
+            assert_frame_equal(pdf, df.toPandas())
 
     def test_toPandas_batch_order(self):
 
