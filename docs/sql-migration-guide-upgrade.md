@@ -23,6 +23,7 @@ license: |
 {:toc}
 
 ## Upgrading From Spark SQL 2.4 to 3.0
+  - In Spark version 2.4 and earlier, SQL queries such as `FROM <table>` or `FROM <table> UNION ALL FROM <table>` are supported by accident. In hive-style `FROM <table> SELECT <expr>`, the `SELECT` clause is not negligible. Neither Hive nor Presto support this syntax. Therefore we will treat these queries as invalid since Spark 3.0.
 
   - Since Spark 3.0, the Dataset and DataFrame API `unionAll` is not deprecated any more. It is an alias for `union`.
 

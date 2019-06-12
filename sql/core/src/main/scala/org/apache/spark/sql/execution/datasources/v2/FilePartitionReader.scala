@@ -47,8 +47,7 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
               e.getMessage + "\n" +
                 "It is possible the underlying files have been updated. " +
                 "You can explicitly invalidate the cache in Spark by " +
-                "running 'REFRESH TABLE tableName' command in SQL or " +
-                "by recreating the Dataset/DataFrame involved.")
+                "recreating the Dataset/DataFrame involved.")
           case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file: $currentReader", e)

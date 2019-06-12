@@ -74,8 +74,7 @@ private[hive] class SparkGetTablesOperation(
 
     val tablePattern = convertIdentifierPattern(tableName, true)
     matchingDbs.foreach { dbName =>
-      catalog.listTables(dbName, tablePattern).foreach { tableIdentifier =>
-        val catalogTable = catalog.getTableMetadata(tableIdentifier)
+      catalog.getTablesByName(catalog.listTables(dbName, tablePattern)).foreach { catalogTable =>
         val tableType = tableTypeString(catalogTable.tableType)
         if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableType)) {
           val rowData = Array[AnyRef](

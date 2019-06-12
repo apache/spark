@@ -435,6 +435,34 @@ class SessionCatalog(
   }
 
   /**
+   * Retrieve all metadata of existing permanent tables/views. If no database is specified,
+   * assume the table/view is in the current database.
+   * Only the tables/views belong to the same database that can be retrieved are returned.
+   * For example, if none of the requested tables could be retrieved, an empty list is returned.
+   * There is no guarantee of ordering of the returned tables.
+   */
+  @throws[NoSuchDatabaseException]
+  def getTablesByName(names: Seq[TableIdentifier]): Seq[CatalogTable] = {
+    if (names.nonEmpty) {
+      val dbs = names.map(_.database.getOrElse(getCurrentDatabase))
+      if (dbs.distinct.size != 1) {
+        val tables = names.map(name => formatTableName(name.table))
+        val qualifiedTableNames = dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}
+        throw new AnalysisException(
+          s"Only the tables/views belong to the same database can be retrieved. Querying " +
+          s"tables/views are $qualifiedTableNames"
+        )
+      }
+      val db = formatDatabaseName(dbs.head)
+      requireDbExists(db)
+      val tables = names.map(name => formatTableName(name.table))
+      externalCatalog.getTablesByName(db, tables)
+    } else {
+      Seq.empty
+    }
+  }
+
+  /**
    * Load files stored in given path into an existing metastore table.
    * If no database is specified, assume the table is in the current database.
    * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.

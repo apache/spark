@@ -747,7 +747,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       val conf = new SparkConf()
         .set(SPARK_DRIVER_RESOURCE_PREFIX + GPU +
-          SPARK_RESOURCE_COUNT_SUFFIX, "1")
+          SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
         .set(SPARK_DRIVER_RESOURCE_PREFIX + GPU +
           SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
         .setMaster("local-cluster[1, 1, 1024]")
@@ -784,7 +784,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       val conf = new SparkConf()
         .set(SPARK_DRIVER_RESOURCE_PREFIX + GPU +
-          SPARK_RESOURCE_COUNT_SUFFIX, "1")
+          SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
         .set(SPARK_DRIVER_RESOURCE_PREFIX + GPU +
           SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX, scriptPath)
         .set(DRIVER_RESOURCES_FILE, resourcesFile)
@@ -806,7 +806,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("Test parsing resources task configs with missing executor config") {
     val conf = new SparkConf()
       .set(SPARK_TASK_RESOURCE_PREFIX + GPU +
-        SPARK_RESOURCE_COUNT_SUFFIX, "1")
+        SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
 
@@ -814,17 +814,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.count " +
-      "needs to be specified since a task requirement config: spark.task.resource.gpu.count " +
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount " +
+      "needs to be specified since a task requirement config: spark.task.resource.gpu.amount " +
       "was specified"))
   }
 
   test("Test parsing resources executor config < task requirements") {
     val conf = new SparkConf()
       .set(SPARK_TASK_RESOURCE_PREFIX + GPU +
-        SPARK_RESOURCE_COUNT_SUFFIX, "2")
+        SPARK_RESOURCE_AMOUNT_SUFFIX, "2")
       .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU +
-        SPARK_RESOURCE_COUNT_SUFFIX, "1")
+        SPARK_RESOURCE_AMOUNT_SUFFIX, "1")
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
 
@@ -833,14 +833,14 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }.getMessage()
 
     assert(error.contains("The executor resource config: " +
-      "spark.executor.resource.gpu.count = 1 has to be >= the task config: " +
-      "spark.task.resource.gpu.count = 2"))
+      "spark.executor.resource.gpu.amount = 1 has to be >= the task config: " +
+      "spark.task.resource.gpu.amount = 2"))
   }
 
   test("Parse resources executor config not the same multiple numbers of the task requirements") {
     val conf = new SparkConf()
-      .set(SPARK_TASK_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_COUNT_SUFFIX, "2")
-      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_COUNT_SUFFIX, "4")
+      .set(SPARK_TASK_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_AMOUNT_SUFFIX, "2")
+      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_AMOUNT_SUFFIX, "4")
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
 
@@ -873,7 +873,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val discoveryScript = resourceFile.getPath()
 
       val conf = new SparkConf()
-        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${SPARK_RESOURCE_COUNT_SUFFIX}", "3")
+        .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
         .set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${GPU}${SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX}",
           discoveryScript)
         .setMaster("local-cluster[3, 3, 1024]")

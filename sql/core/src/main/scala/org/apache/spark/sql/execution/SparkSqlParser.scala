@@ -1272,7 +1272,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ScriptInputOutputSchema]].
    */
   override protected def withScriptIOSchema(
-      ctx: QuerySpecificationContext,
+      ctx: ParserRuleContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,

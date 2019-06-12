@@ -1711,15 +1711,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PASS_PARTITION_BY_AS_OPTIONS =
-    buildConf("spark.sql.legacy.sources.write.passPartitionByAsOptions")
-      .internal()
-      .doc("Whether to pass the partitionBy columns as options in DataFrameWriter. " +
-        "Data source V1 now silently drops partitionBy columns for non-file-format sources; " +
-        "turning the flag on provides a way for these sources to see these partitionBy columns.")
-      .booleanConf
-      .createWithDefault(false)
-
   val NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE =
     buildConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue")
       .internal()
@@ -2362,7 +2353,7 @@ class SQLConf extends Serializable with Logging {
   /**
    * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
    */
-  def redactOptions(options: Map[String, String]): Map[String, String] = {
+  def redactOptions[K, V](options: Map[K, V]): Map[K, V] = {
     val regexes = Seq(
       getConf(SQL_OPTIONS_REDACTION_PATTERN),
       SECRET_REDACTION_PATTERN.readFrom(reader))
