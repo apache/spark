@@ -32,7 +32,7 @@ object HintErrorLogger extends HintErrorHandler with Logging {
   override def hintRelationsNotFound(
       name: String, parameters: Seq[Any], invalidRelations: Set[String]): Unit = {
     invalidRelations.foreach { n =>
-      logWarning(s"Count not find relation '$n' for join strategy hint " +
+      logWarning(s"Count not find relation '$n' specified in hint " +
         s"'$name${parameters.mkString("(", ", ", ")")}'.")
     }
   }
@@ -42,6 +42,6 @@ object HintErrorLogger extends HintErrorHandler with Logging {
   }
 
   override def hintOverridden(hint: HintInfo): Unit = {
-    logWarning(s"Join hint $hint is overridden by another hint and will not take effect.")
+    logWarning(s"Hint $hint is overridden by another hint and will not take effect.")
   }
 }

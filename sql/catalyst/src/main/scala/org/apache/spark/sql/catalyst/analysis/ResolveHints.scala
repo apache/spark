@@ -76,13 +76,11 @@ object ResolveHints {
           case ResolvedHint(u: UnresolvedRelation, hint)
               if relations.exists(resolver(_, u.tableIdentifier.table)) =>
             relations.remove(u.tableIdentifier.table)
-            ResolvedHint(u,
-              createHintInfo(hintName).merge(hint, hintErrorHandler))
+            ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
           case ResolvedHint(r: SubqueryAlias, hint)
               if relations.exists(resolver(_, r.alias)) =>
             relations.remove(r.alias)
-            ResolvedHint(r,
-              createHintInfo(hintName).merge(hint, hintErrorHandler))
+            ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case u: UnresolvedRelation if relations.exists(resolver(_, u.tableIdentifier.table)) =>
             relations.remove(u.tableIdentifier.table)
