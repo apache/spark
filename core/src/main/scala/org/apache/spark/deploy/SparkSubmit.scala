@@ -317,7 +317,6 @@ private[spark] class SparkSubmit extends Logging {
     val isKubernetesClient = clusterManager == KUBERNETES && deployMode == CLIENT
     val isKubernetesClusterModeDriver = isKubernetesClient &&
       sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
-    val isMesosClient = clusterManager == MESOS && deployMode == CLIENT
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
