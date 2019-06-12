@@ -246,7 +246,7 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
         val exc = intercept[UnsupportedOperationException] {
           compactibleLog.purge(2)
         }
-        assert(exc.getMessage.contains("break internal state of CompactibleFileStreamLog"))
+        assert(exc.getMessage.contains("Cannot purge as it might break internal state"))
 
         // Below line would fail with IllegalStateException if we don't prevent purge:
         // - purge(2) would delete batch 0 and 1 which batch 1 is compaction batch
