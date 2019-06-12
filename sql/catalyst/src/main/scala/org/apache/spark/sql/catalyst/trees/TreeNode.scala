@@ -447,6 +447,45 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
+  override def clone(): BaseType = {
+    def mapChild(child: Any): Any = child match {
+      case arg: TreeNode[_] => arg.clone()
+      case (arg1: TreeNode[_], arg2: TreeNode[_]) => (arg1.clone(), arg2.clone())
+      case other => other
+    }
+    CurrentOrigin.withOrigin(origin) {
+      val args = productIterator.toArray.asInstanceOf[Array[AnyRef]]
+      if (args.nonEmpty || otherCopyArgs.nonEmpty) {
+        val newArgs = args.map {
+          case arg: TreeNode[_] => arg.clone()
+          case Some(arg: TreeNode[_]) => Some(arg.clone())
+          case m: Map[_, _] => m.mapValues {
+            case arg: TreeNode[_] => arg.clone()
+            case other => other
+          }.view.force // `mapValues` is lazy and we need to force it to materialize
+          case d: DataType => d // Avoid unpacking Structs
+          case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+          case args: Iterable[_] => args.map(mapChild)
+          case nonChild: AnyRef => nonChild
+          case null => null
+        }
+        makeCopy(newArgs)
+      } else {
+        try {
+          val ctor = getClass.getConstructor()
+          CurrentOrigin.withOrigin(origin) {
+            val res = ctor.newInstance().asInstanceOf[BaseType]
+            res.copyTagsFrom(this)
+            res
+          }
+        } catch {
+          case _: NoSuchElementException =>
+            sys.error(s"No valid default constructor for $nodeName")
+        }
+      }
+    }
+  }
+
   /**
    * Returns the name of this type of TreeNode.  Defaults to the class name.
    * Note that we remove the "Exec" suffix for physical operators here.

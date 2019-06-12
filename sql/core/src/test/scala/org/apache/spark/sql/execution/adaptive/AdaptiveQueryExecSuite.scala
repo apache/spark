@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   setupTestData()
 
@@ -37,6 +39,11 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
     val plan = dfAdaptive.queryExecution.executedPlan
     assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
     val adaptivePlan = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    val exchanges = adaptivePlan.collect {
+      case s: ShuffleExchangeExec => s
+      case b: BroadcastExchangeExec => b
+    }
+    assert(exchanges.isEmpty, "The final plan should not contain any Exchange node.")
     (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
   }
 
@@ -270,6 +277,39 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
       assert(ex.head.plan.isInstanceOf[BroadcastQueryStageExec])
       val sub = findReusedSubquery(adaptivePlan)
       assert(sub.isEmpty)
+    }
+  }
+
+  test("Union/Except/Intersect queries") {
+    withSQLConf(SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true") {
+      runAdaptiveAndVerifyResult(
+        """
+          |SELECT * FROM testData
+          |EXCEPT
+          |SELECT * FROM testData2
+          |UNION ALL
+          |SELECT * FROM testData
+          |INTERSECT ALL
+          |SELECT * FROM testData2
+        """.stripMargin)
+    }
+  }
+
+  test("Subquery de-correlation in Union queries") {
+    withSQLConf(SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true") {
+      withTempView("a", "b") {
+        Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("a")
+        Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("b")
+
+        runAdaptiveAndVerifyResult(
+          """
+            |SELECT id,num,source FROM (
+            |  SELECT id, num, 'a' as source FROM a
+            |  UNION ALL
+            |  SELECT id, num, 'b' as source FROM b
+            |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2)
+          """.stripMargin)
+      }
     }
   }
 }
