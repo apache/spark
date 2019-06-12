@@ -5,113 +5,122 @@
 -- INT2
 -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/int2.sql
 
-CREATE TABLE INT2_TBL(f1 int2);
+CREATE TABLE INT2_TBL(f1 smallint) USING parquet;
 
-INSERT INTO INT2_TBL(f1) VALUES ('0   ');
+-- [SPARK-28023] Trim the string when cast string type to other types
+INSERT INTO INT2_TBL VALUES (trim('0   '));
 
-INSERT INTO INT2_TBL(f1) VALUES ('  1234 ');
+INSERT INTO INT2_TBL VALUES (trim('  1234 '));
 
-INSERT INTO INT2_TBL(f1) VALUES ('    -1234');
+INSERT INTO INT2_TBL VALUES (trim('    -1234'));
 
-INSERT INTO INT2_TBL(f1) VALUES ('34.5');
+-- [SPARK-27923] Invalid input syntax for type short throws exception at PostgreSQL
+-- INSERT INTO INT2_TBL VALUES ('34.5');
 
 -- largest and smallest values
-INSERT INTO INT2_TBL(f1) VALUES ('32767');
+INSERT INTO INT2_TBL VALUES ('32767');
 
-INSERT INTO INT2_TBL(f1) VALUES ('-32767');
+INSERT INTO INT2_TBL VALUES ('-32767');
 
 -- bad input values -- should give errors
-INSERT INTO INT2_TBL(f1) VALUES ('100000');
-INSERT INTO INT2_TBL(f1) VALUES ('asdf');
-INSERT INTO INT2_TBL(f1) VALUES ('    ');
-INSERT INTO INT2_TBL(f1) VALUES ('- 1234');
-INSERT INTO INT2_TBL(f1) VALUES ('4 444');
-INSERT INTO INT2_TBL(f1) VALUES ('123 dt');
-INSERT INTO INT2_TBL(f1) VALUES ('');
+-- INSERT INTO INT2_TBL VALUES ('100000');
+-- INSERT INTO INT2_TBL VALUES ('asdf');
+-- INSERT INTO INT2_TBL VALUES ('    ');
+-- INSERT INTO INT2_TBL VALUES ('- 1234');
+-- INSERT INTO INT2_TBL VALUES ('4 444');
+-- INSERT INTO INT2_TBL VALUES ('123 dt');
+-- INSERT INTO INT2_TBL VALUES ('');
 
 
 SELECT '' AS five, * FROM INT2_TBL;
 
-SELECT '' AS four, i.* FROM INT2_TBL i WHERE i.f1 <> int2 '0';
+SELECT '' AS four, i.* FROM INT2_TBL i WHERE i.f1 <> smallint('0');
 
-SELECT '' AS four, i.* FROM INT2_TBL i WHERE i.f1 <> int4 '0';
+SELECT '' AS four, i.* FROM INT2_TBL i WHERE i.f1 <> int('0');
 
-SELECT '' AS one, i.* FROM INT2_TBL i WHERE i.f1 = int2 '0';
+SELECT '' AS one, i.* FROM INT2_TBL i WHERE i.f1 = smallint('0');
 
-SELECT '' AS one, i.* FROM INT2_TBL i WHERE i.f1 = int4 '0';
+SELECT '' AS one, i.* FROM INT2_TBL i WHERE i.f1 = int('0');
 
-SELECT '' AS two, i.* FROM INT2_TBL i WHERE i.f1 < int2 '0';
+SELECT '' AS two, i.* FROM INT2_TBL i WHERE i.f1 < smallint('0');
 
-SELECT '' AS two, i.* FROM INT2_TBL i WHERE i.f1 < int4 '0';
+SELECT '' AS two, i.* FROM INT2_TBL i WHERE i.f1 < int('0');
 
-SELECT '' AS three, i.* FROM INT2_TBL i WHERE i.f1 <= int2 '0';
+SELECT '' AS three, i.* FROM INT2_TBL i WHERE i.f1 <= smallint('0');
 
-SELECT '' AS three, i.* FROM INT2_TBL i WHERE i.f1 <= int4 '0';
+SELECT '' AS three, i.* FROM INT2_TBL i WHERE i.f1 <= int('0');
 
-SELECT '' AS two, i.* FROM INT2_TBL i WHERE i.f1 > int2 '0';
+SELECT '' AS two, i.* FROM INT2_TBL i WHERE i.f1 > smallint('0');
 
-SELECT '' AS two, i.* FROM INT2_TBL i WHERE i.f1 > int4 '0';
+SELECT '' AS two, i.* FROM INT2_TBL i WHERE i.f1 > int('0');
 
-SELECT '' AS three, i.* FROM INT2_TBL i WHERE i.f1 >= int2 '0';
+SELECT '' AS three, i.* FROM INT2_TBL i WHERE i.f1 >= smallint('0');
 
-SELECT '' AS three, i.* FROM INT2_TBL i WHERE i.f1 >= int4 '0';
+SELECT '' AS three, i.* FROM INT2_TBL i WHERE i.f1 >= int('0');
 
 -- positive odds
-SELECT '' AS one, i.* FROM INT2_TBL i WHERE (i.f1 % int2 '2') = int2 '1';
+SELECT '' AS one, i.* FROM INT2_TBL i WHERE (i.f1 % smallint('2')) = smallint('1');
 
 -- any evens
-SELECT '' AS three, i.* FROM INT2_TBL i WHERE (i.f1 % int4 '2') = int2 '0';
+SELECT '' AS three, i.* FROM INT2_TBL i WHERE (i.f1 % int('2')) = smallint('0');
 
-SELECT '' AS five, i.f1, i.f1 * int2 '2' AS x FROM INT2_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT2_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 * int2 '2' AS x FROM INT2_TBL i
+SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT2_TBL i
 WHERE abs(f1) < 16384;
 
-SELECT '' AS five, i.f1, i.f1 * int4 '2' AS x FROM INT2_TBL i;
+SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT2_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 + int2 '2' AS x FROM INT2_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT2_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 + int2 '2' AS x FROM INT2_TBL i
+SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT2_TBL i
 WHERE f1 < 32766;
 
-SELECT '' AS five, i.f1, i.f1 + int4 '2' AS x FROM INT2_TBL i;
+SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT2_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 - int2 '2' AS x FROM INT2_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT2_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 - int2 '2' AS x FROM INT2_TBL i
+SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT2_TBL i
 WHERE f1 > -32767;
 
-SELECT '' AS five, i.f1, i.f1 - int4 '2' AS x FROM INT2_TBL i;
+SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT2_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 / int2 '2' AS x FROM INT2_TBL i;
+-- The result is different because [SPARK-2659]
+SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT2_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 / int4 '2' AS x FROM INT2_TBL i;
+-- The result is different because [SPARK-2659]
+SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT2_TBL i;
 
 -- corner cases
-SELECT (-1::int2<<15)::text;
-SELECT ((-1::int2<<15)+1::int2)::text;
+SELECT string(shiftleft(smallint(-1), 15));
+SELECT string(smallint(shiftleft(smallint(-1), 15))+1);
 
 -- check sane handling of INT16_MIN overflow cases
-SELECT (-32768)::int2 * (-1)::int2;
-SELECT (-32768)::int2 / (-1)::int2;
-SELECT (-32768)::int2 % (-1)::int2;
+-- [SPARK-28024] Incorrect numeric values when out of range
+-- SELECT smallint((-32768)) * smallint(-1);
+-- SELECT smallint(-32768) / smallint(-1);
+SELECT smallint(-32768) % smallint(-1);
 
+-- [SPARK-28028] Cast numeric to integral type need round
 -- check rounding when casting from float
-SELECT x, x::int2 AS int2_value
-FROM (VALUES (-2.5::float8),
-             (-1.5::float8),
-             (-0.5::float8),
-             (0.0::float8),
-             (0.5::float8),
-             (1.5::float8),
-             (2.5::float8)) t(x);
+SELECT x, smallint(x) AS int2_value
+FROM (VALUES float(-2.5),
+             float(-1.5),
+             float(-0.5),
+             float(0.0),
+             float(0.5),
+             float(1.5),
+             float(2.5)) t(x);
 
 -- check rounding when casting from numeric
-SELECT x, x::int2 AS int2_value
-FROM (VALUES (-2.5::numeric),
-             (-1.5::numeric),
-             (-0.5::numeric),
-             (0.0::numeric),
-             (0.5::numeric),
-             (1.5::numeric),
-             (2.5::numeric)) t(x);
+SELECT x, smallint(x) AS int2_value
+FROM (VALUES decimal(-2.5),
+             decimal(-1.5),
+             decimal(-0.5),
+             decimal(0.0),
+             decimal(0.5),
+             decimal(1.5),
+             decimal(2.5)) t(x);
