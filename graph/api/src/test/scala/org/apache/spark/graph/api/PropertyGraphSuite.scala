@@ -13,20 +13,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.graph.api.CypherSession.{
-  ID_COLUMN,
-  LABEL_COLUMN_PREFIX,
-  SOURCE_ID_COLUMN,
-  TARGET_ID_COLUMN
-}
+import org.scalatest.Matchers
+
+import org.apache.spark.graph.api.CypherSession.{ID_COLUMN, LABEL_COLUMN_PREFIX, SOURCE_ID_COLUMN, TARGET_ID_COLUMN}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.scalatest.Matchers
 
 abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers {
 
@@ -80,10 +75,8 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
       .createDataFrame(Seq((2L, "Eve", "CS")))
       .toDF("id", "name", "subject")
 
-    val studentNF =
-      NodeFrame.create(studentDF, "id", Set("Person", "Student"))
-    val teacherNF =
-      NodeFrame.create(teacherDF, "id", Set("Person", "Teacher"))
+    val studentNF = NodeFrame.create(studentDF, "id", Set("Person", "Student"))
+    val teacherNF = NodeFrame.create(teacherDF, "id", Set("Person", "Teacher"))
 
     val knowsDF = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
@@ -102,7 +95,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
         Seq(
           (convertId(0L), true, true, false, Some(42), Some("Alice"), None),
           (convertId(1L), true, true, false, Some(23), Some("Bob"), None),
-          (convertId(2L), true, false, true, None, Some("Eve"), Some("CS")),
+          (convertId(2L), true, false, true, None, Some("Eve"), Some("CS"))
         ))
       .toDF(
         ID_COLUMN,
@@ -149,8 +142,9 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
       Set("Person", "Teacher"),
       properties = Map("name" -> "col_name", "subject" -> "col_subject"))
 
-    val knowsDF =
-      spark.createDataFrame(Seq((0L, 0L, 1L, 1984))).toDF("id", "source", "target", "col_since")
+    val knowsDF = spark
+      .createDataFrame(Seq((0L, 0L, 1L, 1984)))
+      .toDF("id", "source", "target", "col_since")
     val teachesDF = spark.createDataFrame(Seq((1L, 2L, 1L))).toDF("id", "source", "target")
 
     val knowsRF = RelationshipFrame.create(
@@ -169,7 +163,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
         Seq(
           (convertId(0L), true, true, false, Some(42), Some("Alice"), None),
           (convertId(1L), true, true, false, Some(23), Some("Bob"), None),
-          (convertId(2L), true, false, true, None, Some("Eve"), Some("CS")),
+          (convertId(2L), true, false, true, None, Some("Eve"), Some("CS"))
         ))
       .toDF(
         ID_COLUMN,
