@@ -58,8 +58,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
     resources.foreach { case (_, testRInfo) =>
-      setResourceAmountConf(sparkConf, testRInfo.rId, testRInfo.count)
-      setResourceVendorConf(sparkConf, testRInfo.rId, testRInfo.vendor)
+      sparkConf.set(testRInfo.rId.amountConf, testRInfo.count)
+      sparkConf.set(testRInfo.rId.vendorConf, testRInfo.vendor)
     }
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,

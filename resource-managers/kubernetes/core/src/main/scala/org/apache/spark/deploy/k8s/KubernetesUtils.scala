@@ -230,7 +230,7 @@ private[spark] object KubernetesUtils extends Logging {
       val vendorDomain = request.vendor.getOrElse(throw new SparkException("Resource: " +
         s"${request.id.resourceName} was requested, but vendor was not specified."))
       val quantity = new QuantityBuilder(false)
-        .withAmount(request.count.toString)
+        .withAmount(request.amount.toString)
         .build()
       (KubernetesConf.buildKubernetesResourceName(vendorDomain, request.id.resourceName), quantity)
     }.toMap

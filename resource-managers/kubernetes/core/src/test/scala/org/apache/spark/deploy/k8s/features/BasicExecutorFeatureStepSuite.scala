@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{ResourceID, SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.ResourceUtils._
+import org.apache.spark.TestResourceIDs._
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -94,7 +95,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test spark resource missing vendor") {
-    setExecutorResourceAmountConf(baseConf, GPU, "2")
+    baseConf.set(EXECUTOR_GPU_ID.amountConf, "2")
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val error = intercept[SparkException] {
       val executor = step.configurePod(SparkPod.initialPod())
@@ -103,7 +104,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("test spark resource missing amount") {
-    setExecutorResourceVendorConf(baseConf, GPU, "nvidia.com")
+    baseConf.set(EXECUTOR_GPU_ID.vendorConf, "nvidia.com")
 
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val error = intercept[SparkException] {
@@ -119,8 +120,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       Map(("nvidia.com/gpu" -> TestResourceInformation(gpuExecutorResourceID, "2", "nvidia.com")),
       ("foo.com/fpga" -> TestResourceInformation(fpgaResourceID, "1", "foo.com")))
     gpuResources.foreach { case (_, testRInfo) =>
-      setResourceAmountConf(baseConf, testRInfo.rId, testRInfo.count)
-      setResourceVendorConf(baseConf, testRInfo.rId, testRInfo.vendor)
+      baseConf.set(testRInfo.rId.amountConf, testRInfo.count)
+      baseConf.set(testRInfo.rId.vendorConf, testRInfo.vendor)
     }
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
