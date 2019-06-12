@@ -167,7 +167,9 @@ case class AdaptiveSparkPlanExec(
         }
 
         // Do re-planning and try creating new stages on the new physical plan.
-        reOptimize(currentLogicalPlan)
+        val (newPhysicalPlan, newLogicalPlan) = reOptimize(currentLogicalPlan)
+        currentPhysicalPlan = newPhysicalPlan
+        currentLogicalPlan = newLogicalPlan
         result = createQueryStages(currentPhysicalPlan)
       }
 
@@ -322,16 +324,8 @@ case class AdaptiveSparkPlanExec(
       assert(physicalNode.isDefined)
       // Replace the corresponding logical node with LogicalQueryStage
       val newLogicalNode = LogicalQueryStage(logicalNode, physicalNode.get)
-      // The logical plan may contain multiple identical subtree instances, because, e.g., rules
-      // like `PushDownPredicate` can push the same logical plan subtree instance into different
-      // branches of a Union. This hack is based on the fact that one physical stage should
-      // correspond to exactly one logical node and the Seq `newStages` is in the same order as
-      // that of the tree traversal by `transformDown`.
-      var transformed = false
       val newLogicalPlan = currentLogicalPlan.transformDown {
-        case p if !transformed && p.eq(logicalNode) =>
-          transformed = true
-          newLogicalNode
+        case p if p.eq(logicalNode) => newLogicalNode
       }
       assert(newLogicalPlan != currentLogicalPlan,
         s"logicalNode: $logicalNode; " +
@@ -346,13 +340,13 @@ case class AdaptiveSparkPlanExec(
   /**
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
-  private def reOptimize(logicalPlan: LogicalPlan): Unit = {
+  private def reOptimize(logicalPlan: LogicalPlan): (SparkPlan, LogicalPlan) = {
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     SparkSession.setActiveSession(session)
     val sparkPlan = session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
     val newPlan = applyPhysicalRules(sparkPlan, queryStagePreparationRules)
-    currentPhysicalPlan = newPlan
+    (newPlan, optimized)
   }
 
   /**
@@ -360,10 +354,13 @@ case class AdaptiveSparkPlanExec(
    */
   private def onUpdatePlan(): Unit = {
     executionId.foreach { id =>
-      session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
-        id,
-        SQLExecution.getQueryExecution(id).toString,
-        SparkPlanInfo.fromSparkPlan(currentPhysicalPlan)))
+      val exec = SQLExecution.getQueryExecution(id)
+      if (exec != null) {
+        session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
+          id,
+          exec.toString,
+          SparkPlanInfo.fromSparkPlan(currentPhysicalPlan)))
+      }
     }
   }
 }
