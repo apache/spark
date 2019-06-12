@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.resource
 
 import org.apache.spark.annotation.Evolving
 

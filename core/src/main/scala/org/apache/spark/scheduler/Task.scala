@@ -21,11 +21,13 @@ import java.nio.ByteBuffer
 import java.util.Properties
 
 import org.apache.spark._
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.InputFileBlockHolder
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util._
 
 /**

@@ -34,11 +34,12 @@ import org.json4s.{DefaultFormats, Extraction}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.ResourceUtils._
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.TestResourceIDs._
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}

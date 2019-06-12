@@ -32,11 +32,11 @@ import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mockito.MockitoSugar
 import org.apache.spark._
-import org.apache.spark.ResourceInformation
 
-import org.apache.spark.ResourceUtils._
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.TestResourceIDs._
 import org.apache.spark.TestUtils._
+import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.LaunchTask

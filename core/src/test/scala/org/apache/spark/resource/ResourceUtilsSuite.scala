@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.resource
 
 import java.io.File
 import java.nio.file.{Files => JavaFiles}
 
-import org.apache.spark.ResourceUtils._
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
+
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.TestResourceIDs._
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._

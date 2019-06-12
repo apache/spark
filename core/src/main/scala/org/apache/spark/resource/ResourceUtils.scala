@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.resource
 
 import java.io.{BufferedInputStream, File, FileInputStream}
 
 import com.fasterxml.jackson.databind.exc.MismatchedInputException
+import org.apache.spark.{SparkConf, SparkException}
 import org.json4s.{DefaultFormats, MappingException}
 import org.json4s.jackson.JsonMethods._
 

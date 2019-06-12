@@ -24,8 +24,8 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
-import org.apache.spark.ResourceID
 import org.apache.spark.deploy.k8s.SparkPod
+import org.apache.spark.resource.ResourceID
 
 object KubernetesFeaturesTestUtils {
 

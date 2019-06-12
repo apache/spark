@@ -30,13 +30,14 @@ import org.mockito.Mockito.when
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar._
-
 import org.apache.spark._
-import org.apache.spark.ResourceUtils._
+
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.TestResourceIDs._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend

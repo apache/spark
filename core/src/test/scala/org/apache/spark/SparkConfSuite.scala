@@ -25,13 +25,14 @@ import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
 
-import org.apache.spark.ResourceUtils._
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.TestResourceIDs._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.resource.ResourceID
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
 

@@ -37,14 +37,15 @@ import org.mockito.stubbing.Answer
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
-
 import org.apache.spark._
+
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.memory.TestMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcTimeout}
 import org.apache.spark.scheduler.{FakeTask, ResultTask, Task, TaskDescription}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}

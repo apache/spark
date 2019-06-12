@@ -17,8 +17,9 @@
 
 package org.apache.spark
 
-import org.apache.spark.ResourceUtils._
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceID
 
 object TestResourceIDs {
   val DRIVER_GPU_ID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
