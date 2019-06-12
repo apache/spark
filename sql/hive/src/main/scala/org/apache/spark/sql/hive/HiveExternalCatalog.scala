@@ -461,8 +461,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // default value properties.
     schema.foreach { field =>
-      if (field.metadata.contains("defaultExpression")) {
-        val expr = field.metadata.getExpression("defaultExpression")
+      if (field.metadata.contains("defaultValueExpression")) {
+        val expr = field.metadata.getExpression("defaultValueExpression")
         val defaultValue = (field.dataType, expr) match {
           case (BooleanType, Literal(v: Boolean, b: BooleanType)) => v.toString()
           case (ByteType, Literal(v, b: IntegerType)) =>
