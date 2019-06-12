@@ -1286,6 +1286,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         BitwiseXor(left, right)
       case SqlBaseParser.PIPE =>
         BitwiseOr(left, right)
+      case SqlBaseParser.SHIFT_LEFT =>
+        ShiftLeft(left, right)
+      case SqlBaseParser.SHIFT_RIGHT =>
+        ShiftRight(left, right)
     }
   }
 

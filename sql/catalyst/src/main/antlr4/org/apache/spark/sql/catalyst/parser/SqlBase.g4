@@ -672,6 +672,7 @@ valueExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
     | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
+    | left=valueExpression operator=(SHIFT_LEFT | SHIFT_RIGHT) right=valueExpression         #arithmeticBinary
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
     ;
 
@@ -719,6 +720,7 @@ comparisonOperator
 
 arithmeticOperator
     : PLUS | MINUS | ASTERISK | SLASH | PERCENT | DIV | TILDE | AMPERSAND | PIPE | CONCAT_PIPE | HAT
+    | SHIFT_LEFT | SHIFT_RIGHT
     ;
 
 predicateOperator
@@ -1608,6 +1610,8 @@ AMPERSAND: '&';
 PIPE: '|';
 CONCAT_PIPE: '||';
 HAT: '^';
+SHIFT_LEFT: '<<';
+SHIFT_RIGHT: '>>';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
