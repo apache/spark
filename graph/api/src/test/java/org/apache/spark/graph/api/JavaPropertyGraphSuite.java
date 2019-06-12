@@ -19,7 +19,6 @@ package org.apache.spark.graph.api;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -32,42 +31,26 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import scala.collection.JavaConverters;
-import scala.collection.Seq;
-import scala.collection.immutable.HashMap;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 public abstract class JavaPropertyGraphSuite implements Serializable {
     private transient TestSparkSession spark;
-    private transient CypherSession cypherSession;
-    private transient JavaSparkContext jsc;
+    private transient CypherSession cypherSession = null;
 
     @Before
     public void setUp() {
-        // Trigger static initializer of TestData
         spark = new TestSparkSession();
-
-        jsc = new JavaSparkContext(spark.sparkContext());
-        spark.loadTestData();
     }
 
     @After
     public void tearDown() {
         spark.stop();
         spark = null;
-    }
-
-    private StructType createSchema(List<String> fieldNames, List<DataType> dataTypes) {
-        List<StructField> fields = new ArrayList<>();
-        for (int i = 0; i < fieldNames.size(); i++) {
-            fields.add(DataTypes.createStructField(fieldNames.get(i), dataTypes.get(i), true));
-        }
-        return DataTypes.createStructType(fields);
     }
 
     @Test
@@ -80,17 +63,28 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
                 RowFactory.create(0L, "Alice"),
                 RowFactory.create(1L, "Bob"));
 
+        StructType knowsSchema = createSchema(
+                Lists.newArrayList("id", "source", "target", "since"),
+                Lists.newArrayList(DataTypes.LongType, DataTypes.LongType, DataTypes.LongType, DataTypes.IntegerType));
+
+        List<Row> knowsData = Collections.singletonList(RowFactory.create(0L, 0L, 1L, 1984));
+
         Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
+        NodeFrame personNodeFrame = NodeFrame.create(personDf, "id", Sets.newHashSet("Person"));
 
-        Set<String> labels = Sets.newHashSet("Person");
+        Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
+        RelationshipFrame knowsRelFrame = RelationshipFrame.create(knowsDf, "id", "source", "target", "KNOWS");
 
-        NodeFrame nodeFrame = new NodeFrame(personDf, "id", JavaConverters.asScalaSet(labels).toSet(), new HashMap<>());
-
-        Seq<NodeFrame> nodeFrames = JavaConverters.asScalaBuffer(Lists.newArrayList(nodeFrame)).toSeq();
-        Seq<RelationshipFrame> relationshipFrames = JavaConverters.asScalaBuffer(new ArrayList<RelationshipFrame>()).toSeq();
-
-        PropertyGraph graph = cypherSession.createGraph(nodeFrames, relationshipFrames);
+        PropertyGraph graph = cypherSession.createGraph(Lists.newArrayList(personNodeFrame), Lists.newArrayList(knowsRelFrame));
         List<Row> result = graph.nodes().collectAsList();
         Assert.assertEquals(1, result.size());
+    }
+
+    private StructType createSchema(List<String> fieldNames, List<DataType> dataTypes) {
+        List<StructField> fields = new ArrayList<>();
+        for (int i = 0; i < fieldNames.size(); i++) {
+            fields.add(DataTypes.createStructField(fieldNames.get(i), dataTypes.get(i), true));
+        }
+        return DataTypes.createStructType(fields);
     }
 }

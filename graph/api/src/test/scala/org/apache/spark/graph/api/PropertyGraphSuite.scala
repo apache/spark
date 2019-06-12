@@ -31,7 +31,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
 
   test("create graph from NodeFrame") {
     val nodeData = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
-    val nodeFrame = NodeFrame(df = nodeData, idColumn = "id", labelSet = Set("Person"))
+    val nodeFrame = NodeFrame.create(df = nodeData, idColumn = "id", labelSet = Set("Person"))
     val graph = cypherSession.createGraph(Seq(nodeFrame), Seq.empty)
 
     val expectedDf = spark
@@ -43,12 +43,12 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
 
   test("create graph from NodeFrame and RelationshipFrame") {
     val nodeData = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
-    val nodeFrame = NodeFrame(df = nodeData, idColumn = "id", labelSet = Set("Person"))
+    val nodeFrame = NodeFrame.create(df = nodeData, idColumn = "id", labelSet = Set("Person"))
 
     val relationshipData = spark
       .createDataFrame(Seq((0, 0, 1, 1984)))
       .toDF("id", "source", "target", "since")
-    val relationshipFrame = RelationshipFrame(
+    val relationshipFrame = RelationshipFrame.create(
       relationshipData,
       idColumn = "id",
       sourceIdColumn = "source",
@@ -78,9 +78,9 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
       .toDF("id", "name", "subject")
 
     val studentNF =
-      NodeFrame(df = studentDF, idColumn = "id", labelSet = Set("Person", "Student"))
+      NodeFrame.create(df = studentDF, idColumn = "id", labelSet = Set("Person", "Student"))
     val teacherNF =
-      NodeFrame(df = teacherDF, idColumn = "id", labelSet = Set("Person", "Teacher"))
+      NodeFrame.create(df = teacherDF, idColumn = "id", labelSet = Set("Person", "Teacher"))
 
     val knowsDF = spark
       .createDataFrame(Seq((0, 0, 1, 1984)))
@@ -89,13 +89,13 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
       .createDataFrame(Seq((1, 2, 1)))
       .toDF("id", "source", "target")
 
-    val knowsRF = RelationshipFrame(
+    val knowsRF = RelationshipFrame.create(
       df = knowsDF,
       idColumn = "id",
       sourceIdColumn = "source",
       targetIdColumn = "target",
       relationshipType = "KNOWS")
-    val teachesRF = RelationshipFrame(
+    val teachesRF = RelationshipFrame.create(
       df = teachesDF,
       idColumn = "id",
       sourceIdColumn = "source",
@@ -165,7 +165,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession {
       targetIdColumn = "target",
       relationshipType = "KNOWS",
       properties = Map("since" -> "col_since"))
-    val teachesRF = RelationshipFrame(
+    val teachesRF = RelationshipFrame.create(
       df = teachesDF,
       idColumn = "id",
       sourceIdColumn = "source",

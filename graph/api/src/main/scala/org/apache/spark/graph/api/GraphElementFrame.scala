@@ -18,6 +18,8 @@
 
 package org.apache.spark.graph.api
 
+import scala.collection.JavaConverters
+
 import org.apache.spark.sql.DataFrame
 
 /**
@@ -68,12 +70,47 @@ object NodeFrame {
    * @param labelSet  labels that are assigned to all nodes
    * @since 3.0.0
    */
-  def apply(df: DataFrame, idColumn: String, labelSet: Set[String]): NodeFrame = {
+  def create(df: DataFrame, idColumn: String, labelSet: Set[String]): NodeFrame = {
     val properties = (df.columns.toSet - idColumn)
       .map(columnName => columnName -> columnName)
       .toMap
 
     NodeFrame(df, idColumn, labelSet, properties)
+  }
+
+  /**
+   * Describes how to map an initial [[DataFrame]] to nodes.
+   *
+   * All columns apart from the given `idColumn` are mapped to node properties.
+   *
+   * @param df        [[DataFrame]] containing a single node in each row
+   * @param idColumn  column that contains the node identifier
+   * @param labelSet  labels that are assigned to all nodes
+   * @since 3.0.0
+   */
+  def create(df: DataFrame, idColumn: String, labelSet: java.util.Set[String]): NodeFrame = {
+    create(df, idColumn, JavaConverters.asScalaSet(labelSet).toSet)
+  }
+
+  /**
+   * Describes how to map an initial [[DataFrame]] to nodes.
+   *
+   * All columns apart from the given `idColumn` are mapped to node properties.
+   *
+   * @param df        [[DataFrame]] containing a single node in each row
+   * @param idColumn  column that contains the node identifier
+   * @param labelSet  labels that are assigned to all nodes
+   * @param properties mapping from property keys to corresponding columns
+   * @since 3.0.0
+   */
+  def create(
+      df: DataFrame,
+      idColumn: String,
+      labelSet: java.util.Set[String],
+      properties: java.util.Map[String, String]): NodeFrame = {
+    val scalaLabelSet = JavaConverters.asScalaSet(labelSet).toSet
+    val scalaProperties = JavaConverters.mapAsScalaMap(properties).toMap
+    NodeFrame(df, idColumn, scalaLabelSet, scalaProperties)
   }
 
 }
@@ -115,7 +152,7 @@ object RelationshipFrame {
    * @param relationshipType relationship type that is assigned to all relationships
    * @since 3.0.0
    */
-  def apply(
+  def create(
       df: DataFrame,
       idColumn: String,
       sourceIdColumn: String,
@@ -126,6 +163,33 @@ object RelationshipFrame {
       .toMap
 
     RelationshipFrame(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
+  }
+
+  /**
+   * Describes how to map a [[DataFrame]] to relationships.
+   *
+   * @param df               [[DataFrame]] containing a single relationship in each row
+   * @param idColumn         column that contains the relationship identifier
+   * @param sourceIdColumn   column that contains the source node identifier of the relationship
+   * @param targetIdColumn   column that contains the target node identifier of the relationship
+   * @param relationshipType relationship type that is assigned to all relationships
+   * @param properties       mapping from property keys to corresponding columns
+   * @since 3.0.0
+   */
+  def create(
+      df: DataFrame,
+      idColumn: String,
+      sourceIdColumn: String,
+      targetIdColumn: String,
+      relationshipType: String,
+      properties: java.util.Map[String, String]): RelationshipFrame = {
+    RelationshipFrame(
+      df,
+      idColumn,
+      sourceIdColumn,
+      targetIdColumn,
+      relationshipType,
+      JavaConverters.mapAsScalaMap(properties).toMap)
   }
 
 }

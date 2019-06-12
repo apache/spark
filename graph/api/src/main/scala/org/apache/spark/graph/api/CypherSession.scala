@@ -18,6 +18,8 @@
 
 package org.apache.spark.graph.api
 
+import scala.collection.JavaConverters
+
 import org.apache.spark.sql.{functions, DataFrame, SparkSession}
 
 object CypherSession {
@@ -52,6 +54,23 @@ trait CypherSession {
    * @since 3.0.0
    */
   def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame]): PropertyGraph
+
+  /**
+   * Creates a [[PropertyGraph]] from a sequence of [[NodeFrame]]s and [[RelationshipFrame]]s.
+   * At least one [[NodeFrame]] has to be provided.
+   *
+   * For each label set and relationship type there can be at most one [[NodeFrame]] and at most one
+   * [[RelationshipFrame]], respectively.
+   *
+   * @param nodes         [[NodeFrame]]s that define the nodes in the graph
+   * @param relationships [[RelationshipFrame]]s that define the relationships in the graph
+   * @since 3.0.0
+   */
+  def createGraph(
+      nodes: java.util.List[NodeFrame],
+      relationships: java.util.List[RelationshipFrame]): PropertyGraph = {
+    createGraph(JavaConverters.asScalaBuffer(nodes), JavaConverters.asScalaBuffer(relationships))
+  }
 
   /**
    * Creates a [[PropertyGraph]] from nodes and relationships.
