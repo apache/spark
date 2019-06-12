@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -42,8 +42,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
     val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
     val exchanges = adaptivePlan.collect {
-      case s: ShuffleExchangeExec => s
-      case b: BroadcastExchangeExec => b
+      case e: Exchange => e
     }
     assert(exchanges.isEmpty, "The final plan should not contain any Exchange node.")
     (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
