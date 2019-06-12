@@ -386,7 +386,6 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     // OrcOptions's parameters have a higher priority than SQL configuration.
     // `mergeSchema` -> `spark.sql.orc.mergeSchema`
     withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
-      assert(new OrcOptions(Map.empty[String, String], conf).mergeSchema == true)
       val map1 = Map(OrcOptions.MERGE_SCHEMA -> "true")
       val map2 = Map(OrcOptions.MERGE_SCHEMA -> "false")
       assert(new OrcOptions(map1, conf).mergeSchema == true)
@@ -394,7 +393,6 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
 
     withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
-      assert(new OrcOptions(Map.empty[String, String], conf).mergeSchema == true)
       val map1 = Map(OrcOptions.MERGE_SCHEMA -> "true")
       val map2 = Map(OrcOptions.MERGE_SCHEMA -> "false")
       assert(new OrcOptions(map1, conf).mergeSchema == true)
