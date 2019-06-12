@@ -509,6 +509,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             throw new AnalysisException(s"${field.name} is binary type that not supports " +
                 "default value")
           case (DecimalType.Fixed(_, _), Literal(v, t: DecimalType)) => v.toString()
+          case (_, Literal(null, NullType)) => "null"
           case (_, Literal(v, t)) =>
             throw new AnalysisException(s"Cannot create a table having a column " +
             s"${field.name} whose default value have incompatible type $t with " +
