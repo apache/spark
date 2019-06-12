@@ -20,6 +20,13 @@ package org.apache.spark.graph.api
 
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, functions}
 
+object CypherSession {
+  val ID_COLUMN = "$ID"
+  val SOURCE_ID_COLUMN = "$SOURCE_ID"
+  val TARGET_ID_COLUMN = "$TARGET_ID"
+  val LABEL_COLUMN_PREFIX = ":"
+}
+
 /**
   * Allows for creating and loading [[PropertyGraph]] instances and running Cypher-queries on them.
   * Wraps a [[SparkSession]].
