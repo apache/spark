@@ -857,10 +857,7 @@ class JDBCSuite extends QueryTest
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
-    val errMsg = intercept[IllegalArgumentException] {
-      Postgres.getJDBCType(ByteType)
-    }
-    assert(errMsg.getMessage contains "Unsupported type in postgresql: ByteType")
+    assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
   }
 
   test("DerbyDialect jdbc type mapping") {
