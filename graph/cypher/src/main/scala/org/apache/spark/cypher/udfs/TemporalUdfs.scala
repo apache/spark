@@ -21,7 +21,6 @@ package org.apache.spark.cypher.udfs
 import java.sql.{Date, Timestamp}
 import java.time.temporal.{ChronoField, IsoFields, TemporalField}
 
-import org.apache.logging.log4j.scala.Logging
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -29,7 +28,7 @@ import org.opencypher.okapi.impl.exception.UnsupportedOperationException
 
 import scala.reflect.runtime.universe._
 
-object TemporalUdfs extends Logging {
+object TemporalUdfs {
 
   /**
     * Adds a duration to a date.
@@ -41,10 +40,6 @@ object TemporalUdfs extends Logging {
         null
       } else {
         val days = interval.microseconds / CalendarInterval.MICROS_PER_DAY
-
-        if (interval.microseconds % CalendarInterval.MICROS_PER_DAY != 0) {
-          logger.warn("Arithmetic with Date and Duration can lead to incorrect results when sub-day values are present.")
-        }
 
         val reducedLocalDate = date
           .toLocalDate
@@ -65,10 +60,6 @@ object TemporalUdfs extends Logging {
         null
       } else {
         val days = interval.microseconds / CalendarInterval.MICROS_PER_DAY
-
-        if (interval.microseconds % CalendarInterval.MICROS_PER_DAY != 0) {
-          logger.warn("Arithmetic with Date and Duration can lead to incorrect results when sub-day values are present.")
-        }
 
         val reducedLocalDate = date
           .toLocalDate
