@@ -42,7 +42,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
-public class JavaPropertyGraphSuite implements Serializable {
+public abstract class JavaPropertyGraphSuite implements Serializable {
     private transient TestSparkSession spark;
     private transient CypherSession cypherSession;
     private transient JavaSparkContext jsc;
