@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.resource
 
-import org.apache.spark.resource.ResourceUtils._
-import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceID
+import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX, SPARK_TASK_PREFIX}
+import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 
 object TestResourceIDs {
   val DRIVER_GPU_ID = ResourceID(SPARK_DRIVER_PREFIX, GPU)

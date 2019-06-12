@@ -35,7 +35,7 @@ import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.resource.ResourceUtils._
-import org.apache.spark.TestResourceIDs._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._

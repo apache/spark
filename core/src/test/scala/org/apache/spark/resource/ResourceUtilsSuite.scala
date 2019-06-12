@@ -23,7 +23,7 @@ import java.nio.file.{Files => JavaFiles}
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
 
 import org.apache.spark.resource.ResourceUtils._
-import org.apache.spark.TestResourceIDs._
+import TestResourceIDs._
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils

@@ -31,7 +31,7 @@ import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 
 import org.apache.spark.resource.ResourceUtils._
-import org.apache.spark.TestResourceIDs._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._

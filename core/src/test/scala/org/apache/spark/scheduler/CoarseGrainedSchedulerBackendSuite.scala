@@ -33,7 +33,7 @@ import org.scalatest.mockito.MockitoSugar._
 import org.apache.spark._
 
 import org.apache.spark.resource.ResourceUtils._
-import org.apache.spark.TestResourceIDs._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD

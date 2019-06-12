@@ -28,7 +28,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
 
 import org.apache.spark.resource.ResourceUtils._
-import org.apache.spark.TestResourceIDs._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
