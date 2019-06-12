@@ -183,6 +183,11 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
+  override def verboseString(maxFields: Int): String = simpleString(maxFields)
+
+  override def simpleString(maxFields: Int): String =
+    s"AdaptiveSparkPlan(isFinalPlan=$isFinalPlan)"
+
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
@@ -191,8 +196,9 @@ case class AdaptiveSparkPlanExec(
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int): Unit = {
+    super.generateTreeString(depth, lastChildren, append, verbose, prefix, addSuffix, maxFields)
     currentPhysicalPlan.generateTreeString(
-      depth, lastChildren, append, verbose, "", addSuffix = false, maxFields)
+      depth + 1, lastChildren :+ true, append, verbose, "", addSuffix = false, maxFields)
   }
 
   /**

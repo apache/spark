@@ -31,14 +31,16 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
     val dfAdaptive = sql(query)
+    val planBefore = dfAdaptive.queryExecution.executedPlan
+    assert(planBefore.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=false)"))
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "false") {
       val df = sql(query)
       QueryTest.sameRows(result.toSeq, df.collect().toSeq)
     }
-    val plan = dfAdaptive.queryExecution.executedPlan
-    assert(plan.isInstanceOf[AdaptiveSparkPlanExec])
-    val adaptivePlan = plan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    val planAfter = dfAdaptive.queryExecution.executedPlan
+    assert(planAfter.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=true)"))
+    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
     val exchanges = adaptivePlan.collect {
       case s: ShuffleExchangeExec => s
       case b: BroadcastExchangeExec => b
