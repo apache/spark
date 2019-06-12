@@ -52,13 +52,9 @@ class PropertyGraphReadWrite extends SparkFunSuite with SharedCypherContext with
     Tuple3(0, 0, 1)
   )).toDF("id", "source", "target")
 
-  private lazy val nodeDataFrame: NodeFrame = NodeFrame(
-    initialDf = nodeData, idColumn = "id", labelSet = Set("Person")
-  )
+  private lazy val nodeDataFrame: NodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
 
-  private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame(
-    relationshipData, idColumn = "id", sourceIdColumn = "source", targetIdColumn = "target", relationshipType = "KNOWS"
-  )
+  private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
 
   test("save and load a graph") {
     val graph = cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))

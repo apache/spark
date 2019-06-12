@@ -20,6 +20,7 @@ package org.apache.spark.cypher
 
 import org.apache.spark.cypher.SparkTable.DataFrameTable
 import org.apache.spark.cypher.adapters.RelationalGraphAdapter
+import org.apache.spark.cypher.conversions.GraphElementFrameConversions.normalizeDf
 import org.apache.spark.cypher.io.ReadWriteGraph._
 import org.apache.spark.graph.api._
 import org.apache.spark.sql.{SaveMode, SparkSession}
@@ -65,7 +66,10 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
       "There can be at most one NodeFrame per label set")
     require(relationships.groupBy(_.relationshipType).forall(_._2.size == 1),
       "There can be at most one RelationshipFrame per relationship type")
-    RelationalGraphAdapter(this, nodes, relationships)
+
+    val normalizedNodes = nodes.map(nf => nf.copy(df = normalizeDf(nf)))
+    val normalizedRelationships = relationships.map(rf => rf.copy(df = normalizeDf(rf)))
+    RelationalGraphAdapter(this, normalizedNodes, normalizedRelationships)
   }
 
   def cypher(graph: PropertyGraph, query: String): CypherResult = cypher(graph, query, Map.empty)
