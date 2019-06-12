@@ -47,7 +47,7 @@ private[spark] case class ResourceRequest(
     discoveryScript: Option[String],
     vendor: Option[String])
 
-private[spark] case class TaskResourceRequirement(resourceName: String, count: Int)
+private[spark] case class TaskResourceRequirement(resourceName: String, amount: Int)
 
 private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[String]) {
   def toResourceInfo: ResourceInformation = {

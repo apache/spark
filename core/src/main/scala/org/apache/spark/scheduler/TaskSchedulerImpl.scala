@@ -383,7 +383,7 @@ private[spark] class TaskSchedulerImpl(
    */
   private def resourcesMeetTaskRequirements(resources: Map[String, Buffer[String]]): Boolean = {
     resourcesReqsPerTask.forall { req =>
-      resources.contains(req.resourceName) && resources(req.resourceName).size >= req.count
+      resources.contains(req.resourceName) && resources(req.resourceName).size >= req.amount
     }
   }
 

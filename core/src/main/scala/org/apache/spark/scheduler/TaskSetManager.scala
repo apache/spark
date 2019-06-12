@@ -536,7 +536,7 @@ private[spark] class TaskSetManager(
 
         val extraResources = sched.resourcesReqsPerTask.map { taskReq =>
           val rName = taskReq.resourceName
-          val count = taskReq.count
+          val count = taskReq.amount
           val rAddresses = availableResources.getOrElse(rName, Seq.empty)
           assert(rAddresses.size >= count, s"Required $count $rName addresses, but only " +
             s"${rAddresses.size} available.")

@@ -2705,15 +2705,15 @@ object SparkContext extends Logging {
             " was specified")
         )
         // Make sure the executor resources are large enough to launch at least one task.
-        if (execCount < taskReq.count) {
+        if (execCount < taskReq.amount) {
           throw new SparkException("The executor resource config: " +
             ResourceID(SPARK_EXECUTOR_PREFIX, taskReq.resourceName).amountConf +
             s" = $execCount has to be >= the task config: " +
             ResourceID(SPARK_TASK_PREFIX, taskReq.resourceName).amountConf +
-            s" = ${taskReq.count}")
+            s" = ${taskReq.amount}")
         }
         // Compare and update the max slots each executor can provide.
-        val resourceNumSlots = execCount / taskReq.count
+        val resourceNumSlots = execCount / taskReq.amount
         if (resourceNumSlots < numSlots) {
           logWarning(s"The configuration of resource: ${taskReq.resourceName} " +
             s"(limits tasks to $resourceNumSlots) will result in wasted resources of resource " +
@@ -2727,9 +2727,9 @@ object SparkContext extends Logging {
       // large enough if any task resources were specified.
       taskResourceRequirements.foreach { taskReq =>
         val execCount = executorResourcesAndCounts(taskReq.resourceName)
-        if (taskReq.count * numSlots < execCount) {
+        if (taskReq.amount * numSlots < execCount) {
           val message = s"The configuration of resource: ${taskReq.resourceName} " +
-            s"(exec = ${execCount}, task = ${taskReq.count}) will result in wasted " +
+            s"(exec = ${execCount}, task = ${taskReq.amount}) will result in wasted " +
             s"resources due to resource ${limitingResourceName} limiting the number of " +
             s"runnable tasks per executor to: ${numSlots}. Please adjust your configuration."
           if (Utils.isTesting) {
