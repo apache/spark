@@ -1004,6 +1004,30 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("up-cast decimal to float") {
+    // DecimalType(14, 7) is compatible with FloatType.
+    assert(Cast.canUpCast(DecimalType(3, 0), FloatType))
+    assert(Cast.canUpCast(DecimalType(3, 1), FloatType))
+    assert(Cast.canUpCast(DecimalType(13, 6), FloatType))
+    assert(Cast.canUpCast(DecimalType(13, 7), FloatType))
+    assert(Cast.canUpCast(DecimalType(14, 7), FloatType))
+    assert(!Cast.canUpCast(DecimalType(9, 8), FloatType))
+    assert(!Cast.canUpCast(DecimalType(14, 6), FloatType))
+    assert(!Cast.canUpCast(DecimalType(20, 1), FloatType))
+  }
+
+  test("up-cast decimal to double") {
+    // DecimalType(30, 15) is compatible with DoubleType.
+    assert(Cast.canUpCast(DecimalType(3, 0), DoubleType))
+    assert(Cast.canUpCast(DecimalType(3, 1), DoubleType))
+    assert(Cast.canUpCast(DecimalType(29, 14), DoubleType))
+    assert(Cast.canUpCast(DecimalType(29, 15), DoubleType))
+    assert(Cast.canUpCast(DecimalType(30, 15), DoubleType))
+    assert(!Cast.canUpCast(DecimalType(16, 16), DoubleType))
+    assert(!Cast.canUpCast(DecimalType(31, 15), DoubleType))
+    assert(!Cast.canUpCast(DecimalType(30, 14), DoubleType))
+  }
+
   test("SPARK-27671: cast from nested null type in struct") {
     import DataTypeTestUtils._
 
