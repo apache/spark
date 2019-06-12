@@ -111,15 +111,15 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a from 1k.2m", table("1k", "2m").select('a))
   }
 
-  test("reverse select query") {
-    assertEqual("from a", table("a"))
+  test("hive-style single-FROM statement") {
     assertEqual("from a select b, c", table("a").select('b, 'c))
     assertEqual(
       "from db.a select b, c where d < 1", table("db", "a").where('d < 1).select('b, 'c))
     assertEqual("from a select distinct b, c", Distinct(table("a").select('b, 'c)))
-    assertEqual(
-      "from (from a union all from b) c select *",
-      table("a").union(table("b")).as("c").select(star()))
+
+    // Weird "FROM table" queries, should be invalid anyway
+    intercept("from a", "no viable alternative at input 'from a'")
+    intercept("from (from a union all from b) c select *", "no viable alternative at input 'from")
   }
 
   test("multi select query") {
@@ -128,10 +128,10 @@ class PlanParserSuite extends AnalysisTest {
       table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10",
-      "This select statement can not have FROM cause as its already specified upfront")
+      "mismatched input 'from' expecting")
     intercept(
       "from a select * from b",
-      "This select statement can not have FROM cause as its already specified upfront")
+      "mismatched input 'from' expecting")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(
@@ -795,10 +795,10 @@ class PlanParserSuite extends AnalysisTest {
     val m1 = intercept[ParseException] {
       parsePlan("SELECT * FROM (INSERT INTO BAR VALUES (2))")
     }.getMessage
-    assert(m1.contains("mismatched input 'FROM' expecting"))
+    assert(m1.contains("missing ')' at 'BAR'"))
     val m2 = intercept[ParseException] {
       parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
     }.getMessage
-    assert(m2.contains("mismatched input 'FROM' expecting"))
+    assert(m2.contains("mismatched input 'IN' expecting"))
   }
 }
