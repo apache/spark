@@ -163,7 +163,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
-      ResolveTables(this) ::
+      ResolveTables ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
@@ -661,13 +661,15 @@ class Analyzer(
 
   /**
    * Resolve table relations with concrete relations from v2 catalog.
+   *
+   * [[ResolveRelations]] still resolves v1 tables.
    */
-  case class ResolveTables(lookupCatalog: LookupCatalog) extends Rule[LogicalPlan] {
+  object ResolveTables extends Rule[LogicalPlan] {
     import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalog), ident)) =>
-        loadTable(catalog, ident).map(DataSourceV2Relation.create).getOrElse(u)
+      case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
+        loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
     }
   }
 
