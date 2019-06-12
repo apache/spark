@@ -44,6 +44,28 @@ public final class Platform {
   public static final int DOUBLE_ARRAY_OFFSET;
 
   private static final boolean unaligned;
+  static {
+    boolean _unaligned;
+    String arch = System.getProperty("os.arch", "");
+    if (arch.equals("ppc64le") || arch.equals("ppc64") || arch.matches("s390x")) {
+      // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but
+      // ppc64 and ppc64le support it
+      _unaligned = true;
+    } else {
+      try {
+        Class<?> bitsClass =
+          Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
+        Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
+        unalignedMethod.setAccessible(true);
+        _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
+      } catch (Throwable t) {
+        // We at least know x86 and x64 support unaligned access.
+        //noinspection DynamicRegexReplaceableByCompiledPattern
+        _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
+      }
+    }
+    unaligned = _unaligned;
+  }
 
   // Access fields and constructors once and store them, for performance:
 
