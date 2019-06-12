@@ -107,8 +107,8 @@ private[hive] object OrcFileOperator extends Logging {
    * This is visible for testing.
    */
   def readOrcSchemasInParallel(
-    partFiles: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean)
-    : Seq[StructType] = {
+      partFiles: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean)
+      : Seq[StructType] = {
     ThreadUtils.parmap(partFiles, "readingOrcSchemas", 8) { currentFile =>
       val file = currentFile.getPath.toString
       getFileReader(file, Some(conf), ignoreCorruptFiles).map(reader => {

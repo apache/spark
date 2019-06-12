@@ -31,21 +31,22 @@ object SchemaMergeUtils extends Logging {
    * Figures out a merged Parquet/ORC schema with a distributed Spark job.
    */
   def mergeSchemasInParallel(
-    sparkSession: SparkSession,
-    files: Seq[FileStatus],
-    parallelSchemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType])
-    : Option[StructType] = {
+      sparkSession: SparkSession,
+      files: Seq[FileStatus],
+      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType])
+      : Option[StructType] = {
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
     // !! HACK ALERT !!
     //
-    // Parquet requires `FileStatus`es to read footers.  Here we try to send cached `FileStatus`es
-    // to executor side to avoid fetching them again.  However, `FileStatus` is not `Serializable`
+    // Parquet/Orc requires `FileStatus`es to read footers.
+    // Here we try to send cached `FileStatus`es to executor side to avoid fetching them again.
+    // However, `FileStatus` is not `Serializable`
     // but only `Writable`.  What makes it worse, for some reason, `FileStatus` doesn't play well
     // with `SerializableWritable[T]` and always causes a weird `IllegalStateException`.  These
     // facts virtually prevents us to serialize `FileStatus`es.
     //
-    // Since Parquet only relies on path and length information of those `FileStatus`es to read
+    // Since Parquet/Orc only relies on path and length information of those `FileStatus`es to read
     // footers, here we just extract them (which can be easily serialized), send them to executor
     // side, and resemble fake `FileStatus`es there.
     val partialFileStatusInfo = files.map(f => (f.getPath.toString, f.getLen))
@@ -68,9 +69,7 @@ object SchemaMergeUtils extends Logging {
             new FileStatus(length, false, 0, 0, 0, 0, null, null, null, new Path(path))
           }.toSeq
 
-          // Reads schemas in multi-threaded manner within each task
-          val schemas = parallelSchemaReader(
-            fakeFileStatuses, serializedConf.value, ignoreCorruptFiles)
+          val schemas = schemaReader(fakeFileStatuses, serializedConf.value, ignoreCorruptFiles)
 
           if (schemas.isEmpty) {
             Iterator.empty

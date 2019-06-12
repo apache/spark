@@ -192,7 +192,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
   protected def testMergeSchemasInParallel(
       ignoreCorruptFiles: Boolean,
-      parallelSchemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
     withSQLConf(
       SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles.toString,
       SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
@@ -214,9 +214,9 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         val schema = SchemaMergeUtils.mergeSchemasInParallel(
           spark,
           fileStatuses,
-          parallelSchemaReader)
+          schemaReader)
 
-        assert(schema.isDefined == true)
+        assert(schema.isDefined)
         assert(schema.get == StructType(Seq(
           StructField("a", LongType, true),
           StructField("b", LongType, true))))
@@ -225,10 +225,10 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   }
 
   protected def testMergeSchemasInParallel(
-      parallelSchemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
-    testMergeSchemasInParallel(true, parallelSchemaReader)
+      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+    testMergeSchemasInParallel(true, schemaReader)
     val exception = intercept[SparkException] {
-      testMergeSchemasInParallel(false, parallelSchemaReader)
+      testMergeSchemasInParallel(false, schemaReader)
     }.getCause
     assert(exception.getCause.getMessage.contains("Could not read footer for file"))
   }
@@ -375,6 +375,30 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       val reader = OrcFile.createReader(orcFilePath, readerOptions)
       val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
       assert(version === SPARK_VERSION_SHORT)
+    }
+  }
+
+  test("SPARK-11412 test orc merge schema option") {
+    val conf = spark.sessionState.conf
+    // Test if the default of spark.sql.orc.mergeSchema is false
+    assert(new OrcOptions(Map.empty[String, String], conf).mergeSchema == false)
+
+    // OrcOptions's parameters have a higher priority than SQL configuration.
+    // `mergeSchema` -> `spark.sql.orc.mergeSchema`
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+      assert(new OrcOptions(Map.empty[String, String], conf).mergeSchema == true)
+      val map1 = Map(OrcOptions.MERGE_SCHEMA -> "true")
+      val map2 = Map(OrcOptions.MERGE_SCHEMA -> "false")
+      assert(new OrcOptions(map1, conf).mergeSchema == true)
+      assert(new OrcOptions(map2, conf).mergeSchema == false)
+    }
+
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
+      assert(new OrcOptions(Map.empty[String, String], conf).mergeSchema == true)
+      val map1 = Map(OrcOptions.MERGE_SCHEMA -> "true")
+      val map2 = Map(OrcOptions.MERGE_SCHEMA -> "false")
+      assert(new OrcOptions(map1, conf).mergeSchema == true)
+      assert(new OrcOptions(map2, conf).mergeSchema == false)
     }
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -148,16 +149,10 @@ class MergedOrcReadSchemaSuite
 
   override val format: String = "orc"
 
-  override def beforeAll() {
-    super.beforeAll()
-    originalConf = spark.conf.get(SQLConf.ORC_SCHEMA_MERGING_ENABLED)
-    spark.conf.set(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key, "true")
-  }
-
-  override def afterAll() {
-    spark.conf.set(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key, originalConf)
-    super.afterAll()
-  }
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key, "true")
 }
 
 class ParquetReadSchemaSuite
