@@ -203,7 +203,8 @@ class MasterSuite extends SparkFunSuite
     conf.set(RECOVERY_MODE_FACTORY, classOf[FakeRecoveryModeFactory].getCanonicalName)
     conf.set(MASTER_REST_SERVER_ENABLED, false)
 
-    val fakeAppInfo = makeAppInfo(1024)
+    val fakeAppInfo = makeAppInfo(1024, maxCores = Some(15))
+    val fakeAppInfoX = makeAppInfo(1024)
     val fakeWorkerInfo = makeWorkerInfo(8192, 16)
     val fakeDriverInfo = new DriverInfo(
       startTime = 0,
@@ -218,6 +219,7 @@ class MasterSuite extends SparkFunSuite
 
     // Build the fake recovery data
     FakeRecoveryModeFactory.persistentData.put(s"app_${fakeAppInfo.id}", fakeAppInfo)
+    FakeRecoveryModeFactory.persistentData.put(s"app_${fakeAppInfoX.id}", fakeAppInfoX)
     FakeRecoveryModeFactory.persistentData.put(s"driver_${fakeDriverInfo.id}", fakeDriverInfo)
     FakeRecoveryModeFactory.persistentData.put(s"worker_${fakeWorkerInfo.id}", fakeWorkerInfo)
 
@@ -230,7 +232,7 @@ class MasterSuite extends SparkFunSuite
         master.workers.size should be(1)
       }
 
-      master.idToApp.keySet should be(Set(fakeAppInfo.id))
+      master.idToApp.keySet should be(Set(fakeAppInfo.id, fakeAppInfoX.id))
       getDrivers(master) should be(Set(fakeDriverInfo))
       master.workers should be(Set(fakeWorkerInfo))
 
@@ -240,13 +242,16 @@ class MasterSuite extends SparkFunSuite
         new ExecutorDescription(fakeAppInfo.id, 0, 7, ExecutorState.RUNNING))
 
       fakeAppInfo.state should be(ApplicationState.UNKNOWN)
+      fakeAppInfoX.state should be(ApplicationState.UNKNOWN)
       fakeWorkerInfo.coresFree should be(16)
       fakeWorkerInfo.coresUsed should be(0)
 
       master.self.send(MasterChangeAcknowledged(fakeAppInfo.id))
+      master.self.send(MasterChangeAcknowledged(fakeAppInfoX.id))
       eventually(timeout(1.second), interval(10.milliseconds)) {
         // Application state should be WAITING when "MasterChangeAcknowledged" event executed.
         fakeAppInfo.state should be(ApplicationState.WAITING)
+        fakeAppInfoX.state should be(ApplicationState.WAITING)
       }
 
       master.self.send(
@@ -261,6 +266,8 @@ class MasterSuite extends SparkFunSuite
       fakeWorkerInfo.coresUsed should be(16)
       // State of application should be RUNNING
       fakeAppInfo.state should be(ApplicationState.RUNNING)
+      // State of application X should be WAITING because there is no enough resources
+      fakeAppInfoX.state should be(ApplicationState.WAITING)
     } finally {
       if (master != null) {
         master.rpcEnv.shutdown()
