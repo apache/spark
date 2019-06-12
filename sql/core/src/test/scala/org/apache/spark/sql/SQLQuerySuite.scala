@@ -545,16 +545,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-28002: CTE with column alias") {
-    checkAnswer(
-      sql("""
-        |WITH t(x) AS (SELECT 1)
-        |SELECT * FROM t WHERE x = 1
-        """.stripMargin),
-      Row(1) :: Nil
-    )
-  }
-
   test("date row") {
     checkAnswer(sql(
       """select cast("2015-01-28" as date) from testData limit 1"""),

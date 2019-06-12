@@ -184,14 +184,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *
    * This is only used for Common Table Expressions.
    */
-  override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias =
-    withOrigin(ctx) {
-      val subQuery: LogicalPlan = plan(ctx.query).optionalMap(ctx.columnAliases)(
-        (columnAliases, plan) =>
-          UnresolvedSubqueryColumnAliases(visitIdentifierList(columnAliases), plan)
-      )
-      SubqueryAlias(ctx.name.getText, subQuery)
-    }
+  override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
+    val subQuery: LogicalPlan = plan(ctx.query).optionalMap(ctx.columnAliases)(
+      (columnAliases, plan) =>
+        UnresolvedSubqueryColumnAliases(visitIdentifierList(columnAliases), plan)
+    )
+    SubqueryAlias(ctx.name.getText, subQuery)
+  }
 
   /**
    * Create a logical plan which allows for multiple inserts using one 'from' statement. These

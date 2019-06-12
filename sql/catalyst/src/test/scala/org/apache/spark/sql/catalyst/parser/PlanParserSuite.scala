@@ -81,18 +81,31 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select * from a intersect all select * from b", a.intersect(b, isAll = true))
   }
 
+  private def cte(plan: LogicalPlan, namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
+    val ctes = namedPlans.map {
+      case (name, (cte, columnAliases)) =>
+        val subquery = if (columnAliases.isEmpty) {
+          cte
+        } else {
+          UnresolvedSubqueryColumnAliases(columnAliases, cte)
+        }
+        name -> SubqueryAlias(name, subquery)
+    }
+    With(plan, ctes)
+  }
+
   test("common table expressions") {
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> table("a").select(star())))
+      cte(table("cte1").select(star()), "cte1" -> ((table("a").select(star()), Seq.empty))))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> OneRowRelation().select(1)))
+      cte(table("cte1").select(star()), "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
       cte(table("cte2").select(star()),
-        "cte1" -> OneRowRelation().select(1),
-        "cte2" -> table("cte1").select(star())))
+        "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
+        "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
       "Found duplicate keys 'cte1'")
@@ -817,5 +830,11 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "SELECT /*+ BROADCAST(tab) */ * FROM testcat.db.tab",
       table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
+  }
+
+  test("SPARK-28002: CTE with column alias") {
+    assertEqual(
+      "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
+      cte(table("t").select(star()), "t" -> ((table("a").select('c), Seq("x")))))
   }
 }

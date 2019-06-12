@@ -645,5 +645,4 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
         "2; number of columns: 1."))
   }
-
 }
