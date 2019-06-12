@@ -248,7 +248,7 @@ class SQLAppStatusListener(
     }
   }
 
-  def toStoredNodes(nodes: Seq[SparkPlanGraphNode]): Seq[SparkPlanGraphNodeWrapper] = {
+  private def toStoredNodes(nodes: Seq[SparkPlanGraphNode]): Seq[SparkPlanGraphNodeWrapper] = {
     nodes.map {
       case cluster: SparkPlanGraphCluster =>
         val storedCluster = new SparkPlanGraphClusterWrapper(
@@ -289,8 +289,8 @@ class SQLAppStatusListener(
   }
 
   private def onAdaptiveExecutionUpdate(event: SparkListenerSQLAdaptiveExecutionUpdate): Unit = {
-    val SparkListenerSQLAdaptiveExecutionUpdate(executionId,
-    physicalPlanDescription, sparkPlanInfo) = event
+    val SparkListenerSQLAdaptiveExecutionUpdate(
+      executionId, physicalPlanDescription, sparkPlanInfo) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
