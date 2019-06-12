@@ -230,7 +230,6 @@ class EncoderResolutionSuite extends PlanTest {
   castSuccess[Long, String]
   castSuccess[Int, java.math.BigDecimal]
   castSuccess[Long, java.math.BigDecimal]
-  castSuccess[Double, java.math.BigDecimal]
 
   castFail[Long, Int]
   castFail[java.sql.Timestamp, java.sql.Date]
