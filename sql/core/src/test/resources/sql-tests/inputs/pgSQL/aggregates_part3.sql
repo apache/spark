@@ -103,108 +103,109 @@ create temporary view varchar_tbl as select * from values
 -- select array_agg(distinct a order by a desc nulls last)
 --   from (values (1),(2),(1),(3),(null),(2)) v(a);
 
+-- Skip the test below because it requires 4 UDFs: aggf_trans, aggfns_trans, aggfstr, and aggfns
 -- multi-arg aggs, strict/nonstrict, distinct/order by
 
-select aggfstr(a,b,c)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
-select aggfns(a,b,c)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
+-- select aggfstr(a,b,c)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
+-- select aggfns(a,b,c)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
 
-select aggfstr(distinct a,b,c)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-       generate_series(1,3) i;
-select aggfns(distinct a,b,c)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-       generate_series(1,3) i;
+-- select aggfstr(distinct a,b,c)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--        generate_series(1,3) i;
+-- select aggfns(distinct a,b,c)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--        generate_series(1,3) i;
 
-select aggfstr(distinct a,b,c order by b)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-       generate_series(1,3) i;
-select aggfns(distinct a,b,c order by b)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-       generate_series(1,3) i;
+-- select aggfstr(distinct a,b,c order by b)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--        generate_series(1,3) i;
+-- select aggfns(distinct a,b,c order by b)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--        generate_series(1,3) i;
 
 -- test specific code paths
 
-select aggfns(distinct a,a,c order by c using ~<~,a)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-       generate_series(1,2) i;
-select aggfns(distinct a,a,c order by c using ~<~)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-       generate_series(1,2) i;
-select aggfns(distinct a,a,c order by a)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-       generate_series(1,2) i;
-select aggfns(distinct a,b,c order by a,c using ~<~,b)
-  from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-       generate_series(1,2) i;
+-- select aggfns(distinct a,a,c order by c using ~<~,a)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--        generate_series(1,2) i;
+-- select aggfns(distinct a,a,c order by c using ~<~)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--        generate_series(1,2) i;
+-- select aggfns(distinct a,a,c order by a)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--        generate_series(1,2) i;
+-- select aggfns(distinct a,b,c order by a,c using ~<~,b)
+--   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--        generate_series(1,2) i;
 
 -- check node I/O via view creation and usage, also deparsing logic
 
-create view agg_view1 as
-  select aggfns(a,b,c)
-    from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
+-- create view agg_view1 as
+--   select aggfns(a,b,c)
+--     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
 
-select * from agg_view1;
-select pg_get_viewdef('agg_view1'::regclass);
+-- select * from agg_view1;
+-- select pg_get_viewdef('agg_view1'::regclass);
 
-create or replace view agg_view1 as
-  select aggfns(distinct a,b,c)
-    from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-         generate_series(1,3) i;
+-- create or replace view agg_view1 as
+--   select aggfns(distinct a,b,c)
+--     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--          generate_series(1,3) i;
 
-select * from agg_view1;
-select pg_get_viewdef('agg_view1'::regclass);
+-- select * from agg_view1;
+-- select pg_get_viewdef('agg_view1'::regclass);
 
-create or replace view agg_view1 as
-  select aggfns(distinct a,b,c order by b)
-    from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-         generate_series(1,3) i;
+-- create or replace view agg_view1 as
+--   select aggfns(distinct a,b,c order by b)
+--     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--          generate_series(1,3) i;
 
-select * from agg_view1;
-select pg_get_viewdef('agg_view1'::regclass);
+-- select * from agg_view1;
+-- select pg_get_viewdef('agg_view1'::regclass);
 
-create or replace view agg_view1 as
-  select aggfns(a,b,c order by b+1)
-    from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
+-- create or replace view agg_view1 as
+--   select aggfns(a,b,c order by b+1)
+--     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
 
-select * from agg_view1;
-select pg_get_viewdef('agg_view1'::regclass);
+-- select * from agg_view1;
+-- select pg_get_viewdef('agg_view1'::regclass);
 
-create or replace view agg_view1 as
-  select aggfns(a,a,c order by b)
-    from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
+-- create or replace view agg_view1 as
+--   select aggfns(a,a,c order by b)
+--     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
 
-select * from agg_view1;
-select pg_get_viewdef('agg_view1'::regclass);
+-- select * from agg_view1;
+-- select pg_get_viewdef('agg_view1'::regclass);
 
-create or replace view agg_view1 as
-  select aggfns(a,b,c order by c using ~<~)
-    from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
+-- create or replace view agg_view1 as
+--   select aggfns(a,b,c order by c using ~<~)
+--     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
 
-select * from agg_view1;
-select pg_get_viewdef('agg_view1'::regclass);
+-- select * from agg_view1;
+-- select pg_get_viewdef('agg_view1'::regclass);
 
-create or replace view agg_view1 as
-  select aggfns(distinct a,b,c order by a,c using ~<~,b)
-    from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-         generate_series(1,2) i;
+-- create or replace view agg_view1 as
+--   select aggfns(distinct a,b,c order by a,c using ~<~,b)
+--     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--          generate_series(1,2) i;
 
-select * from agg_view1;
-select pg_get_viewdef('agg_view1'::regclass);
+-- select * from agg_view1;
+-- select pg_get_viewdef('agg_view1'::regclass);
 
-drop view agg_view1;
+-- drop view agg_view1;
 
 -- incorrect DISTINCT usage errors
 
-select aggfns(distinct a,b,c order by i)
-  from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
-select aggfns(distinct a,b,c order by a,b+1)
-  from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
-select aggfns(distinct a,b,c order by a,b,i,c)
-  from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
-select aggfns(distinct a,a,c order by a,b)
-  from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
+-- select aggfns(distinct a,b,c order by i)
+--   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
+-- select aggfns(distinct a,b,c order by a,b+1)
+--   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
+-- select aggfns(distinct a,b,c order by a,b,i,c)
+--   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
+-- select aggfns(distinct a,a,c order by a,b)
+--   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
 
 -- [SPARK-27978] We use concat_ws(delimiter, collect_list(expression)) to rewrite string_agg
 -- string_agg tests
@@ -243,6 +244,7 @@ select concat_ws(',', sort_array(array_distinct(collect_list(f1)))) from varchar
 
 select min(CASE WHEN unique1> 100 THEN unique1 END) from tenk1;
 
+-- The result is different: we added cast here because [SPARK-2659]
 select sum(CASE WHEN ten > 0 THEN cast(1/ten as integer) END) from tenk1;
 
 -- [SPARK-27987] Support POSIX Regular Expressions
@@ -253,13 +255,14 @@ select ten, sum(distinct CASE WHEN four > 10 THEN four END)  from onek a
 group by ten
 having exists (select 1 from onek b where sum(distinct a.four) = b.four);
 
+-- Rewrite this SQL by removing COLLATE
 select max(CASE WHEN bar > '0' THEN foo END)
 from (values ('a', 'b')) AS v(foo,bar);
 
 -- outer reference in FILTER (PostgreSQL extension)
 select (select count(*)
         from (values (1)) t0(inner_c))
-from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
+from (values (2),(3)) t1(outer_c);
 -- Rewriting to CASE WHEN will hit: Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses
 -- select (select count(*) filter (where outer_c <> 0)
 --         from (values (1)) t0(inner_c))
@@ -279,6 +282,6 @@ from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
 --  unique1 IN (SELECT unique1 FROM onek where unique1 < 100)) FROM tenk1;
 
 -- exercise lots of aggregate parts with FILTER
-select aggfns(distinct a,b,c order by a,c using ~<~,b) filter (where a > 1)
-    from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
-    generate_series(1,2) i;
+-- select aggfns(distinct a,b,c order by a,c using ~<~,b) filter (where a > 1)
+--     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+--     generate_series(1,2) i;
