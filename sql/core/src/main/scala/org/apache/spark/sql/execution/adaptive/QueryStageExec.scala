@@ -98,6 +98,8 @@ abstract class QueryStageExec extends LeafExecNode {
   override def doExecuteBroadcast[T](): Broadcast[T] = plan.executeBroadcast()
   override def doCanonicalize(): SparkPlan = plan.canonicalized
 
+  protected override def stringArgs: Iterator[Any] = Iterator.single(id)
+
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
