@@ -367,7 +367,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     contextHandler.addServlet(holder, "/")
     server.attachHandler(contextHandler)
 
-    implicit val webDriver: WebDriver = new HtmlUnitDriver(BrowserVersion.INTERNET_EXPLORER, true)
+    implicit val webDriver: WebDriver =
+      new HtmlUnitDriver(BrowserVersion.INTERNET_EXPLORER_11, true)
 
     try {
       val url = s"http://localhost:$port"
