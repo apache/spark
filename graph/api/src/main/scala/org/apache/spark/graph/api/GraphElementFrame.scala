@@ -47,14 +47,19 @@ abstract class GraphElementFrame {
   def idColumn: String
 
   /**
+   * Name of all columns that contain graph element identifiers.
+   *
+   * @since 3.0.0
+   */
+  def idColumns: Seq[String] = Seq(idColumn)
+
+  /**
    * Mapping from graph element property keys to the columns that contain the corresponding property
    * values.
    *
    * @since 3.0.0
    */
   def properties: Map[String, String]
-
-  protected def idColumns: Seq[String]
 
 }
 
@@ -74,7 +79,25 @@ object NodeFrame {
     val properties = (df.columns.toSet - idColumn)
       .map(columnName => columnName -> columnName)
       .toMap
+    create(df, idColumn, labelSet, properties)
+  }
 
+  /**
+   * Describes how to map an initial [[DataFrame]] to nodes.
+   *
+   * All columns apart from the given `idColumn` are mapped to node properties.
+   *
+   * @param df        [[DataFrame]] containing a single node in each row
+   * @param idColumn  column that contains the node identifier
+   * @param labelSet  labels that are assigned to all nodes
+   * @param properties mapping from property keys to corresponding columns
+   * @since 3.0.0
+   */
+  def create(
+      df: DataFrame,
+      idColumn: String,
+      labelSet: Set[String],
+      properties: Map[String, String]): NodeFrame = {
     NodeFrame(df, idColumn, labelSet, properties)
   }
 
@@ -127,16 +150,12 @@ object NodeFrame {
  * @param properties mapping from property keys to corresponding columns
  * @since 3.0.0
  */
-case class NodeFrame(
+case class NodeFrame private[graph] (
     df: DataFrame,
     idColumn: String,
     labelSet: Set[String],
     properties: Map[String, String])
-    extends GraphElementFrame {
-
-  override protected def idColumns: Seq[String] = Seq(idColumn)
-
-}
+    extends GraphElementFrame
 
 object RelationshipFrame {
 
@@ -162,6 +181,27 @@ object RelationshipFrame {
       .map(columnName => columnName -> columnName)
       .toMap
 
+    create(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
+  }
+
+  /**
+   * Describes how to map a [[DataFrame]] to relationships.
+   *
+   * @param df               [[DataFrame]] containing a single relationship in each row
+   * @param idColumn         column that contains the relationship identifier
+   * @param sourceIdColumn   column that contains the source node identifier of the relationship
+   * @param targetIdColumn   column that contains the target node identifier of the relationship
+   * @param relationshipType relationship type that is assigned to all relationships
+   * @param properties       mapping from property keys to corresponding columns
+   * @since 3.0.0
+   */
+  def create(
+      df: DataFrame,
+      idColumn: String,
+      sourceIdColumn: String,
+      targetIdColumn: String,
+      relationshipType: String,
+      properties: Map[String, String]): RelationshipFrame = {
     RelationshipFrame(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
   }
 
@@ -207,7 +247,7 @@ object RelationshipFrame {
  * @param properties       mapping from property keys to corresponding columns
  * @since 3.0.0
  */
-case class RelationshipFrame(
+case class RelationshipFrame private[graph] (
     df: DataFrame,
     idColumn: String,
     sourceIdColumn: String,
@@ -216,6 +256,6 @@ case class RelationshipFrame(
     properties: Map[String, String])
     extends GraphElementFrame {
 
-  override protected def idColumns: Seq[String] = Seq(idColumn, sourceIdColumn, targetIdColumn)
+  override def idColumns: Seq[String] = Seq(idColumn, sourceIdColumn, targetIdColumn)
 
 }
