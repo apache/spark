@@ -86,13 +86,6 @@ def wrap_udf(f, return_type):
         return lambda *a: f(*a)
 
 
-def verify_scalar_pandas_udf_result_length(result, length):
-    if len(result) != length:
-        raise RuntimeError("Result vector from pandas_udf was not the required length: "
-                           "expected %d, got %d" % (length, len(result)))
-    return result
-
-
 def wrap_scalar_pandas_udf(f, return_type, eval_type):
     arrow_return_type = to_arrow_type(return_type)
 
@@ -103,10 +96,17 @@ def wrap_scalar_pandas_udf(f, return_type, eval_type):
                             "{}, but is {}".format(pd_type, type(result)))
         return result
 
+    def verify_result_length(result, length):
+        if len(result) != length:
+            raise RuntimeError("Result vector from pandas_udf was not the required length: "
+                               "expected %d, got %d" % (length, len(result)))
+        return result
+
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        return lambda *a: (verify_scalar_pandas_udf_result_length(
+        return lambda *a: (verify_result_length(
             verify_result_type(f(*a)), len(a[0])), arrow_return_type)
     else:
+        # The result length verification is done at the end of a partition.
         return lambda *iterator: map(lambda res: (res, arrow_return_type),
                                      map(verify_result_type, f(*iterator)))
 
@@ -282,7 +282,7 @@ def read_udfs(pickleSer, infile, eval_type):
         assert num_udfs == 1, "One SQL_SCALAR_PANDAS_ITER_UDF expected here."
 
         arg_offsets, udf = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=i)
+            pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         def func(_, iterator):
             num_input_rows = [0]
@@ -302,20 +302,23 @@ def read_udfs(pickleSer, infile, eval_type):
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
                 assert num_output_rows <= num_input_rows[0], \
-                    "Pandas iterator UDF generate more rows then read rows."
+                    "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
             try:
                 if sys.version >= '3':
                     iterator.__next__()
                 else:
                     iterator.next()
-                raise Exception("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator.")
             except StopIteration:
                 pass
+            else:
+                raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator.")
 
             if num_output_rows != num_input_rows[0]:
-                raise Exception("The number of output rows of the pandas iterator UDF should be "
-                                "the same with input rows.")
+                raise RuntimeError("The number of output rows of pandas iterator UDF should be "
+                                   "the same with input rows. The input rows number is %d but the "
+                                   "output rows number is %d." %
+                                   (num_input_rows[0], num_output_rows))
 
         # profiling is not supported for UDF
         return func, None, ser, ser

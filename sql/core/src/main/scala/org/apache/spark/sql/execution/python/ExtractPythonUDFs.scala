@@ -117,7 +117,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
 
     var firstVisitedUDFEvalType: Option[Int] = None
 
-    def checkEvalType(evalType: Int): Boolean = {
+    def canChainUDF(evalType: Int): Boolean = {
       if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) {
         false
       } else {
@@ -131,7 +131,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
         firstVisitedUDFEvalType = Some(udf.evalType)
         Seq(udf)
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
-        && checkEvalType(udf.evalType) =>
+        && canChainUDF(udf.evalType) =>
         Seq(udf)
       case e => e.children.flatMap(collectEvaluableUDFs)
     }
@@ -183,13 +183,13 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 
-          val evalType = validUdfs.head.evalType
-          validUdfs.foreach { udf =>
-            if (udf.evalType != evalType) {
-              throw new AnalysisException(
-                "Expected udfs have the same evalType but got different")
-            }
+          val evalTypes = validUdfs.map(_.evalType).toSet
+          if (evalTypes.size != 1) {
+            throw new AnalysisException(
+              s"Expected udfs have the same evalType but got different evalTypes: " +
+              s"${evalTypes.mkString(",")}")
           }
+          val evalType = evalTypes.head
           val evaluation = evalType match {
             case PythonEvalType.SQL_BATCHED_UDF =>
               BatchEvalPython(validUdfs, resultAttrs, child)
