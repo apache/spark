@@ -375,7 +375,11 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       val content = "123".getBytes
       Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
       val df = spark.read.format(BINARY_FILE).load(dir.getPath)
-      df.collect()
+      df.select(col(PATH), col(CONTENT)).first() match {
+        case Row(p: String, c: Array[Byte]) =>
+          assert(p.endsWith(file.getAbsolutePath), "should support space in file name")
+          assert(c === content, "should read file with space in file name")
+      }
     }
   }
 }
