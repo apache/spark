@@ -659,6 +659,11 @@ primaryExpression
     | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
     ;
 
+defaultValueExpression
+    : constant
+    | (functionName=('CURRENT_DATE' | 'CURRENT_TIMESTAMP'))('()')?
+    ;
+
 constant
     : NULL                                                                                     #nullLiteral
     | interval                                                                                 #intervalLiteral
@@ -735,7 +740,7 @@ colTypeList
     ;
 
 colType
-    : identifier dataType (COMMENT STRING)? (DEFAULT defaultExpression=expression)?
+    : identifier dataType (COMMENT STRING)? (DEFAULT defaultValueExpression)?
     ;
 
 complexColTypeList

@@ -514,7 +514,9 @@ class HiveDDLSuite
                         c10 varchar(50) DEFAULT 'unknown',
                         c11 date DEFAULT CURRENT_DATE(),
                         c12 timestamp DEFAULT CURRENT_TIMESTAMP(),
-                        c13 bigint DEFAULT null
+                        c13 date DEFAULT CURRENT_DATE,
+                        c14 timestamp DEFAULT CURRENT_TIMESTAMP,
+                        c15 bigint DEFAULT null
                       )"""
         sql(ddl)
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
@@ -543,6 +545,10 @@ class HiveDDLSuite
         assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c12") ==
           Option("current_timestamp"))
         assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c13") ==
+          Option("current_date"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c14") ==
+          Option("current_timestamp"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c15") ==
           Option("null"))
       }
       withTable(tabName) {
@@ -559,7 +565,9 @@ class HiveDDLSuite
                         c10 varchar(50) DEFAULT 'unknown',
                         c11 date DEFAULT CURRENT_DATE(),
                         c12 timestamp DEFAULT CURRENT_TIMESTAMP(),
-                        c13 bigint DEFAULT null
+                        c13 date DEFAULT CURRENT_DATE,
+                        c14 timestamp DEFAULT CURRENT_TIMESTAMP,
+                        c15 bigint DEFAULT null
                       ) PARTITIONED BY (month string, day string) STORED AS PARQUET"""
         sql(ddl)
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
@@ -588,6 +596,10 @@ class HiveDDLSuite
         assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c12") ==
           Option("current_timestamp"))
         assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c13") ==
+          Option("current_date"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c14") ==
+          Option("current_timestamp"))
+        assert(tableMetadata.properties.get("spark.sql.sources.schema.defaultValue.c15") ==
           Option("null"))
       }
     }

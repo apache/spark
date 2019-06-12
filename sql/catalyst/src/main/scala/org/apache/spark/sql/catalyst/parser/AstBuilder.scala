@@ -1880,8 +1880,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       builder.putString("comment", string(STRING))
     }
     // Add default constraint to metadata
-    if (defaultExpression != null) {
-      builder.putExpression("defaultExpression", this.expression(defaultExpression))
+    if (defaultValueExpression != null) {
+      builder.putExpression("defaultValueExpression",
+          visitDefaultValueExpression(defaultValueExpression))
     }
     // Add Hive type string to metadata.
     val rawDataType = typedVisit[DataType](ctx.dataType)
@@ -1895,6 +1896,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       cleanedDataType,
       nullable = true,
       builder.build())
+  }
+
+  /**
+   * Resolve/create a expression of default value.
+   */
+  override def visitDefaultValueExpression(
+      ctx: DefaultValueExpressionContext): Expression = withOrigin(ctx) {
+    if (ctx.constant != null) {
+      expression(ctx.constant)
+    } else {
+      val funcId = FunctionIdentifier(ctx.functionName.getText, None)
+      val function = UnresolvedFunction(funcId, Seq.empty, false)
+      function
+    }
   }
 
   /**
