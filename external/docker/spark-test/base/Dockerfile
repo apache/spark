@@ -32,6 +32,6 @@ ENV SPARK_HOME /opt/spark
 ENV PATH $SPARK_HOME:$SCALA_HOME/bin:$PATH
 
 # Install Scala
-ADD http://www.scala-lang.org/files/archive/scala-$SCALA_VERSION.tgz /
+ADD https://www.scala-lang.org/files/archive/scala-$SCALA_VERSION.tgz /
 RUN (cd / && gunzip < scala-$SCALA_VERSION.tgz)|(cd /opt && tar -xvf -)
 RUN rm /scala-$SCALA_VERSION.tgz
