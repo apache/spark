@@ -35,7 +35,8 @@ private[spark] case class KafkaTokenClusterConf(
     keyStoreLocation: Option[String],
     keyStorePassword: Option[String],
     keyPassword: Option[String],
-    tokenMechanism: String) {
+    tokenMechanism: String,
+    specifiedKafkaParams: Map[String, String]) {
   override def toString: String = s"KafkaTokenClusterConf{" +
     s"identifier=$identifier, " +
     s"authBootstrapServers=$authBootstrapServers, " +
@@ -47,7 +48,8 @@ private[spark] case class KafkaTokenClusterConf(
     s"keyStoreLocation=$keyStoreLocation, " +
     s"keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
     s"keyPassword=${keyPassword.map(_ => "xxx")}, " +
-    s"tokenMechanism=$tokenMechanism}"
+    s"tokenMechanism=$tokenMechanism, " +
+    s"specifiedKafkaParams=$specifiedKafkaParams}"
 }
 
 private [kafka010] object KafkaTokenSparkConf extends Logging {
@@ -59,6 +61,8 @@ private [kafka010] object KafkaTokenSparkConf extends Logging {
   def getClusterConfig(sparkConf: SparkConf, identifier: String): KafkaTokenClusterConf = {
     val configPrefix = s"$CLUSTERS_CONFIG_PREFIX$identifier."
     val sparkClusterConf = sparkConf.getAllWithPrefix(configPrefix).toMap
+    val configKafkaPrefix = s"${configPrefix}kafka."
+    val sparkClusterKafkaConf = sparkConf.getAllWithPrefix(configKafkaPrefix).toMap
     val result = KafkaTokenClusterConf(
       identifier,
       sparkClusterConf
@@ -76,7 +80,8 @@ private [kafka010] object KafkaTokenSparkConf extends Logging {
       sparkClusterConf.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG),
       sparkClusterConf.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG),
       sparkClusterConf.getOrElse("sasl.token.mechanism",
-        KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
+        KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM),
+      sparkClusterKafkaConf
     )
     logDebug(s"getClusterConfig($identifier): $result")
     result
