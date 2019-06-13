@@ -67,3 +67,4 @@ The `./bin/spark-submit` can also be used to submit jobs to YARN clusters. You w
 export YARN_CONF_DIR=/etc/hadoop/conf
 ./bin/spark-submit --master yarn examples/src/main/r/dataframe.R
 ```
+
