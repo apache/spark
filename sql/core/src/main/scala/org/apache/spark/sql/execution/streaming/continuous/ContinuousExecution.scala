@@ -49,7 +49,7 @@ class ContinuousExecution(
     extraOptions: Map[String, String],
     deleteCheckpointOnStop: Boolean)
   extends StreamExecution(
-    sparkSession, name, checkpointRoot, analyzedPlan, sink.asInstanceOf[BaseStreamingSink],
+    sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
@@ -352,8 +352,7 @@ class ContinuousExecution(
     // number of batches that must be retained and made recoverable, so we should keep the
     // specified number of metadata that have been committed.
     if (minLogEntriesToMaintain <= epoch) {
-      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
-      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
+      purge(epoch + 1 - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()

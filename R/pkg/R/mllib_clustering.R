@@ -55,7 +55,7 @@ setClass("PowerIterationClustering", slots = list(jobj = "jobj"))
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#'                operators are supported, including '~', '.', ':', '+', '-', '*', and '^'.
 #'                Note that the response variable of formula is empty in spark.bisectingKmeans.
 #' @param k the desired number of leaf clusters. Must be > 1.
 #'          The actual number could be smaller if there are no divisible leaf clusters.

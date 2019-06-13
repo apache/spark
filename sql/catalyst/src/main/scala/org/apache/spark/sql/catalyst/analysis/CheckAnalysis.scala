@@ -33,6 +33,8 @@ import org.apache.spark.sql.types._
  */
 trait CheckAnalysis extends PredicateHelper {
 
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
   /**
    * Override to provide additional checks for correct analysis.
    * These rules will be evaluated after our built-in check rules.
@@ -88,7 +90,7 @@ trait CheckAnalysis extends PredicateHelper {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -107,7 +109,7 @@ trait CheckAnalysis extends PredicateHelper {
 
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            val from = operator.inputSet.map(_.qualifiedName).mkString(", ")
+            val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
@@ -294,6 +296,21 @@ trait CheckAnalysis extends PredicateHelper {
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
+            }
+
+          case CreateTableAsSelect(_, _, partitioning, query, _, _, _) =>
+            val references = partitioning.flatMap(_.references).toSet
+            val badReferences = references.map(_.fieldNames).flatMap { column =>
+              query.schema.findNestedField(column) match {
+                case Some(_) =>
+                  None
+                case _ =>
+                  Some(s"${column.quoted} is missing or is in a map or array")
+              }
+            }
+
+            if (badReferences.nonEmpty) {
+              failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
             }
 
           case _ => // Fallbacks to the following checks

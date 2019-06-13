@@ -40,6 +40,7 @@ import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
@@ -77,14 +78,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
           val file1 = new File(tempDir + "/data1")
-          val writer1 = new PrintWriter(file1)
-          writer1.write("1,2")
-          writer1.close()
+          Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+            writer.write("1,2")
+          }
 
           val file2 = new File(tempDir + "/data2")
-          val writer2 = new PrintWriter(file2)
-          writer2.write("1,2")
-          writer2.close()
+          Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+            writer.write("1,2")
+          }
 
           sql(
             s"""
@@ -100,8 +101,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .asInstanceOf[HiveTableRelation]
 
           val properties = relation.tableMeta.ignoredProperties
-          assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
-          assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+          if (HiveUtils.isHive23) {
+            // Since HIVE-6727, Hive fixes table-level stats for external tables are incorrect.
+            assert(properties("totalSize").toLong == 6)
+            assert(properties.get("rawDataSize").isEmpty)
+          } else {
+            assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
+            assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+          }
 
           val sizeInBytes = relation.stats.sizeInBytes
           assert(sizeInBytes === BigInt(file1.length() + file2.length()))
@@ -114,7 +121,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     withTempDir { tempDir =>
       withTable("t1") {
         spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
-        val dataSize = tempDir.listFiles.filter(!_.getName.endsWith(".crc")).map(_.length).sum
+        val dataSize = getDataSize(tempDir)
         spark.sql(
           s"""
              |CREATE EXTERNAL TABLE t1(id BIGINT)
@@ -865,17 +872,25 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val totalSize = extractStatsPropValues(describeResult, "totalSize")
         assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
 
-        // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
-        // Spark specific statistics. This is triggered by the Hive alterTable API.
         val numRows = extractStatsPropValues(describeResult, "numRows")
-        assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
-        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-        assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
-
-        if (analyzedBySpark) {
+        if (HiveUtils.isHive23) {
+          // Since HIVE-15653(Hive 2.3.0), Hive fixs some ALTER TABLE commands drop table stats.
+          assert(numRows.isDefined && numRows.get == 500)
+          val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
+          assert(rawDataSize.isDefined && rawDataSize.get == 5312)
           checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
         } else {
-          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
+          // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
+          // Spark specific statistics. This is triggered by the Hive alterTable API.
+          assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
+          val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
+          assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
+
+          if (analyzedBySpark) {
+            checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
+          } else {
+            checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
+          }
         }
       }
     }
@@ -943,9 +958,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           withTempDir { loadPath =>
             // load data command
             val file = new File(loadPath + "/data")
-            val writer = new PrintWriter(file)
-            writer.write("2,xyz")
-            writer.close()
+            Utils.tryWithResource(new PrintWriter(file)) { writer =>
+              writer.write("2,xyz")
+            }
             sql(s"LOAD DATA INPATH '${loadPath.toURI.toString}' INTO TABLE $table")
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -980,14 +995,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
             val file1 = new File(dir1 + "/data")
-            val writer1 = new PrintWriter(file1)
-            writer1.write("1,a")
-            writer1.close()
+            Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+              writer.write("1,a")
+            }
 
             val file2 = new File(dir2 + "/data")
-            val writer2 = new PrintWriter(file2)
-            writer2.write("1,a")
-            writer2.close()
+            Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+              writer.write("1,a")
+            }
 
             // add partition command
             sql(

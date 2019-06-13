@@ -38,6 +38,7 @@ import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
@@ -49,6 +50,10 @@ public class ExternalShuffleBlockHandlerSuite {
   OneForOneStreamManager streamManager;
   ExternalShuffleBlockResolver blockResolver;
   RpcHandler handler;
+  ManagedBuffer[] blockMarkers = {
+    new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
+    new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
+  };
 
   @Before
   public void beforeEach() {
@@ -76,21 +81,72 @@ public class ExternalShuffleBlockHandlerSuite {
     assertEquals(1, registerExecutorRequestLatencyMillis.getCount());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void testOpenShuffleBlocks() {
+  public void testCompatibilityWithOldVersion() {
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
+
+    OpenBlocks openBlocks = new OpenBlocks(
+      "app0", "exec1", new String[] { "shuffle_0_0_0", "shuffle_0_0_1" });
+    checkOpenBlocksReceive(openBlocks, blockMarkers);
+
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+    verifyOpenBlockLatencyMetrics();
+  }
+
+  @Test
+  public void testFetchShuffleBlocks() {
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
+
+    FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
+      "app0", "exec1", 0, new int[] { 0 }, new int[][] {{ 0, 1 }});
+    checkOpenBlocksReceive(fetchShuffleBlocks, blockMarkers);
+
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+    verifyOpenBlockLatencyMetrics();
+  }
+
+  @Test
+  public void testOpenDiskPersistedRDDBlocks() {
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 0)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 1)).thenReturn(blockMarkers[1]);
+
+    OpenBlocks openBlocks = new OpenBlocks(
+      "app0", "exec1", new String[] { "rdd_0_0", "rdd_0_1" });
+    checkOpenBlocksReceive(openBlocks, blockMarkers);
+
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
+    verifyOpenBlockLatencyMetrics();
+  }
+
+  @Test
+  public void testOpenDiskPersistedRDDBlocksWithMissingBlock() {
+    ManagedBuffer[] blockMarkersWithMissingBlock = {
+      new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
+      null
+    };
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 0))
+      .thenReturn(blockMarkersWithMissingBlock[0]);
+    when(blockResolver.getRddBlockData("app0", "exec1", 0, 1))
+      .thenReturn(null);
+
+    OpenBlocks openBlocks = new OpenBlocks(
+      "app0", "exec1", new String[] { "rdd_0_0", "rdd_0_1" });
+    checkOpenBlocksReceive(openBlocks, blockMarkersWithMissingBlock);
+
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
+  }
+
+  private void checkOpenBlocksReceive(BlockTransferMessage msg, ManagedBuffer[] blockMarkers) {
     when(client.getClientId()).thenReturn("app0");
 
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
-
-    ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
-    ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(block0Marker);
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(block1Marker);
-    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1",
-      new String[] { "shuffle_0_0_0", "shuffle_0_0_1" })
-      .toByteBuffer();
-    handler.receive(client, openBlocks, callback);
+    handler.receive(client, msg.toByteBuffer(), callback);
 
     ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
     verify(callback, times(1)).onSuccess(response.capture());
@@ -106,13 +162,12 @@ public class ExternalShuffleBlockHandlerSuite {
     verify(streamManager, times(1)).registerStream(anyString(), stream.capture(),
       any());
     Iterator<ManagedBuffer> buffers = stream.getValue();
-    assertEquals(block0Marker, buffers.next());
-    assertEquals(block1Marker, buffers.next());
+    assertEquals(blockMarkers[0], buffers.next());
+    assertEquals(blockMarkers[1], buffers.next());
     assertFalse(buffers.hasNext());
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+  }
 
-    // Verify open block request latency metrics
+  private void verifyOpenBlockLatencyMetrics() {
     Timer openBlockRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()

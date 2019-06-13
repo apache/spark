@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-27366][CORE] Support GPU Resources in Spark job scheduling
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.resources"),
+
     // [SPARK-27410][MLLIB] Remove deprecated / no-op mllib.KMeans getRuns, setRuns
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.getRuns"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.setRuns"),
@@ -75,6 +78,9 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart.copy"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart.this"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart$"),
+    
+    // [SPARK-26632][Core] Separate Thread Configurations of Driver and Executor
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
 
     // [SPARK-25765][ML] Add training cost to BisectingKMeans summary
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.BisectingKMeansModel.this"),
@@ -285,6 +291,45 @@ object MimaExcludes {
       case _ => true
     },
 
+    // [SPARK-27521][SQL] Move data source v2 to catalyst module
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarBatch"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ArrowColumnVector"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarRow"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarArray"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarMap"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnVector"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.GreaterThanOrEqual"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringEndsWith"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LessThanOrEqual$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.In$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Not"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.IsNotNull"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LessThan"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LessThanOrEqual"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.EqualNullSafe$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.GreaterThan$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.In"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.And"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringStartsWith$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.EqualNullSafe"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringEndsWith$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.GreaterThanOrEqual$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Not$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.IsNull$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LessThan$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.IsNotNull$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Or"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.EqualTo$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.GreaterThan"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringContains"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Filter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.IsNull"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.EqualTo"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.And$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Or$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringStartsWith"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringContains$"),
+
     // [SPARK-26216][SQL] Do not use case class as public API (UserDefinedFunction)
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.UserDefinedFunction$"),
     ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.sql.expressions.UserDefinedFunction"),
@@ -441,7 +486,9 @@ object MimaExcludes {
     // [SPARK-15526][ML][FOLLOWUP] Make JPMML provided scope to avoid including unshaded JARs
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>
-        !cls.fullName.startsWith("org.spark_project.jpmml") &&
+        !cls.fullName.startsWith("org.sparkproject.jpmml") &&
+          !cls.fullName.startsWith("org.sparkproject.dmg.pmml") &&
+          !cls.fullName.startsWith("org.spark_project.jpmml") &&
           !cls.fullName.startsWith("org.spark_project.dmg.pmml")
       case _ => true
     }
@@ -716,6 +763,7 @@ object MimaExcludes {
       ProblemFilters.exclude[Problem]("org.apache.spark.rpc.*"),
       ProblemFilters.exclude[Problem]("org.spark-project.jetty.*"),
       ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
+      ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
