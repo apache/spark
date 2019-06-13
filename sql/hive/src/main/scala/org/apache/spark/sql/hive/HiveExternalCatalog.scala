@@ -511,9 +511,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           case (DecimalType.Fixed(_, _), Literal(v, t: DecimalType)) => v.toString()
           case (_, Literal(null, NullType)) => "null"
           case (_, Literal(v, t)) =>
-            throw new AnalysisException(s"Cannot create a table having a column " +
-            s"${field.name} whose default value have incompatible type $t with " +
-            s"field type ${field.dataType}")
+            throw new AnalysisException(s"Cannot create table having a column '${field.name}' " +
+            s"whose default value have incompatible type $t with field type ${field.dataType}")
         }
         properties.put(s"$DATASOURCE_SCHEMA_DEFAULTVALUE_PREFIX${field.name}", defaultValue)
       }
