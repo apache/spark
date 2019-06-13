@@ -127,12 +127,13 @@ case class AggregateExpression(
   override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
-  override def references: AttributeSet = {
+  private lazy val _references: AttributeSet = {
     mode match {
       case Partial | Complete => aggregateFunction.references
       case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
     }
   }
+  override def references: AttributeSet = _references
 
   override def toString: String = {
     val prefix = mode match {

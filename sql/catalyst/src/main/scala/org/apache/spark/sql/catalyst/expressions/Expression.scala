@@ -113,7 +113,9 @@ abstract class Expression extends TreeNode[Expression] {
 
   def nullable: Boolean
 
-  def references: AttributeSet = AttributeSet.fromAttributeSets(children.map(_.references))
+  private lazy val _references: AttributeSet =
+    AttributeSet.fromAttributeSets(children.map(_.references))
+  def references: AttributeSet = _references
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: InternalRow = null): Any
