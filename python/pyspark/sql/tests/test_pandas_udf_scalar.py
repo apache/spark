@@ -454,14 +454,15 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 batch = it.__next__()
             else:
                 batch = it.next()
-            yield pd.Series(len(batch))
+            yield pd.Series([1] * len(batch))
 
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
+            df1 = self.spark.range(10).repartition(1)
             with QuietTest(self.sc):
                 with self.assertRaisesRegexp(
                         Exception,
                         "SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator"):
-                    df.select(iter2_raise_exception(col('id'))).collect()
+                    df1.select(iter2_raise_exception(col('id'))).collect()
 
     def test_vectorized_udf_chained(self):
         df = self.spark.range(10)
