@@ -24,7 +24,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Network._
+import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
