@@ -37,7 +37,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var masters: Array[String] = null
   var workDir: String = null
   var resourceFile: Option[String] = None
-  var resourceDiscoveryScript: Map[String, String] = Map()
+  var resourceDiscoveryScript: Map[String, String] = Map.empty
   var propertiesFile: String = null
 
   // Check for settings in environment variables
@@ -60,7 +60,8 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
     resourceFile = Some(System.getenv("SPARK_WORKER_RESOURCE_FILE"))
   }
   if (System.getenv("SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT") != null) {
-    parseResourceDiscoveryScript(conf.getenv("SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT"))
+    resourceDiscoveryScript = parseResourceDiscoveryScript(
+      System.getenv("SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT"))
   }
 
   parse(args.toList)
@@ -105,7 +106,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       parse(tail)
 
     case ("--resource-script") :: value :: tail =>
-      parseResourceDiscoveryScript(value)
+      resourceDiscoveryScript = parseResourceDiscoveryScript(value)
       parse(tail)
 
     case "--webui-port" :: IntParam(value) :: tail =>
@@ -164,8 +165,8 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   /**
    * @param scripts e.g. gpu:/path1/to1/gpu-script.sh,fpga:/path2/to2/fpga-script.sh
    */
-  private def parseResourceDiscoveryScript(scripts: String): Unit = {
-    resourceDiscoveryScript = scripts.split(",").map { name2Script =>
+  private def parseResourceDiscoveryScript(scripts: String): Map[String, String] = {
+    scripts.split(",").map { name2Script =>
       val rName = name2Script.split(":")(0)
       val rScript = name2Script.split(":")(1)
       (rName, rScript)

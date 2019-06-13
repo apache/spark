@@ -178,7 +178,8 @@ private[deploy] class Worker(
     masterRpcAddresses.length // Make sure we can register with all masters at the same time
   )
 
-  private var resources: Map[String, ResourceInformation] = _
+  // visible for tests
+  private[deploy] var resources: Map[String, ResourceInformation] = _
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -232,23 +233,15 @@ private[deploy] class Worker(
 //        ResourceDiscoverer.parseAllocatedFromJsonFile(rFile)
         null
       }.getOrElse {
-        if (resourceDiscoveryScript.isEmpty) {
-          logWarning(s"Neither resourceFile nor resourceDiscoveryScript found for worker. " +
-            s"You can use SPARK_WORKER_RESOURCE_FILE(--resource-file) or " +
-            s"SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT(--resource-script) to config " +
-            s"resources(e.g. GPU/FPGA) for worker.")
-          Map.empty
-        } else {
-          resourceDiscoveryScript.map { case (rName, rScript) =>
-//            val resInfo = ResourceDiscoverer.getResourceInfo(rScript, rName,
-//              "SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT or (--resource-script)")
-            (rName, null)
-          }
+        resourceDiscoveryScript.map { case (rName, rScript) =>
+//          val resInfo = ResourceDiscoverer.getResourceInfo(rScript, rName,
+//            "SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT or (--resource-script)")
+          (rName, null)
         }
       }
     } catch {
-      case t: Throwable =>
-        logWarning("Failed to setup worker resources: ", t)
+      case e: Exception =>
+        logError("Failed to setup worker resources: ", e)
         System.exit(1)
     }
 
