@@ -42,10 +42,15 @@ class PlanParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)
 
-  private def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
+  private def cte(plan: LogicalPlan, namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
     val ctes = namedPlans.map {
-      case (name, cte) =>
-        name -> SubqueryAlias(name, cte)
+      case (name, (cte, columnAliases)) =>
+        val subquery = if (columnAliases.isEmpty) {
+          cte
+        } else {
+          UnresolvedSubqueryColumnAliases(columnAliases, cte)
+        }
+        name -> SubqueryAlias(name, subquery)
     }
     With(plan, ctes)
   }
@@ -79,19 +84,6 @@ class PlanParserSuite extends AnalysisTest {
       "intersect select * from b", a.intersect(b, isAll = false))
     assertEqual("select * from a intersect distinct select * from b", a.intersect(b, isAll = false))
     assertEqual("select * from a intersect all select * from b", a.intersect(b, isAll = true))
-  }
-
-  private def cte(plan: LogicalPlan, namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
-    val ctes = namedPlans.map {
-      case (name, (cte, columnAliases)) =>
-        val subquery = if (columnAliases.isEmpty) {
-          cte
-        } else {
-          UnresolvedSubqueryColumnAliases(columnAliases, cte)
-        }
-        name -> SubqueryAlias(name, subquery)
-    }
-    With(plan, ctes)
   }
 
   test("common table expressions") {
@@ -825,7 +817,8 @@ class PlanParserSuite extends AnalysisTest {
         |WITH cte1 AS (SELECT * FROM testcat.db.tab)
         |SELECT * FROM cte1
       """.stripMargin,
-      cte(table("cte1").select(star()), "cte1" -> table("testcat", "db", "tab").select(star())))
+      cte(table("cte1").select(star()),
+        "cte1" -> ((table("testcat", "db", "tab").select(star()), Seq.empty))))
 
     assertEqual(
       "SELECT /*+ BROADCAST(tab) */ * FROM testcat.db.tab",
