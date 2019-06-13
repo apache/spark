@@ -21,11 +21,10 @@ import java.io.File
 import java.nio.file.{Files => JavaFiles}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
-
-import org.apache.spark.resource.ResourceUtils._
-import TestResourceIDs._
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.Utils
 
 class ResourceUtilsSuite extends SparkFunSuite
@@ -52,7 +51,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, scriptPath)
 
       val error = intercept[IllegalArgumentException] {
-        getAllResources(conf, SPARK_EXECUTOR_PREFIX, None)
+        getOrDiscoverAllResources(conf, SPARK_EXECUTOR_PREFIX, None)
       }.getMessage()
       assert(error.contains("Resource: gpu, with " +
         "addresses:  is less than what the user requested: 2"))
@@ -75,7 +74,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       conf.set(EXECUTOR_FPGA_ID.amountConf, "2")
       conf.set(EXECUTOR_FPGA_ID.discoveryScriptConf, fpgaDiscovery)
 
-      val resources = getAllResources(conf, SPARK_EXECUTOR_PREFIX, None)
+      val resources = getOrDiscoverAllResources(conf, SPARK_EXECUTOR_PREFIX, None)
       assert(resources.size === 2)
       val gpuValue = resources.get(GPU)
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
@@ -145,7 +144,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       conf.set(DRIVER_GPU_ID.discoveryScriptConf, gpuDiscovery)
 
       // make sure it reads from correct config, here it should use driver
-      val resources = getAllResources(conf, SPARK_DRIVER_PREFIX, None)
+      val resources = getOrDiscoverAllResources(conf, SPARK_DRIVER_PREFIX, None)
       val gpuValue = resources.get(GPU)
       assert(gpuValue.nonEmpty, "Should have a gpu entry")
       assert(gpuValue.get.name == "gpu", "name should be gpu")

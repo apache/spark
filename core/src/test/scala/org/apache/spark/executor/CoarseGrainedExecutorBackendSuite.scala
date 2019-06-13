@@ -31,12 +31,12 @@ import org.json4s.JsonDSL._
 import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mockito.MockitoSugar
-import org.apache.spark._
 
-import org.apache.spark.resource.ResourceUtils._
-import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark._
 import org.apache.spark.TestUtils._
 import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.LaunchTask
@@ -243,7 +243,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.get(GPU).get.addresses.deep === Array("0", "1").deep)
       assert(parsedResources.get(FPGA).nonEmpty)
       assert(parsedResources.get(FPGA).get.name === FPGA)
-      assert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
+      as\sert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
     }
   }
 

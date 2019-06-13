@@ -58,7 +58,7 @@ private[spark] case class TaskResourceRequirement(resourceName: String, amount: 
  * @see [[org.apache.spark.executor.CoarseGrainedExecutorBackend.resourcesFileOpt]]
  */
 private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[String]) {
-  def toResourceInfo: ResourceInformation = {
+  def toResourceInformation: ResourceInformation = {
     new ResourceInformation(id.resourceName, addresses.toArray)
   }
 }
@@ -145,26 +145,27 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   /**
-   * Gets all resource information for the input component.
+   * Gets all allocated resource information for the input component from input resources file and
+   * discover the remaining via discovery scripts.
+   * It also verifies the resource allocation meets required amount for each resource.
    * @return a map from resource name to resource info
    */
-  def getAllResources(
+  def getOrDiscoverAllResources(
       sparkConf: SparkConf,
       componentName: String,
       resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     val requests = parseAllResourceRequests(sparkConf, componentName)
     val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt)
     assertAllResourceAllocationsMeetRequests(allocations, requests)
-    val resourceInfoMap = allocations.map(a => (a.id.resourceName, a.toResourceInfo)).toMap
+    val resourceInfoMap = allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
     logInfo("==============================================================")
-    logInfo("Resources:")
-    resourceInfoMap.foreach { case (k, v) => logInfo(s"$k -> $v") }
+    logInfo(s"Resources for $componentName:\n${resourceInfoMap.mkString("\n")}")
     logInfo("==============================================================")
     resourceInfoMap
   }
 
   // visible for test
-  def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
+  private[spark] def discoverResource(resourceRequest: ResourceRequest): ResourceInformation = {
     val resourceName = resourceRequest.id.resourceName
     val script = resourceRequest.discoveryScript
     val result = if (script.nonEmpty) {

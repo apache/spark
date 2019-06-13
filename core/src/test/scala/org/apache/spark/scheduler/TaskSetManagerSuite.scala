@@ -27,10 +27,10 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark._
-import org.apache.spark.resource.ResourceUtils._
-import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ManualClock}

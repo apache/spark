@@ -379,7 +379,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _driverLogger = DriverLogger(_conf)
 
     val resourcesFileOpt = conf.get(DRIVER_RESOURCES_FILE)
-    _resources = getAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
+    _resources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
 
     // log out spark.app.name in the Spark driver logs
     logInfo(s"Submitted application: $appName")
