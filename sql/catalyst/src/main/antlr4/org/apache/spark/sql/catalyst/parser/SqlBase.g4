@@ -740,7 +740,7 @@ colTypeList
     ;
 
 colType
-    : identifier dataType (COMMENT STRING)? (DEFAULT defaultValueExpression)?
+    : identifier dataType (DEFAULT defaultValueExpression)? (COMMENT STRING)?
     ;
 
 complexColTypeList
