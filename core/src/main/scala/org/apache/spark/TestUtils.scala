@@ -316,9 +316,10 @@ private[spark] object TestUtils {
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 
-  def writeJsonToFile(dir: File, strToWrite: JValue): String = {
-    val file = File.createTempFile("jsonResourceFile", "", dir)
-    JavaFiles.write(file.toPath(), compact(render(strToWrite)).getBytes())
+  /** Creates a temp JSON file that contains the input JSON record. */
+  def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
+    val file = File.createTempFile(prefix, ".json", dir)
+    JavaFiles.write(file.toPath, compact(render(jsonValue)).getBytes())
     file.getPath
   }
 

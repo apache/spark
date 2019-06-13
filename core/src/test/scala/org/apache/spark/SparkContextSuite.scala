@@ -768,7 +768,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val gpusAllocated =
         ResourceAllocation(DRIVER_GPU_ID, Seq("0", "1", "8"))
       val ja = Extraction.decompose(Seq(gpusAllocated))
-      val resourcesFile = writeJsonToFile(dir, ja)
+      val resourcesFile = createTempJsonFile(dir, "resources", ja)
 
       val conf = new SparkConf()
         .set(DRIVER_RESOURCES_FILE, resourcesFile)

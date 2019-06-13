@@ -60,7 +60,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     withTempDir { tmpDir =>
       val testResourceArgs: JObject = ("" -> "")
       val ja = JArray(List(testResourceArgs))
-      val f1 = writeJsonToFile(tmpDir, ja)
+      val f1 = createTempJsonFile(tmpDir, "resources", ja)
       var error = intercept[SparkException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
@@ -82,7 +82,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     withTempDir { tmpDir =>
       val ra = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
       val ja = Extraction.decompose(Seq(ra))
-      val f1 = writeJsonToFile(tmpDir, ja)
+      val f1 = createTempJsonFile(tmpDir, "resources", ja)
       val parsedResources = backend.parseOrFindResources(Some(f1))
 
       assert(parsedResources.size === 1)
@@ -110,7 +110,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val fpgaArgs =
         ResourceAllocation(EXECUTOR_FPGA_ID, Seq("f1", "f2", "f3"))
       val ja = Extraction.decompose(Seq(gpuArgs, fpgaArgs))
-      val f1 = writeJsonToFile(tmpDir, ja)
+      val f1 = createTempJsonFile(tmpDir, "resources", ja)
       val parsedResources = backend.parseOrFindResources(Some(f1))
 
       assert(parsedResources.size === 2)
@@ -137,7 +137,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     withTempDir { tmpDir =>
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0"))
             val ja = Extraction.decompose(Seq(gpuArgs))
-      val f1 = writeJsonToFile(tmpDir, ja)
+      val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
       var error = intercept[IllegalArgumentException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
@@ -151,7 +151,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     withTempDir { tmpDir =>
       val fpga = ResourceAllocation(EXECUTOR_FPGA_ID, Seq("0"))
       val ja = Extraction.decompose(Seq(fpga))
-      val f1 = writeJsonToFile(tmpDir, ja)
+      val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
       var error = intercept[SparkException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
@@ -176,7 +176,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     withTempDir { tmpDir =>
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
       val ja = Extraction.decompose(Seq(gpuArgs))
-      val f1 = writeJsonToFile(tmpDir, ja)
+      val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
       var error = intercept[IllegalArgumentException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
@@ -231,7 +231,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         4, Seq.empty[URL], env, None)
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
       val ja = Extraction.decompose(Seq(gpuArgs))
-      val f1 = writeJsonToFile(dir, ja)
+      val f1 = createTempJsonFile(dir, "resources", ja)
       val parsedResources = backend.parseOrFindResources(Some(f1))
 
       assert(parsedResources.size === 2)
