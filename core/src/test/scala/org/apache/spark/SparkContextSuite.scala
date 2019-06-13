@@ -739,9 +739,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("test driver discovery under local-cluster mode") {
     withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val scriptPath = writeStringToFileAndSetPermissions(gpuFile,
-        """'{"name": "gpu","addresses":["5", "6"]}'""")
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu","addresses":["5", "6"]}""")
 
       val conf = new SparkConf()
         .setMaster("local-cluster[1, 1, 1024]")
@@ -762,9 +761,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("test gpu driver resource files and discovery under local-cluster mode") {
     withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val scriptPath = writeStringToFileAndSetPermissions(gpuFile,
-        """'{"name": "gpu","addresses":["5", "6"]}'""")
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu","addresses":["5", "6"]}""")
 
       implicit val formats = DefaultFormats
       val gpusAllocated =
@@ -844,9 +842,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val resourceFile = new File(dir, "resourceDiscoverScript")
-      val discoveryScript = writeStringToFileAndSetPermissions(resourceFile,
-        """'{"name": "gpu","addresses":["0", "1", "2"]}'""")
+      val discoveryScript = createTempScriptWithExpectedOutput(dir, "resourceDiscoveryScript",
+        """{"name": "gpu","addresses":["0", "1", "2"]}""")
 
       val conf = new SparkConf()
         .setMaster("local-cluster[3, 3, 1024]")

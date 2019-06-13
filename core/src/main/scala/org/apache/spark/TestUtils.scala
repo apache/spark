@@ -317,16 +317,19 @@ private[spark] object TestUtils {
   }
 
   def writeJsonToFile(dir: File, strToWrite: JValue): String = {
-    val f1 = File.createTempFile("jsonResourceFile", "", dir)
-    JavaFiles.write(f1.toPath(), compact(render(strToWrite)).getBytes())
-    f1.getPath()
+    val file = File.createTempFile("jsonResourceFile", "", dir)
+    JavaFiles.write(file.toPath(), compact(render(strToWrite)).getBytes())
+    file.getPath
   }
 
-  def writeStringToFileAndSetPermissions(file: File, result: String): String = {
-    Files.write(s"echo $result", file, StandardCharsets.UTF_8)
-    JavaFiles.setPosixFilePermissions(file.toPath(),
+  /** Creates a temp bash script that prints the given output. */
+  def createTempScriptWithExpectedOutput(dir: File, prefix: String, output: String): String = {
+    val file = File.createTempFile(prefix, ".sh", dir)
+    val script = s"cat <<EOF\n$output\nEOF\n"
+    Files.write(script, file, StandardCharsets.UTF_8)
+    JavaFiles.setPosixFilePermissions(file.toPath,
       EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
-    file.getPath()
+    file.getPath
   }
 }
 

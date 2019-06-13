@@ -193,11 +193,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     conf.set(TASK_FPGA_ID.amountConf, "3")
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-
-      val fpgaDiscovery = new File(dir, "resourceDiscoverScriptfpga")
-      val scriptPath = writeStringToFileAndSetPermissions(fpgaDiscovery,
-        """'{"name": "fpga","addresses":["f1", "f2", "f3"]}'""")
-      conf.set(EXECUTOR_FPGA_ID.discoveryScriptConf, fpgaDiscovery.getPath)
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
+        """{"name": "fpga","addresses":["f1", "f2", "f3"]}""")
+      conf.set(EXECUTOR_FPGA_ID.discoveryScriptConf, scriptPath)
 
       val serializer = new JavaSerializer(conf)
       val env = createMockEnv(conf, serializer)
@@ -221,10 +219,9 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     conf.set(TASK_FPGA_ID.amountConf, "3")
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val fpgaDiscovery = new File(dir, "resourceDiscoverScriptfpga")
-      val scriptPath = writeStringToFileAndSetPermissions(fpgaDiscovery,
-        """'{"name": "fpga","addresses":["f1", "f2", "f3"]}'""")
-      conf.set(EXECUTOR_FPGA_ID.discoveryScriptConf, fpgaDiscovery.getPath)
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
+        """{"name": "fpga","addresses":["f1", "f2", "f3"]}""")
+      conf.set(EXECUTOR_FPGA_ID.discoveryScriptConf, scriptPath)
 
       val serializer = new JavaSerializer(conf)
       val env = createMockEnv(conf, serializer)

@@ -45,8 +45,8 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val scriptPath = writeStringToFileAndSetPermissions(gpuFile, """'{"name": "gpu"}'""")
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoverScript",
+        """{"name": "gpu"}""")
       conf.set(EXECUTOR_GPU_ID.amountConf, "2")
       conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, scriptPath)
 
@@ -62,15 +62,13 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val gpuDiscovery = writeStringToFileAndSetPermissions(gpuFile,
-        """'{"name": "gpu", "addresses": ["0", "1"]}'""")
+      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(EXECUTOR_GPU_ID.amountConf, "2")
       conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, gpuDiscovery)
 
-      val fpgaFile = new File(dir, "fpgaDiscoverScript")
-      val fpgaDiscovery = writeStringToFileAndSetPermissions(fpgaFile,
-        """'{"name": "fpga", "addresses": ["f1", "f2", "f3"]}'""")
+      val fpgaDiscovery = createTempScriptWithExpectedOutput(dir, "fpgDiscoverScript",
+        """{"name": "fpga", "addresses": ["f1", "f2", "f3"]}""")
       conf.set(EXECUTOR_FPGA_ID.amountConf, "2")
       conf.set(EXECUTOR_FPGA_ID.discoveryScriptConf, fpgaDiscovery)
 
@@ -137,9 +135,8 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val gpuDiscovery = writeStringToFileAndSetPermissions(gpuFile,
-        """'{"name": "gpu", "addresses": ["0", "1"]}'""")
+      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDisocveryScript",
+        """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(DRIVER_GPU_ID.amountConf, "2")
       conf.set(DRIVER_GPU_ID.discoveryScriptConf, gpuDiscovery)
 
@@ -157,9 +154,8 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val gpuDiscovery = writeStringToFileAndSetPermissions(gpuFile,
-        """'{"name": "fpga", "addresses": ["0", "1"]}'""")
+      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "fpga", "addresses": ["0", "1"]}""")
       val request =
         ResourceRequest(
           DRIVER_GPU_ID,
@@ -180,9 +176,8 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val gpuFile = new File(dir, "gpuDiscoverScript")
-      val gpuDiscovery = writeStringToFileAndSetPermissions(gpuFile,
-        """'{"addresses": ["0", "1"]}'""")
+      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoverScript",
+        """{"addresses": ["0", "1"]}""")
 
       val request =
         ResourceRequest(
