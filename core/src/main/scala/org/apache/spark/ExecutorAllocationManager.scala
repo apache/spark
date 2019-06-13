@@ -267,7 +267,7 @@ private[spark] class ExecutorAllocationManager(
   private def totalRunningTasks(): Int = synchronized {
     listener.totalRunningTasks
   }
-  
+
   /**
    * This is called at a fixed interval to regulate the number of pending executor requests
    * and number of executors running.
