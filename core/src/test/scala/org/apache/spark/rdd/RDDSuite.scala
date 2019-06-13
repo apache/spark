@@ -18,15 +18,14 @@
 package org.apache.spark.rdd
 
 import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
+import java.lang.management.ManagementFactory
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.reflect.ClassTag
-
 import com.esotericsoftware.kryo.KryoException
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
-
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
@@ -1178,6 +1177,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("SPARK-27666: Do not release lock while TaskContext already completed") {
     val rdd = sc.parallelize(Range(0, 10), 1).cache()
+    val tid = sc.longAccumulator("threadId")
     // validate cache
     rdd.collect()
     rdd.mapPartitions { iter =>
@@ -1189,9 +1189,15 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       })
       t.setDaemon(false)
       t.start()
+      tid.add(t.getId)
       Iterator(0)
     }.collect()
-    Thread.sleep(10 * 150)
+    val tmx = ManagementFactory.getThreadMXBean
+    var t = tmx.getThreadInfo(tid.value)
+    // getThreadInfo() will return null after child thread `t` died
+    while (t != null && t.getThreadState != Thread.State.TERMINATED) {
+      t = tmx.getThreadInfo(tid.value)
+    }
   }
 
   test("SPARK-23496: order of input partitions can result in severe skew in coalesce") {
