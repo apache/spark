@@ -317,76 +317,92 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
     if (children.nonEmpty) {
-      var changed = false
-      def mapChild(child: Any): Any = child match {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = f(arg.asInstanceOf[BaseType])
-          if (!(newChild fastEquals arg)) {
-            changed = true
-            newChild
-          } else {
-            arg
-          }
-        case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
-          val newChild1 = if (containsChild(arg1)) {
-            f(arg1.asInstanceOf[BaseType])
-          } else {
-            arg1.asInstanceOf[BaseType]
-          }
-
-          val newChild2 = if (containsChild(arg2)) {
-            f(arg2.asInstanceOf[BaseType])
-          } else {
-            arg2.asInstanceOf[BaseType]
-          }
-
-          if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
-            changed = true
-            (newChild1, newChild2)
-          } else {
-            tuple
-          }
-        case other => other
-      }
-
-      val newArgs = mapProductIterator {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = f(arg.asInstanceOf[BaseType])
-          if (!(newChild fastEquals arg)) {
-            changed = true
-            newChild
-          } else {
-            arg
-          }
-        case Some(arg: TreeNode[_]) if containsChild(arg) =>
-          val newChild = f(arg.asInstanceOf[BaseType])
-          if (!(newChild fastEquals arg)) {
-            changed = true
-            Some(newChild)
-          } else {
-            Some(arg)
-          }
-        case m: Map[_, _] => m.mapValues {
-          case arg: TreeNode[_] if containsChild(arg) =>
-            val newChild = f(arg.asInstanceOf[BaseType])
-            if (!(newChild fastEquals arg)) {
-              changed = true
-              newChild
-            } else {
-              arg
-            }
-          case other => other
-        }.view.force // `mapValues` is lazy and we need to force it to materialize
-        case d: DataType => d // Avoid unpacking Structs
-        case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
-        case args: Iterable[_] => args.map(mapChild)
-        case nonChild: AnyRef => nonChild
-        case null => null
-      }
-      if (changed) makeCopy(newArgs) else this
+      mapProductElements(f, applyToAll = false)
     } else {
       this
     }
+  }
+
+  /**
+   * Returns a copy of this node where `f` has been applied to all applicable `TreeNode` elements
+   * in the productIterator.
+   * @param f the transform function to be applied on applicable `TreeNode` elements.
+   * @param applyToAll If true, the transform function will be applied to all `TreeNode` elements
+   *                   even for non-child elements; otherwise, the function will only be applied
+   *                   on children nodes. Also, when this is true, a copy of this node will be
+   *                   returned even if no elements have been changed.
+   */
+  private def mapProductElements(
+      f: BaseType => BaseType,
+      applyToAll: Boolean): BaseType = {
+    var changed = false
+
+    def mapChild(child: Any): Any = child match {
+      case arg: TreeNode[_] if applyToAll || containsChild(arg) =>
+        val newChild = f(arg.asInstanceOf[BaseType])
+        if (applyToAll || !(newChild fastEquals arg)) {
+          changed = true
+          newChild
+        } else {
+          arg
+        }
+      case tuple @ (arg1: TreeNode[_], arg2: TreeNode[_]) =>
+        val newChild1 = if (applyToAll || containsChild(arg1)) {
+          f(arg1.asInstanceOf[BaseType])
+        } else {
+          arg1.asInstanceOf[BaseType]
+        }
+
+        val newChild2 = if (applyToAll || containsChild(arg2)) {
+          f(arg2.asInstanceOf[BaseType])
+        } else {
+          arg2.asInstanceOf[BaseType]
+        }
+
+        if (applyToAll || !(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
+          changed = true
+          (newChild1, newChild2)
+        } else {
+          tuple
+        }
+      case other => other
+    }
+
+    val newArgs = mapProductIterator {
+      case arg: TreeNode[_] if applyToAll || containsChild(arg) =>
+        val newChild = f(arg.asInstanceOf[BaseType])
+        if (applyToAll || !(newChild fastEquals arg)) {
+          changed = true
+          newChild
+        } else {
+          arg
+        }
+      case Some(arg: TreeNode[_]) if applyToAll || containsChild(arg) =>
+        val newChild = f(arg.asInstanceOf[BaseType])
+        if (applyToAll || !(newChild fastEquals arg)) {
+          changed = true
+          Some(newChild)
+        } else {
+          Some(arg)
+        }
+      case m: Map[_, _] => m.mapValues {
+        case arg: TreeNode[_] if applyToAll || containsChild(arg) =>
+          val newChild = f(arg.asInstanceOf[BaseType])
+          if (applyToAll || !(newChild fastEquals arg)) {
+            changed = true
+            newChild
+          } else {
+            arg
+          }
+        case other => other
+      }.view.force // `mapValues` is lazy and we need to force it to materialize
+      case d: DataType => d // Avoid unpacking Structs
+      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+      case args: Iterable[_] => args.map(mapChild)
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }
+    if (applyToAll || changed) makeCopy(newArgs, applyToAll) else this
   }
 
   /**
@@ -402,9 +418,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * that are not present in the productIterator.
    * @param newArgs the new product arguments.
    */
-  def makeCopy(newArgs: Array[AnyRef]): BaseType = attachTree(this, "makeCopy") {
+  def makeCopy(newArgs: Array[AnyRef]): BaseType = makeCopy(newArgs, allowEmptyArgs = false)
+
+  /**
+   * Creates a copy of this type of tree node after a transformation.
+   * Must be overridden by child classes that have constructor arguments
+   * that are not present in the productIterator.
+   * @param newArgs the new product arguments.
+   * @param allowEmptyArgs whether to allow argument list to be empty.
+   */
+  private def makeCopy(
+      newArgs: Array[AnyRef],
+      allowEmptyArgs: Boolean): BaseType = attachTree(this, "makeCopy") {
     // Skip no-arg constructors that are just there for kryo.
-    val ctors = getClass.getConstructors.filter(_.getParameterTypes.size != 0)
+    val ctors = getClass.getConstructors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
       sys.error(s"No valid constructor for $nodeName")
     }
@@ -448,42 +475,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   override def clone(): BaseType = {
-    def mapChild(child: Any): Any = child match {
-      case arg: TreeNode[_] => arg.clone()
-      case (arg1: TreeNode[_], arg2: TreeNode[_]) => (arg1.clone(), arg2.clone())
-      case other => other
-    }
-    CurrentOrigin.withOrigin(origin) {
-      val args = productIterator.toArray.asInstanceOf[Array[AnyRef]]
-      if (args.nonEmpty || otherCopyArgs.nonEmpty) {
-        val newArgs = args.map {
-          case arg: TreeNode[_] => arg.clone()
-          case Some(arg: TreeNode[_]) => Some(arg.clone())
-          case m: Map[_, _] => m.mapValues {
-            case arg: TreeNode[_] => arg.clone()
-            case other => other
-          }.view.force // `mapValues` is lazy and we need to force it to materialize
-          case d: DataType => d // Avoid unpacking Structs
-          case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
-          case args: Iterable[_] => args.map(mapChild)
-          case nonChild: AnyRef => nonChild
-          case null => null
-        }
-        makeCopy(newArgs)
-      } else {
-        try {
-          val ctor = getClass.getConstructor()
-          CurrentOrigin.withOrigin(origin) {
-            val res = ctor.newInstance().asInstanceOf[BaseType]
-            res.copyTagsFrom(this)
-            res
-          }
-        } catch {
-          case _: NoSuchElementException =>
-            sys.error(s"No valid default constructor for $nodeName")
-        }
-      }
-    }
+    mapProductElements(_.clone(), applyToAll = true)
   }
 
   /**
