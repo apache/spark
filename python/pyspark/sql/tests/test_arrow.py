@@ -387,11 +387,10 @@ class ArrowTests(ReusedSQLTestCase):
     def test_timestamp_nat(self):
         dt = [pd.NaT, pd.Timestamp('2019-06-11'), None] * 100
         pdf = pd.DataFrame({'time': dt})
+        df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf)
 
-        for arrow_enabled in [False, True]:
-            with self.sql_conf({'spark.sql.execution.arrow.pyspark.enabled': arrow_enabled}):
-                df = self.spark.createDataFrame(pdf)
-                assert_frame_equal(pdf, df.toPandas())
+        assert_frame_equal(pdf, df_no_arrow.toPandas())
+        assert_frame_equal(pdf, df_arrow.toPandas())
 
     def test_toPandas_batch_order(self):
 
