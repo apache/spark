@@ -388,13 +388,10 @@ class ArrowTests(ReusedSQLTestCase):
         dt = [pd.NaT, pd.Timestamp('2019-06-11'), None] * 100
         pdf = pd.DataFrame({'time': dt})
 
-        with self.sql_conf({'spark.sql.execution.arrow.pyspark.enabled': "false"}):
-            df = self.spark.createDataFrame(pdf)
-            assert_frame_equal(pdf, df.toPandas())
-
-        with self.sql_conf({'spark.sql.execution.arrow.pyspark.enabled': "true"}):
-            df = self.spark.createDataFrame(pdf)
-            assert_frame_equal(pdf, df.toPandas())
+        for arrow_enabled in [False, True]:
+            with self.sql_conf({'spark.sql.execution.arrow.pyspark.enabled': arrow_enabled}):
+                df = self.spark.createDataFrame(pdf)
+                assert_frame_equal(pdf, df.toPandas())
 
     def test_toPandas_batch_order(self):
 
