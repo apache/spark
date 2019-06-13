@@ -53,9 +53,7 @@ private[spark] case class TaskResourceRequirement(resourceName: String, amount: 
 /**
  * Case class representing allocated resource addresses for a specific resource.
  * Cluster manager uses the JSON serialization of this case class to pass allocated resource info to
- * driver and executors.
- *
- * @see [[org.apache.spark.executor.CoarseGrainedExecutorBackend.resourcesFileOpt]]
+ * driver and executors. See the ``--resourcesFile`` option there.
  */
 private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[String]) {
   def toResourceInformation: ResourceInformation = {

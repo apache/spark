@@ -179,7 +179,8 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Resources allocated to the task. The key is the resource name and the value is information
-   * about the resource. Please refer to [[ResourceInformation]] for specifics.
+   * about the resource. Please refer to [[org.apache.spark.resource.ResourceInformation]] for
+   * specifics.
    */
   @Evolving
   def resources(): Map[String, ResourceInformation]
