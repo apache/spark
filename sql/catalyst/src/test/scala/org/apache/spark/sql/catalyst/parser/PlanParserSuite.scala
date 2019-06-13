@@ -42,6 +42,14 @@ class PlanParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)
 
+  private def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
+    val ctes = namedPlans.map {
+      case (name, cte) =>
+        name -> SubqueryAlias(name, cte)
+    }
+    With(plan, ctes)
+  }
+
   test("case insensitive") {
     val plan = table("a").select(star())
     assertEqual("sELEct * FroM a", plan)
@@ -74,13 +82,6 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("common table expressions") {
-    def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
-      val ctes = namedPlans.map {
-        case (name, cte) =>
-          name -> SubqueryAlias(name, cte)
-      }
-      With(plan, ctes)
-    }
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
       cte(table("cte1").select(star()), "cte1" -> table("a").select(star())))
@@ -800,5 +801,21 @@ class PlanParserSuite extends AnalysisTest {
       parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
     }.getMessage
     assert(m2.contains("mismatched input 'IN' expecting"))
+  }
+
+  test("relation in v2 catalog") {
+    assertEqual("TABLE testcat.db.tab", table("testcat", "db", "tab"))
+    assertEqual("SELECT * FROM testcat.db.tab", table("testcat", "db", "tab").select(star()))
+
+    assertEqual(
+      """
+        |WITH cte1 AS (SELECT * FROM testcat.db.tab)
+        |SELECT * FROM cte1
+      """.stripMargin,
+      cte(table("cte1").select(star()), "cte1" -> table("testcat", "db", "tab").select(star())))
+
+    assertEqual(
+      "SELECT /*+ BROADCAST(tab) */ * FROM testcat.db.tab",
+      table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
   }
 }
