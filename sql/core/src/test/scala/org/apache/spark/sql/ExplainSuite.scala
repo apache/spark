@@ -162,16 +162,21 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
     // ---------------------------------------------------------------------------------------
     // +, -                                              identity, negation
     // *, /                                              multiplication, division
-    // +, -, ||                                          addition, subtraction, concatenation
+    // +, -                                              addition, subtraction
+    // ||                                                concatenation
     // =, !=, <, >, <=, >=, IS NULL, LIKE, BETWEEN, IN   comparison
     // NOT                                               exponentiation, logical negation
     // AND                                               conjunction
     // OR                                                disjunction
     // ---------------------------------------------------------------------------------------
     checkKeywordsExistsInExplain(sql("select 'a' || 1 + 2"),
-      "Project [null AS (CAST(concat(a, CAST(1 AS STRING)) AS DOUBLE) + CAST(2 AS DOUBLE))#x]")
+      "Project [concat(a, cast((1 + 2) as string)) AS concat(a, CAST((1 + 2) AS STRING))#x]")
     checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
       "Project [-1b AS concat(CAST((1 - 2) AS STRING), b)#x]")
+    checkKeywordsExistsInExplain(sql("select 'a' || 2 ^ 2"),
+      "Project [concat(a, cast((2 ^ 2) as string)) AS concat(a, CAST((2 ^ 2) AS STRING))#x]")
+    checkKeywordsExistsInExplain(sql("select 2 ^ 2 || 'a'"),
+      "Project [concat(cast((2 ^ 2) as string), a) AS concat(CAST((2 ^ 2) AS STRING), a)#x]")
     checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
       "Project [11b AS concat(CAST(((2 * 4) + 3) AS STRING), b)#x]")
     checkKeywordsExistsInExplain(sql("select 3 + 1 || 'a' || 4 / 2"),

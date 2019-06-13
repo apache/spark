@@ -1258,6 +1258,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * - Modulo: '%'
    * - Addition: '+'
    * - Subtraction: '-'
+   * - String concatenation: '||'
    * - Binary AND: '&'
    * - Binary XOR
    * - Binary OR: '|'
