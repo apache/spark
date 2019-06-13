@@ -46,12 +46,12 @@ abstract class QueryStageExec extends LeafExecNode {
   /**
    * An id of this query stage which is unique in the entire query plan.
    */
-  def id: Int
+  val id: Int
 
   /**
    * The sub-tree of the query plan that belongs to this query stage.
    */
-  def plan: SparkPlan
+  val plan: SparkPlan
 
   /**
    * Materialize this query stage, to prepare for the execution, like submitting map stages,
