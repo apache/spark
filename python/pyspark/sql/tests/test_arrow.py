@@ -383,6 +383,7 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(pdf, df_from_python.toPandas())
         assert_frame_equal(pdf, df_from_pandas.toPandas())
 
+    # Regression test for SPARK-28003
     def test_timestamp_nat(self):
         dt = [pd.NaT, pd.Timestamp('2019-06-11'), None] * 100
         pdf = pd.DataFrame({'time': dt})
