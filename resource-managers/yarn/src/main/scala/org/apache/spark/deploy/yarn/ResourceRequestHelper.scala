@@ -24,9 +24,8 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.yarn.api.records.Resource
-import org.apache.spark.{SparkConf, SparkException}
 
-import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging

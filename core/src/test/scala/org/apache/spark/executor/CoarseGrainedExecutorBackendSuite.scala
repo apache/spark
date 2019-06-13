@@ -243,7 +243,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       assert(parsedResources.get(GPU).get.addresses.deep === Array("0", "1").deep)
       assert(parsedResources.get(FPGA).nonEmpty)
       assert(parsedResources.get(FPGA).get.name === FPGA)
-      as\sert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
+      assert(parsedResources.get(FPGA).get.addresses.deep === Array("f1", "f2", "f3").deep)
     }
   }
 

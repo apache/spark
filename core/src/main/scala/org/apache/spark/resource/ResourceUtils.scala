@@ -72,8 +72,6 @@ private[spark] object ResourceUtils extends Logging {
   // internally we currently only support addresses, so its just an integer count
   val AMOUNT = "amount"
 
-
-
   def parseResourceRequest(sparkConf: SparkConf, resourceId: ResourceID): ResourceRequest = {
     val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
     val amount = settings.getOrElse(AMOUNT,

@@ -19,9 +19,8 @@ package org.apache.spark.deploy.k8s.features
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder}
-import org.apache.spark.{SparkConf, SparkFunSuite}
 
-import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -30,6 +29,7 @@ import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
