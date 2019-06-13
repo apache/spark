@@ -36,6 +36,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.default.catalog", "testcat")
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
@@ -47,6 +48,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   after {
     spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
     spark.sql("DROP TABLE source")
+    spark.sql("DROP TABLE source2")
   }
 
   test("CreateTable: use v2 plan because catalog is set") {
@@ -281,5 +283,65 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"DROP TABLE testcat.db.notbl")
     }
     sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
+  }
+
+  test("Relation: basic") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
+      checkAnswer(sql(s"TABLE $t1"), spark.table("source"))
+      checkAnswer(sql(s"SELECT * FROM $t1"), spark.table("source"))
+    }
+  }
+
+  test("Relation: SparkSession.table()") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
+      checkAnswer(spark.table(s"$t1"), spark.table("source"))
+    }
+  }
+
+  test("Relation: CTE") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
+      checkAnswer(
+        sql(s"""
+          |WITH cte AS (SELECT * FROM $t1)
+          |SELECT * FROM cte
+        """.stripMargin),
+        spark.table("source"))
+    }
+  }
+
+  test("Relation: view text") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      withView("view1") { v1: String =>
+        sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
+        sql(s"CREATE VIEW $v1 AS SELECT * from $t1")
+        checkAnswer(sql(s"TABLE $v1"), spark.table("source"))
+      }
+    }
+  }
+
+  test("Relation: join tables in 2 catalogs") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    val t2 = "testcat2.v2tbl"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
+      sql(s"CREATE TABLE $t2 USING foo AS SELECT id, data FROM source2")
+      val df1 = spark.table("source")
+      val df2 = spark.table("source2")
+      val df_joined = df1.join(df2).where(df1("id") + 1 === df2("id"))
+      checkAnswer(
+        sql(s"""
+          |SELECT *
+          |FROM $t1 t1, $t2 t2
+          |WHERE t1.id + 1 = t2.id
+        """.stripMargin),
+        df_joined)
+    }
   }
 }
