@@ -176,9 +176,10 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
+      isFinalPlan = true
       logDebug(s"Final plan: $currentPhysicalPlan")
       onUpdatePlan()
-      isFinalPlan = true
+
       currentPhysicalPlan.execute()
     }
   }
@@ -365,7 +366,7 @@ case class AdaptiveSparkPlanExec(
         session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
           id,
           exec.toString,
-          SparkPlanInfo.fromSparkPlan(currentPhysicalPlan)))
+          SparkPlanInfo.fromSparkPlan(this)))
       }
     }
   }
