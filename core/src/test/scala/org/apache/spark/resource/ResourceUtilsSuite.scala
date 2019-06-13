@@ -190,7 +190,7 @@ class ResourceUtilsSuite extends SparkFunSuite
         discoverResource(request)
       }.getMessage()
 
-      assert(error.contains("Exception parsing the resources in"))
+      assert(error.contains("Error parsing JSON into ResourceInformation"))
     }
   }
 

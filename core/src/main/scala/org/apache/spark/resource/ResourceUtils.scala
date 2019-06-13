@@ -109,7 +109,7 @@ private[spark] object ResourceUtils extends Logging {
       parse(json).extract[Seq[ResourceAllocation]]
     } catch {
       case NonFatal(e) =>
-        throw new SparkException(s"error parsing resources file $resourcesFile", e)
+        throw new SparkException(s"Error parsing resources file $resourcesFile", e)
     }
   }
 
