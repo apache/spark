@@ -25,7 +25,7 @@ import org.apache.spark.sql.DataFrame
  * A graph is always tied to and managed by a [[CypherSession]].
  * The lifetime of a graph is bound by the session lifetime.
  *
- * @see [[https://github.com/opencypher/openCypher/blob/master/docs/property-graph-model.adoc]]
+ * @see <a href="http://www.opencypher.org/">openCypher project</a>
  * @since 3.0.0
  */
 abstract class PropertyGraph {
@@ -47,8 +47,8 @@ abstract class PropertyGraph {
   /**
    * Returns the [[NodeFrame]] for a given node label set.
    *
-   * @param labelSet Label set used for [[NodeFrame]] lookup
-   * @return [[NodeFrame]] for the given label set
+   * @param labelSet Label set used for NodeFrame lookup
+   * @return NodeFrame for the given label set
    * @since 3.0.0
    */
   def nodeFrame(labelSet: Set[String]): NodeFrame
@@ -56,14 +56,14 @@ abstract class PropertyGraph {
   /**
    * Returns the [[RelationshipFrame]] for a given relationship type.
    *
-   * @param relationshipType Relationship type used for [[RelationshipFrame]] lookup
-   * @return [[RelationshipFrame]] for the given relationship type
+   * @param relationshipType Relationship type used for RelationshipFrame lookup
+   * @return RelationshipFrame for the given relationship type
    * @since 3.0.0
    */
   def relationshipFrame(relationshipType: String): RelationshipFrame
 
   /**
-   * Returns a [[DataFrame]] that contains a row for each node in this graph.
+   * Returns a DataFrame that contains a row for each node in this graph.
    *
    * The DataFrame adheres to the following column naming conventions:
    *
@@ -73,13 +73,14 @@ abstract class PropertyGraph {
    *     Property columns: `{Property_Key}`
    * }}}
    *
-   * @see [[CypherSession]]
+   * @see `org.apache.spark.graph.api.CypherSession.createGraph(nodes, relationships)`
    * @since 3.0.0
    */
   def nodes: DataFrame
 
   /**
-   * Returns a [[DataFrame]] that contains a row for each relationship in this graph.
+   * Returns a DataFrame that contains a row for each relationship in this
+   * graph.
    *
    * The DataFrame adheres to column naming conventions:
    *
@@ -91,7 +92,7 @@ abstract class PropertyGraph {
    *     Property columns: `{Property_Key}`
    * }}}
    *
-   * @see [[CypherSession]]
+   * @see `org.apache.spark.graph.api.CypherSession.createGraph(nodes, relationships)`
    * @since 3.0.0
    */
   def relationships: DataFrame

@@ -33,7 +33,7 @@ object CypherSession {
  *
  * Provides factory methods for creating [[PropertyGraph]] instances.
  *
- * Wraps a [[SparkSession]].
+ * Wraps a [[org.apache.spark.sql.SparkSession]].
  *
  * @since 3.0.0
  */
@@ -48,8 +48,8 @@ trait CypherSession {
    * For each label set and relationship type there can be at most one [[NodeFrame]] and at most one
    * [[RelationshipFrame]], respectively.
    *
-   * @param nodes         [[NodeFrame]]s that define the nodes in the graph
-   * @param relationships [[RelationshipFrame]]s that define the relationships in the graph
+   * @param nodes         NodeFrames that define the nodes in the graph
+   * @param relationships RelationshipFrames that define the relationships in the graph
    * @since 3.0.0
    */
   def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame]): PropertyGraph
@@ -61,8 +61,8 @@ trait CypherSession {
    * For each label set and relationship type there can be at most one [[NodeFrame]] and at most one
    * [[RelationshipFrame]], respectively.
    *
-   * @param nodes         [[NodeFrame]]s that define the nodes in the graph
-   * @param relationships [[RelationshipFrame]]s that define the relationships in the graph
+   * @param nodes         NodeFrames that define the nodes in the graph
+   * @param relationships RelationshipFrames that define the relationships in the graph
    * @since 3.0.0
    */
   def createGraph(
@@ -88,8 +88,8 @@ trait CypherSession {
    * }}}
    *
    * @see [[CypherSession]]
-   * @param nodes         node [[DataFrame]]
-   * @param relationships relationship [[DataFrame]]
+   * @param nodes         node DataFrame
+   * @param relationships relationship DataFrame
    * @since 3.0.0
    */
   def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph = {
