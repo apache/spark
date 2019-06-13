@@ -635,12 +635,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     comparePlans(res, expected)
   }
 
-  test("SPARK-28002: CTE with non-existing column alias") {
+  test("CTE with non-existing column alias") {
     assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       Seq("cannot resolve '`y`' given input columns: [x]"))
   }
 
-  test("SPARK-28002: CTE with non-matching column alias") {
+  test("CTE with non-matching column alias") {
     assertAnalysisError(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
       Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
         "2; number of columns: 1."))

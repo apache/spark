@@ -24,7 +24,7 @@ SELECT t1.id AS c1,
 FROM   CTE1 t1
        CROSS JOIN CTE1 t2;
 
--- SPARK-28002: CTE with column alias
+-- CTE with column alias
 WITH t(x) AS (SELECT 1)
 SELECT * FROM t WHERE x = 1;
 

@@ -832,7 +832,7 @@ class PlanParserSuite extends AnalysisTest {
       table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
   }
 
-  test("SPARK-28002: CTE with column alias") {
+  test("CTE with column alias") {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
       cte(table("t").select(star()), "t" -> ((table("a").select('c), Seq("x")))))
