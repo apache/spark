@@ -317,6 +317,17 @@
       <artifactId>selenium-htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Coerce sbt into honoring these dependency updates: -->
+    <dependency>
+      <groupId>net.sourceforge.htmlunit</groupId>
+      <artifactId>htmlunit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.sourceforge.htmlunit</groupId>
+      <artifactId>htmlunit-core-js</artifactId>
+      <scope>test</scope>
+    </dependency>
     <!-- Added for selenium: -->
     <dependency>
       <groupId>xml-apis</groupId>
