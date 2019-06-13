@@ -444,9 +444,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     Exception,
-                    "The number of output rows of the pandas iterator UDF should be "
-                    "the same with input rows."):
+                    "The number of output rows of pandas iterator UDF should be "
+                    "the same with input rows"):
                 df.select(iter1_raise_exception(col('id'))).collect()
+
+        @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
+        def iter2_raise_exception(it):
+            if sys.version >= '3':
+                batch = it.__next__()
+            else:
+                batch = it.next()
+            yield pd.Series(len(batch))
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(
+                        Exception,
+                        "SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator"):
+                    df.select(iter2_raise_exception(col('id'))).collect()
 
     def test_vectorized_udf_chained(self):
         df = self.spark.range(10)
