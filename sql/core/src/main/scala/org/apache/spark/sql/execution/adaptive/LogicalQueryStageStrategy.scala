@@ -35,10 +35,12 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
  */
 object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
 
-  private def isBroadcastStage(plan: LogicalPlan): Boolean =
-    plan.isInstanceOf[LogicalQueryStage] &&
-      BroadcastQueryStageExec.isBroadcastQueryStageExec(
-        plan.asInstanceOf[LogicalQueryStage].physicalPlan)
+  private def isBroadcastStage(plan: LogicalPlan): Boolean = plan match {
+    case LogicalQueryStage(_, physicalPlan)
+        if BroadcastQueryStageExec.isBroadcastQueryStageExec(physicalPlan) =>
+      true
+    case _ => false
+  }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, hint)
