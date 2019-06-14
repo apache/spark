@@ -199,21 +199,50 @@ object Cast {
  * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
  * session local timezone by an analyzer [[ResolveTimeZone]].
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
+  usage = "_FUNC_(expr AS type [FORMAT fmt]) - Casts the value `expr` to the target data type `type`.",
   examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
        10
+      > SELECT _FUNC_('2016 12 31' as date FORMAT 'yyyy MM dd');
+       2016-12-31
   """)
-case class Cast(
-    child: Expression,
-    dataType: DataType,
-    timeZoneId: Option[String] = None,
-    format: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
+// scalastyle:on line.size.limit
+case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
+  extends CastBase {
 
   def this(child: Expression, dataType: DataType) = this(child, dataType, None)
+
+  override val format = None
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+}
+
+case class FormattedCast(
+    child: Expression,
+    dataType: DataType,
+    fmt: String,
+    timeZoneId: Option[String] = None) extends CastBase {
+
+  override val format: Option[String] = Some(fmt)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+}
+
+object CastBase {
+  def unapply(castBase: CastBase): Option[(Expression, DataType)] =
+    Some((castBase.child, castBase.dataType))
+}
+
+sealed trait CastBase extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
+  val child: Expression
+  val dataType: DataType
+  val timeZoneId: Option[String]
+  val format: Option[String]
 
   override def toString: String =
     s"cast($child as ${dataType.simpleString}${format.map(" format " + _).getOrElse("")})"
@@ -229,9 +258,6 @@ case class Cast(
 
   override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
   // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;
   // Otherwise behave like Expression.resolved.
   override lazy val resolved: Boolean =
@@ -245,8 +271,7 @@ case class Cast(
   private lazy val dateFormatter =
     format.flatMap { f =>
       (child.dataType, dataType) match {
-        case (StringType, DateType) => Some(DateFormatter(f))
-        case (DateType, StringType) => Some(DateFormatter(f))
+        case (StringType, DateType) | (DateType, StringType) => Some(DateFormatter(f))
         case _ => None
       }
     }.getOrElse(DateFormatter())
@@ -254,8 +279,8 @@ case class Cast(
   private lazy val timestampFormatter =
     format.flatMap { f =>
       (child.dataType, dataType) match {
-        case (StringType, TimestampType) => Some(TimestampFormatter(f, zoneId))
-        case (TimestampType, StringType) => Some(TimestampFormatter(f, zoneId))
+        case (StringType, TimestampType) | (TimestampType, StringType) =>
+          Some(TimestampFormatter(f, zoneId))
         case _ => None
       }
     }.getOrElse(TimestampFormatter.getFractionFormatter(zoneId))

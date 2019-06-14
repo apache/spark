@@ -240,7 +240,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           collect(child, negate)
         case PromotePrecision(child) =>
           collect(child, negate)
-        case Cast(child, dataType, _, _) =>
+        case CastBase(child, dataType) =>
           dataType match {
             case _: NumericType | _: TimestampType => collect(child, negate)
             case _ =>

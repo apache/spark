@@ -521,7 +521,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case e @ WindowExpression(Cast(Literal(0L, _), _, _, _), _) =>
+      case e @ WindowExpression(CastBase(Literal(0L, _), _), _) =>
         Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _) if exprs.forall(isNullLiteral) =>
         Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
@@ -662,8 +662,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Cast(e, dataType, _, _) if e.dataType == dataType => e
-    case c @ Cast(e, dataType, _, _) => (e.dataType, dataType) match {
+    case CastBase(e, dataType) if e.dataType == dataType => e
+    case c @ CastBase(e, dataType) => (e.dataType, dataType) match {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
       case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
         if fromKey == toKey && fromValue == toValue => e
@@ -714,8 +714,8 @@ object CombineConcats extends Rule[LogicalPlan] {
         // If `spark.sql.function.concatBinaryAsString` is false, nested `Concat` exprs possibly
         // have `Concat`s with binary output. Since `TypeCoercion` casts them into strings,
         // we need to handle the case to combine all nested `Concat`s.
-        case c @ Cast(Concat(children), StringType, _, _) =>
-          val newChildren = children.map { e => c.copy(child = e) }
+        case c @ CastBase(Concat(children), StringType) =>
+          val newChildren = children.map { e => c.withNewChildren(Seq(e)) }
           stack.pushAll(newChildren.reverse)
         case child =>
           flattened += child
@@ -726,7 +726,7 @@ object CombineConcats extends Rule[LogicalPlan] {
 
   private def hasNestedConcats(concat: Concat): Boolean = concat.children.exists {
     case c: Concat => true
-    case c @ Cast(Concat(children), StringType, _, _) => true
+    case c @ CastBase(Concat(_), StringType) => true
     case _ => false
   }
 
