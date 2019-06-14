@@ -389,6 +389,10 @@ case class ArrayFilter(
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
        true
+      > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 10);
+       false
+      > SELECT _FUNC_(array(1, null, 3), x -> x % 2 == 0);
+       NULL
   """,
   since = "2.4.0")
 case class ArrayExists(
