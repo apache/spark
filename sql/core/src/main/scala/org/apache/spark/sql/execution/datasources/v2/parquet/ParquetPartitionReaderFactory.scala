@@ -177,10 +177,10 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createRowBaseReader(file: PartitionedFile): RecordReader[Void, UnsafeRow] = {
-    buildReaderBase(file, createRowBaseReader0)
+    buildReaderBase(file, createRowBaseParquetReader)
   }
 
-  private def createRowBaseReader0(
+  private def createRowBaseParquetReader(
       split: ParquetInputSplit,
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
@@ -203,13 +203,13 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createVectorizedReader(file: PartitionedFile): VectorizedParquetRecordReader = {
-    val vectorizedReader =
-      buildReaderBase(file, createVectorizedReader0).asInstanceOf[VectorizedParquetRecordReader]
+    val vectorizedReader = buildReaderBase(file, createParquetVectorizedReader)
+      .asInstanceOf[VectorizedParquetRecordReader]
     vectorizedReader.initBatch(partitionSchema, file.partitionValues)
     vectorizedReader
   }
 
-  private def createVectorizedReader0(
+  private def createParquetVectorizedReader(
       split: ParquetInputSplit,
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
