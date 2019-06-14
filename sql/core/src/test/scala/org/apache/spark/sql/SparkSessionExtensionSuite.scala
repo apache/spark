@@ -123,16 +123,17 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
   test("inject columnar") {
     val extensions = create { extensions =>
-      extensions.injectColumnar(session => MyColumarRule(PreRuleReplaceAdd(), MyPostRule()))
+      extensions.injectColumnar(session =>
+        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(PreRuleReplaceAdd(), MyPostRule())))
+        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
       // repartitioning avoids having the add operation pushed up into the LocalTableScan
       val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
       val result = data.selectExpr("vals + 1").collect()
-      assert(result(0).getLong(0) == 102L)
+      assert(result(0).getLong(0) == 102L) // Check that broken columnar Add was used.
       assert(result(1).getLong(0) == 202L)
       assert(result(2).getLong(0) == 302L)
     }
@@ -153,7 +154,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(session.sessionState.functionRegistry
         .lookupFunction(MyExtensions.myFunction._1).isDefined)
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(PreRuleReplaceAdd(), MyPostRule())))
+        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
     } finally {
       stop(session)
     }
@@ -522,10 +523,11 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 }
 
 /**
- * A version of add that supports columnar processing for longs.
+ * A version of add that supports columnar processing for longs.  This version is broken
+ * on purpose so it adds the numbers plus 1 so that the tests can show that it was replaced.
  */
-class ColumnarAdd(left: ColumnarExpression, right: ColumnarExpression) extends Add(left, right)
-  with ColumnarExpression {
+class BrokenColumnarAdd(left: ColumnarExpression, right: ColumnarExpression)
+  extends Add(left, right) with ColumnarExpression {
 
   override def supportsColumnar(): Boolean = left.supportsColumnar && right.supportsColumnar
 
@@ -585,7 +587,7 @@ class CannotReplaceException(str: String) extends RuntimeException(str) {
 
 }
 
-case class PreRuleReplaceAdd() extends Rule[SparkPlan] {
+case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
   def replaceWithColumnarExpression(exp: Expression): ColumnarExpression = exp match {
     case a: Alias =>
       new ColumnarAlias(replaceWithColumnarExpression(a.child),
@@ -599,7 +601,7 @@ case class PreRuleReplaceAdd() extends Rule[SparkPlan] {
       (add.left.dataType == LongType) &&
       (add.right.dataType == LongType) =>
       // Add only supports Longs for now.
-      new ColumnarAdd(replaceWithColumnarExpression(add.left),
+      new BrokenColumnarAdd(replaceWithColumnarExpression(add.left),
         replaceWithColumnarExpression(add.right))
     case exp =>
       throw new CannotReplaceException(s"expression " +
@@ -645,7 +647,7 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
     e.injectOptimizerRule(MyRule)
     e.injectParser(MyParser)
     e.injectFunction(MyExtensions.myFunction)
-    e.injectColumnar(session => MyColumarRule(PreRuleReplaceAdd(), MyPostRule()))
+    e.injectColumnar(session => MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
   }
 }
 

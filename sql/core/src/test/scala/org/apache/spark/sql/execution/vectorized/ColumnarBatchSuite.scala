@@ -1273,7 +1273,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     allocator.close()
   }
 
-  test("RowToColumnarExec") {
+  test("RowToColumnConverter") {
     val schema = StructType(
       StructField("str", StringType) ::
         StructField("bool", BooleanType) ::
@@ -1379,8 +1379,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(2).isNullAt(2))
 
       assert(columns(3).dataType() == ShortType)
-      assert(columns(3).getShort(0) == 2.toByte)
-      assert(columns(3).getShort(1) == 17.toByte)
+      assert(columns(3).getShort(0) == 2.toShort)
+      assert(columns(3).getShort(1) == 17.toShort)
       assert(columns(3).isNullAt(2))
 
       assert(columns(4).dataType() == IntegerType)
