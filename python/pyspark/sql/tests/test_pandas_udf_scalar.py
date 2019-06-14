@@ -29,6 +29,7 @@ if sys.version >= '3':
 from datetime import date, datetime
 from decimal import Decimal
 
+from pyspark import TaskContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, \
@@ -819,6 +820,35 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             expected = df.select(expr('a + b'))
             self.assertEquals(expected.collect(), res1.collect())
             self.assertEquals(expected.collect(), res2.collect())
+
+    def test_scalar_iter_udf_init(self):
+        import numpy as np
+
+        @pandas_udf('int', PandasUDFType.SCALAR_ITER)
+        def rng(batch_iter):
+            context = TaskContext.get()
+            part = context.partitionId()
+            np.random.seed(part)
+            for batch in batch_iter:
+                yield pd.Series(np.random.randint(100, size=len(batch)))
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+            df = self.spark.range(10, numPartitions=2).select(rng(col("id").alias("v")))
+            result1 = df.collect()
+            result2 = df.collect()
+            self.assertEqual(result1, result2,
+                             "SCALAR ITER UDF can initialize state and produce deterministic RNG")
+
+    def test_scalar_iter_udf_close(self):
+        @pandas_udf('int', PandasUDFType.SCALAR_ITER)
+        def test_close(batch_iter):
+            try:
+                for batch in batch_iter:
+                    yield batch
+            finally:
+                raise RuntimeError("reached finally block")
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "reached finally block"):
+                self.spark.range(1).select(test_close(col("id"))).collect()
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
