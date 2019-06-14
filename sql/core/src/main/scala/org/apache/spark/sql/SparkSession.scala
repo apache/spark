@@ -988,8 +988,7 @@ object SparkSession extends Logging {
    * @since 2.0.0
    */
   def setActiveSession(session: SparkSession): Unit = {
-    if (getActiveSession.isEmpty
-      || (session != getActiveSession.get && getActiveSession.isDefined)) {
+    if (session != getActiveSession.get && getActiveSession.isDefined) {
       numActiveSessions.getAndIncrement
       activeThreadSession.set(session)
     } else if (session == null) {

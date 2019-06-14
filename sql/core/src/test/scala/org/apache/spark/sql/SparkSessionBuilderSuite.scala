@@ -154,9 +154,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("SPARK-27958: SparkContext stopped when last SparkSession is stopped ") {
-    val session1 = SparkSession.builder().master("local").getOrCreate()
+    val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
+    val newSC = new SparkContext(conf)
+    val session1 = SparkSession.builder().sparkContext(newSC).master("local").getOrCreate()
     assert(!session1.sparkContext.isStopped)
-    val session2 = SparkSession.builder().master("local").getOrCreate()
+    val session2 = SparkSession.builder().sparkContext(newSC).master("local").getOrCreate()
     session1.stop()
     assert(!session1.sparkContext.isStopped)
     session2.stop()
