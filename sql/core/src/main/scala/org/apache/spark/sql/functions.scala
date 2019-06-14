@@ -3322,27 +3322,47 @@ object functions {
     ArrayExcept(col1.expr, col2.expr)
   }
 
-  private def expressionFunction(f: Column => Column): Expression => Expression =
-    x => f(Column(x)).expr
+  private def createLambda(f: Column => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val function = f(Column(x)).expr
+    LambdaFunction(function, Seq(x))
+  }
 
-  private def expressionFunction(f: (Column, Column) => Column)
-    : (Expression, Expression) => Expression =
-    (x, y) => f(Column(x), Column(y)).expr
+  private def createLambda(f: (Column, Column) => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val function = f(Column(x), Column(y)).expr
+    LambdaFunction(function, Seq(x, y))
+  }
 
-  private def expressionFunction(f: (Column, Column, Column) => Column)
-    : (Expression, Expression, Expression) => Expression =
-    (x, y, z) => f(Column(x), Column(y), Column(z)).expr
+  private def createLambda(f: (Column, Column, Column) => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val z = UnresolvedNamedLambdaVariable(Seq("z"))
+    val function = f(Column(x), Column(y), Column(z)).expr
+    LambdaFunction(function, Seq(x, y, z))
+  }
 
-  private def expressionFunction(f: Function[Column, Column]): Expression => Expression =
-    x => f.call(Column(x)).expr
+  private def createLambda(f: Function[Column, Column]) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val function = f.call(Column(x)).expr
+    LambdaFunction(function, Seq(x))
+  }
 
-  private def expressionFunction(f: Function2[Column, Column, Column])
-    : (Expression, Expression) => Expression =
-    (x, y) => f.call(Column(x), Column(y)).expr
+  private def createLambda(f: Function2[Column, Column, Column]) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val function = f.call(Column(x), Column(y)).expr
+    LambdaFunction(function, Seq(x, y))
+  }
 
-  private def expressionFunction(f: Function3[Column, Column, Column, Column])
-    : (Expression, Expression, Expression) => Expression =
-    (x, y, z) => f.call(Column(x), Column(y), Column(z)).expr
+  private def createLambda(f: Function3[Column, Column, Column, Column]) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val z = UnresolvedNamedLambdaVariable(Seq("z"))
+    val function = f.call(Column(x), Column(y), Column(z)).expr
+    LambdaFunction(function, Seq(x, y, z))
+  }
 
   /**
    * (Scala-specific) Returns an array of elements after applying a tranformation to each element
@@ -3351,7 +3371,7 @@ object functions {
    * @group collection_funcs
    */
   def transform(column: Column, f: Column => Column): Column = withExpr {
-    HigherOrderUtils.transform(column.expr, expressionFunction(f))
+    ArrayTransform(column.expr, createLambda(f))
   }
 
   /**
@@ -3361,7 +3381,7 @@ object functions {
    * @group collection_funcs
    */
   def transform(column: Column, f: (Column, Column) => Column): Column = withExpr {
-    HigherOrderUtils.transform(column.expr, expressionFunction(f))
+    ArrayTransform(column.expr, createLambda(f))
   }
 
   /**
@@ -3370,7 +3390,7 @@ object functions {
    * @group collection_funcs
    */
   def exists(column: Column, f: Column => Column): Column = withExpr {
-    HigherOrderUtils.exists(column.expr, expressionFunction(f))
+    ArrayExists(column.expr, createLambda(f))
   }
 
   /**
@@ -3379,7 +3399,7 @@ object functions {
    * @group collection_funcs
    */
   def filter(column: Column, f: Column => Column): Column = withExpr {
-    HigherOrderUtils.filter(column.expr, expressionFunction(f))
+    ArrayFilter(column.expr, createLambda(f))
   }
 
   /**
@@ -3391,11 +3411,11 @@ object functions {
    */
   def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column,
                 finish: Column => Column): Column = withExpr {
-    HigherOrderUtils.aggregate(
+    ArrayAggregate(
       expr.expr,
       zero.expr,
-      expressionFunction(merge),
-      expressionFunction(finish)
+      createLambda(merge),
+      createLambda(finish)
     )
   }
 
@@ -3416,7 +3436,7 @@ object functions {
    * @group collection_funcs
    */
   def zip_with(left: Column, right: Column, f: (Column, Column) => Column): Column = withExpr {
-    HigherOrderUtils.zip_with(left.expr, right.expr, expressionFunction(f))
+    ZipWith(left.expr, right.expr, createLambda(f))
   }
 
   /**
@@ -3426,7 +3446,7 @@ object functions {
    * @group collection_funcs
    */
   def transform_keys(expr: Column, f: (Column, Column) => Column): Column = withExpr {
-    HigherOrderUtils.transformKeys(expr.expr, expressionFunction(f))
+    TransformKeys(expr.expr, createLambda(f))
   }
 
   /**
@@ -3436,7 +3456,7 @@ object functions {
    * @group collection_funcs
    */
   def transform_values(expr: Column, f: (Column, Column) => Column): Column = withExpr {
-    HigherOrderUtils.transformValues(expr.expr, expressionFunction(f))
+    TransformValues(expr.expr, createLambda(f))
   }
 
   /**
@@ -3445,7 +3465,7 @@ object functions {
    * @group collection_funcs
    */
   def map_filter(expr: Column, f: (Column, Column) => Column): Column = withExpr {
-    HigherOrderUtils.mapFilter(expr.expr, expressionFunction(f))
+    MapFilter(expr.expr, createLambda(f))
   }
 
   /**
@@ -3455,7 +3475,7 @@ object functions {
    */
   def map_zip_with(left: Column, right: Column,
                    f: (Column, Column, Column) => Column): Column = withExpr {
-    HigherOrderUtils.map_zip_with(left.expr, right.expr, expressionFunction(f))
+    MapZipWith(left.expr, right.expr, createLambda(f))
   }
 
   /**
@@ -3465,7 +3485,7 @@ object functions {
    * @group collection_funcs
    */
   def transform(column: Column, f: Function[Column, Column]): Column = withExpr {
-    HigherOrderUtils.transform(column.expr, expressionFunction(f))
+    ArrayTransform(column.expr, createLambda(f))
   }
 
   /**
@@ -3475,7 +3495,7 @@ object functions {
    * @group collection_funcs
    */
   def transform(column: Column, f: Function2[Column, Column, Column]): Column = withExpr {
-    HigherOrderUtils.transform(column.expr, expressionFunction(f))
+    ArrayTransform(column.expr, createLambda(f))
   }
 
   /**
@@ -3484,7 +3504,7 @@ object functions {
    * @group collection_funcs
    */
   def exists(column: Column, f: Function[Column, Column]): Column = withExpr {
-    HigherOrderUtils.exists(column.expr, expressionFunction(f))
+    ArrayExists(column.expr, createLambda(f))
   }
 
   /**
@@ -3493,7 +3513,7 @@ object functions {
    * @group collection_funcs
    */
   def filter(column: Column, f: Function[Column, Column]): Column = withExpr {
-    HigherOrderUtils.filter(column.expr, expressionFunction(f))
+    ArrayFilter(column.expr, createLambda(f))
   }
 
   /**
@@ -3505,11 +3525,11 @@ object functions {
    */
   def aggregate(expr: Column, zero: Column, merge: Function2[Column, Column, Column],
                 finish: Function[Column, Column]): Column = withExpr {
-    HigherOrderUtils.aggregate(
+    ArrayAggregate(
       expr.expr,
       zero.expr,
-      expressionFunction(merge),
-      expressionFunction(finish)
+      createLambda(merge),
+      createLambda(finish)
     )
   }
 
@@ -3531,7 +3551,7 @@ object functions {
    */
   def zip_with(left: Column, right: Column, f: Function2[Column, Column, Column]): Column =
     withExpr {
-      HigherOrderUtils.zip_with(left.expr, right.expr, expressionFunction(f))
+      ZipWith(left.expr, right.expr, createLambda(f))
     }
 
   /**
@@ -3541,7 +3561,7 @@ object functions {
    * @group collection_funcs
    */
   def transform_keys(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
-    HigherOrderUtils.transformKeys(expr.expr, expressionFunction(f))
+    TransformKeys(expr.expr, createLambda(f))
   }
 
   /**
@@ -3551,7 +3571,7 @@ object functions {
    * @group collection_funcs
    */
   def transform_values(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
-    HigherOrderUtils.transformValues(expr.expr, expressionFunction(f))
+    TransformValues(expr.expr, createLambda(f))
   }
 
   /**
@@ -3560,7 +3580,7 @@ object functions {
    * @group collection_funcs
    */
   def map_filter(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
-    HigherOrderUtils.mapFilter(expr.expr, expressionFunction(f))
+    MapFilter(expr.expr, createLambda(f))
   }
 
   /**
@@ -3570,7 +3590,7 @@ object functions {
    */
   def map_zip_with(left: Column, right: Column,
                    f: Function3[Column, Column, Column, Column]): Column = withExpr {
-    HigherOrderUtils.map_zip_with(left.expr, right.expr, expressionFunction(f))
+    MapZipWith(left.expr, right.expr, createLambda(f))
   }
 
   /**
