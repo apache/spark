@@ -372,20 +372,20 @@ struct<x:float,int2_value:smallint>
 
 -- !query 36
 SELECT x, smallint(x) AS int2_value
-FROM (VALUES decimal(-2.5),
-             decimal(-1.5),
-             decimal(-0.5),
-             decimal(0.0),
-             decimal(0.5),
-             decimal(1.5),
-             decimal(2.5)) t(x)
+FROM (VALUES cast(-2.5 as decimal(38, 18)),
+             cast(-1.5 as decimal(38, 18)),
+             cast(-0.5 as decimal(38, 18)),
+             cast(-0.0 as decimal(38, 18)),
+             cast(0.5 as decimal(38, 18)),
+             cast(1.5 as decimal(38, 18)),
+             cast(2.5 as decimal(38, 18))) t(x)
 -- !query 36 schema
-struct<x:decimal(10,0),int2_value:smallint>
+struct<x:decimal(38,18),int2_value:smallint>
 -- !query 36 output
--1	-1
--2	-2
--3	-3
+-0.5	0
+-1.5	-1
+-2.5	-2
 0	0
-1	1
-2	2
-3	3
+0.5	0
+1.5	1
+2.5	2

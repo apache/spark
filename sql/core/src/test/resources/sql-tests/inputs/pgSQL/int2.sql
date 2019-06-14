@@ -115,12 +115,13 @@ FROM (VALUES float(-2.5),
              float(1.5),
              float(2.5)) t(x);
 
+-- [SPARK-28028] Cast numeric to integral type need round
 -- check rounding when casting from numeric
 SELECT x, smallint(x) AS int2_value
-FROM (VALUES decimal(-2.5),
-             decimal(-1.5),
-             decimal(-0.5),
-             decimal(0.0),
-             decimal(0.5),
-             decimal(1.5),
-             decimal(2.5)) t(x);
+FROM (VALUES cast(-2.5 as decimal(38, 18)),
+             cast(-1.5 as decimal(38, 18)),
+             cast(-0.5 as decimal(38, 18)),
+             cast(-0.0 as decimal(38, 18)),
+             cast(0.5 as decimal(38, 18)),
+             cast(1.5 as decimal(38, 18)),
+             cast(2.5 as decimal(38, 18))) t(x);
