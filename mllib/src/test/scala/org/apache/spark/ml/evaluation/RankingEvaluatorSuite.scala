@@ -64,9 +64,4 @@ class RankingEvaluatorSuite
     assert(evaluator.evaluate(scoreAndLabels) ~== 1.0 / 3 absTol 1e-5)
   }
 
-
-  test("should support all NumericType labels and not support other types") {
-    MLTestingUtils.checkNumericTypes(new RankingEvaluator, spark)
-  }
-
 }
