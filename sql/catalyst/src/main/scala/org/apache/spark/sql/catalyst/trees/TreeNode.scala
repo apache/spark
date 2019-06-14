@@ -234,6 +234,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
     def mapChild(child: Any): Any = child match {
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
+      // CaseWhen Case or any tuple type
+      case (left, right) => (mapChild(left), mapChild(right))
       case nonChild: AnyRef => nonChild
       case null => null
     }
@@ -249,6 +251,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         // `mapValues` is lazy and we need to force it to materialize
         m.mapValues(mapChild).view.force
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
+      case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
       case null => null
     }

@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 
 /**
  * Test various parser errors.
  */
-class ErrorParserSuite extends SparkFunSuite {
+class ErrorParserSuite extends AnalysisTest {
+  def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(CatalystSqlParser.parsePlan)(sqlCommand, messages: _*)
+
   def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
                 messages: String*): Unit = {
     val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
@@ -62,5 +65,11 @@ class ErrorParserSuite extends SparkFunSuite {
     intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
       "^^^")
+  }
+
+  test("SPARK-21136: misleading error message due to problematic antlr grammar") {
+    intercept("select * from a left joinn b on a.id = b.id", "missing 'JOIN' at 'joinn'")
+    intercept("select * from test where test.t is like 'test'", "mismatched input 'is' expecting")
+    intercept("SELECT * FROM test WHERE x NOT NULL", "mismatched input 'NOT' expecting")
   }
 }

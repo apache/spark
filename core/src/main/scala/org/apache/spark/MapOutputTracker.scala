@@ -670,7 +670,7 @@ private[spark] class MapOutputTrackerMaster(
 /**
  * Executor-side client for fetching map output info from the driver's MapOutputTrackerMaster.
  * Note that this is not used in local-mode; instead, local-mode Executors access the
- * MapOutputTrackerMaster directly (which is possible because the master and worker share a comon
+ * MapOutputTrackerMaster directly (which is possible because the master and worker share a common
  * superclass).
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
