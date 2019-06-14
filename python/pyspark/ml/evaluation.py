@@ -594,6 +594,7 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     .. note:: Experimental
     Evaluator for Ranking, which expects two input
     columns: prediction and label.
+
     >>> scoreAndLabels = [([1.0, 6.0, 2.0, 7.0, 8.0, 3.0, 9.0, 10.0, 4.0, 5.0],
     ...     [1.0, 2.0, 3.0, 4.0, 5.0]),
     ...     ([4.0, 1.0, 5.0, 6.0, 2.0, 7.0, 3.0, 8.0, 9.0, 10.0], [1.0, 2.0, 3.0]),
@@ -610,6 +611,7 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     >>> evaluator2 = RankingEvaluator.load(ranke_path)
     >>> str(evaluator2.getPredictionCol())
     'prediction'
+
     .. versionadded:: 3.0.0
     """
     metricName = Param(Params._dummy(), "metricName",
