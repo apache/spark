@@ -63,9 +63,6 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       case af @ ArrayFilter(_, lf @ LambdaFunction(func, _, _)) =>
         val newLambda = lf.copy(function = replaceNullWithFalse(func))
         af.copy(function = newLambda)
-      case ae @ ArrayExists(_, lf @ LambdaFunction(func, _, _)) =>
-        val newLambda = lf.copy(function = replaceNullWithFalse(func))
-        ae.copy(function = newLambda)
       case mf @ MapFilter(_, lf @ LambdaFunction(func, _, _)) =>
         val newLambda = lf.copy(function = replaceNullWithFalse(func))
         mf.copy(function = newLambda)

@@ -255,13 +255,21 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     val isEven: Expression => Expression = x => x % 2 === 0
     val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+    val alwaysFalse: Expression => Expression = _ => Literal.FalseLiteral
+    val alwaysNull: Expression => Expression = _ => Literal(null, BooleanType)
 
     checkEvaluation(exists(ai0, isEven), true)
     checkEvaluation(exists(ai0, isNullOrOdd), true)
-    checkEvaluation(exists(ai1, isEven), false)
+    checkEvaluation(exists(ai0, alwaysFalse), false)
+    checkEvaluation(exists(ai0, alwaysNull), null)
+    checkEvaluation(exists(ai1, isEven), null)
     checkEvaluation(exists(ai1, isNullOrOdd), true)
+    checkEvaluation(exists(ai1, alwaysFalse), false)
+    checkEvaluation(exists(ai1, alwaysNull), null)
     checkEvaluation(exists(ain, isEven), null)
     checkEvaluation(exists(ain, isNullOrOdd), null)
+    checkEvaluation(exists(ain, alwaysFalse), null)
+    checkEvaluation(exists(ain, alwaysNull), null)
 
     val as0 =
       Literal.create(Seq("a0", "b1", "a2", "c3"), ArrayType(StringType, containsNull = false))
@@ -271,8 +279,14 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val startsWithA: Expression => Expression = x => x.startsWith("a")
 
     checkEvaluation(exists(as0, startsWithA), true)
-    checkEvaluation(exists(as1, startsWithA), false)
+    checkEvaluation(exists(as0, alwaysFalse), false)
+    checkEvaluation(exists(as0, alwaysNull), null)
+    checkEvaluation(exists(as1, startsWithA), null)
+    checkEvaluation(exists(as1, alwaysFalse), false)
+    checkEvaluation(exists(as1, alwaysNull), null)
     checkEvaluation(exists(asn, startsWithA), null)
+    checkEvaluation(exists(asn, alwaysFalse), null)
+    checkEvaluation(exists(asn, alwaysNull), null)
 
     val aai = Literal.create(Seq(Seq(1, 2, 3), null, Seq(4, 5)),
       ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))

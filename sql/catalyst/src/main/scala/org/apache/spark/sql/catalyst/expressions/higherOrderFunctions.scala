@@ -395,6 +395,8 @@ case class ArrayExists(
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
+  override def nullable: Boolean = super.nullable || function.nullable
+
   override def dataType: DataType = BooleanType
 
   override def functionType: AbstractDataType = BooleanType
@@ -409,16 +411,23 @@ case class ArrayExists(
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
-    var exists = false
+    var foundNull = false
     var i = 0
-    while (i < arr.numElements && !exists) {
+    while (i < arr.numElements) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
-      if (f.eval(inputRow).asInstanceOf[Boolean]) {
-        exists = true
+      val ret = f.eval(inputRow)
+      if (ret == null) {
+        foundNull = true
+      } else if (ret.asInstanceOf[Boolean]) {
+        return true
       }
       i += 1
     }
-    exists
+    if (foundNull) {
+      null
+    } else {
+      false
+    }
   }
 
   override def prettyName: String = "exists"
