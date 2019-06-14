@@ -629,7 +629,7 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
         __init__(self, predictionCol="prediction", labelCol="label", \
                  metricName="meanAveragePrecision", k=10)
         """
-        super(MultilabelClassificationEvaluator, self).__init__()
+        super(RankingEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RankingEvaluator", self.uid)
         self._setDefault(metricName="meanAveragePrecision", k=10)
