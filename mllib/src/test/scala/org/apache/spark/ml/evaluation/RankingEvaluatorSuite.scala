@@ -22,6 +22,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 
 class RankingEvaluatorSuite
@@ -56,11 +57,11 @@ class RankingEvaluatorSuite
 
     val evaluator = new RankingEvaluator()
       .setMetricName("meanAveragePrecision")
-    assert(math.abs(evaluator.evaluate(scoreAndLabels) - 0.355026) < 0.00001)
+    assert(evaluator.evaluate(scoreAndLabels) ~== 0.355026 absTol 1e-5)
 
     evaluator.setMetricName("precisionAtK")
       .setK(2)
-    assert(math.abs(evaluator.evaluate(scoreAndLabels) - 1.0 / 3) < 0.00001)
+    assert(evaluator.evaluate(scoreAndLabels) ~== 1.0 / 3 absTol 1e-5)
   }
 
 

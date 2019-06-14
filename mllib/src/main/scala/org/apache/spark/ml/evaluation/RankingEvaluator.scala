@@ -59,10 +59,9 @@ class RankingEvaluator (override val uid: String)
 
   setDefault(metricName -> "meanAveragePrecision")
 
-  @Since("3.0.0")
   final val k = new IntParam(this, "k",
     "The ranking position value used in meanAveragePrecisionAtK|precisionAtK|ndcgAtK|recallAtK." +
-    " Must be > 0.",
+    " Must be > 0. The default value is 10.",
     ParamValidators.gt(0))
 
   /** @group getParam */
@@ -93,14 +92,13 @@ class RankingEvaluator (override val uid: String)
         (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
       }
     val metrics = new RankingMetrics[Double](predictionAndLabels)
-    val metric = $(metricName) match {
+    $(metricName) match {
       case "meanAveragePrecision" => metrics.meanAveragePrecision
       case "meanAveragePrecisionAtK" => metrics.meanAveragePrecisionAt($(k))
       case "precisionAtK" => metrics.precisionAt($(k))
       case "ndcgAtK" => metrics.ndcgAt($(k))
       case "recallAtK" => metrics.recallAt($(k))
     }
-    metric
   }
 
   override def copy(extra: ParamMap): RankingEvaluator = defaultCopy(extra)
