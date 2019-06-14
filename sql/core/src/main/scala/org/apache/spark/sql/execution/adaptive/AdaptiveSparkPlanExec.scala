@@ -62,9 +62,6 @@ case class AdaptiveSparkPlanExec(
     @transient stageCache: TrieMap[SparkPlan, QueryStageExec])
   extends LeafExecNode {
 
-  @transient private val executionId = Option(
-    session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
-
   @transient private val lock = new Object()
 
   // The logical plan optimizer for re-optimizing the current logical plan.
@@ -93,6 +90,8 @@ case class AdaptiveSparkPlanExec(
 
   @volatile private var isFinalPlan = false
 
+  @volatile private var executionId = Option.empty[Long]
+
   /**
    * Return type for `createQueryStages`
    * @param newPlan the new plan with created query stages.
@@ -116,6 +115,8 @@ case class AdaptiveSparkPlanExec(
     currentPhysicalPlan.execute()
   } else {
     lock.synchronized {
+      executionId = Option(
+        session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
@@ -361,13 +362,10 @@ case class AdaptiveSparkPlanExec(
    */
   private def onUpdatePlan(): Unit = {
     executionId.foreach { id =>
-      val exec = SQLExecution.getQueryExecution(id)
-      if (exec != null) {
-        session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
-          id,
-          exec.toString,
-          SparkPlanInfo.fromSparkPlan(this)))
-      }
+      session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
+        id,
+        SQLExecution.getQueryExecution(id).toString,
+        SparkPlanInfo.fromSparkPlan(this)))
     }
   }
 }
