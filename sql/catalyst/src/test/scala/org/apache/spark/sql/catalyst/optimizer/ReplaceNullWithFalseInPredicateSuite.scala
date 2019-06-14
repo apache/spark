@@ -314,7 +314,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("replace nulls in lambda function of ArrayExists") {
-    withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> true.toString) {
+    withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "true") {
       val lambdaArgs = Seq(lv('e))
       val cond = GreaterThan(lambdaArgs.last, Literal(0))
       val lambda = LambdaFunction(
@@ -323,7 +323,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       val expr = ArrayExists('a, lambda)
       testProjection(originalExpr = expr, expectedExpr = expr)
     }
-    withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> false.toString) {
+    withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "false") {
       testHigherOrderFunc('a, ArrayExists, Seq(lv('e)))
     }
   }
