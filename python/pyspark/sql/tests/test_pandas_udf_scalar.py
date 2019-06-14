@@ -252,7 +252,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         def iter_f(it):
             for i in it:
-                yield pd.Series(map(str, i))
+                yield scalar_f(i)
 
         for f, udf_type in [(scalar_f, PandasUDFType.SCALAR), (iter_f, PandasUDFType.SCALAR_ITER)]:
             str_f = pandas_udf(f, StringType(), udf_type)
@@ -322,7 +322,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         def iter_func(it):
             for id in it:
-                yield pd.DataFrame({'id': id, 'str': id.apply(unicode)})
+                yield scalar_func(id)
 
         for func, udf_type in [(scalar_func, PandasUDFType.SCALAR),
                                (iter_func, PandasUDFType.SCALAR_ITER)]:
@@ -348,16 +348,16 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             StructField('ts', TimestampType()),
             StructField('arr', ArrayType(LongType()))])
 
-        @pandas_udf(returnType=return_type)
-        def scalar_f(id):
+        def _scalar_f(id):
             return pd.DataFrame({'ts': id.apply(lambda i: pd.Timestamp(i)),
                                  'arr': id.apply(lambda i: [i, i + 1])})
+
+        scalar_f = pandas_udf(_scalar_f, returnType=return_type)
 
         @pandas_udf(returnType=return_type, functionType=PandasUDFType.SCALAR_ITER)
         def iter_f(it):
             for id in it:
-                yield pd.DataFrame({'ts': id.apply(lambda i: pd.Timestamp(i)),
-                                    'arr': id.apply(lambda i: [i, i + 1])})
+                yield _scalar_f(id)
 
         for f, udf_type in [(scalar_f, PandasUDFType.SCALAR), (iter_f, PandasUDFType.SCALAR_ITER)]:
             actual = df.withColumn('f', f(col('id'))).collect()
@@ -437,7 +437,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 df.select(raise_exception(col('id'))).collect()
 
         @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
-        def iter1_raise_exception(it):
+        def iter_udf_wong_output_size(it):
             for _ in it:
                 yield pd.Series(1)
 
@@ -446,15 +446,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     Exception,
                     "The number of output rows of pandas iterator UDF should be "
                     "the same with input rows"):
-                df.select(iter1_raise_exception(col('id'))).collect()
+                df.select(iter_udf_wong_output_size(col('id'))).collect()
 
         @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
-        def iter2_raise_exception(it):
-            if sys.version >= '3':
-                batch = it.__next__()
-            else:
-                batch = it.next()
-            yield pd.Series([1] * len(batch))
+        def iter_udf_not_reading_all_input(it):
+            for batch in it:
+                batch_len = len(batch)
+                yield pd.Series([1] * batch_len)
+                break
 
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
             df1 = self.spark.range(10).repartition(1)
@@ -462,7 +461,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 with self.assertRaisesRegexp(
                         Exception,
                         "SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator"):
-                    df1.select(iter2_raise_exception(col('id'))).collect()
+                    df1.select(iter_udf_not_reading_all_input(col('id'))).collect()
 
     def test_vectorized_udf_chained(self):
         df = self.spark.range(10)
@@ -862,12 +861,12 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return x + 1
 
         @pandas_udf('int')
-        def f2s(x):
+        def f2_scalar(x):
             assert type(x) == pd.Series
             return x + 10
 
         @pandas_udf('int', PandasUDFType.SCALAR_ITER)
-        def f2i(it):
+        def f2_iter(it):
             for x in it:
                 assert type(x) == pd.Series
                 yield x + 10
@@ -878,12 +877,12 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return x + 100
 
         @pandas_udf('int')
-        def f4s(x):
+        def f4_scalar(x):
             assert type(x) == pd.Series
             return x + 1000
 
         @pandas_udf('int', PandasUDFType.SCALAR_ITER)
-        def f4i(it):
+        def f4_iter(it):
             for x in it:
                 assert type(x) == pd.Series
                 yield x + 1000
@@ -912,7 +911,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn('f4_f3_f2_f1', df['v'] + 1111) \
             .collect()
 
-        for f2, f4 in [(f2s, f4s), (f2s, f4i), (f2i, f4s), (f2i, f4i)]:
+        for f2, f4 in [(f2_scalar, f4_scalar), (f2_scalar, f4_iter),
+                       (f2_iter, f4_scalar), (f2_iter, f4_iter)]:
             # Test single expression with chained UDFs
             df_chained_1 = df.withColumn('f2_f1', f2(f1(df['v'])))
             df_chained_2 = df.withColumn('f3_f2_f1', f3(f2(f1(df['v']))))

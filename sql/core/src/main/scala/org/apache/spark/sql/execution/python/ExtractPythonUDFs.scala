@@ -115,20 +115,20 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
     // otherwise check if subsequent UDFs are of the same type as the first UDF. (since we can only
     // extract UDFs of the same eval type)
 
-    var firstVisitedUDFEvalType: Option[Int] = None
+    var firstVisitedScalarUDFEvalType: Option[Int] = None
 
     def canChainUDF(evalType: Int): Boolean = {
       if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) {
         false
       } else {
-        evalType == firstVisitedUDFEvalType.get
+        evalType == firstVisitedScalarUDFEvalType.get
       }
     }
 
     def collectEvaluableUDFs(expr: Expression): Seq[PythonUDF] = expr match {
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
-        && firstVisitedUDFEvalType.isEmpty =>
-        firstVisitedUDFEvalType = Some(udf.evalType)
+        && firstVisitedScalarUDFEvalType.isEmpty =>
+        firstVisitedScalarUDFEvalType = Some(udf.evalType)
         Seq(udf)
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
         && canChainUDF(udf.evalType) =>
