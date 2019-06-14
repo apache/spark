@@ -1930,13 +1930,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(Seq(5, 9, 11, 10, 6)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("i"), x => x + 1)),
+      checkAnswer(df.select(transform(col("i"), x => x + 1)),
         Seq(
           Row(Seq(2, 10, 9, 8)),
           Row(Seq(6, 9, 10, 8, 3)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("i"), (x, i) => x + i)),
+      checkAnswer(df.select(transform(col("i"), (x, i) => x + i)),
         Seq(
           Row(Seq(1, 10, 10, 10)),
           Row(Seq(5, 9, 11, 10, 6)),
@@ -1972,13 +1972,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(Seq(5, null, 10, 12, 11, 7)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("i"), x => x + 1)),
+      checkAnswer(df.select(transform(col("i"), x => x + 1)),
         Seq(
           Row(Seq(2, 10, 9, null, 8)),
           Row(Seq(6, null, 9, 10, 8, 3)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("i"), (x, i) => x + i)),
+      checkAnswer(df.select(transform(col("i"), (x, i) => x + i)),
         Seq(
           Row(Seq(1, 10, 10, null, 11)),
           Row(Seq(5, null, 10, 12, 11, 7)),
@@ -2014,13 +2014,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(Seq("b0", null, "c2", null)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("s"), x => concat(x, x))),
+      checkAnswer(df.select(transform(col("s"), x => concat(x, x))),
         Seq(
           Row(Seq("cc", "aa", "bb")),
           Row(Seq("bb", null, "cc", null)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("s"), (x, i) => concat(x, i))),
+      checkAnswer(df.select(transform(col("s"), (x, i) => concat(x, i))),
         Seq(
           Row(Seq("c0", "a1", "b2")),
           Row(Seq("b0", null, "c2", null)),
@@ -2070,13 +2070,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
             Seq("b", null, "c", null, null))),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("arg"), arg => arg)),
+      checkAnswer(df.select(transform(col("arg"), arg => arg)),
         Seq(
           Row(Seq("c", "a", "b")),
           Row(Seq("b", null, "c", null)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("arg"), _ => df("arg"))),
+      checkAnswer(df.select(transform(col("arg"), _ => col("arg"))),
         Seq(
           Row(Seq(Seq("c", "a", "b"), Seq("c", "a", "b"), Seq("c", "a", "b"))),
           Row(Seq(
@@ -2086,7 +2086,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
             Seq("b", null, "c", null))),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(transform(df("arg"), x => concat(df("arg"), array(x)))),
+      checkAnswer(df.select(transform(col("arg"), x => concat(col("arg"), array(x)))),
         Seq(
           Row(Seq(Seq("c", "a", "b", "c"), Seq("c", "a", "b", "a"), Seq("c", "a", "b", "b"))),
           Row(Seq(
@@ -2143,8 +2143,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Map(1 -> 10), Map(3 -> -3))))
 
     checkAnswer(dfInts.select(
-      map_filter(dfInts("m"), (k, v) => k * 10 === v),
-      map_filter(dfInts("m"), (k, v) => k === (v * -1))),
+      map_filter(col("m"), (k, v) => k * 10 === v),
+      map_filter(col("m"), (k, v) => k === (v * -1))),
       Seq(
         Row(Map(1 -> 10, 2 -> 20, 3 -> 30), Map()),
         Row(Map(), Map(1 -> -1, 2 -> -2, 3 -> -3)),
@@ -2161,8 +2161,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Map(), Map(2 -> Seq(-2, -2)))))
 
     checkAnswer(dfComplex.select(
-      map_filter(dfComplex("m"), (k, v) => k === element_at(v, 1)),
-      map_filter(dfComplex("m"), (k, v) => k === size(v))),
+      map_filter(col("m"), (k, v) => k === element_at(v, 1)),
+      map_filter(col("m"), (k, v) => k === size(v))),
       Seq(
         Row(Map(1 -> Seq(1)), Map(1 -> Seq(1), 2 -> Seq(1, 2), 3 -> Seq(1, 2, 3))),
         Row(Map(), Map(2 -> Seq(-2, -2)))))
@@ -2189,10 +2189,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 1 requires map type"))
 
-    val ex3a = intercept[MatchError] {
-      df.select(map_filter(df("i"), (k, v) => k > v))
+    val ex3a = intercept[AnalysisException] {
+      df.select(map_filter(col("i"), (k, v) => k > v))
     }
-    assert(ex3a.getMessage.contains("IntegerType"))
+    assert(ex3a.getMessage.contains("data type mismatch: argument 1 requires map type"))
 
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_filter(a, (k, v) -> k > v)")
@@ -2215,7 +2215,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(Seq(8, 2)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(filter(df("i"), _ % 2 === 0)),
+      checkAnswer(df.select(filter(col("i"), _ % 2 === 0)),
         Seq(
           Row(Seq(8)),
           Row(Seq(8, 2)),
@@ -2245,7 +2245,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(Seq(8, 2)),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(filter(df("i"), _ % 2 === 0)),
+      checkAnswer(df.select(filter(col("i"), _ % 2 === 0)),
         Seq(
           Row(Seq(8)),
           Row(Seq(8, 2)),
@@ -2275,7 +2275,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(Seq("b", "c")),
           Row(Seq.empty),
           Row(null)))
-      checkAnswer(df.select(filter(df("s"), x => x.isNotNull)),
+      checkAnswer(df.select(filter(col("s"), x => x.isNotNull)),
         Seq(
           Row(Seq("c", "a", "b")),
           Row(Seq("b", "c")),
@@ -2308,10 +2308,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
-    val ex2a = intercept[MatchError] {
-      df.select(filter(df("i"), x => x))
+    val ex2a = intercept[AnalysisException] {
+      df.select(filter(col("i"), x => x))
     }
-    assert(ex2a.getMessage.contains("IntegerType"))
+    assert(ex2a.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("filter(s, x -> x)")
@@ -2319,7 +2319,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
     val ex3a = intercept[AnalysisException] {
-      df.select(filter(df("s"), x => x))
+      df.select(filter(col("s"), x => x))
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
@@ -2344,7 +2344,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(false),
           Row(false),
           Row(null)))
-      checkAnswer(df.select(exists(df("i"), _ % 2 === 0)),
+      checkAnswer(df.select(exists(col("i"), _ % 2 === 0)),
         Seq(
           Row(true),
           Row(false),
@@ -2374,7 +2374,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(false),
           Row(false),
           Row(null)))
-      checkAnswer(df.select(exists(df("i"), _ % 2 === 0)),
+      checkAnswer(df.select(exists(col("i"), _ % 2 === 0)),
         Seq(
           Row(true),
           Row(false),
@@ -2404,7 +2404,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(true),
           Row(false),
           Row(null)))
-      checkAnswer(df.select(exists(df("s"), x => x.isNull)),
+      checkAnswer(df.select(exists(col("s"), x => x.isNull)),
         Seq(
           Row(false),
           Row(true),
@@ -2437,10 +2437,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
-    val ex2a = intercept[MatchError] {
-      df.select(exists(df("i"), x => x))
+    val ex2a = intercept[AnalysisException] {
+      df.select(exists(col("i"), x => x))
     }
-    assert(ex2a.getMessage.contains("IntegerType"))
+    assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("exists(s, x -> x)")
@@ -2479,13 +2479,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(310),
           Row(0),
           Row(null)))
-      checkAnswer(df.select(aggregate(df("i"), lit(0), (acc, x) => acc + x)),
+      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x)),
         Seq(
           Row(25),
           Row(31),
           Row(0),
           Row(null)))
-      checkAnswer(df.select(aggregate(df("i"), lit(0), (acc, x) => acc + x, _ * 10)),
+      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10)),
         Seq(
           Row(250),
           Row(310),
@@ -2522,7 +2522,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(0),
           Row(0),
           Row(null)))
-      checkAnswer(df.select(aggregate(df("i"), lit(0), (acc, x) => acc + x)),
+      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x)),
         Seq(
           Row(25),
           Row(null),
@@ -2530,7 +2530,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(null)))
       checkAnswer(
         df.select(
-          aggregate(df("i"), lit(0), (acc, x) => acc + x, acc => coalesce(acc, lit(0)) * 10)),
+          aggregate(col("i"), lit(0), (acc, x) => acc + x, acc => coalesce(acc, lit(0)) * 10)),
         Seq(
           Row(250),
           Row(0),
@@ -2567,7 +2567,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(""),
           Row("c"),
           Row(null)))
-      checkAnswer(df.select(aggregate(df("ss"), df("s"), (acc, x) => concat(acc, x))),
+      checkAnswer(df.select(aggregate(col("ss"), col("s"), (acc, x) => concat(acc, x))),
         Seq(
           Row("acab"),
           Row(null),
@@ -2575,7 +2575,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(null)))
       checkAnswer(
         df.select(
-          aggregate(df("ss"), df("s"), (acc, x) => concat(acc, x), acc => coalesce(acc, lit("")))),
+          aggregate(col("ss"), col("s"), (acc, x) => concat(acc, x),
+            acc => coalesce(acc, lit("")))),
         Seq(
           Row("acab"),
           Row(""),
@@ -2613,10 +2614,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
-    val ex3a = intercept[MatchError] {
-      df.select(aggregate(df("i"), lit(0), (acc, x) => x))
+    val ex3a = intercept[AnalysisException] {
+      df.select(aggregate(col("i"), lit(0), (acc, x) => x))
     }
-    assert(ex3a.getMessage.contains("IntegerType"))
+    assert(ex3a.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
@@ -2624,7 +2625,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex4.getMessage.contains("data type mismatch: argument 3 requires int type"))
 
     val ex4a = intercept[AnalysisException] {
-      df.select(aggregate(df("s"), lit(0), (acc, x) => x))
+      df.select(aggregate(col("s"), lit(0), (acc, x) => x))
     }
     assert(ex4a.getMessage.contains("data type mismatch: argument 3 requires int type"))
 
@@ -2672,7 +2673,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Map("a" -> Row("d", null))),
         Row(null)))
 
-    checkAnswer(df.select(map_zip_with(df("m1"), df("m2"), (k, v1, v2) => struct(v1, v2))),
+    checkAnswer(df.select(map_zip_with(col("m1"), col("m2"), (k, v1, v2) => struct(v1, v2))),
       Seq(
         Row(Map("z" -> Row("a", "c"), "y" -> Row("b", null), "x" -> Row("c", "a"))),
         Row(Map("b" -> Row("a", null), "c" -> Row("d", "a"), "d" -> Row(null, "k"))),
@@ -2696,30 +2697,31 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex2.getMessage.contains("The input to function map_zip_with should have " +
       "been two maps with compatible key types"))
 
-    val ex2a = intercept[NoSuchElementException] {
-      df.select(map_zip_with(df("mis"), df("mmi"), (x, y, z) => concat(x, y, z)))
+    val ex2a = intercept[AnalysisException] {
+      df.select(map_zip_with(df("mis"), col("mmi"), (x, y, z) => concat(x, y, z)))
     }
-    assert(ex2a.getMessage.contains("None.get"))
+    assert(ex2a.getMessage.contains("The input to function map_zip_with should have " +
+      "been two maps with compatible key types"))
 
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("map_zip_with(i, mis, (x, y, z) -> concat(x, y, z))")
     }
     assert(ex3.getMessage.contains("type mismatch: argument 1 requires map type"))
 
-    val ex3a = intercept[MatchError] {
-      df.select(map_zip_with(df("i"), df("mis"), (x, y, z) => concat(x, y, z)))
+    val ex3a = intercept[AnalysisException] {
+      df.select(map_zip_with(col("i"), col("mis"), (x, y, z) => concat(x, y, z)))
     }
-    assert(ex3a.getMessage.contains("IntegerType"))
+    assert(ex3a.getMessage.contains("type mismatch: argument 1 requires map type"))
 
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_zip_with(mis, i, (x, y, z) -> concat(x, y, z))")
     }
     assert(ex4.getMessage.contains("type mismatch: argument 2 requires map type"))
 
-    val ex4a = intercept[MatchError] {
-      df.select(map_zip_with(df("mis"), df("i"), (x, y, z) => concat(x, y, z)))
+    val ex4a = intercept[AnalysisException] {
+      df.select(map_zip_with(col("mis"), col("i"), (x, y, z) => concat(x, y, z)))
     }
-    assert(ex4a.getMessage.contains("IntegerType"))
+    assert(ex4a.getMessage.contains("type mismatch: argument 2 requires map type"))
 
     val ex5 = intercept[AnalysisException] {
       df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
@@ -2749,7 +2751,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> k + v)"),
         Seq(Row(Map(2 -> 1, 18 -> 9, 16 -> 8, 14 -> 7))))
 
-      checkAnswer(dfExample1.select(transform_keys(dfExample1("i"), (k, v) => k + v)),
+      checkAnswer(dfExample1.select(transform_keys(col("i"), (k, v) => k + v)),
         Seq(Row(Map(2 -> 1, 18 -> 9, 16 -> 8, 14 -> 7))))
 
       checkAnswer(dfExample2.selectExpr("transform_keys(j, " +
@@ -2758,7 +2760,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
       checkAnswer(dfExample2.select(
           transform_keys(
-            dfExample2("j"),
+            col("j"),
             (k, v) => element_at(
               map_from_arrays(
                 array(lit(1), lit(2), lit(3)),
@@ -2773,33 +2775,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> CAST(v * 2 AS BIGINT) + k)"),
         Seq(Row(Map(3 -> 1.0, 4 -> 1.4, 6 -> 1.7))))
 
-      checkAnswer(dfExample2.select(transform_keys(dfExample2("j"),
+      checkAnswer(dfExample2.select(transform_keys(col("j"),
         (k, v) => (v * 2).cast("bigint") + k)),
         Seq(Row(Map(3 -> 1.0, 4 -> 1.4, 6 -> 1.7))))
 
       checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> k + v)"),
         Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7))))
 
-      checkAnswer(dfExample2.select(transform_keys(dfExample2("j"), (k, v) => k + v)),
+      checkAnswer(dfExample2.select(transform_keys(col("j"), (k, v) => k + v)),
         Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7))))
 
       checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)"),
         Seq(Row(Map(true -> true, true -> false))))
 
-      checkAnswer(dfExample3.select(transform_keys(dfExample3("x"), (k, v) => k % 2 === 0 || v)),
+      checkAnswer(dfExample3.select(transform_keys(col("x"), (k, v) => k % 2 === 0 || v)),
         Seq(Row(Map(true -> true, true -> false))))
 
       checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) -> if(v, 2 * k, 3 * k))"),
         Seq(Row(Map(50 -> true, 78 -> false))))
 
-      checkAnswer(dfExample3.select(transform_keys(dfExample3("x"),
+      checkAnswer(dfExample3.select(transform_keys(col("x"),
         (k, v) => when(v, k * 2).otherwise(k * 3))),
         Seq(Row(Map(50 -> true, 78 -> false))))
 
       checkAnswer(dfExample4.selectExpr("transform_keys(y, (k, v) -> array_contains(k, 3) AND v)"),
         Seq(Row(Map(false -> false))))
 
-      checkAnswer(dfExample4.select(transform_keys(dfExample4("y"),
+      checkAnswer(dfExample4.select(transform_keys(col("y"),
         (k, v) => array_contains(k, lit(3)) && v)),
         Seq(Row(Map(false -> false))))
     }
@@ -2840,7 +2842,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex3.getMessage.contains("Cannot use null as map key"))
 
     val ex3a = intercept[Exception] {
-      dfExample1.select(transform_keys(dfExample1("i"), (k, v) => v)).show()
+      dfExample1.select(transform_keys(col("i"), (k, v) => v)).show()
     }
     assert(ex3a.getMessage.contains("Cannot use null as map key"))
 
@@ -2909,26 +2911,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         dfExample5.selectExpr("transform_values(c, (k, v) -> k + cardinality(v))"),
         Seq(Row(Map(1 -> 3))))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("i"), (k, v) => k + v)),
+      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => k + v)),
         Seq(Row(Map(1 -> 2, 9 -> 18, 8 -> 16, 7 -> 14))))
 
       checkAnswer(dfExample2.select(
-        transform_values(dfExample2("x"), (k, v) => when(k, v).otherwise(k.cast("string")))),
+        transform_values(col("x"), (k, v) => when(k, v).otherwise(k.cast("string")))),
         Seq(Row(Map(false -> "false", true -> "def"))))
 
-      checkAnswer(dfExample2.select(transform_values(dfExample2("x"),
+      checkAnswer(dfExample2.select(transform_values(col("x"),
         (k, v) => (!k) && v === "abc")),
         Seq(Row(Map(false -> true, true -> false))))
 
-      checkAnswer(dfExample3.select(transform_values(dfExample3("y"), (k, v) => v * v)),
+      checkAnswer(dfExample3.select(transform_values(col("y"), (k, v) => v * v)),
         Seq(Row(Map("a" -> 1, "b" -> 4, "c" -> 9))))
 
       checkAnswer(dfExample3.select(
-        transform_values(dfExample3("y"), (k, v) => concat(k, lit(":"), v.cast("string")))),
+        transform_values(col("y"), (k, v) => concat(k, lit(":"), v.cast("string")))),
         Seq(Row(Map("a" -> "a:1", "b" -> "b:2", "c" -> "c:3"))))
 
       checkAnswer(
-        dfExample3.select(transform_values(dfExample3("y"), (k, v) => concat(k, v.cast("string")))),
+        dfExample3.select(transform_values(col("y"), (k, v) => concat(k, v.cast("string")))),
         Seq(Row(Map("a" -> "a1", "b" -> "b2", "c" -> "c3"))))
 
       val testMap = map_from_arrays(
@@ -2937,16 +2939,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       )
 
       checkAnswer(
-        dfExample4.select(transform_values(dfExample4("z"),
+        dfExample4.select(transform_values(col("z"),
           (k, v) => concat(element_at(testMap, k), lit("_"), v.cast("string")))),
         Seq(Row(Map(1 -> "one_1.0", 2 -> "two_1.4", 3 ->"three_1.7"))))
 
       checkAnswer(
-        dfExample4.select(transform_values(dfExample4("z"), (k, v) => k - v)),
+        dfExample4.select(transform_values(col("z"), (k, v) => k - v)),
         Seq(Row(Map(1 -> 0.0, 2 -> 0.6000000000000001, 3 -> 1.3))))
 
       checkAnswer(
-        dfExample5.select(transform_values(dfExample5("c"), (k, v) => k + size(v))),
+        dfExample5.select(transform_values(col("c"), (k, v) => k + size(v))),
         Seq(Row(Map(1 -> 3))))
     }
 
@@ -2992,26 +2994,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       checkAnswer(dfExample2.selectExpr("transform_values(j, (k, v) -> k + cast(v as BIGINT))"),
         Seq(Row(Map.empty[BigInt, BigInt])))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("i"),
+      checkAnswer(dfExample1.select(transform_values(col("i"),
         (k, v) => lit(null).cast("int"))),
         Seq(Row(Map.empty[Integer, Integer])))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("i"), (k, v) => k)),
+      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => k)),
         Seq(Row(Map.empty[Integer, Integer])))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("i"), (k, v) => v)),
+      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => v)),
         Seq(Row(Map.empty[Integer, Integer])))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("i"), (k, v) => lit(0))),
+      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => lit(0))),
         Seq(Row(Map.empty[Integer, Integer])))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("i"), (k, v) => lit("value"))),
+      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => lit("value"))),
         Seq(Row(Map.empty[Integer, String])))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("i"), (k, v) => lit(true))),
+      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => lit(true))),
         Seq(Row(Map.empty[Integer, Boolean])))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("i"), (k, v) => v.cast("bigint"))),
+      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => v.cast("bigint"))),
         Seq(Row(Map.empty[BigInt, BigInt])))
     }
 
@@ -3038,12 +3040,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         "transform_values(b, (k, v) -> IF(v IS NULL, k + 1, k + 2))"),
         Seq(Row(Map(1 -> 3, 2 -> 4, 3 -> 4))))
 
-      checkAnswer(dfExample1.select(transform_values(dfExample1("a"),
+      checkAnswer(dfExample1.select(transform_values(col("a"),
         (k, v) => lit(null).cast("int"))),
         Seq(Row(Map[Int, Integer](1 -> null, 2 -> null, 3 -> null, 4 -> null))))
 
       checkAnswer(dfExample2.select(
-        transform_values(dfExample2("b"), (k, v) => when(v.isNull, k + 1).otherwise(k + 2))
+        transform_values(col("b"), (k, v) => when(v.isNull, k + 1).otherwise(k + 2))
         ),
         Seq(Row(Map(1 -> 3, 2 -> 4, 3 -> 4))))
     }
@@ -3085,10 +3087,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       assert(ex3.getMessage.contains(
         "data type mismatch: argument 1 requires map type"))
 
-      val ex3a = intercept[MatchError] {
-        dfExample3.select(transform_values(dfExample3("x"), (k, v) => k + 1))
+      val ex3a = intercept[AnalysisException] {
+        dfExample3.select(transform_values(col("x"), (k, v) => k + 1))
       }
-      assert(ex3a.getMessage.contains("IntegerType"))
+      assert(ex3a.getMessage.contains(
+        "data type mismatch: argument 1 requires map type"))
     }
 
     testInvalidLambdaFunctions()
@@ -3143,7 +3146,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       expectedValue1
     )
     checkAnswer(
-      df.select(zip_with(df("val1"), df("val2"), (x, y) => struct(y, x))),
+      df.select(zip_with(col("val1"), col("val2"), (x, y) => struct(y, x))),
       expectedValue1
     )
   }
@@ -3167,10 +3170,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("zip_with(i, a2, (acc, x) -> x)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 1 requires array type"))
-    val ex3a = intercept[MatchError] {
+    val ex3a = intercept[AnalysisException] {
       df.select(zip_with(df("i"), df("a2"), (acc, x) => x))
     }
-    assert(ex3a.getMessage.contains("IntegerType"))
+    assert(ex3a.getMessage.contains("data type mismatch: argument 1 requires array type"))
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
     }

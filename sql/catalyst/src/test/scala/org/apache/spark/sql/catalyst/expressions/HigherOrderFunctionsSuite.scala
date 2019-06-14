@@ -24,7 +24,102 @@ import org.apache.spark.sql.types._
 
 class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   import org.apache.spark.sql.catalyst.dsl.expressions._
-  import org.apache.spark.sql.catalyst.expressions.HigherOrderUtils._
+
+  private def createLambda(
+      dt: DataType,
+      nullable: Boolean,
+      f: Expression => Expression): Expression = {
+    val lv = NamedLambdaVariable("arg", dt, nullable)
+    val function = f(lv)
+    LambdaFunction(function, Seq(lv))
+  }
+
+  private def createLambda(
+      dt1: DataType,
+      nullable1: Boolean,
+      dt2: DataType,
+      nullable2: Boolean,
+      f: (Expression, Expression) => Expression): Expression = {
+    val lv1 = NamedLambdaVariable("arg1", dt1, nullable1)
+    val lv2 = NamedLambdaVariable("arg2", dt2, nullable2)
+    val function = f(lv1, lv2)
+    LambdaFunction(function, Seq(lv1, lv2))
+  }
+
+  private def createLambda(
+      dt1: DataType,
+      nullable1: Boolean,
+      dt2: DataType,
+      nullable2: Boolean,
+      dt3: DataType,
+      nullable3: Boolean,
+      f: (Expression, Expression, Expression) => Expression): Expression = {
+    val lv1 = NamedLambdaVariable("arg1", dt1, nullable1)
+    val lv2 = NamedLambdaVariable("arg2", dt2, nullable2)
+    val lv3 = NamedLambdaVariable("arg3", dt3, nullable3)
+    val function = f(lv1, lv2, lv3)
+    LambdaFunction(function, Seq(lv1, lv2, lv3))
+  }
+
+  private def validateBinding(
+      e: Expression,
+      argInfo: Seq[(DataType, Boolean)]): LambdaFunction = e match {
+    case f: LambdaFunction =>
+      assert(f.arguments.size === argInfo.size)
+      f.arguments.zip(argInfo).foreach {
+        case (arg, (dataType, nullable)) =>
+          assert(arg.dataType === dataType)
+          assert(arg.nullable === nullable)
+      }
+      f
+  }
+
+  def transform(expr: Expression, f: Expression => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArrayTransform(expr, createLambda(et, cn, f)).bind(validateBinding)
+  }
+
+  def transform(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArrayTransform(expr, createLambda(et, cn, IntegerType, false, f)).bind(validateBinding)
+  }
+
+  def filter(expr: Expression, f: Expression => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArrayFilter(expr, createLambda(et, cn, f)).bind(validateBinding)
+  }
+
+  def transformKeys(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val MapType(kt, vt, vcn) = expr.dataType
+    TransformKeys(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
+  }
+
+  def aggregate(
+      expr: Expression,
+      zero: Expression,
+      merge: (Expression, Expression) => Expression,
+      finish: Expression => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    val zeroType = zero.dataType
+    ArrayAggregate(
+      expr,
+      zero,
+      createLambda(zeroType, true, et, cn, merge),
+      createLambda(zeroType, true, finish))
+      .bind(validateBinding)
+  }
+
+  def aggregate(
+      expr: Expression,
+      zero: Expression,
+      merge: (Expression, Expression) => Expression): Expression = {
+    aggregate(expr, zero, merge, identity)
+  }
+
+  def transformValues(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val MapType(kt, vt, vcn) = expr.dataType
+    TransformValues(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
+  }
 
   test("ArrayTransform") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
@@ -68,6 +163,10 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("MapFilter") {
+    def mapFilter(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+      val MapType(kt, vt, vcn) = expr.dataType
+      MapFilter(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
+    }
     val mii0 = Literal.create(Map(1 -> 0, 2 -> 10, 3 -> -1),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val mii1 = Literal.create(Map(1 -> null, 2 -> 10, 3 -> null),
@@ -145,6 +244,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("ArrayExists") {
+    def exists(expr: Expression, f: Expression => Expression): Expression = {
+      val ArrayType(et, cn) = expr.dataType
+      ArrayExists(expr, createLambda(et, cn, f)).bind(validateBinding)
+    }
+
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
     val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
@@ -353,6 +457,16 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("MapZipWith") {
+    def map_zip_with(
+        left: Expression,
+        right: Expression,
+        f: (Expression, Expression, Expression) => Expression): Expression = {
+      val MapType(kt, vt1, _) = left.dataType
+      val MapType(_, vt2, _) = right.dataType
+      MapZipWith(left, right, createLambda(kt, false, vt1, true, vt2, true, f))
+        .bind(validateBinding)
+    }
+
     val mii0 = Literal.create(create_map(1 -> 10, 2 -> 20, 3 -> 30),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val mii1 = Literal.create(create_map(1 -> -1, 2 -> -2, 4 -> -4),
@@ -435,6 +549,15 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("ZipWith") {
+    def zip_with(
+        left: Expression,
+        right: Expression,
+        f: (Expression, Expression) => Expression): Expression = {
+      val ArrayType(leftT, _) = left.dataType
+      val ArrayType(rightT, _) = right.dataType
+      ZipWith(left, right, createLambda(leftT, true, rightT, true, f)).bind(validateBinding)
+    }
+
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq(1, 2, 3, 4), ArrayType(IntegerType, containsNull = false))
     val ai2 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
