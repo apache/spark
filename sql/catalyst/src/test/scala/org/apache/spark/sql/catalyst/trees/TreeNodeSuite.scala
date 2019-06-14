@@ -706,6 +706,6 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val leaf = FakeLeafPlan(intersect)
     val leafCloned = leaf.clone()
     assertDifferentInstance(leaf, leafCloned)
-    assertDifferentInstance(leaf.child, leafCloned.asInstanceOf[FakeLeafPlan].child)
+    assert(leaf.child.eq(leafCloned.asInstanceOf[FakeLeafPlan].child))
   }
 }
