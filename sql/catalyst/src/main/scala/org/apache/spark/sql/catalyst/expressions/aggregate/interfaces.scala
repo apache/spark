@@ -127,6 +127,7 @@ case class AggregateExpression(
   override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
+  @transient
   private lazy val _references: AttributeSet = {
     mode match {
       case Partial | Complete => aggregateFunction.references

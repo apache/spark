@@ -98,6 +98,7 @@ case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
   since = "2.0.0")
 // scalastyle:on line.size.limit
 case class Grouping(child: Expression) extends Expression with Unevaluable {
+  @transient
   private lazy val _references: AttributeSet =
     AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
   override def references: AttributeSet = _references

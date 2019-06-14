@@ -37,7 +37,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: AttributeSet = AttributeSet(output)
+  @transient
+  lazy val outputSet: AttributeSet = AttributeSet(output)
 
   /**
    * All Attributes that appear in expressions from this operator.  Note that this set does not
@@ -45,6 +46,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   def references: AttributeSet = _references
 
+  @transient
   private lazy val _references: AttributeSet =
     AttributeSet.fromAttributeSets(expressions.map(_.references))
 
