@@ -646,17 +646,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[DropTableCommand]] command.
-   */
-  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    DropTableCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      ctx.EXISTS != null,
-      ctx.VIEW != null,
-      ctx.PURGE != null)
-  }
-
-  /**
    * Create a [[AlterTableRenameCommand]] command.
    *
    * For example:
@@ -669,57 +658,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     AlterTableRenameCommand(
       visitTableIdentifier(ctx.from),
       visitTableIdentifier(ctx.to),
-      ctx.VIEW != null)
-  }
-
-  /**
-   * Create a [[AlterTableAddColumnsCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table1
-   *   ADD COLUMNS (col_name data_type [COMMENT col_comment], ...);
-   * }}}
-   */
-  override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAddColumnsCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitColTypeList(ctx.columns)
-    )
-  }
-
-  /**
-   * Create an [[AlterTableSetPropertiesCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table SET TBLPROPERTIES ('comment' = new_comment);
-   *   ALTER VIEW view SET TBLPROPERTIES ('comment' = new_comment);
-   * }}}
-   */
-  override def visitSetTableProperties(
-      ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetPropertiesCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitPropertyKeyValues(ctx.tablePropertyList),
-      ctx.VIEW != null)
-  }
-
-  /**
-   * Create an [[AlterTableUnsetPropertiesCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-   *   ALTER VIEW view UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-   * }}}
-   */
-  override def visitUnsetTableProperties(
-      ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableUnsetPropertiesCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitPropertyKeys(ctx.tablePropertyList),
-      ctx.EXISTS != null,
       ctx.VIEW != null)
   }
 
@@ -831,17 +769,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AlterTableSetLocationCommand]] command
+   * Create an [[AlterTableSetLocationCommand]] command for a partition.
    *
    * For example:
    * {{{
-   *   ALTER TABLE table [PARTITION spec] SET LOCATION "loc";
+   *   ALTER TABLE table PARTITION spec SET LOCATION "loc";
    * }}}
    */
-  override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
+  override def visitSetPartitionLocation(
+      ctx: SetPartitionLocationContext): LogicalPlan = withOrigin(ctx) {
     AlterTableSetLocationCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
+      Some(visitNonOptionalPartitionSpec(ctx.partitionSpec)),
       visitLocationSpec(ctx.locationSpec))
   }
 
@@ -1333,7 +1272,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ScriptInputOutputSchema]].
    */
   override protected def withScriptIOSchema(
-      ctx: QuerySpecificationContext,
+      ctx: ParserRuleContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,

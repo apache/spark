@@ -27,8 +27,8 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite {
     val tableSchema = StructType(Seq(field1, field2))
     val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
     assert(columns.size() == 2)
-    assert(columns.get(0).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
-    assert(columns.get(1).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
+    assert(columns.get(0).getType().getName == "VOID")
+    assert(columns.get(1).getType().getName == "VOID")
   }
 
   test("SPARK-20146 Comment should be preserved") {
@@ -37,9 +37,9 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite {
     val tableSchema = StructType(Seq(field1, field2))
     val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
     assert(columns.size() == 2)
-    assert(columns.get(0).getType() == org.apache.hive.service.cli.Type.STRING_TYPE)
+    assert(columns.get(0).getType().getName == "STRING")
     assert(columns.get(0).getComment() == "comment 1")
-    assert(columns.get(1).getType() == org.apache.hive.service.cli.Type.INT_TYPE)
+    assert(columns.get(1).getType().getName == "INT")
     assert(columns.get(1).getComment() == "")
   }
 }

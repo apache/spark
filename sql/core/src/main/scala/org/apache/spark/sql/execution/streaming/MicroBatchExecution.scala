@@ -426,8 +426,7 @@ class MicroBatchExecution(
         // It is now safe to discard the metadata beyond the minimum number to retain.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
         if (minLogEntriesToMaintain < currentBatchId) {
-          offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
-          commitLog.purge(currentBatchId - minLogEntriesToMaintain)
+          purge(currentBatchId - minLogEntriesToMaintain)
         }
       }
       noNewData = false
