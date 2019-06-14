@@ -74,21 +74,21 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   @Since("3.0.0")
-  final val label: DoubleParam = new DoubleParam(this, "label",
-    "The label whose metric will be computed in truePositiveRateByLabel|" +
+  final val metricClass: DoubleParam = new DoubleParam(this, "metricClass",
+    "The class whose metric will be computed in truePositiveRateByLabel|" +
       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel." +
       " Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
   /** @group getParam */
   @Since("3.0.0")
-  def getLabel: Double = $(label)
+  def getMetricClass: Double = $(metricClass)
 
   /** @group setParam */
   @Since("3.0.0")
-  def setLabel(value: Double): this.type = set(label, value)
+  def setMetricClass(value: Double): this.type = set(metricClass, value)
 
-  setDefault(label -> 0.0)
+  setDefault(metricClass -> 0.0)
 
   @Since("3.0.0")
   final val beta: DoubleParam = new DoubleParam(this, "beta",
@@ -120,7 +120,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
       }
     val metrics = new MulticlassMetrics(predictionAndLabelsWithWeights)
-    val metric = $(metricName) match {
+    $(metricName) match {
       case "f1" => metrics.weightedFMeasure
       case "accuracy" => metrics.accuracy
       case "weightedPrecision" => metrics.weightedPrecision
@@ -128,13 +128,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       case "weightedTruePositiveRate" => metrics.weightedTruePositiveRate
       case "weightedFalsePositiveRate" => metrics.weightedFalsePositiveRate
       case "weightedFMeasure" => metrics.weightedFMeasure($(beta))
-      case "truePositiveRateByLabel" => metrics.truePositiveRate($(label))
-      case "falsePositiveRateByLabel" => metrics.falsePositiveRate($(label))
-      case "precisionByLabel" => metrics.precision($(label))
-      case "recallByLabel" => metrics.recall($(label))
-      case "fMeasureByLabel" => metrics.fMeasure($(label), $(beta))
+      case "truePositiveRateByLabel" => metrics.truePositiveRate($(metricClass))
+      case "falsePositiveRateByLabel" => metrics.falsePositiveRate($(metricClass))
+      case "precisionByLabel" => metrics.precision($(metricClass))
+      case "recallByLabel" => metrics.recall($(metricClass))
+      case "fMeasureByLabel" => metrics.fMeasure($(metricClass), $(beta))
     }
-    metric
   }
 
   @Since("1.5.0")

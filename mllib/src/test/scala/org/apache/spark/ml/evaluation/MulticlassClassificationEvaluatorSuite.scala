@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 class MulticlassClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -36,6 +37,8 @@ class MulticlassClassificationEvaluatorSuite
       .setPredictionCol("myPrediction")
       .setLabelCol("myLabel")
       .setMetricName("accuracy")
+      .setMetricClass(1.0)
+      .setBeta(2.0)
     testDefaultReadWrite(evaluator)
   }
 
@@ -50,11 +53,11 @@ class MulticlassClassificationEvaluatorSuite
 
     val evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("precisionByLabel")
-      .setLabel(0.0)
-    assert(math.abs(evaluator.evaluate(predictionAndLabels) - 2.0 / 3) < 0.00001)
+      .setMetricClass(0.0)
+    assert(evaluator.evaluate(predictionAndLabels) ~== 2.0 / 3 absTol 1e-5)
 
     evaluator.setMetricName("truePositiveRateByLabel")
-      .setLabel(1.0)
-    assert(math.abs(evaluator.evaluate(predictionAndLabels) - 3.0 / 4) < 0.00001)
+      .setMetricClass(1.0)
+    assert(evaluator.evaluate(predictionAndLabels) ~== 3.0 / 4 absTol 1e-5)
   }
 }
