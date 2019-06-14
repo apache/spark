@@ -592,6 +592,7 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
                        JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
+
     Evaluator for Ranking, which expects two input
     columns: prediction and label.
 
