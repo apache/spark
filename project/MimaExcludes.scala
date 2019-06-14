@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-27366][CORE] Support GPU Resources in Spark job scheduling
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.resources"),
+
     // [SPARK-27410][MLLIB] Remove deprecated / no-op mllib.KMeans getRuns, setRuns
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.getRuns"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.setRuns"),
@@ -287,6 +290,45 @@ object MimaExcludes {
         !meth.owner.fullName.startsWith("org.apache.spark.sql.sources.v2")
       case _ => true
     },
+
+    // [SPARK-27521][SQL] Move data source v2 to catalyst module
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarBatch"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ArrowColumnVector"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarRow"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarArray"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarMap"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnVector"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.GreaterThanOrEqual"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringEndsWith"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LessThanOrEqual$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.In$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Not"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.IsNotNull"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LessThan"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LessThanOrEqual"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.EqualNullSafe$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.GreaterThan$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.In"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.And"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringStartsWith$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.EqualNullSafe"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringEndsWith$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.GreaterThanOrEqual$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Not$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.IsNull$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.LessThan$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.IsNotNull$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Or"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.EqualTo$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.GreaterThan"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringContains"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Filter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.IsNull"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.EqualTo"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.And$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.Or$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringStartsWith"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.StringContains$"),
 
     // [SPARK-26216][SQL] Do not use case class as public API (UserDefinedFunction)
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.UserDefinedFunction$"),

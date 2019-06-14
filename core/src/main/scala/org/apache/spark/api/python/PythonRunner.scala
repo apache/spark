@@ -79,12 +79,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private val memoryMb = conf.get(PYSPARK_EXECUTOR_MEMORY).map(_ / conf.get(EXECUTOR_CORES))
 
   // All the Python functions should have the same exec, version and envvars.
-  protected val envVars = funcs.head.funcs.head.envVars
-  protected val pythonExec = funcs.head.funcs.head.pythonExec
-  protected val pythonVer = funcs.head.funcs.head.pythonVer
+  protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
+  protected val pythonExec: String = funcs.head.funcs.head.pythonExec
+  protected val pythonVer: String = funcs.head.funcs.head.pythonVer
 
   // TODO: support accumulator in multiple UDF
-  protected val accumulator = funcs.head.funcs.head.accumulator
+  protected val accumulator: PythonAccumulatorV2 = funcs.head.funcs.head.accumulator
+
+  // Python accumulator is always set in production except in tests. See SPARK-27893
+  private val maybeAccumulator: Option[PythonAccumulatorV2] = Option(accumulator)
 
   // Expose a ServerSocket to support method calls via socket from Python side.
   private[spark] var serverSocket: Option[ServerSocket] = None
@@ -465,7 +468,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         val updateLen = stream.readInt()
         val update = new Array[Byte](updateLen)
         stream.readFully(update)
-        accumulator.add(update)
+        maybeAccumulator.foreach(_.add(update))
       }
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {

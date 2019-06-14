@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
+import org.apache.spark.util.Utils
 
 trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
 
@@ -35,7 +36,9 @@ trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
   def readerFactory: PartitionReaderFactory
 
   override def simpleString(maxFields: Int): String = {
-    s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
+    val result =
+      s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
+    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, result)
   }
 
   override def outputPartitioning: physical.Partitioning = scan match {

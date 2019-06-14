@@ -29,6 +29,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.{Properties, Try}
 
+import org.apache.commons.io.FilenameUtils
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -222,7 +223,7 @@ private[spark] class SparkSubmit extends Logging {
     // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
-    val sparkConf = new SparkConf()
+    val sparkConf = args.toSparkConf()
     var childMainClass = ""
 
     // Set the cluster manager
@@ -313,6 +314,9 @@ private[spark] class SparkSubmit extends Logging {
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
+    val isKubernetesClient = clusterManager == KUBERNETES && deployMode == CLIENT
+    val isKubernetesClusterModeDriver = isKubernetesClient &&
+      sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
     val isMesosClient = clusterManager == MESOS && deployMode == CLIENT
 
     if (!isMesosCluster && !isStandAloneCluster) {
@@ -323,9 +327,25 @@ private[spark] class SparkSubmit extends Logging {
         args.ivySettingsPath)
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
-        args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
-        if (args.isPython || isInternal(args.primaryResource)) {
-          args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
+        // In K8s client mode, when in the driver, add resolved jars early as we might need
+        // them at the submit time for artifact downloading.
+        // For example we might use the dependencies for downloading
+        // files from a Hadoop Compatible fs eg. S3. In this case the user might pass:
+        // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
+        if (isKubernetesClusterModeDriver) {
+          val loader = getSubmitClassLoader(sparkConf)
+          for (jar <- resolvedMavenCoordinates.split(",")) {
+            addJarToClasspath(jar, loader)
+          }
+        } else if (isKubernetesCluster) {
+          // We need this in K8s cluster mode so that we can upload local deps
+          // via the k8s application, like in cluster mode driver
+          childClasspath ++= resolvedMavenCoordinates.split(",")
+        } else {
+          args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
+          if (args.isPython || isInternal(args.primaryResource)) {
+            args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
+          }
         }
       }
 
@@ -380,6 +400,17 @@ private[spark] class SparkSubmit extends Logging {
       localPyFiles = Option(args.pyFiles).map {
         downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
+
+      if (isKubernetesClusterModeDriver) {
+        // Replace with the downloaded local jar path to avoid propagating hadoop compatible uris.
+        // Executors will get the jars from the Spark file server.
+        // Explicitly download the related files here
+        args.jars = renameResourcesToLocalFS(args.jars, localJars)
+        val localFiles = Option(args.files).map {
+          downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        }.orNull
+        args.files = renameResourcesToLocalFS(args.files, localFiles)
+      }
     }
 
     // When running in YARN, for some remote resources with scheme:
@@ -517,7 +548,7 @@ private[spark] class SparkSubmit extends Logging {
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.submit.deployMode"),
+        confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
@@ -535,11 +566,13 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.pyFiles, ALL_CLUSTER_MGRS, CLUSTER, confKey = SUBMIT_PYTHON_FILES.key),
 
       // Propagate attributes for dependency resolution at the driver side
-      OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.packages"),
-      OptionAssigner(args.repositories, STANDALONE | MESOS, CLUSTER,
-        confKey = "spark.jars.repositories"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.ivy"),
-      OptionAssigner(args.packagesExclusions, STANDALONE | MESOS,
+      OptionAssigner(args.packages, STANDALONE | MESOS | KUBERNETES,
+        CLUSTER, confKey = "spark.jars.packages"),
+      OptionAssigner(args.repositories, STANDALONE | MESOS | KUBERNETES,
+        CLUSTER, confKey = "spark.jars.repositories"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS | KUBERNETES,
+        CLUSTER, confKey = "spark.jars.ivy"),
+      OptionAssigner(args.packagesExclusions, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = "spark.jars.excludes"),
 
       // Yarn only
@@ -747,8 +780,8 @@ private[spark] class SparkSubmit extends Logging {
 
     // Resolve paths in certain spark properties
     val pathConfigs = Seq(
-      "spark.jars",
-      "spark.files",
+      JARS.key,
+      FILES.key,
       "spark.yarn.dist.files",
       "spark.yarn.dist.archives",
       "spark.yarn.dist.jars")
@@ -777,6 +810,21 @@ private[spark] class SparkSubmit extends Logging {
     (childArgs, childClasspath, sparkConf, childMainClass)
   }
 
+  private def renameResourcesToLocalFS(resources: String, localResources: String): String = {
+    if (resources != null && localResources != null) {
+      val localResourcesSeq = Utils.stringToSeq(localResources)
+      Utils.stringToSeq(resources).map { resource =>
+        val filenameRemote = FilenameUtils.getName(new URI(resource).getPath)
+        localResourcesSeq.find { localUri =>
+          val filenameLocal = FilenameUtils.getName(new URI(localUri).getPath)
+          filenameRemote == filenameLocal
+        }.getOrElse(resource)
+      }.mkString(",")
+    } else {
+      resources
+    }
+  }
+
   // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
   // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos or Kubernetes
   // mode, we must trick it into thinking we're YARN.
@@ -785,6 +833,19 @@ private[spark] class SparkSubmit extends Logging {
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
     logInfo(s"Setting ${key} to ${shortUserName}")
     sparkConf.set(key, shortUserName)
+  }
+
+  private def getSubmitClassLoader(sparkConf: SparkConf): MutableURLClassLoader = {
+    val loader =
+      if (sparkConf.get(DRIVER_USER_CLASS_PATH_FIRST)) {
+        new ChildFirstURLClassLoader(new Array[URL](0),
+          Thread.currentThread.getContextClassLoader)
+      } else {
+        new MutableURLClassLoader(new Array[URL](0),
+          Thread.currentThread.getContextClassLoader)
+      }
+    Thread.currentThread.setContextClassLoader(loader)
+    loader
   }
 
   /**
@@ -814,17 +875,7 @@ private[spark] class SparkSubmit extends Logging {
       logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       logInfo("\n")
     }
-
-    val loader =
-      if (sparkConf.get(DRIVER_USER_CLASS_PATH_FIRST)) {
-        new ChildFirstURLClassLoader(new Array[URL](0),
-          Thread.currentThread.getContextClassLoader)
-      } else {
-        new MutableURLClassLoader(new Array[URL](0),
-          Thread.currentThread.getContextClassLoader)
-      }
-    Thread.currentThread.setContextClassLoader(loader)
-
+    val loader = getSubmitClassLoader(sparkConf)
     for (jar <- childClasspath) {
       addJarToClasspath(jar, loader)
     }
