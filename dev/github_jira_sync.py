@@ -77,8 +77,8 @@ def get_jira_prs():
                 result = result + [(jira, pull)]
 
         # Check if there is another page
-        link_header = filter(lambda k: k.startswith("Link"), page.info().headers)[0]
-        if "next" not in link_header:
+        link_headers = filter(lambda k: k.startswith("Link"), page.info().headers)
+        if not link_headers or "next" not in link_headers[0]:
             has_next_page = False
         else:
             page_num += 1
