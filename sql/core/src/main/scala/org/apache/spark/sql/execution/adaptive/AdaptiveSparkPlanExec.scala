@@ -90,8 +90,6 @@ case class AdaptiveSparkPlanExec(
 
   @volatile private var isFinalPlan = false
 
-  @volatile private var executionId = Option.empty[Long]
-
   /**
    * Return type for `createQueryStages`
    * @param newPlan the new plan with created query stages.
@@ -115,7 +113,7 @@ case class AdaptiveSparkPlanExec(
     currentPhysicalPlan.execute()
   } else {
     lock.synchronized {
-      executionId = Option(
+      val executionId = Option(
         session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
@@ -125,7 +123,7 @@ case class AdaptiveSparkPlanExec(
         currentPhysicalPlan = result.newPlan
         currentLogicalPlan = updateLogicalPlan(currentLogicalPlan, result.newStages)
         currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
-        onUpdatePlan()
+        executionId.foreach(onUpdatePlan)
 
         // Start materialization of all new stages.
         result.newStages.map(_._2).foreach { stage =>
@@ -179,7 +177,7 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
       isFinalPlan = true
       logDebug(s"Final plan: $currentPhysicalPlan")
-      onUpdatePlan()
+      executionId.foreach(onUpdatePlan)
 
       currentPhysicalPlan.execute()
     }
@@ -360,13 +358,11 @@ case class AdaptiveSparkPlanExec(
   /**
    * Notify the listeners of the physical plan change.
    */
-  private def onUpdatePlan(): Unit = {
-    executionId.foreach { id =>
-      session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
-        id,
-        SQLExecution.getQueryExecution(id).toString,
-        SparkPlanInfo.fromSparkPlan(this)))
-    }
+  private def onUpdatePlan(executionId: Long): Unit = {
+    session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
+      executionId,
+      SQLExecution.getQueryExecution(executionId).toString,
+      SparkPlanInfo.fromSparkPlan(this)))
   }
 }
 
