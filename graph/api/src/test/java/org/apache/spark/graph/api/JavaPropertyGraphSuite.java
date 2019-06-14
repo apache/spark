@@ -24,7 +24,6 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.junit.After;
@@ -37,6 +36,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
+import static org.apache.spark.sql.types.DataTypes.*;
+import static org.apache.spark.sql.types.DataTypes.LongType;
 
 public abstract class JavaPropertyGraphSuite implements Serializable {
   private transient TestSparkSession spark;
@@ -57,7 +59,7 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
   public void testCreateFromNodeFrame() {
     StructType personSchema = createSchema(
         Lists.newArrayList("id", "name"),
-        Lists.newArrayList(DataTypes.LongType, DataTypes.StringType));
+        Lists.newArrayList(LongType, StringType));
 
     List<Row> personData = Arrays.asList(
         RowFactory.create(0L, "Alice"),
@@ -65,17 +67,21 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
 
     StructType knowsSchema = createSchema(
         Lists.newArrayList("id", "source", "target", "since"),
-        Lists.newArrayList(DataTypes.LongType, DataTypes.LongType, DataTypes.LongType, DataTypes.IntegerType));
+        Lists.newArrayList(LongType, LongType, LongType, IntegerType));
 
     List<Row> knowsData = Collections.singletonList(RowFactory.create(0L, 0L, 1L, 1984));
 
     Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
-    NodeFrame personNodeFrame = NodeFrame.create(personDf, "id", Sets.newHashSet("Person"));
+    NodeFrame personNodeFrame = NodeFrame
+        .create(personDf, "id", Sets.newHashSet("Person"));
 
     Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
-    RelationshipFrame knowsRelFrame = RelationshipFrame.create(knowsDf, "id", "source", "target", "KNOWS");
+    RelationshipFrame knowsRelFrame = RelationshipFrame
+        .create(knowsDf, "id", "source", "target", "KNOWS");
 
-    PropertyGraph graph = cypherSession.createGraph(Lists.newArrayList(personNodeFrame), Lists.newArrayList(knowsRelFrame));
+    PropertyGraph graph = cypherSession.createGraph(
+        Lists.newArrayList(personNodeFrame),
+        Lists.newArrayList(knowsRelFrame));
     List<Row> result = graph.nodes().collectAsList();
     Assert.assertEquals(1, result.size());
   }
@@ -83,8 +89,8 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
   private StructType createSchema(List<String> fieldNames, List<DataType> dataTypes) {
     List<StructField> fields = new ArrayList<>();
     for (int i = 0; i < fieldNames.size(); i++) {
-      fields.add(DataTypes.createStructField(fieldNames.get(i), dataTypes.get(i), true));
+      fields.add(createStructField(fieldNames.get(i), dataTypes.get(i), true));
     }
-    return DataTypes.createStructType(fields);
+    return createStructType(fields);
   }
 }
