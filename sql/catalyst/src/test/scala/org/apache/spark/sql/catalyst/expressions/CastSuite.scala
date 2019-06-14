@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
 import java.util.{Calendar, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -1016,6 +1017,26 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", atomicType, nullable = true))))
       assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null))
+    }
+  }
+
+  test("SPARK-28023: Trim the string when cast string type to Boolean/Numeric types") {
+    Seq(" true ", " true", "true ").foreach { str =>
+      checkEvaluation(Cast(Literal(str), BooleanType), true)
+    }
+
+    Seq(" 1 ", " 1", "1 ").foreach { str =>
+      checkEvaluation(Cast(Literal(str), ByteType), 1.toByte)
+      checkEvaluation(Cast(Literal(str), ShortType), 1.toShort)
+      checkEvaluation(Cast(Literal(str), IntegerType), 1)
+      checkEvaluation(Cast(Literal(str), LongType), 1L)
+      checkEvaluation(Cast(Literal(str), DecimalType.IntDecimal), BigDecimal.ONE)
+    }
+
+    Seq(" 1.23 ", " 1.23", "1.23 ").foreach { str =>
+      checkEvaluation(Cast(Literal(str), FloatType), 1.23F)
+      checkEvaluation(Cast(Literal(str), DoubleType), 1.23D)
+      checkEvaluation(Cast(Literal(str), DecimalType.FloatDecimal), BigDecimal.valueOf(1.2300000))
     }
   }
 }

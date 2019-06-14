@@ -433,7 +433,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new LongWrapper()
-      buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
+      buildCast[UTF8String](_, s => if (s.trim.toLong(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0L)
     case DateType =>
@@ -448,7 +448,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
+      buildCast[UTF8String](_, s => if (s.trim.toInt(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
@@ -463,7 +463,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toShort(result)) {
+      buildCast[UTF8String](_, s => if (s.trim.toShort(result)) {
         result.value.toShort
       } else {
         null
@@ -482,7 +482,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toByte(result)) {
+      buildCast[UTF8String](_, s => if (s.trim.toByte(result)) {
         result.value.toByte
       } else {
         null
@@ -518,7 +518,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
-        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
+        changePrecision(Decimal(new JavaBigDecimal(s.toString.trim)), target)
       } catch {
         case _: NumberFormatException => null
       })
@@ -544,7 +544,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // DoubleConverter
   private[this] def castToDouble(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toDouble catch {
+      buildCast[UTF8String](_, s => try s.toString.trim.toDouble catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -560,7 +560,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // FloatConverter
   private[this] def castToFloat(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toFloat catch {
+      buildCast[UTF8String](_, s => try s.toString.trim.toFloat catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -983,7 +983,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         (c, evPrim, evNull) =>
           code"""
             try {
-              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString()));
+              Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString().trim()));
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
@@ -1136,7 +1136,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toByte($wrapper)) {
+          if ($c.trim().toByte($wrapper)) {
             $evPrim = (byte) $wrapper.value;
           } else {
             $evNull = true;
@@ -1163,7 +1163,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toShort($wrapper)) {
+          if ($c.trim().toShort($wrapper)) {
             $evPrim = (short) $wrapper.value;
           } else {
             $evNull = true;
@@ -1188,7 +1188,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
-          if ($c.toInt($wrapper)) {
+          if ($c.trim().toInt($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
@@ -1214,7 +1214,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
-          if ($c.toLong($wrapper)) {
+          if ($c.trim().toLong($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
@@ -1238,7 +1238,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           try {
-            $evPrim = Float.valueOf($c.toString());
+            $evPrim = Float.valueOf($c.toString().trim());
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
@@ -1260,7 +1260,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           try {
-            $evPrim = Double.valueOf($c.toString());
+            $evPrim = Double.valueOf($c.toString().trim());
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
