@@ -189,6 +189,7 @@
     <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
+    <htmlunit.version>2.22</htmlunit.version>
     <!--
     Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
     -->
@@ -547,6 +548,19 @@
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>selenium-htmlunit-driver</artifactId>
         <version>${selenium.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- Update htmlunit dependency that selenium uses for better JS support -->
+      <dependency>
+        <groupId>net.sourceforge.htmlunit</groupId>
+        <artifactId>htmlunit</artifactId>
+        <version>${htmlunit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.sourceforge.htmlunit</groupId>
+        <artifactId>htmlunit-core-js</artifactId>
+        <version>${htmlunit.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- Added for selenium only, and should match its dependent version: -->
