@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.util.Locale
 
 import scala.collection.mutable.{ArrayBuffer, Map}
 
