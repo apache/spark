@@ -85,11 +85,11 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages(conf)
   )
 
-  private var currentStageId = 0
-
   @volatile private var currentPhysicalPlan = initialPlan
 
-  @volatile private var isFinalPlan = false
+  private var isFinalPlan = false
+
+  private var currentStageId = 0
 
   /**
    * Return type for `createQueryStages`
@@ -110,10 +110,10 @@ case class AdaptiveSparkPlanExec(
 
   override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
-  override def doExecute(): RDD[InternalRow] = if (isFinalPlan) {
-    currentPhysicalPlan.execute()
-  } else {
-    lock.synchronized {
+  override def doExecute(): RDD[InternalRow] = lock.synchronized {
+    if (isFinalPlan) {
+      currentPhysicalPlan.execute()
+    } else {
       val executionId = Option(
         session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
