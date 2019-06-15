@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.{BufferedInputStream, FileInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -27,11 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import org.json4s.DefaultFormats
-import org.json4s.JsonAST.JArray
-import org.json4s.MappingException
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
