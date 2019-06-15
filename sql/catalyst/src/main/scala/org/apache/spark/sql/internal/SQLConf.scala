@@ -1799,6 +1799,12 @@ object SQLConf {
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
+    buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
+      .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
