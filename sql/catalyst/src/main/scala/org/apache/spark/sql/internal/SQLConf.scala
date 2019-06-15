@@ -292,6 +292,12 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(64 * 1024 * 1024)
 
+  val RUNTIME_REOPTIMIZATION_ENABLED =
+    buildConf("spark.sql.runtime.reoptimization.enabled")
+      .doc("When true, enable runtime query re-optimization.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
     .booleanConf
@@ -1889,7 +1895,10 @@ class SQLConf extends Serializable with Logging {
   def targetPostShuffleInputSize: Long =
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
-  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+  def runtimeReoptimizationEnabled: Boolean = getConf(RUNTIME_REOPTIMIZATION_ENABLED)
+
+  def adaptiveExecutionEnabled: Boolean =
+    getConf(ADAPTIVE_EXECUTION_ENABLED) && !getConf(RUNTIME_REOPTIMIZATION_ENABLED)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
