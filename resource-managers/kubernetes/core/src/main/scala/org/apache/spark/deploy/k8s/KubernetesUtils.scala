@@ -316,4 +316,15 @@ private[spark] object KubernetesUtils extends Logging {
         throw new SparkException(s"Error uploading file ${src.getName}", e)
     }
   }
+
+  def buildPodWithServiceAccount(serviceAccount: Option[String], pod: SparkPod): Option[Pod] = {
+    serviceAccount.map { account =>
+      new PodBuilder(pod.pod)
+        .editOrNewSpec()
+          .withServiceAccount(account)
+          .withServiceAccountName(account)
+        .endSpec()
+        .build()
+    }
+  }
 }

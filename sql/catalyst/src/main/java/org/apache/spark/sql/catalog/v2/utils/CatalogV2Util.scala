@@ -22,11 +22,15 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalog.v2.TableChange
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableChange}
 import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RemoveProperty, RenameColumn, SetProperty, UpdateColumnComment, UpdateColumnType}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object CatalogV2Util {
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
   /**
    * Apply properties changes to a map and return the result.
    */
@@ -149,4 +153,11 @@ object CatalogV2Util {
 
     new StructType(newFields)
   }
+
+  def loadTable(catalog: CatalogPlugin, ident: Identifier): Option[Table] =
+    try {
+      Option(catalog.asTableCatalog.loadTable(ident))
+    } catch {
+      case _: NoSuchTableException => None
+    }
 }
