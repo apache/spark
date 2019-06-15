@@ -319,7 +319,7 @@ ctes
     ;
 
 namedQuery
-    : name=identifier AS? '(' query ')'
+    : name=identifier (columnAliases=identifierList)? AS? '(' query ')'
     ;
 
 tableProvider
