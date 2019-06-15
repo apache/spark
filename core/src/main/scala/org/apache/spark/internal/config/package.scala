@@ -1187,6 +1187,7 @@ package object config {
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
       .intConf
+      .checkValue(_ >= 0, "The buffer size must not be negative")
       .createWithDefault(65536)
 
   private[spark] val LOCALITY_WAIT_PROCESS = ConfigBuilder("spark.locality.wait.process")
