@@ -125,3 +125,5 @@ FROM (VALUES cast(-2.5 as decimal(38, 18)),
              cast(0.5 as decimal(38, 18)),
              cast(1.5 as decimal(38, 18)),
              cast(2.5 as decimal(38, 18))) t(x);
+
+DROP TABLE INT2_TBL;
