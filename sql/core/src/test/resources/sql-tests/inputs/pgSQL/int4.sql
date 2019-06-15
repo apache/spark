@@ -6,96 +6,106 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/int4.sql
 --
 
-CREATE TABLE INT4_TBL(f1 int4);
+CREATE TABLE INT4_TBL(f1 int) USING parquet;
 
-INSERT INTO INT4_TBL(f1) VALUES ('   0  ');
+-- [SPARK-28023] Trim the string when cast string type to other types
+INSERT INTO INT4_TBL VALUES (trim('   0  '));
 
-INSERT INTO INT4_TBL(f1) VALUES ('123456     ');
+INSERT INTO INT4_TBL VALUES (trim('123456     '));
 
-INSERT INTO INT4_TBL(f1) VALUES ('    -123456');
+INSERT INTO INT4_TBL VALUES (trim('    -123456'));
 
-INSERT INTO INT4_TBL(f1) VALUES ('34.5');
+-- [SPARK-27923] Invalid input syntax for integer: "34.5" at PostgreSQL
+-- INSERT INTO INT4_TBL(f1) VALUES ('34.5');
 
 -- largest and smallest values
-INSERT INTO INT4_TBL(f1) VALUES ('2147483647');
+INSERT INTO INT4_TBL VALUES ('2147483647');
 
-INSERT INTO INT4_TBL(f1) VALUES ('-2147483647');
+INSERT INTO INT4_TBL VALUES ('-2147483647');
 
 -- bad input values -- should give errors
-INSERT INTO INT4_TBL(f1) VALUES ('1000000000000');
-INSERT INTO INT4_TBL(f1) VALUES ('asdf');
-INSERT INTO INT4_TBL(f1) VALUES ('     ');
-INSERT INTO INT4_TBL(f1) VALUES ('   asdf   ');
-INSERT INTO INT4_TBL(f1) VALUES ('- 1234');
-INSERT INTO INT4_TBL(f1) VALUES ('123       5');
-INSERT INTO INT4_TBL(f1) VALUES ('');
+-- INSERT INTO INT4_TBL(f1) VALUES ('1000000000000');
+-- INSERT INTO INT4_TBL(f1) VALUES ('asdf');
+-- INSERT INTO INT4_TBL(f1) VALUES ('     ');
+-- INSERT INTO INT4_TBL(f1) VALUES ('   asdf   ');
+-- INSERT INTO INT4_TBL(f1) VALUES ('- 1234');
+-- INSERT INTO INT4_TBL(f1) VALUES ('123       5');
+-- INSERT INTO INT4_TBL(f1) VALUES ('');
+
+select * from INT4_TBL;
 
 
 SELECT '' AS five, * FROM INT4_TBL;
 
-SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> int2 '0';
+SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> smallint('0');
 
-SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> int4 '0';
+SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> int('0');
 
-SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = int2 '0';
+SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = smallint('0');
 
-SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = int4 '0';
+SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = int('0');
 
-SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < int2 '0';
+SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < smallint('0');
 
-SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < int4 '0';
+SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < int('0');
 
-SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= int2 '0';
+SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= smallint('0');
 
-SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= int4 '0';
+SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= int('0');
 
-SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > int2 '0';
+SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > smallint('0');
 
-SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > int4 '0';
+SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > int('0');
 
-SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= int2 '0';
+SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= smallint('0');
 
-SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= int4 '0';
+SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= int('0');
 
 -- positive odds
-SELECT '' AS one, i.* FROM INT4_TBL i WHERE (i.f1 % int2 '2') = int2 '1';
+SELECT '' AS one, i.* FROM INT4_TBL i WHERE (i.f1 % smallint('2')) = smallint('1');
 
 -- any evens
-SELECT '' AS three, i.* FROM INT4_TBL i WHERE (i.f1 % int4 '2') = int2 '0';
+SELECT '' AS three, i.* FROM INT4_TBL i WHERE (i.f1 % int('2')) = smallint('0');
 
-SELECT '' AS five, i.f1, i.f1 * int2 '2' AS x FROM INT4_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 * int2 '2' AS x FROM INT4_TBL i
+SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 WHERE abs(f1) < 1073741824;
 
-SELECT '' AS five, i.f1, i.f1 * int4 '2' AS x FROM INT4_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 * int4 '2' AS x FROM INT4_TBL i
+SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 WHERE abs(f1) < 1073741824;
 
-SELECT '' AS five, i.f1, i.f1 + int2 '2' AS x FROM INT4_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 + int2 '2' AS x FROM INT4_TBL i
+SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 WHERE f1 < 2147483646;
 
-SELECT '' AS five, i.f1, i.f1 + int4 '2' AS x FROM INT4_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 + int4 '2' AS x FROM INT4_TBL i
+SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 WHERE f1 < 2147483646;
 
-SELECT '' AS five, i.f1, i.f1 - int2 '2' AS x FROM INT4_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 - int2 '2' AS x FROM INT4_TBL i
+SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 WHERE f1 > -2147483647;
 
-SELECT '' AS five, i.f1, i.f1 - int4 '2' AS x FROM INT4_TBL i;
+-- [SPARK-28024] Incorrect value when out of range
+SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 - int4 '2' AS x FROM INT4_TBL i
+SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 WHERE f1 > -2147483647;
 
-SELECT '' AS five, i.f1, i.f1 / int2 '2' AS x FROM INT4_TBL i;
+SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT4_TBL i;
 
-SELECT '' AS five, i.f1, i.f1 / int4 '2' AS x FROM INT4_TBL i;
+SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT4_TBL i;
 
 --
 -- more complex expressions
@@ -110,52 +120,60 @@ SELECT 2- -1 AS three;
 
 SELECT 2 - -2 AS four;
 
-SELECT int2 '2' * int2 '2' = int2 '16' / int2 '4' AS true;
+SELECT smallint('2') * smallint('2') = smallint('16') / smallint('4') AS true;
 
-SELECT int4 '2' * int2 '2' = int2 '16' / int4 '4' AS true;
+SELECT int('2') * smallint('2') = smallint('16') / int('4') AS true;
 
-SELECT int2 '2' * int4 '2' = int4 '16' / int2 '4' AS true;
+SELECT smallint('2') * int('2') = int('16') / smallint('4') AS true;
 
-SELECT int4 '1000' < int4 '999' AS false;
+SELECT int('1000') < int('999') AS false;
 
-SELECT 4! AS twenty_four;
+-- [SPARK-28027] Our ! and !! has different meanings
+-- SELECT 4! AS twenty_four;
 
-SELECT !!3 AS six;
+-- SELECT !!3 AS six;
 
 SELECT 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 AS ten;
 
+-- [SPARK-2659] HiveQL: Division operator should always perform fractional division
 SELECT 2 + 2 / 2 AS three;
 
 SELECT (2 + 2) / 2 AS two;
 
+-- [SPARK-28027] Add bitwise shift left/right operators
 -- corner case
-SELECT (-1::int4<<31)::text;
-SELECT ((-1::int4<<31)+1)::text;
+SELECT string(shiftleft(int(-1), 31));
+SELECT string(int(shiftleft(int(-1), 31))+1);
 
+-- [SPARK-28024] Incorrect numeric values when out of range
 -- check sane handling of INT_MIN overflow cases
-SELECT (-2147483648)::int4 * (-1)::int4;
-SELECT (-2147483648)::int4 / (-1)::int4;
-SELECT (-2147483648)::int4 % (-1)::int4;
-SELECT (-2147483648)::int4 * (-1)::int2;
-SELECT (-2147483648)::int4 / (-1)::int2;
-SELECT (-2147483648)::int4 % (-1)::int2;
+-- SELECT (-2147483648)::int4 * (-1)::int4;
+-- SELECT (-2147483648)::int4 / (-1)::int4;
+SELECT int(-2147483648) % int(-1);
+-- SELECT (-2147483648)::int4 * (-1)::int2;
+-- SELECT (-2147483648)::int4 / (-1)::int2;
+SELECT int(-2147483648) % smallint(-1);
 
+-- [SPARK-28028] Cast numeric to integral type need round
 -- check rounding when casting from float
-SELECT x, x::int4 AS int4_value
-FROM (VALUES (-2.5::float8),
-             (-1.5::float8),
-             (-0.5::float8),
-             (0.0::float8),
-             (0.5::float8),
-             (1.5::float8),
-             (2.5::float8)) t(x);
+SELECT x, int(x) AS int4_value
+FROM (VALUES double(-2.5),
+             double(-1.5),
+             double(-0.5),
+             double(0.0),
+             double(0.5),
+             double(1.5),
+             double(2.5)) t(x);
 
+-- [SPARK-28028] Cast numeric to integral type need round
 -- check rounding when casting from numeric
-SELECT x, x::int4 AS int4_value
-FROM (VALUES (-2.5::numeric),
-             (-1.5::numeric),
-             (-0.5::numeric),
-             (0.0::numeric),
-             (0.5::numeric),
-             (1.5::numeric),
-             (2.5::numeric)) t(x);
+SELECT x, int(x) AS int4_value
+FROM (VALUES cast(-2.5 as decimal(38, 18)),
+             cast(-1.5 as decimal(38, 18)),
+             cast(-0.5 as decimal(38, 18)),
+             cast(-0.0 as decimal(38, 18)),
+             cast(0.5 as decimal(38, 18)),
+             cast(1.5 as decimal(38, 18)),
+             cast(2.5 as decimal(38, 18))) t(x);
+
+DROP TABLE INT4_TBL;
