@@ -162,18 +162,13 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
-      catalog match {
-        case staging: StagingTableCatalog =>
-          CreateTableStagingExec(staging, ident, schema, parts, props, ifNotExists) :: Nil
-        case _ =>
-          CreateTableExec(catalog, ident, schema, parts, props, ifNotExists) :: Nil
-      }
+      CreateTableExec(catalog, ident, schema, parts, props, ifNotExists) :: Nil
 
     case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
-          CreateTableAsSelectStagingExec(
+          AtomicCreateTableAsSelectExec(
             staging, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
         case _ =>
           CreateTableAsSelectExec(

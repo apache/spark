@@ -286,16 +286,18 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("ReplaceTableAsSelect: New table has same behavior as CTAS.") {
-    spark.sql(s"CREATE TABLE created USING $orc2 AS SELECT id, data FROM source")
-    spark.sql(s"REPLACE TABLE replaced USING $orc2 AS SELECT id, data FROM source")
+    Seq("testcat", "testcat_atomic").foreach { catalog =>
+      spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
+      spark.sql(s"REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
-    val createdTable = testCatalog.loadTable(Identifier.of(Array(), "created"))
-    val replacedTable = testCatalog.loadTable(Identifier.of(Array(), "replaced"))
+      val testCatalog = spark.catalog(catalog).asTableCatalog
+      val createdTable = testCatalog.loadTable(Identifier.of(Array(), "created"))
+      val replacedTable = testCatalog.loadTable(Identifier.of(Array(), "replaced"))
 
-    assert(createdTable.asInstanceOf[InMemoryTable].rows ===
-      replacedTable.asInstanceOf[InMemoryTable].rows)
-    assert(createdTable.schema === replacedTable.schema)
+      assert(createdTable.asInstanceOf[InMemoryTable].rows ===
+        replacedTable.asInstanceOf[InMemoryTable].rows)
+      assert(createdTable.schema === replacedTable.schema)
+    }
   }
 
   test("CreateTableAsSelect: use v2 plan because provider is v2") {

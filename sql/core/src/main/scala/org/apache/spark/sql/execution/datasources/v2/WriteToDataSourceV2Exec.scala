@@ -77,6 +77,7 @@ case class CreateTableAsSelectExec(
       }
 
       throw new TableAlreadyExistsException(ident)
+
     }
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       catalog.createTable(
@@ -109,7 +110,7 @@ case class CreateTableAsSelectExec(
  * should bundle the commitment of the metadata and the table contents in a single unit. If the
  * write fails, the table is instructed to roll back all staged changes.
  */
-case class CreateTableAsSelectStagingExec (
+case class AtomicCreateTableAsSelectExec(
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
