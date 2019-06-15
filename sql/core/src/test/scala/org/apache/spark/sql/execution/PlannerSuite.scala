@@ -172,15 +172,17 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("SPARK-11390 explain should print PushedFilters of PhysicalRDD") {
-    withTempPath { file =>
-      val path = file.getCanonicalPath
-      testData.write.parquet(path)
-      val df = spark.read.parquet(path)
-      df.createOrReplaceTempView("testPushed")
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        testData.write.parquet(path)
+        val df = spark.read.parquet(path)
+        df.createOrReplaceTempView("testPushed")
 
-      withTempView("testPushed") {
-        val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
-        assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
+        withTempView("testPushed") {
+          val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
+          assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
+        }
       }
     }
   }
