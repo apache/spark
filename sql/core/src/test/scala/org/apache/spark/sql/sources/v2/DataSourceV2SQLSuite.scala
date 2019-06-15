@@ -36,13 +36,9 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
-<<<<<<< HEAD
     spark.conf.set(
         "spark.sql.catalog.testcat_atomic", classOf[TestStagingInMemoryCatalog].getName)
-||||||| merged common ancestors
-=======
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
->>>>>>> origin/master
     spark.conf.set("spark.sql.default.catalog", "testcat")
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
