@@ -625,7 +625,7 @@ FROM tenk1 WHERE unique1 < 10;
 -- FROM cte
 -- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 
--- with UNION/we didn't have tenk2 yet
+-- with UNION
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
 
 create table t1 (f1 int, f2 int) using parquet;
@@ -666,7 +666,6 @@ insert into t1 values (1,1),(1,2),(2,2);
 --                          groups between 1 following and 2 following)
 -- from t1 where f1 = f2;
 
--- ordering by a non-integer constant is allowed
 SELECT rank() OVER (ORDER BY length('abc'));
 
 -- can't order by another window function
@@ -737,7 +736,7 @@ SELECT count() OVER () FROM tenk1;
 --    FROM empsalary) emp
 -- WHERE depname = 'sales';
 
--- -- Test Sort node reordering
+-- Test Sort node reordering
 -- EXPLAIN (COSTS OFF)
 -- SELECT
 --   lead(1) OVER (PARTITION BY depname ORDER BY salary, enroll_date),
