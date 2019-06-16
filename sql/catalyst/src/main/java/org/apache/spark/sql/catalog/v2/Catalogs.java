@@ -67,7 +67,8 @@ public class Catalogs {
             name, pluginClassName));
       }
 
-      CatalogPlugin plugin = CatalogPlugin.class.cast(pluginClass.getDeclaredConstructor().newInstance());
+      CatalogPlugin plugin =
+        CatalogPlugin.class.cast(pluginClass.getDeclaredConstructor().newInstance());
 
       plugin.initialize(name, catalogOptions(name, conf));
 
@@ -89,8 +90,8 @@ public class Catalogs {
 
     } catch (InstantiationException e) {
       throw new SparkException(String.format(
-          "Cannot instantiate abstract catalog plugin class for catalog '%s': %s", name, pluginClassName),
-          e.getCause());
+          "Cannot instantiate abstract catalog plugin class for catalog '%s': %s", name,
+          pluginClassName), e.getCause());
 
     } catch (InvocationTargetException e) {
       throw new SparkException(String.format(
