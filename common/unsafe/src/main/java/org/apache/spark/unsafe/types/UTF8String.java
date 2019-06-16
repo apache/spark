@@ -540,6 +540,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // skip all of the space (0x20) in the right side
     int e = this.numBytes - 1;
     while (e > s && getByte(e) == 0x20) e--;
+    if (s == 0 && e == numBytes - 1) {
+      return this;
+    }
     return copyUTF8String(s, e);
   }
 
