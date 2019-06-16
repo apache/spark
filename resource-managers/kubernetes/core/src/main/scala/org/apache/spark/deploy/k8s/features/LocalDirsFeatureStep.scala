@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import java.util.UUID
 
 import collection.JavaConverters._
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder, VolumeBuilder, VolumeMount, VolumeMountBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder, Volume, VolumeBuilder, VolumeMount, VolumeMountBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
@@ -45,10 +45,9 @@ private[spark] class LocalDirsFeatureStep(
       .zipWithIndex
       .map { case (localDir, index) =>
         val name = s"spark-local-dir-${index + 1}"
-        hasVolume(pod, name) match {
-          case true =>
-            pod.pod.getSpec.getVolumes().asScala.find(v => v.getName.equals(name)).get
-          case false =>
+        findVolume(pod, name) match {
+          case Some(volume) => volume
+          case None =>
             new VolumeBuilder()
               .withName(s"spark-local-dir-${index + 1}")
               .withNewEmptyDir()
@@ -60,13 +59,9 @@ private[spark] class LocalDirsFeatureStep(
     val localDirVolumeMounts = localDirVolumes
       .zip(resolvedLocalDirs)
       .map { case (localDirVolume, localDirPath) =>
-        hasVolumeMount(pod, localDirVolume.getName, localDirPath) match {
-          case true =>
-            pod.container.getVolumeMounts().asScala
-              .find(m => m.getName.equals(localDirVolume.getName)
-                && m.getMountPath.equals(localDirPath))
-              .get
-          case false =>
+        findVolumeMount(pod, localDirVolume.getName, localDirPath) match {
+          case Some(volumeMount) => volumeMount
+          case None =>
             new VolumeMountBuilder()
               .withName(localDirVolume.getName)
               .withMountPath(localDirPath)
@@ -75,7 +70,7 @@ private[spark] class LocalDirsFeatureStep(
       }
     val podWithLocalDirVolumes = new PodBuilder(pod.pod)
       .editSpec()
-        .addToVolumes(localDirVolumes.filter(v => !hasVolume(pod, v.getName)): _*)
+        .addToVolumes(localDirVolumes.filter(v => findVolume(pod, v.getName).isEmpty): _*)
         .endSpec()
       .build()
     val containerWithLocalDirVolumeMounts = new ContainerBuilder(pod.container)
@@ -84,17 +79,17 @@ private[spark] class LocalDirsFeatureStep(
         .withValue(resolvedLocalDirs.mkString(","))
         .endEnv()
       .addToVolumeMounts(localDirVolumeMounts
-        .filter(m => !hasVolumeMount(pod, m.getName, m.getMountPath)): _*)
+        .filter(m => findVolumeMount(pod, m.getName, m.getMountPath).isEmpty): _*)
       .build()
     SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
   }
 
-  def hasVolume(pod: SparkPod, name: String): Boolean = {
-    pod.pod.getSpec().getVolumes().asScala.exists(v => v.getName.equals(name))
+  def findVolume(pod: SparkPod, name: String): Option[Volume] = {
+    pod.pod.getSpec.getVolumes.asScala.find(v => v.getName.equals(name))
   }
 
-  def hasVolumeMount(pod: SparkPod, name: String, path: String): Boolean = {
-    pod.container.getVolumeMounts().asScala
-      .exists(m => m.getName.equals(name) && m.getMountPath.equals(path))
+  def findVolumeMount(pod: SparkPod, name: String, path: String): Option[VolumeMount] = {
+    pod.container.getVolumeMounts.asScala
+      .find(m => m.getName.equals(name) && m.getMountPath.equals(path))
   }
 }
