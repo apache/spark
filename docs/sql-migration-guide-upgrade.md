@@ -23,7 +23,7 @@ license: |
 {:toc}
 
 ## Upgrading From Spark SQL 2.4 to 3.0
-  - Since Spark 3.0, trim the string when cast string type to Boolean/Datetime/Numeric types.
+  - Since Spark 3.0, trim the string when casting from string to boolean, date, timestamp or numeric types, whitespace is trimmed from the ends of the value first.
 
   - In Spark version 2.4 and earlier, SQL queries such as `FROM <table>` or `FROM <table> UNION ALL FROM <table>` are supported by accident. In hive-style `FROM <table> SELECT <expr>`, the `SELECT` clause is not negligible. Neither Hive nor Presto support this syntax. Therefore we will treat these queries as invalid since Spark 3.0.
 

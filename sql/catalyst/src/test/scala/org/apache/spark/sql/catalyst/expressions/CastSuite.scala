@@ -1020,9 +1020,12 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-28023: Trim the string when cast string type to Boolean/Numeric types") {
+  test("Trim the string when cast string type to Boolean/Numeric types") {
     Seq(" true ", " true", "true ").foreach { str =>
       checkEvaluation(Cast(Literal(str), BooleanType), true)
+    }
+    Seq(" false ", " false", "false ").foreach { str =>
+      checkEvaluation(Cast(Literal(str), BooleanType), false)
     }
 
     Seq(" 1 ", " 1", "1 ").foreach { str =>
