@@ -894,4 +894,44 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         error.message.contains("function min_by does not support ordering on type map<int,string>"))
     }
   }
+
+  test("count_if") {
+    withTempView("tempView") {
+      Seq(("a", None), ("a", Some(1)), ("a", Some(2)), ("a", Some(3)),
+        ("b", None), ("b", Some(4)), ("b", Some(5)), ("b", Some(6)))
+        .toDF("x", "y")
+        .createOrReplaceTempView("tempView")
+
+      checkAnswer(
+        sql("SELECT COUNT_IF(NULL), COUNT_IF(y % 2 = 0), COUNT_IF(y % 2 <> 0), " +
+          "COUNT_IF(y IS NULL) FROM tempView"),
+        Row(0L, 3L, 3L, 2L))
+
+      checkAnswer(
+        sql("SELECT x, COUNT_IF(NULL), COUNT_IF(y % 2 = 0), COUNT_IF(y % 2 <> 0), " +
+          "COUNT_IF(y IS NULL) FROM tempView GROUP BY x"),
+        Row("a", 0L, 1L, 2L, 1L) :: Row("b", 0L, 2L, 1L, 1L) :: Nil)
+
+      checkAnswer(
+        sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(y % 2 = 0) = 1"),
+        Row("a"))
+
+      checkAnswer(
+        sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(y % 2 = 0) = 2"),
+        Row("b"))
+
+      checkAnswer(
+        sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(y IS NULL) > 0"),
+        Row("a") :: Row("b") :: Nil)
+
+      checkAnswer(
+        sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(NULL) > 0"),
+        Nil)
+
+      val error = intercept[AnalysisException] {
+        sql("SELECT COUNT_IF(x) FROM tempView")
+      }
+      assert(error.message.contains("function count_if requires boolean type"))
+    }
+  }
 }

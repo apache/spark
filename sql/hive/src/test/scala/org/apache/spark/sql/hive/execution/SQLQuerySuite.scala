@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -1105,7 +1105,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
         sql(
-          s"ADD JAR ${hiveContext.getHiveContribJar().getCanonicalPath}")
+          s"ADD JAR ${HiveTestUtils.getHiveContribJar.getCanonicalPath}")
         try {
           sql(
             """
@@ -1183,6 +1183,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
       Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
         "32 seconds 99 milliseconds 899 microseconds")))
+    checkAnswer(sql("select interval '15:40:32.99899999' hour to second"),
+      Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 99 milliseconds " +
+        "899 microseconds")))
     checkAnswer(sql("select interval '30' year"),
       Row(CalendarInterval.fromString("interval 30 years")))
     checkAnswer(sql("select interval '25' month"),
@@ -2337,7 +2340,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
     Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
-      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
+      // This test case is only for file source V1. As the rule OptimizeMetadataOnlyQuery is
+      // disabled by default, we can skip testing file source v2 in current stage.
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString,
+        SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
         withTable("t") {
           sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
           sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")

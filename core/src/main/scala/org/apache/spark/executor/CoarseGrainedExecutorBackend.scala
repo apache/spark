@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.{BufferedInputStream, FileInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -27,11 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import org.json4s.DefaultFormats
-import org.json4s.JsonAST.JArray
-import org.json4s.MappingException
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -66,6 +61,13 @@ private[spark] class CoarseGrainedExecutorBackend(
   // to be changed so that we don't share the serializer instance across threads
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
+  /**
+   * Map each taskId to the information about the resource allocated to it, Please refer to
+   * [[ResourceInformation]] for specifics.
+   * Exposed for testing only.
+   */
+  private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
+
   override def onStart() {
     logInfo("Connecting to driver: " + driverUrl)
     val resources = parseOrFindResources(resourcesFile)
@@ -99,7 +101,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
       val execReqResourcesAndCounts =
         env.conf.getAllWithPrefixAndSuffix(SPARK_EXECUTOR_RESOURCE_PREFIX,
-          SPARK_RESOURCE_COUNT_SUFFIX).toMap
+          SPARK_RESOURCE_AMOUNT_SUFFIX).toMap
 
       ResourceDiscoverer.checkActualResourcesMeetRequirements(execReqResourcesAndCounts,
         actualExecResources)
@@ -151,6 +153,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
+        taskResources(taskDesc.taskId) = taskDesc.resources
         executor.launchTask(this, taskDesc)
       }
 
@@ -197,7 +200,11 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
-    val msg = StatusUpdate(executorId, taskId, state, data)
+    val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
+    val msg = StatusUpdate(executorId, taskId, state, data, resources)
+    if (TaskState.isFinished(state)) {
+      taskResources.remove(taskId)
+    }
     driver match {
       case Some(driverRef) => driverRef.send(msg)
       case None => logWarning(s"Drop $msg because has not yet connected to driver")

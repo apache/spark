@@ -2246,6 +2246,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("exists function - array for primitive type containing null") {
     val df = Seq[Seq[Integer]](
       Seq(1, 9, 8, null, 7),
+      Seq(1, 3, 5),
       Seq(5, null, null, 9, 7, null),
       Seq.empty,
       null
@@ -2256,6 +2257,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Seq(
           Row(true),
           Row(false),
+          Row(null),
           Row(false),
           Row(null)))
     }
@@ -2348,6 +2350,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq[Seq[Integer]](
       Seq(1, 9, 8, null, 7),
       Seq(2, null, null, 4, 6, null),
+      Seq(2, 4, 6, 8),
       Seq.empty,
       null
     ).toDF("i")
@@ -2356,6 +2359,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0 or x is null)"),
         Seq(
           Row(false),
+          Row(true),
+          Row(true),
+          Row(true),
+          Row(null)))
+      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"),
+        Seq(
+          Row(null),
+          Row(null),
           Row(true),
           Row(true),
           Row(null)))

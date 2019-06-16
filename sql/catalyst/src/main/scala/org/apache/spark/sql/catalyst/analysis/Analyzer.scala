@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -162,6 +163,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
+      ResolveTables ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
@@ -215,23 +217,26 @@ class Analyzer(
   object CTESubstitution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case With(child, relations) =>
-        substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
-          case (resolved, (name, relation)) =>
-            resolved :+ name -> executeSameContext(substituteCTE(relation, resolved))
-        })
+        // substitute CTE expressions right-to-left to resolve references to previous CTEs:
+        // with a as (select * from t), b as (select * from a) select * from b
+        relations.foldRight(child) {
+          case ((cteName, ctePlan), currentPlan) =>
+            substituteCTE(currentPlan, cteName, ctePlan)
+        }
       case other => other
     }
 
-    def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
-      plan resolveOperatorsDown {
+    def substituteCTE(plan: LogicalPlan, cteName: String, ctePlan: LogicalPlan): LogicalPlan = {
+      plan resolveOperatorsUp {
+        case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
+          ctePlan
         case u: UnresolvedRelation =>
-          cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
-            .map(_._2).getOrElse(u)
+          u
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.plan, cteRelations))
+              e.withNewPlan(substituteCTE(e.plan, cteName, ctePlan))
           }
       }
     }
@@ -655,6 +660,20 @@ class Analyzer(
   }
 
   /**
+   * Resolve table relations with concrete relations from v2 catalog.
+   *
+   * [[ResolveRelations]] still resolves v1 tables.
+   */
+  object ResolveTables extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
+        loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
+    }
+  }
+
+  /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
@@ -686,10 +705,15 @@ class Analyzer(
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
-      case u: UnresolvedRelation if !isRunningDirectlyOnFiles(u.tableIdentifier) =>
+      case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
-        val foundRelation = lookupTableFromCatalog(u, defaultDatabase)
-        resolveRelation(foundRelation)
+        val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)
+        if (foundRelation != u) {
+          resolveRelation(foundRelation)
+        } else {
+          u
+        }
+
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
@@ -712,8 +736,9 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        EliminateSubqueryAliases(lookupTableFromCatalog(u)) match {
+      case i @ InsertIntoTable(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
+          if child.resolved =>
+        EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
           case v: View =>
             u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
           case other => i.copy(table = other)
@@ -728,20 +753,16 @@ class Analyzer(
     //    and the default database is only used to look up a view);
     // 3. Use the currentDb of the SessionCatalog.
     private def lookupTableFromCatalog(
+        tableIdentifier: TableIdentifier,
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
-      val tableIdentWithDb = u.tableIdentifier.copy(
-        database = u.tableIdentifier.database.orElse(defaultDatabase))
+      val tableIdentWithDb = tableIdentifier.copy(
+        database = tableIdentifier.database.orElse(defaultDatabase))
       try {
         catalog.lookupRelation(tableIdentWithDb)
       } catch {
-        case e: NoSuchTableException =>
-          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}", e)
-        // If the database is defined and that database is not found, throw an AnalysisException.
-        // Note that if the database is not defined, it is possible we are looking up a temp view.
-        case e: NoSuchDatabaseException =>
-          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
-            s"database ${e.db} doesn't exist.", e)
+        case _: NoSuchTableException | _: NoSuchDatabaseException =>
+          u
       }
     }
 

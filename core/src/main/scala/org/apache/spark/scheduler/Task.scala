@@ -74,12 +74,14 @@ private[spark] abstract class Task[T](
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
+   * @param resources other host resources (like gpus) that this task attempt can access
    * @return the result of the task along with updates of Accumulators.
    */
   final def run(
       taskAttemptId: Long,
       attemptNumber: Int,
-      metricsSystem: MetricsSystem): T = {
+      metricsSystem: MetricsSystem,
+      resources: Map[String, ResourceInformation]): T = {
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
     // the stage is barrier.
@@ -92,7 +94,8 @@ private[spark] abstract class Task[T](
       taskMemoryManager,
       localProperties,
       metricsSystem,
-      metrics)
+      metrics,
+      resources)
 
     context = if (isBarrier) {
       new BarrierTaskContext(taskContext)

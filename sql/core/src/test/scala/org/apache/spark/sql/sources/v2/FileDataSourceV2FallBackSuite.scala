@@ -131,10 +131,12 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
     withTempPath { file =>
       val path = file.getCanonicalPath
       // Dummy File writer should fail as expected.
-      val exception = intercept[AnalysisException] {
-        df.write.format(dummyParquetWriterV2).save(path)
+      withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "") {
+        val exception = intercept[AnalysisException] {
+          df.write.format(dummyParquetWriterV2).save(path)
+        }
+        assert(exception.message.equals("Dummy file writer"))
       }
-      assert(exception.message.equals("Dummy file writer"))
       df.write.parquet(path)
       // Fallback reads to V1
       checkAnswer(spark.read.format(dummyParquetWriterV2).load(path), df)
