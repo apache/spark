@@ -652,6 +652,16 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       }
     }
   }
+  test("SPARK-25768 Hive UDF supports literal struct type") {
+    withUserDefinedFunction("testLiteralStructType" -> false) {
+      // Simulate a hive udf that supports struct parameters
+      sql(s"CREATE FUNCTION testLiteralStructType AS '" +
+        s"${classOf[GenericUDFArray].getName}'")
+      checkAnswer(
+        sql("SELECT testLiteralStructType(named_struct('name', 'xx', 'value', 1))[0].value"),
+        Seq(Row(1)))
+    }
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
