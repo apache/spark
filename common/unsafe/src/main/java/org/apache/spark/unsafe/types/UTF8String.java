@@ -534,13 +534,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // skip all of the space (0x20) in the left side
     while (s < this.numBytes && getByte(s) == 0x20) s++;
     if (s == this.numBytes) {
-      // empty string
+      // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the space (0x20) in the right side
     int e = this.numBytes - 1;
     while (e > s && getByte(e) == 0x20) e--;
     if (s == 0 && e == numBytes - 1) {
+      // Nothing trimmed
       return this;
     }
     return copyUTF8String(s, e);
@@ -565,12 +566,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int s = 0;
     // skip all of the space (0x20) in the left side
     while (s < this.numBytes && getByte(s) == 0x20) s++;
-    if (s == this.numBytes) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(s, this.numBytes - 1);
+    if (s == 0) {
+      // Nothing trimmed
+      return this;
     }
+    if (s == this.numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(s, this.numBytes - 1);
   }
 
   /**
@@ -600,26 +604,30 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       srchIdx += searchCharBytes;
     }
-
-    if (trimIdx >= numBytes) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(trimIdx, numBytes - 1);
+    if (srchIdx == 0) {
+      // Nothing trimmed
+      return this;
     }
+    if (trimIdx >= numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(trimIdx, numBytes - 1);
   }
 
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
     while (e >= 0 && getByte(e) == 0x20) e--;
-
-    if (e < 0) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(0, e);
+    if (e == numBytes - 1) {
+      // Nothing trimmed
+      return this;
     }
+    if (e < 0) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(0, e);
   }
 
   /**
@@ -661,12 +669,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       numChars --;
     }
 
-    if (trimEnd < 0) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(0, trimEnd);
+    if (trimEnd == numBytes - 1) {
+      // Nothing trimmed
+      return this;
     }
+    if (trimEnd < 0) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(0, trimEnd);
   }
 
   public UTF8String reverse() {
