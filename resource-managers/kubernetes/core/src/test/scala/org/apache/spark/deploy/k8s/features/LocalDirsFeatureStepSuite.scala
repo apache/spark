@@ -137,6 +137,6 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
     assert(newConfiguredPod.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/hostPath/tmp")
     assert(newConfiguredPod.container.getVolumeMounts.size() === 1)
     assert(newConfiguredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
-    assert(newConfiguredPod.container.getVolumeMounts.get(0).getName === "testVolume")
+    assert(newConfiguredPod.container.getVolumeMounts.get(0).getName === "spark-local-dir-1")
   }
 }
