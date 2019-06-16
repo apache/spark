@@ -1434,7 +1434,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
     val tableName = "SPARK_23263"
-    Seq(false, false).foreach { isConverted =>
+    Seq(false, true).foreach { isConverted =>
       Seq(false, true).foreach { updateEnabled =>
         withSQLConf(
           SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString,
