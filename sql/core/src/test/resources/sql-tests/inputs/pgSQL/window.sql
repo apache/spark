@@ -32,8 +32,8 @@ GROUP BY four, ten ORDER BY four, ten;
 
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
 
--- I get an error when trying `order by rank() over w`, however it works for `order by r' if column rank is renamed to r
-SELECT depname, empno, salary, rank() OVER w as r FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY r;
+-- [SPARK-28064] Order by does not accept a call to rank()
+-- SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY rank() OVER w;
 
 SELECT COUNT(*) OVER () FROM tenk1 WHERE unique2 < 10;
 
@@ -55,13 +55,13 @@ SELECT cume_dist() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 W
 
 SELECT ntile(3) OVER (ORDER BY ten, four), ten, four FROM tenk1 WHERE unique2 < 10;
 
--- Spark does not accept null as input for `ntile`
+-- [SPARK-28065] ntile does not accept NULL as input
 -- SELECT ntile(NULL) OVER (ORDER BY ten, four), ten, four FROM tenk1 LIMIT 2;
 
 -- Spark fills with NULL instead of white space
 SELECT lag(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 
--- `lag` second argument must be a literal?
+-- `lag` second argument must be a literal in Spark
 -- SELECT lag(ten, four) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 -- SELECT lag(ten, four, 0) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 
@@ -89,15 +89,10 @@ FROM tenk1 GROUP BY ten, two;
 
 SELECT count(*) OVER (PARTITION BY four), four FROM (SELECT * FROM tenk1 WHERE two = 1)s WHERE unique2 < 10;
 
--- Original PSQL query:
--- SELECT (count(*) OVER (PARTITION BY four ORDER BY ten) +
---   sum(hundred) OVER (PARTITION BY four ORDER BY ten))::varchar AS cntsum
---   FROM tenk1 WHERE unique2 < 10;
 SELECT (count(*) OVER (PARTITION BY four ORDER BY ten) +
   sum(hundred) OVER (PARTITION BY four ORDER BY ten)) AS cntsum
   FROM tenk1 WHERE unique2 < 10;
 
--- opexpr with different windows evaluation.
 SELECT * FROM(
   SELECT count(*) OVER (PARTITION BY four ORDER BY ten) +
     sum(hundred) OVER (PARTITION BY two ORDER BY ten) AS total,
@@ -111,13 +106,11 @@ SELECT avg(four) OVER (PARTITION BY four ORDER BY thousand / 100) FROM tenk1 WHE
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
 FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
 
--- more than one window with GROUP BY
 SELECT sum(salary),
 row_number() OVER (ORDER BY depname),
 sum(sum(salary)) OVER (ORDER BY depname DESC)
 FROM empsalary GROUP BY depname;
 
--- identical windows with different names
 SELECT sum(salary) OVER w1, count(*) OVER w2
 FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 
@@ -125,10 +118,8 @@ FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 -- SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
 -- FROM tenk1 s WHERE unique2 < 10;
 
--- empty table
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s;
 
--- mixture of agg/wfunc in the same window
 SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 
 -- strict aggs
@@ -147,23 +138,21 @@ create temporary view int4_tbl as select * from values
   (2147483647),
   (-2147483647)
   as int4_tbl(f1);
--- window function over ungrouped agg over empty row set
+
 SELECT SUM(COUNT(f1)) OVER () FROM int4_tbl WHERE f1=42;
 
--- window function with ORDER BY an expression involving aggregates (9.1 bug)
 select ten,
   sum(unique1) + sum(unique2) as res,
   rank() over (order by sum(unique1) + sum(unique2)) as rank
 from tenk1
 group by ten order by ten;
 
--- no costs_off?
+-- explain costs off unavailable at Spark
 -- explain (costs off)
 -- select first_value(max(x)) over (), y
 --   from (select unique1 as x, ten+four as y from tenk1) ss
 --   group by y;
 
--- test non-default frame specifications
 SELECT four, ten,
 sum(ten) over (partition by four order by ten),
 last_value(ten) over (partition by four order by ten)
@@ -205,14 +194,15 @@ FROM tenk1 WHERE unique1 < 10;
 -- SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude no others),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
+
 -- SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
@@ -223,15 +213,15 @@ FROM tenk1 WHERE unique1 < 10;
 -- SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
@@ -252,14 +242,14 @@ FROM tenk1 WHERE unique1 < 10;
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 --
--- -- broken
--- -- SELECT sum(unique1) over (w range between current row and unbounded following),
--- -- unique1, four
--- -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
--- --
--- -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
--- -- unique1, four
--- -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
+-- broken
+-- SELECT sum(unique1) over (w range between current row and unbounded following),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
+--
+-- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 --
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude group),
 -- unique1, four
@@ -275,15 +265,12 @@ FROM tenk1 WHERE unique1 < 10;
 -- FROM tenk1 WHERE unique1 < 10
 -- WINDOW w AS (order by four range between current row and unbounded following);
 
--- broken
 -- SELECT sum(unique1) over
 -- (order by unique1
 --   rows (SELECT unique1 FROM tenk1 ORDER BY unique1 LIMIT 1) + 1 PRECEDING),
 -- unique1
 -- FROM tenk1 WHERE unique1 < 10;
 
-
--- we don't have a generate_series?
 -- CREATE TEMP VIEW v_window AS
 -- SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following) as sum_rows
 -- FROM generate_series(1, 10) i;
@@ -510,83 +497,83 @@ FROM tenk1 WHERE unique1 < 10;
 -- SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between current row and unbounded following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
 --   exclude current row), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
 --   exclude group), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
 --   exclude ties), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (partition by ten
 --   order by four groups between 0 preceding and 0 following),unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (partition by ten
 --   order by four groups between 0 preceding and 0 following exclude current row), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (partition by ten
 --   order by four groups between 0 preceding and 0 following exclude group), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- SELECT sum(unique1) over (partition by ten
 --   order by four groups between 0 preceding and 0 following exclude ties), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
---
+
 -- select first_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
 -- lead(salary) over(order by enroll_date groups between 1 preceding and 1 following),
 -- nth_value(salary, 1) over(order by enroll_date groups between 1 preceding and 1 following),
 -- salary, enroll_date from empsalary;
---
+
 -- select last_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
 -- lag(salary) over(order by enroll_date groups between 1 preceding and 1 following),
 -- salary, enroll_date from empsalary;
---
+
 -- select first_value(salary) over(order by enroll_date groups between 1 following and 3 following
 --   exclude current row),
 -- lead(salary) over(order by enroll_date groups between 1 following and 3 following exclude ties),
 -- nth_value(salary, 1) over(order by enroll_date groups between 1 following and 3 following
 --   exclude ties),
 -- salary, enroll_date from empsalary;
---
+
 -- select last_value(salary) over(order by enroll_date groups between 1 following and 3 following
 --   exclude group),
 -- lag(salary) over(order by enroll_date groups between 1 following and 3 following exclude group),
@@ -639,9 +626,8 @@ FROM tenk1 WHERE unique1 < 10;
 -- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 
 -- with UNION/we didn't have tenk2 yet
--- SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
+SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
 
--- check some degenerate cases
 create table t1 (f1 int, f2 int) using parquet;
 insert into t1 values (1,1),(1,2),(2,2);
 
@@ -750,7 +736,7 @@ SELECT count() OVER () FROM tenk1;
 --           min(salary) OVER (PARTITION BY depname, empno order by enroll_date) depminsalary
 --    FROM empsalary) emp
 -- WHERE depname = 'sales';
---
+
 -- -- Test Sort node reordering
 -- EXPLAIN (COSTS OFF)
 -- SELECT
@@ -762,8 +748,6 @@ SELECT count() OVER () FROM tenk1;
 -- restarts the aggregation from scratch. The second aggregate is supposed
 -- to test cases where only some aggregates restart, the third one checks
 -- that one aggregate restarting doesn't cause others to restart.
-
-
 -- WITH
 -- vs AS (
 --   SELECT i, (random() * 100)::int4 AS v
@@ -784,10 +768,6 @@ SELECT count() OVER () FROM tenk1;
 --   ORDER BY vs.i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
 -- );
 
-
--- Test various built-in aggregates that have moving-aggregate support
-
--- test inverse transition functions handle NULLs properly
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
 
@@ -912,7 +892,11 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,3),(4,4)) t(i,v);
 
--- bool_and?
+-- [SPARK-27880] Implement boolean aggregates(BOOL_AND, BOOL_OR and EVERY)
 -- SELECT i, b, bool_and(b) OVER w, bool_or(b) OVER w
 --   FROM (VALUES (1,true), (2,true), (3,false), (4,false), (5,true)) v(i,b)
 --   WINDOW w AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING);
+
+-- cleanup
+drop table empsalary;
+drop table t1;
