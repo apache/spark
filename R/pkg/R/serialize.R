@@ -36,15 +36,15 @@
 # nolint end
 
 getSerdeType <- function(object) {
-  type <- class(object)[[1]]
-  if (is.atomic(object) & !is.raw(object) & length(object) > 1) {
+  type <- class(object)[[1L]]
+  if (is.atomic(object) & !is.raw(object) & length(object) > 1L) {
     "array"
   } else if (type != "list") {
      type
   } else {
     # Check if all elements are of same type
     elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
-    if (length(elemType) <= 1) {
+    if (length(elemType) <= 1L) {
       "array"
     } else {
       "list"
@@ -54,14 +54,12 @@ getSerdeType <- function(object) {
 
 writeObject <- function(con, object, writeType = TRUE) {
   # NOTE: In R vectors have same type as objects
-  type <- class(object)[[1]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
+  type <- class(object)[[1L]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
   # Checking types is needed here, since 'is.na' only handles atomic vectors,
   # lists and pairlists
-  if (type %in% c("integer", "character", "logical", "double", "numeric")) {
-    if (is.na(object)) {
-      object <- NULL
-      type <- "NULL"
-    }
+  if (inherits(object, c("integer", "character", "logical", "double", "numeric")) && is.na(object)) {
+    object <- NULL
+    type <- "NULL"
   }
 
   serdeType <- getSerdeType(object)
@@ -71,18 +69,19 @@ writeObject <- function(con, object, writeType = TRUE) {
   switch(serdeType,
          NULL = writeVoid(con),
          integer = writeInt(con, object),
+         glue =,
          character = writeString(con, object),
          logical = writeBoolean(con, object),
-         double = writeDouble(con, object),
+         double =,
          numeric = writeDouble(con, object),
          raw = writeRaw(con, object),
          array = writeArray(con, object),
-         list = writeList(con, object),
+         list =,
          struct = writeList(con, object),
          jobj = writeJobj(con, object),
          environment = writeEnv(con, object),
          Date = writeDate(con, object),
-         POSIXlt = writeTime(con, object),
+         POSIXlt =,
          POSIXct = writeTime(con, object),
          stop(paste("Unsupported type for serialization", type)))
 }
@@ -145,9 +144,10 @@ writeType <- function(con, class) {
   type <- switch(class,
                  NULL = "n",
                  integer = "i",
+                 glue =,
                  character = "c",
                  logical = "b",
-                 double = "d",
+                 double =,
                  numeric = "d",
                  raw = "r",
                  array = "a",
@@ -156,7 +156,7 @@ writeType <- function(con, class) {
                  jobj = "j",
                  environment = "e",
                  Date = "D",
-                 POSIXlt = "t",
+                 POSIXlt =,
                  POSIXct = "t",
                  stop(paste("Unsupported type for serialization", class)))
   writeBin(charToRaw(type), con)
