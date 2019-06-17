@@ -576,9 +576,7 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskId = taskStart.taskInfo.taskId
       val taskIndex = taskStart.taskInfo.index
-
       allocationManager.synchronized {
-
         liveTaskIds += taskId
         // If this is the last pending task, mark the scheduler queue as empty
         if (taskStart.taskInfo.speculative) {
@@ -595,13 +593,12 @@ private[spark] class ExecutorAllocationManager(
     }
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-      val taskId = taskEnd.taskInfo.taskId
-      val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
       val stageAttemptId = taskEnd.stageAttemptId
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
+      val taskId = taskEnd.taskInfo.taskId
+      val taskIndex = taskEnd.taskInfo.index
       allocationManager.synchronized {
-
         liveTaskIds.remove(taskId)
         // If the task failed, we expect it to be resubmitted later. To ensure we have
         // enough resources to run the resubmitted task, we need to mark the scheduler
@@ -624,7 +621,6 @@ private[spark] class ExecutorAllocationManager(
       val stageId = speculativeTask.stageId
       val stageAttemptId = speculativeTask.stageAttemptId
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
-
       allocationManager.synchronized {
         stageAttemptToNumSpeculativeTasks(stageAttempt) =
           stageAttemptToNumSpeculativeTasks.getOrElse(stageAttempt, 0) + 1
