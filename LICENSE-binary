@@ -369,6 +369,7 @@ org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
 org.scala-lang.modules:scala-xml_2.12
+org.opencypher:okapi-shade
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*

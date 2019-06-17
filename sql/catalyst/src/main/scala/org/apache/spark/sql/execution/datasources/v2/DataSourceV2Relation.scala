@@ -68,11 +68,6 @@ case class DataSourceV2Relation(
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
   }
-
-  override def refresh(): Unit = table match {
-    case table: FileTable => table.fileIndex.refresh()
-    case _ => // Do nothing.
-  }
 }
 
 /**
@@ -108,6 +103,8 @@ object DataSourceV2Relation {
     val output = table.schema().toAttributes
     DataSourceV2Relation(table, output, options)
   }
+
+  def create(table: Table): DataSourceV2Relation = create(table, CaseInsensitiveStringMap.empty)
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

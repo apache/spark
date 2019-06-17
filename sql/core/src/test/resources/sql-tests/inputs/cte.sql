@@ -24,6 +24,10 @@ SELECT t1.id AS c1,
 FROM   CTE1 t1
        CROSS JOIN CTE1 t2;
 
+-- CTE with column alias
+WITH t(x) AS (SELECT 1)
+SELECT * FROM t WHERE x = 1;
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

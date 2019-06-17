@@ -240,7 +240,7 @@ def exec_maven(mvn_args=()):
     zinc_port = get_zinc_port()
     os.environ["ZINC_PORT"] = "%s" % zinc_port
     zinc_flag = "-DzincPort=%s" % zinc_port
-    flags = [os.path.join(SPARK_HOME, "build", "mvn"), "--force", zinc_flag]
+    flags = [os.path.join(SPARK_HOME, "build", "mvn"), zinc_flag]
     run_cmd(flags + mvn_args)
 
 

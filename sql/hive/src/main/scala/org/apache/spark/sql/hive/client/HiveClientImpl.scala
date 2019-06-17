@@ -30,14 +30,17 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
-import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
+import org.apache.hadoop.hive.metastore.{IMetaStoreClient, TableType => HiveTableType}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Order, SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -277,6 +280,10 @@ private[hive] class HiveClientImpl(
     }
   }
 
+  private def msClient: IMetaStoreClient = {
+    shim.getMSC(client)
+  }
+
   /** Return the associated Hive [[SessionState]] of this [[HiveClientImpl]] */
   override def getState: SessionState = withHiveState(state)
 
@@ -385,8 +392,24 @@ private[hive] class HiveClientImpl(
     Option(client.getTable(dbName, tableName, false /* do not throw exception */))
   }
 
+  private def getRawTablesByName(dbName: String, tableNames: Seq[String]): Seq[HiveTable] = {
+    try {
+      msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
+        .map(extraFixesForNonView).map(new HiveTable(_))
+    } catch {
+      case ex: Exception =>
+        throw new HiveException(s"Unable to fetch tables of db $dbName", ex);
+    }
+  }
+
   override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
     getRawTableOption(dbName, tableName).nonEmpty
+  }
+
+  override def getTablesByName(
+      dbName: String,
+      tableNames: Seq[String]): Seq[CatalogTable] = withHiveState {
+    getRawTablesByName(dbName, tableNames).map(convertHiveTableToCatalogTable)
   }
 
   override def getTableOption(
@@ -1090,6 +1113,40 @@ private[hive] object HiveClientImpl {
       lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters = properties,
       stats = readHiveStats(properties))
+  }
+
+  /**
+   * This is the same process copied from the method `getTable()`
+   * of [[org.apache.hadoop.hive.ql.metadata.Hive]] to do some extra fixes for non-views.
+   * Methods of extracting multiple [[HiveTable]] like `getRawTablesByName()`
+   * should invoke this before return.
+   */
+  def extraFixesForNonView(tTable: MetaStoreApiTable): MetaStoreApiTable = {
+    // For non-views, we need to do some extra fixes
+    if (!(HiveTableType.VIRTUAL_VIEW.toString == tTable.getTableType)) {
+      // Fix the non-printable chars
+      val parameters = tTable.getSd.getParameters
+      if (parameters != null) {
+        val sf = parameters.get(serdeConstants.SERIALIZATION_FORMAT)
+        if (sf != null) {
+          val b: Array[Char] = sf.toCharArray
+          if ((b.length == 1) && (b(0) < 10)) { // ^A, ^B, ^C, ^D, \t
+            parameters.put(serdeConstants.SERIALIZATION_FORMAT, Integer.toString(b(0)))
+          }
+        }
+      }
+      // Use LazySimpleSerDe for MetadataTypedColumnsetSerDe.
+      // NOTE: LazySimpleSerDe does not support tables with a single column of col
+      // of type "array<string>". This happens when the table is created using
+      // an earlier version of Hive.
+      if (classOf[MetadataTypedColumnsetSerDe].getName ==
+        tTable.getSd.getSerdeInfo.getSerializationLib &&
+        tTable.getSd.getColsSize > 0 &&
+        tTable.getSd.getCols.get(0).getType.indexOf('<') == -1) {
+        tTable.getSd.getSerdeInfo.setSerializationLib(classOf[LazySimpleSerDe].getName)
+      }
+    }
+    tTable
   }
 
   /**
