@@ -441,7 +441,12 @@ class DataFrameReader(OptionUtils):
                   When it meets a record having fewer tokens than the length of the schema, \
                   sets ``null`` to extra fields. When the record has more tokens than the \
                   length of the schema, it drops extra tokens.
-                * ``DROPMALFORMED`` : ignores the whole corrupted records.
+                * ``DROPMALFORMED`` : ignores the whole corrupted records. Note that when CSV \
+                  parser column pruning (``spark.sql.csv.parser.columnPruning.enabled``) is \
+                  enabled (it is enabled by default), the malformed columns can be ignored during \
+                  parsing if they are pruned, resulting the corrupted records are not dropped. \
+                  Disabling the column pruning feature can drop corrupted records even malformed \
+                  columns are not read.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
