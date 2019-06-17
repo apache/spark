@@ -74,7 +74,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   @Since("3.0.0")
-  final val metricClass: DoubleParam = new DoubleParam(this, "metricClass",
+  final val metricLabel: DoubleParam = new DoubleParam(this, "metricLabel",
     "The class whose metric will be computed in truePositiveRateByLabel|" +
       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel." +
       " Must be >= 0. The default value is 0.",
@@ -82,13 +82,13 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   /** @group getParam */
   @Since("3.0.0")
-  def getMetricClass: Double = $(metricClass)
+  def getMetricLabel: Double = $(metricLabel)
 
   /** @group setParam */
   @Since("3.0.0")
-  def setMetricClass(value: Double): this.type = set(metricClass, value)
+  def setMetricLabel(value: Double): this.type = set(metricLabel, value)
 
-  setDefault(metricClass -> 0.0)
+  setDefault(metricLabel -> 0.0)
 
   @Since("3.0.0")
   final val beta: DoubleParam = new DoubleParam(this, "beta",
@@ -128,11 +128,11 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       case "weightedTruePositiveRate" => metrics.weightedTruePositiveRate
       case "weightedFalsePositiveRate" => metrics.weightedFalsePositiveRate
       case "weightedFMeasure" => metrics.weightedFMeasure($(beta))
-      case "truePositiveRateByLabel" => metrics.truePositiveRate($(metricClass))
-      case "falsePositiveRateByLabel" => metrics.falsePositiveRate($(metricClass))
-      case "precisionByLabel" => metrics.precision($(metricClass))
-      case "recallByLabel" => metrics.recall($(metricClass))
-      case "fMeasureByLabel" => metrics.fMeasure($(metricClass), $(beta))
+      case "truePositiveRateByLabel" => metrics.truePositiveRate($(metricLabel))
+      case "falsePositiveRateByLabel" => metrics.falsePositiveRate($(metricLabel))
+      case "precisionByLabel" => metrics.precision($(metricLabel))
+      case "recallByLabel" => metrics.recall($(metricLabel))
+      case "fMeasureByLabel" => metrics.fMeasure($(metricLabel), $(beta))
     }
   }
 

@@ -37,7 +37,7 @@ class MulticlassClassificationEvaluatorSuite
       .setPredictionCol("myPrediction")
       .setLabelCol("myLabel")
       .setMetricName("accuracy")
-      .setMetricClass(1.0)
+      .setMetricLabel(1.0)
       .setBeta(2.0)
     testDefaultReadWrite(evaluator)
   }
@@ -53,11 +53,11 @@ class MulticlassClassificationEvaluatorSuite
 
     val evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("precisionByLabel")
-      .setMetricClass(0.0)
+      .setMetricLabel(0.0)
     assert(evaluator.evaluate(predictionAndLabels) ~== 2.0 / 3 absTol 1e-5)
 
     evaluator.setMetricName("truePositiveRateByLabel")
-      .setMetricClass(1.0)
+      .setMetricLabel(1.0)
     assert(evaluator.evaluate(predictionAndLabels) ~== 3.0 / 4 absTol 1e-5)
   }
 }
