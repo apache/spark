@@ -218,7 +218,7 @@ case class ColumnarToRowExec(child: SparkPlan)
  */
 private[execution] class RowToColumnConverter(schema: StructType) extends Serializable {
   private val converters = schema.fields.map {
-    f => RowToColumnConverter.getConverterForType(f.dataType)
+    f => RowToColumnConverter.getConverterForType(f.dataType, f.nullable)
   }
 
   final def convert(row: InternalRow, vectors: Array[WritableColumnVector]): Unit = {
@@ -259,28 +259,35 @@ private object RowToColumnConverter {
     }
   }
 
-  private def getConverterForType(dataType: DataType): TypeConverter = {
-    dataType match {
-      case BooleanType => BasicNullableTypeConverter(BooleanConverter)
-      case ByteType => BasicNullableTypeConverter(ByteConverter)
-      case ShortType => BasicNullableTypeConverter(ShortConverter)
-      case IntegerType => BasicNullableTypeConverter(IntConverter)
-      case FloatType => BasicNullableTypeConverter(FloatConverter)
-      case LongType => BasicNullableTypeConverter(LongConverter)
-      case DoubleType => BasicNullableTypeConverter(DoubleConverter)
-      case DateType => BasicNullableTypeConverter(IntConverter)
-      case TimestampType => BasicNullableTypeConverter(LongConverter)
-      case StringType => BasicNullableTypeConverter(StringConverter)
-      case CalendarIntervalType => StructNullableTypeConverter(CalendarConverter)
-      case at: ArrayType => BasicNullableTypeConverter(
-        new ArrayConverter(getConverterForType(at.elementType)))
-      case st: StructType => StructNullableTypeConverter(new StructConverter(st.fields.map(
-        (f) => getConverterForType(f.dataType))))
-      case dt: DecimalType => BasicNullableTypeConverter(new DecimalConverter(dt))
-      case mt: MapType => BasicNullableTypeConverter(
-        new MapConverter(getConverterForType(mt.keyType), getConverterForType(mt.valueType)))
+  private def getConverterForType(dataType: DataType, nullable: Boolean): TypeConverter = {
+    val core = dataType match {
+      case BooleanType => BooleanConverter
+      case ByteType => ByteConverter
+      case ShortType => ShortConverter
+      case IntegerType | DateType => IntConverter
+      case FloatType => FloatConverter
+      case LongType | TimestampType => LongConverter
+      case DoubleType => DoubleConverter
+      case StringType => StringConverter
+      case CalendarIntervalType => CalendarConverter
+      case at: ArrayType => new ArrayConverter(getConverterForType(at.elementType, nullable))
+      case st: StructType => new StructConverter(st.fields.map(
+        (f) => getConverterForType(f.dataType, f.nullable)))
+      case dt: DecimalType => new DecimalConverter(dt)
+      case mt: MapType => new MapConverter(getConverterForType(mt.keyType, nullable),
+        getConverterForType(mt.valueType, nullable))
       case unknown => throw new UnsupportedOperationException(
         s"Type $unknown not supported")
+    }
+
+    if (nullable) {
+      dataType match {
+        case CalendarIntervalType => new StructNullableTypeConverter(core)
+        case st: StructType => new StructNullableTypeConverter(core)
+        case _ => new BasicNullableTypeConverter(core)
+      }
+    } else {
+      core
     }
   }
 

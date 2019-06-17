@@ -1289,7 +1289,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         StructField("cal", CalendarIntervalType) ::
         StructField("arr_of_int", ArrayType(IntegerType)) ::
         StructField("int_and_int", StructType(
-          StructField("int1", IntegerType) ::
+          StructField("int1", IntegerType, false) ::
             StructField("int2", IntegerType) ::
             Nil
         )) ::
@@ -1445,7 +1445,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(12).isNullAt(2))
 
       assert(columns(13).dataType() == StructType(
-        StructField("int1", IntegerType) ::
+        StructField("int1", IntegerType, false) ::
           StructField("int2", IntegerType) ::
           Nil
       ))
