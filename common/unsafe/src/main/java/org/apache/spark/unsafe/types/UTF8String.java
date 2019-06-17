@@ -529,26 +529,35 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(newBytes);
   }
 
+  /**
+   * Trims space characters (ASCII 32) from both ends of this string.
+   *
+   * @return this string with no spaces at the start or end
+   */
   public UTF8String trim() {
     int s = 0;
     // skip all of the space (0x20) in the left side
     while (s < this.numBytes && getByte(s) == 0x20) s++;
     if (s == this.numBytes) {
-      // empty string
+      // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the space (0x20) in the right side
     int e = this.numBytes - 1;
     while (e > s && getByte(e) == 0x20) e--;
+    if (s == 0 && e == numBytes - 1) {
+      // Nothing trimmed
+      return this;
+    }
     return copyUTF8String(s, e);
   }
 
   /**
-   * Based on the given trim string, trim this string starting from both ends
-   * This method searches for each character in the source string, removes the character if it is
-   * found in the trim string, stops at the first not found. It calls the trimLeft first, then
-   * trimRight. It returns a new string in which both ends trim characters have been removed.
+   * Trims instances of the given trim string from both ends of this string.
+   *
    * @param trimString the trim character string
+   * @return this string with no occurrences of the trim string at the start or end, or `null`
+   *  if `trimString` is `null`
    */
   public UTF8String trim(UTF8String trimString) {
     if (trimString != null) {
@@ -558,24 +567,32 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
   }
 
+  /**
+   * Trims space characters (ASCII 32) from the start of this string.
+   *
+   * @return this string with no spaces at the start
+   */
   public UTF8String trimLeft() {
     int s = 0;
     // skip all of the space (0x20) in the left side
     while (s < this.numBytes && getByte(s) == 0x20) s++;
-    if (s == this.numBytes) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(s, this.numBytes - 1);
+    if (s == 0) {
+      // Nothing trimmed
+      return this;
     }
+    if (s == this.numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(s, this.numBytes - 1);
   }
 
   /**
-   * Based on the given trim string, trim this string starting from left end
-   * This method searches each character in the source string starting from the left end, removes
-   * the character if it is in the trim string, stops at the first character which is not in the
-   * trim string, returns the new string.
+   * Trims instances of the given trim string from the start of this string.
+   *
    * @param trimString the trim character string
+   * @return this string with no occurrences of the trim string at the start, or `null`
+   *  if `trimString` is `null`
    */
   public UTF8String trimLeft(UTF8String trimString) {
     if (trimString == null) return null;
@@ -597,34 +614,43 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       srchIdx += searchCharBytes;
     }
-
-    if (trimIdx >= numBytes) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(trimIdx, numBytes - 1);
+    if (srchIdx == 0) {
+      // Nothing trimmed
+      return this;
     }
+    if (trimIdx >= numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(trimIdx, numBytes - 1);
   }
 
+  /**
+   * Trims space characters (ASCII 32) from the end of this string.
+   *
+   * @return this string with no spaces at the end
+   */
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
     while (e >= 0 && getByte(e) == 0x20) e--;
-
-    if (e < 0) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(0, e);
+    if (e == numBytes - 1) {
+      // Nothing trimmed
+      return this;
     }
+    if (e < 0) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(0, e);
   }
 
   /**
-   * Based on the given trim string, trim this string starting from right end
-   * This method searches each character in the source string starting from the right end,
-   * removes the character if it is in the trim string, stops at the first character which is not
-   * in the trim string, returns the new string.
+   * Trims instances of the given trim string from the end of this string.
+   *
    * @param trimString the trim character string
+   * @return this string with no occurrences of the trim string at the end, or `null`
+   *  if `trimString` is `null`
    */
   public UTF8String trimRight(UTF8String trimString) {
     if (trimString == null) return null;
@@ -658,12 +684,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       numChars --;
     }
 
-    if (trimEnd < 0) {
-      // empty string
-      return EMPTY_UTF8;
-    } else {
-      return copyUTF8String(0, trimEnd);
+    if (trimEnd == numBytes - 1) {
+      // Nothing trimmed
+      return this;
     }
+    if (trimEnd < 0) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(0, trimEnd);
   }
 
   public UTF8String reverse() {
