@@ -652,13 +652,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       }
     }
   }
-  test("SPARK-28012 Hive UDF supports literal struct type") {
-    withUserDefinedFunction("testLiteralStructType" -> false) {
+  test("SPARK-28012 Hive UDF supports struct type foldable expression") {
+    withUserDefinedFunction("testUDFStructType" -> false) {
       // Simulate a hive udf that supports struct parameters
-      sql("CREATE FUNCTION testLiteralStructType AS '" +
+      sql("CREATE FUNCTION testUDFStructType AS '" +
         s"${classOf[GenericUDFArray].getName}'")
       checkAnswer(
-        sql("SELECT testLiteralStructType(named_struct('name', 'xx', 'value', 1))[0].value"),
+        sql("SELECT testUDFStructType(named_struct('name', 'xx', 'value', 1))[0].value"),
         Seq(Row(1)))
     }
   }
