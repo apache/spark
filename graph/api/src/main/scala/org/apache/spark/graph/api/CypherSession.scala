@@ -19,7 +19,7 @@ package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 object CypherSession {
   val ID_COLUMN = "$ID"
@@ -132,4 +132,22 @@ trait CypherSession {
 
     createGraph(nodeFrames.toSeq, relFrames.toSeq)
   }
+
+  /**
+   * Loads a [[PropertyGraph]] from the given location.
+   *
+   * @param path directory in which the graph is stored
+   * @since 3.0.0
+   */
+  def load(path: String): PropertyGraph
+
+  /**
+   * Saves a [[PropertyGraph]] to the given location.
+   *
+   * @param graph     [[PropertyGraph]] to be stored
+   * @param path      directory in which the graph should be stored
+   * @param saveMode  specifies what happens when the destination already exists
+   * @since 3.0.0
+   */
+  def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit
 }

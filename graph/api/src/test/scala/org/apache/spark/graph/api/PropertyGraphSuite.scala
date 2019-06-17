@@ -19,7 +19,12 @@ package org.apache.spark.graph.api
 
 import org.scalatest.Matchers
 
-import org.apache.spark.graph.api.CypherSession.{ID_COLUMN, LABEL_COLUMN_PREFIX, SOURCE_ID_COLUMN, TARGET_ID_COLUMN}
+import org.apache.spark.graph.api.CypherSession.{
+  ID_COLUMN,
+  LABEL_COLUMN_PREFIX,
+  SOURCE_ID_COLUMN,
+  TARGET_ID_COLUMN
+}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -95,8 +100,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
         Seq(
           (convertId(0L), true, true, false, Some(42), Some("Alice"), None),
           (convertId(1L), true, true, false, Some(23), Some("Bob"), None),
-          (convertId(2L), true, false, true, None, Some("Eve"), Some("CS"))
-        ))
+          (convertId(2L), true, false, true, None, Some("Eve"), Some("CS"))))
       .toDF(
         ID_COLUMN,
         label("Person"),
@@ -163,8 +167,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
         Seq(
           (convertId(0L), true, true, false, Some(42), Some("Alice"), None),
           (convertId(1L), true, true, false, Some(23), Some("Bob"), None),
-          (convertId(2L), true, false, true, None, Some("Eve"), Some("CS"))
-        ))
+          (convertId(2L), true, false, true, None, Some("Eve"), Some("CS"))))
       .toDF(
         ID_COLUMN,
         label("Person"),
