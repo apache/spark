@@ -77,7 +77,7 @@ case class ColumnarToRowExec(child: SparkPlan)
     val numInputBatches = longMetric("numInputBatches")
     val scanTime = longMetric("scanTime")
     // UnsafeProjection is not serializable so do it on the executor side, which is why it is lazy
-    lazy val outputProject = UnsafeProjection.create(output, output)
+    @transient lazy val outputProject = UnsafeProjection.create(output, output)
     val batches = child.executeColumnar()
     batches.flatMap(batch => {
       val batchStartNs = System.nanoTime()
@@ -89,8 +89,8 @@ case class ColumnarToRowExec(child: SparkPlan)
       numOutputRows += batch.numRows()
       val ret = batch.rowIterator().asScala
       scanTime += ((System.nanoTime() - batchStartNs) / (1000 * 1000))
-      ret
-    }).map(outputProject)
+      ret.map(outputProject)
+    })
   }
 
   /**
