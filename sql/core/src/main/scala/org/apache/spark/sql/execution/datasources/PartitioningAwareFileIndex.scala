@@ -58,10 +58,12 @@ abstract class PartitioningAwareFileIndex(
 
   protected lazy val pathGlobFilter = parameters.get("pathGlobFilter").map(new GlobFilter(_))
 
-  protected lazy val recursive = parameters.getOrElse("recursive", "false").toBoolean
-
   protected def matchGlobPattern(file: FileStatus): Boolean = {
     pathGlobFilter.forall(_.accept(file.getPath))
+  }
+
+  protected lazy val recursiveFileLookup = {
+    parameters.getOrElse("recursiveFileLookup", "false").toBoolean
   }
 
   override def listFiles(
@@ -72,7 +74,7 @@ abstract class PartitioningAwareFileIndex(
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
       PartitionDirectory(InternalRow.empty, allFiles().filter(isNonEmptyFile)) :: Nil
     } else {
-      if (recursive) {
+      if (recursiveFileLookup) {
         throw new IllegalArgumentException(
           "Datasource with partition do not allow recursive file loading.")
       }
@@ -102,7 +104,7 @@ abstract class PartitioningAwareFileIndex(
 
   def allFiles(): Seq[FileStatus] = {
     val files = if (partitionSpec().partitionColumns.isEmpty) {
-      if (recursive) {
+      if (recursiveFileLookup) {
         leafFiles.values.toSeq
       } else {
         // For each of the root input paths, get the list of files inside them
@@ -140,7 +142,7 @@ abstract class PartitioningAwareFileIndex(
   }
 
   protected def inferPartitioning(): PartitionSpec = {
-    if (recursive) {
+    if (recursiveFileLookup) {
       PartitionSpec.emptySpec
     } else {
       // We use leaf dirs containing data files to discover the schema.
