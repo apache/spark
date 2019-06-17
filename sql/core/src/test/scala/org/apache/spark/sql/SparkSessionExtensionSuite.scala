@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{ColumnarRule, ProjectExec, SparkPlan, SparkStrategy}
+import org.apache.spark.sql.execution.{ColumnarRule, ProjectExec, RowToColumnarExec, SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
@@ -629,8 +629,28 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = replaceWithColumnarPlan(plan)
 }
 
+class ReplacedRowToColumnarExec(override val child: SparkPlan)
+  extends RowToColumnarExec(child) {
+
+  // We have to override equals because subclassing a case class like ProjectExec is not that clean
+  // One of the issues is that the generated equals will see ColumnarProjectExec and ProjectExec
+  // as being equal and this can result in the withNewChildren method not actually replacing
+  // anything
+  override def equals(other: Any): Boolean = {
+    if (!super.equals(other)) {
+      return false
+    }
+    return other.isInstanceOf[ReplacedRowToColumnarExec]
+  }
+
+  override def hashCode(): Int = super.hashCode()
+}
+
 case class MyPostRule() extends Rule[SparkPlan] {
-  override def apply(plan: SparkPlan): SparkPlan = plan
+  override def apply(plan: SparkPlan): SparkPlan = plan match {
+    case rc: RowToColumnarExec => new ReplacedRowToColumnarExec(rc.child)
+    case plan => plan.withNewChildren(plan.children.map(apply))
+  }
 }
 
 case class MyColumarRule(pre: Rule[SparkPlan], post: Rule[SparkPlan]) extends ColumnarRule {
