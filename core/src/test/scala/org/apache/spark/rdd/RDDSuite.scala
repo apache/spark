@@ -22,11 +22,13 @@ import java.lang.management.ManagementFactory
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.KryoException
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -34,7 +36,7 @@ import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class RDDSuite extends SparkFunSuite with SharedSparkContext {
+class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   var tempDir: File = _
 
   override def beforeAll(): Unit = {
@@ -1195,10 +1197,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       Iterator(0)
     }.collect()
     val tmx = ManagementFactory.getThreadMXBean
-    var t = tmx.getThreadInfo(tid.value)
-    // getThreadInfo() will return null after child thread `t` died
-    while (t != null && t.getThreadState != Thread.State.TERMINATED) {
-      t = tmx.getThreadInfo(tid.value)
+    eventually(timeout(10.seconds))  {
+      // getThreadInfo() will return null after child thread `t` died
+      val t = tmx.getThreadInfo(tid.value)
+      assert(t == null || t.getThreadState == Thread.State.TERMINATED)
     }
   }
 
