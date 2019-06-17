@@ -662,6 +662,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         Seq(Row(1)))
     }
   }
+
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
