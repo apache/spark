@@ -30,7 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, Iso8601TimestampFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -859,11 +859,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     } else {
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       val locale = ctx.addReferenceObj("locale", Locale.US)
-      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val tf = classOf[Iso8601TimestampFormatter].getName
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.value} = UTF8String.fromString($tf.apply($f.toString(), $zid, $locale).
+          ${ev.value} = UTF8String.fromString((new $tf($f.toString(), $zid, $locale)).
             format($seconds * 1000000L));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;
