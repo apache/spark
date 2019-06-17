@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{ColumnarRule, ProjectExec, RowToColumnarExec, SparkPlan, SparkStrategy}
+import org.apache.spark.sql.execution.{ColumnarRule, ColumnarToRowExec, ProjectExec, RowToColumnarExec, SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
@@ -132,7 +132,17 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       import session.sqlContext.implicits._
       // repartitioning avoids having the add operation pushed up into the LocalTableScan
       val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
-      val result = data.selectExpr("vals + 1").collect()
+      val df = data.selectExpr("vals + 1")
+      // Verify that both pre and post processing of the plan worked.
+      val found = df.queryExecution.executedPlan.collect {
+        case rep: ReplacedRowToColumnarExec => 1
+        case proj: ColumnarProjectExec => 1
+        case c2r: ColumnarToRowExec => 1
+      }.sum
+      assert(found == 3)
+
+      // Verify that we get back the expected, wrong, result
+      val result = df.collect()
       assert(result(0).getLong(0) == 102L) // Check that broken columnar Add was used.
       assert(result(1).getLong(0) == 202L)
       assert(result(2).getLong(0) == 302L)
