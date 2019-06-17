@@ -40,9 +40,15 @@ object PythonUDF {
       e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
   }
 
+  def isGroupedXformPandasUDF(e: Expression): Boolean = {
+    e.isInstanceOf[PythonUDF] &&
+      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_XFORM_PANDAS_UDF
+  }
+
   // This is currently same as GroupedAggPandasUDF, but we might support new types in the future,
   // e.g, N -> N transform.
-  def isWindowPandasUDF(e: Expression): Boolean = isGroupedAggPandasUDF(e)
+  def isWindowPandasUDF(e: Expression): Boolean =
+    isGroupedAggPandasUDF(e) || isGroupedXformPandasUDF(e)
 }
 
 /**

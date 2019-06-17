@@ -2802,6 +2802,9 @@ class PandasUDFType(object):
 
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
+    # Experimental type
+    GROUPED_XFORM = PythonEvalType.SQL_GROUPED_XFORM_PANDAS_UDF
+
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
@@ -3182,7 +3185,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     if eval_type not in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                          PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
+                         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                         PythonEvalType.SQL_GROUPED_XFORM_PANDAS_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 

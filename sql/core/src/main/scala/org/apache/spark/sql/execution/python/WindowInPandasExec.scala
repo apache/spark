@@ -210,6 +210,8 @@ case class WindowInPandasExec(
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
     require(pyFuncs.length == expressions.length)
 
+    var evalType = udfExpressions.head.evalType
+
     val udfWindowBoundTypes = pyFuncs.indices.map(i =>
       frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
     val pythonRunnerConf: Map[String, String] = (ArrowUtils.getPythonRunnerConfMap(conf)
@@ -384,9 +386,13 @@ case class WindowInPandasExec(
         }
       }
 
+      if (evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+        evalType = PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
+      }
+
       val windowFunctionResult = new ArrowPythonRunner(
         pyFuncs,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        evalType,
         argOffsets,
         pythonInputSchema,
         sessionLocalTimeZone,

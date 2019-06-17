@@ -78,6 +78,13 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         return min
 
     @property
+    def pandas_xform_demean_udf(self):
+        @pandas_udf('double', PandasUDFType.GROUPED_XFORM)
+        def demean(x):
+            return x - x.mean()
+        return demean
+
+    @property
     def unbounded_window(self):
         return Window.partitionBy('id') \
             .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing).orderBy('v')
@@ -349,6 +356,21 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
             .withColumn('mean_unbounded_v', mean(df['v']).over(w1))
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
+
+    def test_xform(self):
+        demean = self.pandas_xform_demean_udf
+        w = self.unbounded_window
+        df = self.data
+        pdf = df.toPandas()
+
+        result = df.withColumn('v_demean', demean(df['v']).over(w)).toPandas()
+
+        expected = pdf
+        expected['v_demean'] = pdf.groupby('id')['v'] \
+            .transform(demean.func) \
+            .reset_index(drop=True, level=0)
+
+        assert_frame_equal(result, expected)
 
 
 if __name__ == "__main__":

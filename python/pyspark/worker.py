@@ -206,6 +206,15 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
     return lambda *a: (wrapped(*a), arrow_return_type)
 
 
+def wrap_window_xform_pandas_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def wrapped(*series):
+        result = f(*series)
+        return result
+    return lambda *a: (wrapped(*a), arrow_return_type)
+
+
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
@@ -236,6 +245,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
         return arg_offsets, wrap_window_agg_pandas_udf(func, return_type, runner_conf, udf_index)
+    elif eval_type == PythonEvalType.SQL_GROUPED_XFORM_PANDAS_UDF:
+        return arg_offsets, wrap_window_xform_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(func, return_type)
     else:
@@ -249,7 +260,8 @@ def read_udfs(pickleSer, infile, eval_type):
                      PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                     PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
+                     PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_XFORM_PANDAS_UDF):
 
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)
