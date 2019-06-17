@@ -52,172 +52,217 @@ getSerdeType <- function(object) {
   }
 }
 
-writeObject <- function(con, object, writeType = TRUE) {
-  # NOTE: In R vectors have same type as objects
-  type <- class(object)[[1L]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
-  # Checking types is needed here, since 'is.na' only handles atomic vectors,
-  # lists and pairlists
-  if (inherits(object, c("integer", "character", "logical", "double", "numeric")) && is.na(object)) {
-    object <- NULL
-    type <- "NULL"
-  }
+# NOTE: In R vectors have same type as objects
+writeObject <- function(object, con, writeType = TRUE) UseMethod('writeObject')
+writeObject.default = function(object, con, writeType = TRUE) {
+  stop(paste("Unsupported type for serialization", class(object)))
+}
 
-  serdeType <- getSerdeType(object)
+# integer same as logical; will cast TRUE -> 1, FALSE -> 0
+writeObject.integer <-
+writeObject.logical <- function(object, con, writeType = TRUE) {
   if (writeType) {
-    writeType(con, serdeType)
+    writeType(object, con)
   }
-  switch(serdeType,
-         NULL = writeVoid(con),
-         integer = writeInt(con, object),
-         glue =,
-         character = writeString(con, object),
-         logical = writeBoolean(con, object),
-         double =,
-         numeric = writeDouble(con, object),
-         raw = writeRaw(con, object),
-         array = writeArray(con, object),
-         list =,
-         struct = writeList(con, object),
-         jobj = writeJobj(con, object),
-         environment = writeEnv(con, object),
-         Date = writeDate(con, object),
-         POSIXlt =,
-         POSIXct = writeTime(con, object),
-         stop(paste("Unsupported type for serialization", type)))
-}
+  # non-scalar value written as array
+  if (length(object) > 1L) return(writeArray(object, con))
+  if (is.na(object)) return() # no value for NULL
 
-writeVoid <- function(con) {
-  # no value for NULL
+  writeBin(as.integer(object), con, endian = "big")
 }
-
-writeJobj <- function(con, value) {
-  if (!isValidJobj(value)) {
-    stop("invalid jobj ", value$id)
+writeObject.character <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(object, con)
   }
-  writeString(con, value$id)
-}
+  # non-scalar value written as array
+  if (length(object) > 1L) return(writeArray(object, con))
+  if (is.na(object)) return() # no value for NULL
 
-writeString <- function(con, value) {
   utfVal <- enc2utf8(value)
-  writeInt(con, as.integer(nchar(utfVal, type = "bytes") + 1))
+  writeObject(as.integer(nchar(utfVal, type = "bytes") + 1L), writeType = FALSE)
   writeBin(utfVal, con, endian = "big", useBytes = TRUE)
 }
+writeObject.numeric <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(object, con)
+  }
+  # non-scalar value written as array
+  if (length(object) > 1L) return(writeArray(object, con))
+  if (is.na(object)) return() # no value for NULL
 
-writeInt <- function(con, value) {
-  writeBin(as.integer(value), con, endian = "big")
+  writeBin(object, con, endian = "big")
 }
-
-writeDouble <- function(con, value) {
-  writeBin(value, con, endian = "big")
+writeObject.raw <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(object, con)
+  }
+  writeObject(length(object), con, writeType = FALSE)
+  writeBin(object, con, endian = "big")
 }
-
-writeBoolean <- function(con, value) {
-  # TRUE becomes 1, FALSE becomes 0
-  writeInt(con, as.integer(value))
+writeType.list = function(object, con) {
+  # Check if all elements are of same type
+  elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
+  if (length(elemType) <= 1L) {
+    return(writeBin(as.raw(0x61), con)) #charToRaw('a')
+  }
+  writeBin(as.raw(0x6c), con) # charToRaw('l')
+}
+writeObject.struct <-
+writeObject.list <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    # writeType.list either writes array or list; TRUE is returned for list
+    if (isTRUE(writeType(object, con))) {
+      writeObject(length(object), con, writeType = FALSE)
+      return(writeBin(object, con, endian = "big"))
+    } else {
+      return(writeArray(object, con))
+    }
+  }
+  # Check if all elements are of same type
+  elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
+  if (length(elemType) <= 1L) {
+    return(writeArray(object, con))
+  }
+  writeObject(length(object), con, writeType = FALSE)
+  writeBin(object, con, endian = "big")
+}
+writeObject.jobj <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(object, con)
+  }
+  if (!isValidJobj(object)) {
+    stop("invalid jobj ", object$id)
+  }
+  writeObject(object$id, writeType = FALSE)
+}
+# Used to pass in hash maps required on Java side.
+writeObject.environment <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(object, con)
+  }
+  len <- length(object)
+  writeObject(len, con, writeType = FALSE)
+  if (len > 0L) {
+    envObj = ls(env)
+    writeArray(as.list(envObj), con)
+    writeObject(mget(envObj, env), writeType = FALSE)
+  }
+  writeBin(object, con, endian = "big")
+}
+writeObject.Date <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(object, con)
+  }
+  writeObject(as.character(object), con, writeType = FALSE)
+}
+# covers POSIXct and POSIXt
+writeObject.POSIXt <- function(object, con, writeType = TRUE) {
+  if (writeType) {
+    writeType(object, con)
+  }
+  writeObject(as.double(object), con, writeType = FALSE)
 }
 
 writeRawSerialize <- function(outputCon, batch) {
   outputSer <- serialize(batch, ascii = FALSE, connection = NULL)
-  writeRaw(outputCon, outputSer)
+  writeObject(outputSer, outputCon, writeType = FALSE)
 }
 
 writeRowSerialize <- function(outputCon, rows) {
   invisible(lapply(rows, function(r) {
     bytes <- serializeRow(r)
-    writeRaw(outputCon, bytes)
+    writeObject(bytes, outputCon, writeType = FALSE)
   }))
 }
 
 serializeRow <- function(row) {
-  rawObj <- rawConnection(raw(0), "wb")
+  rawObj <- rawConnection(raw(0L), "wb")
   on.exit(close(rawObj))
-  writeList(rawObj, row)
+  writeObject(as.list(row), rawObj, writeType = FALSE)
   rawConnectionValue(rawObj)
 }
 
-writeRaw <- function(con, batch) {
-  writeInt(con, length(batch))
-  writeBin(batch, con, endian = "big")
+
+writeType = function(object, con) UseMethod('writeType')
+writeType.default = function(object, con) {
+  stop('Unsupported type for serialization', class(object))
 }
 
-writeType <- function(con, class) {
-  type <- switch(class,
-                 NULL = "n",
-                 integer = "i",
-                 glue =,
-                 character = "c",
-                 logical = "b",
-                 double =,
-                 numeric = "d",
-                 raw = "r",
-                 array = "a",
-                 list = "l",
-                 struct = "s",
-                 jobj = "j",
-                 environment = "e",
-                 Date = "D",
-                 POSIXlt =,
-                 POSIXct = "t",
-                 stop(paste("Unsupported type for serialization", class)))
-  writeBin(charToRaw(type), con)
+# 'is.na' only handles atomic vectors, lists and pairlists;
+#   all atomic classes except complex are handled; complex will error
+writeType.integer = function(object, con) {
+  # non-scalar value written as array
+  if (length(object) > 1L) return(writeBin(as.raw(0x61), con)) #charToRaw('a')
+  if (is.na(object)) return(writeBin(as.raw(0x6e), con)) # charToRaw('n')
+  writeBin(as.raw(0x69), con) # charToRaw('i')
+}
+writeType.character = function(object, con) {
+  # non-scalar value written as array
+  if (length(object) > 1L) return(writeBin(as.raw(0x61), con)) #charToRaw('a')
+  if (is.na(object)) return(writeBin(as.raw(0x6e), con)) # charToRaw('n')
+  writeBin(as.raw(0x63), con) # charToRaw('c')
+}
+writeType.logical = function(object, con) {
+  # non-scalar value written as array
+  if (length(object) > 1L) return(writeBin(as.raw(0x61), con)) #charToRaw('a')
+  if (is.na(object)) return(writeBin(as.raw(0x6e), con)) # charToRaw('n')
+  writeBin(as.raw(0x62), con) # charToRaw('b')
+}
+writeType.numeric = function(object, con) {
+  # non-scalar value written as array
+  if (length(object) > 1L) return(writeBin(as.raw(0x61), con)) #charToRaw('a')
+  if (is.na(object)) return(writeBin(as.raw(0x6e), con)) # charToRaw('n')
+  writeBin(as.raw(0x64), con) # charToRaw('d')
+}
+writeType.raw = function(object, con) {
+  writeBin(as.raw(0x72), con) # charToRaw('r')
+}
+writeType.list = function(object, con) {
+  # Check if all elements are of same type
+  elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
+  if (length(elemType) <= 1L) {
+    return(writeBin(as.raw(0x61), con)) #charToRaw('a')
+  }
+  writeBin(as.raw(0x6c), con) # charToRaw('l')
+  # emit TRUE to signal that this object is being treated as a list
+  return(TRUE)
+}
+writeType.struct = function(object, con) {
+  writeBin(as.raw(0x73), con) # charToRaw('s')
+}
+writeType.jobj = function(object, con) {
+  writeBin(as.raw(0x6a), con) # charToRaw('j')
+}
+writeType.environment = function(object, con) {
+  writeBin(as.raw(0x65), con) # charToRaw('e')
+}
+writeType.Date = function(object, con) {
+  writeBin(as.raw(0x44), con) # charToRaw('D')
+}
+# covers POSIXct and POSIXt
+writeType.POSIXt = function(object, con) {
+  writeBin(as.raw(0x74), con) # charToRaw('t')
 }
 
 # Used to pass arrays where all the elements are of the same type
-writeArray <- function(con, arr) {
+writeArray <- function(arr , con) {
   # TODO: Empty lists are given type "character" right now.
   # This may not work if the Java side expects array of any other type.
-  if (length(arr) == 0) {
-    elemType <- class("somestring")
-  } else {
-    elemType <- getSerdeType(arr[[1]])
+  writeType(if (length(arr) > 0L) arr[[1L]] else 'somestring', con)
+  writeObject(length(arr), con, writeType = FALSE)
+
+  if (length(arr) > 0L) {
+    sapply(arr, writeObject, con, writeType = FALSE)
   }
-
-  writeType(con, elemType)
-  writeInt(con, length(arr))
-
-  if (length(arr) > 0) {
-    for (a in arr) {
-      writeObject(con, a, FALSE)
-    }
-  }
-}
-
-# Used to pass arrays where the elements can be of different types
-writeList <- function(con, list) {
-  writeInt(con, length(list))
-  for (elem in list) {
-    writeObject(con, elem)
-  }
-}
-
-# Used to pass in hash maps required on Java side.
-writeEnv <- function(con, env) {
-  len <- length(env)
-
-  writeInt(con, len)
-  if (len > 0) {
-    writeArray(con, as.list(ls(env)))
-    vals <- lapply(ls(env), function(x) { env[[x]] })
-    writeList(con, as.list(vals))
-  }
-}
-
-writeDate <- function(con, date) {
-  writeString(con, as.character(date))
-}
-
-writeTime <- function(con, time) {
-  writeDouble(con, as.double(time))
+  return(NULL)
 }
 
 # Used to serialize in a list of objects where each
 # object can be of a different type. Serialization format is
 # <object type> <object> for each object
 writeArgs <- function(con, args) {
-  if (length(args) > 0) {
-    for (a in args) {
-      writeObject(con, a)
-    }
+  if (length(args) > 0L) {
+    sapply(args, writeObject, con)
   }
 }
 
@@ -230,7 +275,7 @@ writeSerializeInArrow <- function(conn, df) {
     # There looks no way to send each batch in streaming format via socket
     # connection. See ARROW-4512.
     # So, it writes the whole Arrow streaming-formatted binary at once for now.
-    writeRaw(conn, write_arrow(df, raw()))
+    writeObject(write_arrow(df, raw()), conn, writeType = FALSE)
   } else {
     stop("'arrow' package should be installed.")
   }
