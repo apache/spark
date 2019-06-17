@@ -292,6 +292,12 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(64 * 1024 * 1024)
 
+  val RUNTIME_REOPTIMIZATION_ENABLED =
+    buildConf("spark.sql.runtime.reoptimization.enabled")
+      .doc("When true, enable runtime query re-optimization.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
     .booleanConf
@@ -1373,6 +1379,15 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val PANDAS_UDF_BUFFER_SIZE =
+    buildConf("spark.sql.pandas.udf.buffer.size")
+      .doc(
+        s"Same as ${BUFFER_SIZE} but only applies to Pandas UDF executions. If it is not set, " +
+        s"the fallback is ${BUFFER_SIZE}. Note that Pandas execution requires more than 4 bytes. " +
+        "Lowering this value could make small Pandas UDF batch iterated and pipelined; however, " +
+        "it might degrade performance. See SPARK-27870.")
+      .fallbackConf(BUFFER_SIZE)
+
   val PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.execution.pandas.respectSessionTimeZone")
       .internal()
@@ -1518,7 +1533,7 @@ object SQLConf {
       " register class names for which data source V2 write paths are disabled. Writes from these" +
       " sources will fall back to the V1 sources.")
     .stringConf
-    .createWithDefault("csv,json,orc,text")
+    .createWithDefault("csv,json,orc,text,parquet")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1711,15 +1726,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PASS_PARTITION_BY_AS_OPTIONS =
-    buildConf("spark.sql.legacy.sources.write.passPartitionByAsOptions")
-      .internal()
-      .doc("Whether to pass the partitionBy columns as options in DataFrameWriter. " +
-        "Data source V1 now silently drops partitionBy columns for non-file-format sources; " +
-        "turning the flag on provides a way for these sources to see these partitionBy columns.")
-      .booleanConf
-      .createWithDefault(false)
-
   val NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE =
     buildConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue")
       .internal()
@@ -1793,6 +1799,12 @@ object SQLConf {
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
+    buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
+      .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
@@ -1898,7 +1910,10 @@ class SQLConf extends Serializable with Logging {
   def targetPostShuffleInputSize: Long =
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
-  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+  def runtimeReoptimizationEnabled: Boolean = getConf(RUNTIME_REOPTIMIZATION_ENABLED)
+
+  def adaptiveExecutionEnabled: Boolean =
+    getConf(ADAPTIVE_EXECUTION_ENABLED) && !getConf(RUNTIME_REOPTIMIZATION_ENABLED)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
@@ -2171,6 +2186,8 @@ class SQLConf extends Serializable with Logging {
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
+  def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
+
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
@@ -2362,7 +2379,7 @@ class SQLConf extends Serializable with Logging {
   /**
    * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
    */
-  def redactOptions(options: Map[String, String]): Map[String, String] = {
+  def redactOptions[K, V](options: Map[K, V]): Map[K, V] = {
     val regexes = Seq(
       getConf(SQL_OPTIONS_REDACTION_PATTERN),
       SECRET_REDACTION_PATTERN.readFrom(reader))

@@ -224,7 +224,7 @@ class ResourceDiscovererSuite extends SparkFunSuite
   test("gpu's specified but not discovery script") {
     val sparkconf = new SparkConf
     sparkconf.set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU +
-      SPARK_RESOURCE_COUNT_SUFFIX, "2")
+      SPARK_RESOURCE_AMOUNT_SUFFIX, "2")
 
     val error = intercept[SparkException] {
       ResourceDiscoverer.discoverResourcesInformation(sparkconf, SPARK_EXECUTOR_RESOURCE_PREFIX)

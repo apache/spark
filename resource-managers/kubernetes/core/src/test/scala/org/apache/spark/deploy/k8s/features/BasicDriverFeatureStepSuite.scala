@@ -56,7 +56,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
     resources.foreach { case (_, testRInfo) =>
       sparkConf.set(
-        s"${SPARK_DRIVER_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_COUNT_SUFFIX}",
+        s"${SPARK_DRIVER_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}",
         testRInfo.count)
       sparkConf.set(
         s"${SPARK_DRIVER_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_VENDOR_SUFFIX}",

@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin, SQLHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -80,6 +80,11 @@ case class SelfReferenceUDF(
     var config: Map[String, Any] = Map.empty[String, Any]) extends Function1[String, Boolean] {
   config += "self" -> this
   def apply(key: String): Boolean = config.contains(key)
+}
+
+case class FakeLeafPlan(child: LogicalPlan)
+  extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+  override def output: Seq[Attribute] = child.output
 }
 
 class TreeNodeSuite extends SparkFunSuite with SQLHelper {
@@ -672,5 +677,35 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
         })
     }
+  }
+
+  test("clone") {
+    def assertDifferentInstance(before: AnyRef, after: AnyRef): Unit = {
+      assert(before.ne(after) && before == after)
+      before.asInstanceOf[TreeNode[_]].children.zip(
+          after.asInstanceOf[TreeNode[_]].children).foreach {
+        case (beforeChild: AnyRef, afterChild: AnyRef) =>
+          assertDifferentInstance(beforeChild, afterChild)
+      }
+    }
+
+    // Empty constructor
+    val rowNumber = RowNumber()
+    assertDifferentInstance(rowNumber, rowNumber.clone())
+
+    // Overridden `makeCopy`
+    val oneRowRelation = OneRowRelation()
+    assertDifferentInstance(oneRowRelation, oneRowRelation.clone())
+
+    // Multi-way operators
+    val intersect =
+      Intersect(oneRowRelation, Union(Seq(oneRowRelation, oneRowRelation)), isAll = false)
+    assertDifferentInstance(intersect, intersect.clone())
+
+    // Leaf node with an inner child
+    val leaf = FakeLeafPlan(intersect)
+    val leafCloned = leaf.clone()
+    assertDifferentInstance(leaf, leafCloned)
+    assert(leaf.child.eq(leafCloned.asInstanceOf[FakeLeafPlan].child))
   }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.catalog.v2.CatalogPlugin
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -185,6 +186,8 @@ abstract class BaseSessionStateBuilder(
         V2WriteSupportCheck +:
         V2StreamingScanSupportCheck +:
         customCheckRules
+
+    override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
   }
 
   /**

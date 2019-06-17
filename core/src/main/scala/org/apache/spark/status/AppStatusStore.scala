@@ -25,7 +25,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
-import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 /**
