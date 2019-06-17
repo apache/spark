@@ -717,6 +717,19 @@ class PlanParserSuite extends AnalysisTest {
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
       OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
     )
+
+    assertEqual(
+      "SELECT TRIM(BOTH FROM '  bunch o blanks  ')",
+      OneRowRelation().select('TRIM.function("  bunch o blanks  "))
+    )
+    assertEqual(
+      "SELECT TRIM(LEADING FROM '  bunch o blanks  ')",
+      OneRowRelation().select('ltrim.function("  bunch o blanks  "))
+    )
+    assertEqual(
+      "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
+      OneRowRelation().select('rtrim.function("  bunch o blanks  "))
+    )
   }
 
   test("precedence of set operations") {
