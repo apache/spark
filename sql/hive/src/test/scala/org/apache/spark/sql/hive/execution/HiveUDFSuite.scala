@@ -655,7 +655,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("SPARK-28012 Hive UDF supports literal struct type") {
     withUserDefinedFunction("testLiteralStructType" -> false) {
       // Simulate a hive udf that supports struct parameters
-      sql(s"CREATE FUNCTION testLiteralStructType AS '" +
+      sql("CREATE FUNCTION testLiteralStructType AS '" +
         s"${classOf[GenericUDFArray].getName}'")
       checkAnswer(
         sql("SELECT testLiteralStructType(named_struct('name', 'xx', 'value', 1))[0].value"),
