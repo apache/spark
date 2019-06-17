@@ -38,15 +38,16 @@ object SchemaMergeUtils extends Logging {
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
     // !! HACK ALERT !!
+    // Here is a hack for Parquet, but it can be used by Orc as well.
     //
-    // Parquet/ORC requires `FileStatus`es to read footers.
+    // Parquet requires `FileStatus`es to read footers.
     // Here we try to send cached `FileStatus`es to executor side to avoid fetching them again.
     // However, `FileStatus` is not `Serializable`
     // but only `Writable`.  What makes it worse, for some reason, `FileStatus` doesn't play well
     // with `SerializableWritable[T]` and always causes a weird `IllegalStateException`.  These
     // facts virtually prevents us to serialize `FileStatus`es.
     //
-    // Since Parquet/ORC only relies on path and length information of those `FileStatus`es to read
+    // Since Parquet only relies on path and length information of those `FileStatus`es to read
     // footers, here we just extract them (which can be easily serialized), send them to executor
     // side, and resemble fake `FileStatus`es there.
     val partialFileStatusInfo = files.map(f => (f.getPath.toString, f.getLen))
