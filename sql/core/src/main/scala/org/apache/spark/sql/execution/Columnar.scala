@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{broadcast, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -74,55 +76,21 @@ case class ColumnarToRowExec(child: SparkPlan)
     val numOutputRows = longMetric("numOutputRows")
     val numInputBatches = longMetric("numInputBatches")
     val scanTime = longMetric("scanTime")
+    // UnsafeProjection is not serializable so do it on the executor side, which is why it is lazy
+    lazy val outputProject = UnsafeProjection.create(output, output)
     val batches = child.executeColumnar()
-    batches.mapPartitions { cbIter =>
-      // UnsafeProjection is not serializable so do it on the executor side
-      val outputProject = UnsafeProjection.create(output, output)
-      new Iterator[InternalRow] {
-        var it: java.util.Iterator[InternalRow] = null
-
-        def loadNextBatch: Unit = {
-          if (it != null) {
-            it = null
-          }
-          val batchStartNs = System.nanoTime()
-          if (cbIter.hasNext) {
-            val cb = cbIter.next()
-            it = cb.rowIterator()
-            numInputBatches += 1
-            // In order to match the numOutputRows metric in the generated code we update
-            // numOutputRows for each batch. This is less accurate than doing it at output
-            // because it will over count the number of rows output in the case of a limit,
-            // but it is more efficient.
-            numOutputRows += cb.numRows()
-          }
-          scanTime += ((System.nanoTime() - batchStartNs) / (1000 * 1000))
-        }
-
-        override def hasNext: Boolean = {
-          val itHasNext = it != null && it.hasNext
-          if (!itHasNext) {
-            loadNextBatch
-            it != null && it.hasNext
-          } else {
-            itHasNext
-          }
-        }
-
-        override def next(): InternalRow = {
-          if (it == null || !it.hasNext) {
-            loadNextBatch
-          }
-          if (it == null) {
-            throw new NoSuchElementException()
-          }
-          it.next()
-        }
-        // This is to convert the InternalRow to an UnsafeRow. Even though the type is
-        // InternalRow some operations downstream operations like collect require it to
-        // be UnsafeRow
-      }.map(outputProject)
-    }
+    batches.flatMap(batch => {
+      val batchStartNs = System.nanoTime()
+      numInputBatches += 1
+      // In order to match the numOutputRows metric in the generated code we update
+      // numOutputRows for each batch. This is less accurate than doing it at output
+      // because it will over count the number of rows output in the case of a limit,
+      // but it is more efficient.
+      numOutputRows += batch.numRows()
+      val ret = batch.rowIterator().asScala
+      scanTime += ((System.nanoTime() - batchStartNs) / (1000 * 1000))
+      ret
+    }).map(outputProject)
   }
 
   /**
@@ -271,25 +239,46 @@ private object RowToColumnConverter {
     def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit
   }
 
+  private final case class BasicNullableTypeConverter(base: TypeConverter) extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      if (row.isNullAt(column)) {
+        cv.appendNull
+      } else {
+        base.append(row, column, cv)
+      }
+    }
+  }
+
+  private final case class StructNullableTypeConverter(base: TypeConverter) extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      if (row.isNullAt(column)) {
+        cv.appendStruct(true)
+      } else {
+        base.append(row, column, cv)
+      }
+    }
+  }
+
   private def getConverterForType(dataType: DataType): TypeConverter = {
     dataType match {
-      case BooleanType => BooleanConverter
-      case ByteType => ByteConverter
-      case ShortType => ShortConverter
-      case IntegerType => IntConverter
-      case FloatType => FloatConverter
-      case LongType => LongConverter
-      case DoubleType => DoubleConverter
-      case DateType => IntConverter
-      case TimestampType => LongConverter
-      case StringType => StringConverter
-      case CalendarIntervalType => CalendarConverter
-      case at: ArrayType => new ArrayConverter(getConverterForType(at.elementType))
-      case st: StructType => new StructConverter(st.fields.map(
-        (f) => getConverterForType(f.dataType)))
-      case dt: DecimalType => new DecimalConverter(dt)
-      case mt: MapType => new MapConverter(getConverterForType(mt.keyType),
-        getConverterForType(mt.valueType))
+      case BooleanType => BasicNullableTypeConverter(BooleanConverter)
+      case ByteType => BasicNullableTypeConverter(ByteConverter)
+      case ShortType => BasicNullableTypeConverter(ShortConverter)
+      case IntegerType => BasicNullableTypeConverter(IntConverter)
+      case FloatType => BasicNullableTypeConverter(FloatConverter)
+      case LongType => BasicNullableTypeConverter(LongConverter)
+      case DoubleType => BasicNullableTypeConverter(DoubleConverter)
+      case DateType => BasicNullableTypeConverter(IntConverter)
+      case TimestampType => BasicNullableTypeConverter(LongConverter)
+      case StringType => BasicNullableTypeConverter(StringConverter)
+      case CalendarIntervalType => StructNullableTypeConverter(CalendarConverter)
+      case at: ArrayType => BasicNullableTypeConverter(
+        new ArrayConverter(getConverterForType(at.elementType)))
+      case st: StructType => StructNullableTypeConverter(new StructConverter(st.fields.map(
+        (f) => getConverterForType(f.dataType))))
+      case dt: DecimalType => BasicNullableTypeConverter(new DecimalConverter(dt))
+      case mt: MapType => BasicNullableTypeConverter(
+        new MapConverter(getConverterForType(mt.keyType), getConverterForType(mt.valueType)))
       case unknown => throw new UnsupportedOperationException(
         s"Type $unknown not supported")
     }
@@ -297,136 +286,88 @@ private object RowToColumnConverter {
 
   private object BooleanConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit =
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        cv.appendBoolean(row.getBoolean(column))
-      }
+      cv.appendBoolean(row.getBoolean(column))
   }
 
   private object ByteConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit =
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        cv.appendByte(row.getByte(column))
-      }
+      cv.appendByte(row.getByte(column))
   }
 
   private object ShortConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit =
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        cv.appendShort(row.getShort(column))
-      }
+      cv.appendShort(row.getShort(column))
   }
 
   private object IntConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit =
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        cv.appendInt(row.getInt(column))
-      }
+      cv.appendInt(row.getInt(column))
   }
 
   private object FloatConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit =
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        cv.appendFloat(row.getFloat(column))
-      }
+      cv.appendFloat(row.getFloat(column))
   }
 
   private object LongConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit =
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        cv.appendLong(row.getLong(column))
-      }
+      cv.appendLong(row.getLong(column))
   }
 
   private object DoubleConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit =
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        cv.appendDouble(row.getDouble(column))
-      }
+      cv.appendDouble(row.getDouble(column))
   }
 
   private object StringConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        val data = row.getUTF8String(column).getBytes
-        cv.appendByteArray(data, 0, data.length)
-      }
+      val data = row.getUTF8String(column).getBytes
+      cv.appendByteArray(data, 0, data.length)
     }
   }
 
   private object CalendarConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      if (row.isNullAt(column)) {
-        cv.appendStruct(true)
-      } else {
-        val c = row.getInterval(column)
-        cv.appendStruct(false)
-        cv.getChild(0).appendInt(c.months)
-        cv.getChild(1).appendLong(c.microseconds)
-      }
+      val c = row.getInterval(column)
+      cv.appendStruct(false)
+      cv.getChild(0).appendInt(c.months)
+      cv.getChild(1).appendLong(c.microseconds)
     }
   }
 
   private case class ArrayConverter(childConverter: TypeConverter) extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        val values = row.getArray(column)
-        val numElements = values.numElements()
-        cv.appendArray(numElements)
-        val arrData = cv.arrayData()
-        for (i <- 0 until numElements) {
-          childConverter.append(values, i, arrData)
-        }
+      val values = row.getArray(column)
+      val numElements = values.numElements()
+      cv.appendArray(numElements)
+      val arrData = cv.arrayData()
+      for (i <- 0 until numElements) {
+        childConverter.append(values, i, arrData)
       }
     }
   }
 
   private case class StructConverter(childConverters: Array[TypeConverter]) extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      if (row.isNullAt(column)) {
-        cv.appendStruct(true)
-      } else {
-        cv.appendStruct(false)
-        val data = row.getStruct(column, childConverters.length)
-        for (i <- 0 until childConverters.length) {
-          childConverters(i).append(data, i, cv.getChild(i))
-        }
+      cv.appendStruct(false)
+      val data = row.getStruct(column, childConverters.length)
+      for (i <- 0 until childConverters.length) {
+        childConverters(i).append(data, i, cv.getChild(i))
       }
     }
   }
 
   private case class DecimalConverter(dt: DecimalType) extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      if (row.isNullAt(column)) {
-        cv.appendNull
+      val d = row.getDecimal(column, dt.precision, dt.scale)
+      if (dt.precision <= Decimal.MAX_INT_DIGITS) {
+        cv.appendInt(d.toUnscaledLong.toInt)
+      } else if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+        cv.appendLong(d.toUnscaledLong)
       } else {
-        val d = row.getDecimal(column, dt.precision, dt.scale)
-        if (dt.precision <= Decimal.MAX_INT_DIGITS) {
-          cv.appendInt(d.toUnscaledLong.toInt)
-        } else if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-          cv.appendLong(d.toUnscaledLong)
-        } else {
-          val integer = d.toJavaBigDecimal.unscaledValue
-          val bytes = integer.toByteArray
-          cv.appendByteArray(bytes, 0, bytes.length)
-        }
+        val integer = d.toJavaBigDecimal.unscaledValue
+        val bytes = integer.toByteArray
+        cv.appendByteArray(bytes, 0, bytes.length)
       }
     }
   }
@@ -434,22 +375,18 @@ private object RowToColumnConverter {
   private case class MapConverter(keyConverter: TypeConverter, valueConverter: TypeConverter)
     extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      if (row.isNullAt(column)) {
-        cv.appendNull
-      } else {
-        val m = row.getMap(column)
-        val keys = cv.getChild(0)
-        val values = cv.getChild(1)
-        val numElements = m.numElements()
-        cv.appendArray(numElements)
+      val m = row.getMap(column)
+      val keys = cv.getChild(0)
+      val values = cv.getChild(1)
+      val numElements = m.numElements()
+      cv.appendArray(numElements)
 
-        val srcKeys = m.keyArray()
-        val srcValues = m.valueArray()
+      val srcKeys = m.keyArray()
+      val srcValues = m.valueArray()
 
-        for (i <- 0 until numElements) {
-          keyConverter.append(srcKeys, i, keys)
-          valueConverter.append(srcValues, i, values)
-        }
+      for (i <- 0 until numElements) {
+        keyConverter.append(srcKeys, i, keys)
+        valueConverter.append(srcValues, i, values)
       }
     }
   }
