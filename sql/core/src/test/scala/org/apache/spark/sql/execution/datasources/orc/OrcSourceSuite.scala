@@ -399,6 +399,31 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       assert(new OrcOptions(map2, conf).mergeSchema == false)
     }
   }
+
+  test("SPARK-11412 test enabling/disabling schema merging") {
+    def testSchemaMerging(expectedColumnNumber: Int): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+        spark.range(0, 10).toDF("b").write.orc(new Path(basePath, "foo=2").toString)
+        assert(spark.read.orc(basePath).columns.length === expectedColumnNumber)
+
+        // OrcOptions.MERGE_SCHEMA has higher priority
+        assert(spark.read.option(OrcOptions.MERGE_SCHEMA, true)
+          .orc(basePath).columns.length === 3)
+        assert(spark.read.option(OrcOptions.MERGE_SCHEMA, false)
+          .orc(basePath).columns.length === 2)
+      }
+    }
+
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+      testSchemaMerging(3)
+    }
+
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
+      testSchemaMerging(2)
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSQLContext {
