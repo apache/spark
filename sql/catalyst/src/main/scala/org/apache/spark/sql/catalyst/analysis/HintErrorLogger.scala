@@ -26,14 +26,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{HintErrorHandler, HintInfo}
 object HintErrorLogger extends HintErrorHandler with Logging {
 
   override def hintNotRecognized(name: String, parameters: Seq[Any]): Unit = {
-    logWarning(s"Unrecognized hint: $name${parameters.mkString("(", ", ", ")")}")
+    logWarning(s"Unrecognized hint: ${hintToPrettyString(name, parameters)}")
   }
 
   override def hintRelationsNotFound(
       name: String, parameters: Seq[Any], invalidRelations: Set[String]): Unit = {
     invalidRelations.foreach { n =>
       logWarning(s"Count not find relation '$n' specified in hint " +
-        s"'$name${parameters.mkString("(", ", ", ")")}'.")
+        s"'${hintToPrettyString(name, parameters)}'.")
     }
   }
 
@@ -43,5 +43,13 @@ object HintErrorLogger extends HintErrorHandler with Logging {
 
   override def hintOverridden(hint: HintInfo): Unit = {
     logWarning(s"Hint $hint is overridden by another hint and will not take effect.")
+  }
+
+  private def hintToPrettyString(name: String, parameters: Seq[Any]): String = {
+    val prettyParameters = parameters.map {
+      case a: UnresolvedAttribute => a.nameParts.mkString(".")
+      case e: Any => e.toString
+    }
+    s"$name${prettyParameters.mkString("(", ", ", ")")}"
   }
 }
