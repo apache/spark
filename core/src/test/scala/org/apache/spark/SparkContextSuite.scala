@@ -816,8 +816,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: " +
-      "spark.executor.resource.gpu.amount = 1 has to be >= the task config: " +
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount = 1 " +
+      "has to be >= the requested amount in task resource config: " +
       "spark.task.resource.gpu.amount = 2"))
   }
 
