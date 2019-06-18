@@ -653,7 +653,7 @@ case class StringTrim(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -753,7 +753,7 @@ case class StringTrimLeft(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -856,7 +856,7 @@ case class StringTrimRight(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 

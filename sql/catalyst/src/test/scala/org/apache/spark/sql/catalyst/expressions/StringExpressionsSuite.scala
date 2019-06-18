@@ -465,6 +465,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrim(Literal("a"), Literal.create(null, StringType)), null)
     checkEvaluation(StringTrim(Literal.create(null, StringType), Literal("a")), null)
+
+    checkEvaluation(StringTrim(Literal("yxTomxx"), Literal("xyz")), "Tom")
+    checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
   }
 
   test("LTRIM") {
@@ -489,6 +492,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrimLeft(Literal.create(null, StringType), Literal("a")), null)
     checkEvaluation(StringTrimLeft(Literal("a"), Literal.create(null, StringType)), null)
+
+    checkEvaluation(StringTrimLeft(Literal("zzzytest"), Literal("xyz")), "test")
+    checkEvaluation(StringTrimLeft(Literal("zzzytestxyz"), Literal("xyz")), "testxyz")
+    checkEvaluation(StringTrimLeft(Literal("xyxXxyLAST WORD"), Literal("xy")), "XxyLAST WORD")
   }
 
   test("RTRIM") {
@@ -514,6 +521,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrimRight(Literal("a"), Literal.create(null, StringType)), null)
     checkEvaluation(StringTrimRight(Literal.create(null, StringType), Literal("a")), null)
+
+    checkEvaluation(StringTrimRight(Literal("testxxzx"), Literal("xyz")), "test")
+    checkEvaluation(StringTrimRight(Literal("xyztestxxzx"), Literal("xyz")), "xyztest")
+    checkEvaluation(StringTrimRight(Literal("TURNERyxXxy"), Literal("xy")), "TURNERyxX")
   }
 
   test("FORMAT") {
