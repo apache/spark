@@ -32,9 +32,10 @@ import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -2016,6 +2017,11 @@ class SQLConf extends Serializable with Logging {
       org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
     }
   }
+
+  /**
+   * Returns the error handler for handling hint errors.
+   */
+  def hintErrorHandler: HintErrorHandler = HintErrorLogger
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
