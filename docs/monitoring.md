@@ -1097,6 +1097,7 @@ Note: applies to the shuffle service
 - blockTransferRateBytes (meter)
 - numActiveConnections.count
 - numRegisteredConnections.count
+- numCaughtExceptions.count
 - openBlockRequestLatencyMillis (histogram)
 - registerExecutorRequestLatencyMillis (histogram)
 - registeredExecutorsSize

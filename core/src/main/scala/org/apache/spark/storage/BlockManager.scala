@@ -45,7 +45,6 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
-import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
@@ -130,11 +129,12 @@ private[spark] class BlockManager(
     shuffleManager: ShuffleManager,
     val blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
-    numUsableCores: Int)
+    externalShuffleClient: Option[ExternalShuffleClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
-  private[spark] val externalShuffleServiceEnabled =
-    conf.get(config.SHUFFLE_SERVICE_ENABLED)
+  // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
+  private[spark] val externalShuffleServiceEnabled: Boolean = externalShuffleClient.isDefined
+
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
 
@@ -164,20 +164,7 @@ private[spark] class BlockManager(
   private val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
   private val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
-  // Port used by the external shuffle service. In Yarn mode, this may be already be
-  // set through the Hadoop configuration as the server is launched in the Yarn NM.
-  private val externalShuffleServicePort = {
-    val tmpPort = Utils.getSparkOrYarnConfig(conf, config.SHUFFLE_SERVICE_PORT.key,
-      config.SHUFFLE_SERVICE_PORT.defaultValueString).toInt
-    if (tmpPort == 0) {
-      // for testing, we set "spark.shuffle.service.port" to 0 in the yarn config, so yarn finds
-      // an open port.  But we still need to tell our spark apps the right port to use.  So
-      // only if the yarn config has the port set to 0, we prefer the value in the spark config
-      conf.get(config.SHUFFLE_SERVICE_PORT.key).toInt
-    } else {
-      tmpPort
-    }
-  }
+  private val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
 
   var blockManagerId: BlockManagerId = _
 
@@ -187,13 +174,7 @@ private[spark] class BlockManager(
 
   // Client to read other executors' shuffle files. This is either an external service, or just the
   // standard BlockTransferService to directly connect to other Executors.
-  private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
-    val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-    new ExternalShuffleClient(transConf, securityManager,
-      securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
-  } else {
-    blockTransferService
-  }
+  private[spark] val shuffleClient = externalShuffleClient.getOrElse(blockTransferService)
 
   // Max number of failures before this block manager refreshes the block locations from the driver
   private val maxFailuresBeforeLocationRefresh =
@@ -414,8 +395,9 @@ private[spark] class BlockManager(
    */
   def initialize(appId: String): Unit = {
     blockTransferService.init(this)
-    shuffleClient.init(appId)
-
+    externalShuffleClient.foreach { shuffleClient =>
+      shuffleClient.init(appId)
+    }
     blockReplicationPolicy = {
       val priorityClass = conf.get(config.STORAGE_REPLICATION_POLICY)
       val clazz = Utils.classForName(priorityClass)
@@ -749,7 +731,7 @@ private[spark] class BlockManager(
       case Some(info) =>
         val level = info.level
         logDebug(s"Level for block $blockId is $level")
-        val taskAttemptId = Option(TaskContext.get()).map(_.taskAttemptId())
+        val taskContext = Option(TaskContext.get())
         if (level.useMemory && memoryStore.contains(blockId)) {
           val iter: Iterator[Any] = if (level.deserialized) {
             memoryStore.getValues(blockId).get
@@ -761,7 +743,7 @@ private[spark] class BlockManager(
           // from a different thread which does not have TaskContext set; see SPARK-18406 for
           // discussion.
           val ci = CompletionIterator[Any, Iterator[Any]](iter, {
-            releaseLock(blockId, taskAttemptId)
+            releaseLock(blockId, taskContext)
           })
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
@@ -780,7 +762,7 @@ private[spark] class BlockManager(
             }
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
-            releaseLockAndDispose(blockId, diskData, taskAttemptId)
+            releaseLockAndDispose(blockId, diskData, taskContext)
           })
           Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
@@ -843,7 +825,7 @@ private[spark] class BlockManager(
    *
    * This does not acquire a lock on this block in this JVM.
    */
-  private def getRemoteValues[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
+  private[spark] def getRemoteValues[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
     val ct = implicitly[ClassTag[T]]
     getRemoteManagedBuffer(blockId).map { data =>
       val values =
@@ -852,21 +834,30 @@ private[spark] class BlockManager(
     }
   }
 
+  private def preferExecutors(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
+    val (executors, shuffleServers) = locations.partition(_.port != externalShuffleServicePort)
+    executors ++ shuffleServers
+  }
+
   /**
    * Return a list of locations for the given block, prioritizing the local machine since
    * multiple block managers can share the same host, followed by hosts on the same rack.
+   *
+   * Within each of the above listed groups (same host, same rack and others) executors are
+   * preferred over the external shuffle service.
    */
-  private def sortLocations(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
+  private[spark] def sortLocations(locations: Seq[BlockManagerId]): Seq[BlockManagerId] = {
     val locs = Random.shuffle(locations)
-    val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
-    blockManagerId.topologyInfo match {
-      case None => preferredLocs ++ otherLocs
+    val (preferredLocs, otherLocs) = locs.partition(_.host == blockManagerId.host)
+    val orderedParts = blockManagerId.topologyInfo match {
+      case None => Seq(preferredLocs, otherLocs)
       case Some(_) =>
         val (sameRackLocs, differentRackLocs) = otherLocs.partition {
           loc => blockManagerId.topologyInfo == loc.topologyInfo
         }
-        preferredLocs ++ sameRackLocs ++ differentRackLocs
+        Seq(preferredLocs, sameRackLocs, differentRackLocs)
     }
+    orderedParts.map(preferExecutors).reduce(_ ++ _)
   }
 
   /**
@@ -902,8 +893,12 @@ private[spark] class BlockManager(
       val loc = locationIterator.next()
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
-        blockTransferService.fetchBlockSync(
-          loc.host, loc.port, loc.executorId, blockId.toString, tempFileManager)
+        val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
+          blockId.toString, tempFileManager)
+        if (blockSize > 0 && buf.size() == 0) {
+          throw new IllegalStateException("Empty buffer received for non empty block")
+        }
+        buf
       } catch {
         case NonFatal(e) =>
           runningFailureCount += 1
@@ -996,13 +991,20 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Release a lock on the given block with explicit TID.
-   * The param `taskAttemptId` should be passed in case we can't get the correct TID from
-   * TaskContext, for example, the input iterator of a cached RDD iterates to the end in a child
+   * Release a lock on the given block with explicit TaskContext.
+   * The param `taskContext` should be passed in case we can't get the correct TaskContext,
+   * for example, the input iterator of a cached RDD iterates to the end in a child
    * thread.
    */
-  def releaseLock(blockId: BlockId, taskAttemptId: Option[Long] = None): Unit = {
-    blockInfoManager.unlock(blockId, taskAttemptId)
+  def releaseLock(blockId: BlockId, taskContext: Option[TaskContext] = None): Unit = {
+    val taskAttemptId = taskContext.map(_.taskAttemptId())
+    // SPARK-27666. When a task completes, Spark automatically releases all the blocks locked
+    // by this task. We should not release any locks for a task that is already completed.
+    if (taskContext.isDefined && taskContext.get.isCompleted) {
+      logWarning(s"Task ${taskAttemptId.get} already completed, not releasing lock for $blockId")
+    } else {
+      blockInfoManager.unlock(blockId, taskAttemptId)
+    }
   }
 
   /**
@@ -1671,8 +1673,8 @@ private[spark] class BlockManager(
   def releaseLockAndDispose(
       blockId: BlockId,
       data: BlockData,
-      taskAttemptId: Option[Long] = None): Unit = {
-    releaseLock(blockId, taskAttemptId)
+      taskContext: Option[TaskContext] = None): Unit = {
+    releaseLock(blockId, taskContext)
     data.dispose()
   }
 

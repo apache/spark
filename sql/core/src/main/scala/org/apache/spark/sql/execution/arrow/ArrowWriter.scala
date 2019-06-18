@@ -25,6 +25,7 @@ import org.apache.arrow.vector.complex._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 
 object ArrowWriter {
 

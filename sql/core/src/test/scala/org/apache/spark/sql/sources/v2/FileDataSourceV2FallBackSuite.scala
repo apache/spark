@@ -50,7 +50,7 @@ class DummyReadOnlyFileTable extends Table with SupportsRead {
   }
 
   override def capabilities(): java.util.Set[TableCapability] =
-    Set(TableCapability.BATCH_READ).asJava
+    Set(TableCapability.BATCH_READ, TableCapability.ACCEPT_ANY_SCHEMA).asJava
 }
 
 class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
@@ -73,7 +73,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
     throw new AnalysisException("Dummy file writer")
 
   override def capabilities(): java.util.Set[TableCapability] =
-    Set(TableCapability.BATCH_WRITE).asJava
+    Set(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA).asJava
 }
 
 class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
@@ -131,10 +131,12 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
     withTempPath { file =>
       val path = file.getCanonicalPath
       // Dummy File writer should fail as expected.
-      val exception = intercept[AnalysisException] {
-        df.write.format(dummyParquetWriterV2).save(path)
+      withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "") {
+        val exception = intercept[AnalysisException] {
+          df.write.format(dummyParquetWriterV2).save(path)
+        }
+        assert(exception.message.equals("Dummy file writer"))
       }
-      assert(exception.message.equals("Dummy file writer"))
       df.write.parquet(path)
       // Fallback reads to V1
       checkAnswer(spark.read.format(dummyParquetWriterV2).load(path), df)

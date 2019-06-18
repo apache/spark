@@ -22,8 +22,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.log4j.{AppenderSkeleton, Level}
 import org.apache.log4j.spi.LoggingEvent
 
+import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -555,6 +557,27 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
         assertBroadcastNLJoin(
           sql(nonEquiJoinQueryWithHint("SHUFFLE_REPLICATE_NL(t1, t2)" :: Nil, "right")), BuildLeft)
       }
+    }
+  }
+
+  test("Verify that the EliminatedResolvedHint rule is idempotent") {
+    withTempView("t1", "t2") {
+      Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
+      Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
+      val df = sql("SELECT /*+ broadcast(t2) */ * from t1 join t2 ON t1.key = t2.key")
+      val optimize = new RuleExecutor[LogicalPlan] {
+        val batches = Batch("EliminateResolvedHint", FixedPoint(10), EliminateResolvedHint) :: Nil
+      }
+      val optimized = optimize.execute(df.logicalPlan)
+      val expectedHints =
+        JoinHint(
+          None,
+          Some(HintInfo(strategy = Some(BROADCAST)))) :: Nil
+      val joinHints = optimized collect {
+        case Join(_, _, _, _, hint) => hint
+        case _: ResolvedHint => fail("ResolvedHint should not appear after optimize.")
+      }
+      assert(joinHints == expectedHints)
     }
   }
 }

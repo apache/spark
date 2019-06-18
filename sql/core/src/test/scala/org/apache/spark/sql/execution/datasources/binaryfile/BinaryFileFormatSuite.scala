@@ -368,4 +368,18 @@ class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTest
       assert(caught.getMessage.contains("exceeds the max length allowed"))
     }
   }
+
+  test("SPARK-28030: support chars in file names that require URL encoding") {
+    withTempDir { dir =>
+      val file = new File(dir, "test space.txt")
+      val content = "123".getBytes
+      Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+      val df = spark.read.format(BINARY_FILE).load(dir.getPath)
+      df.select(col(PATH), col(CONTENT)).first() match {
+        case Row(p: String, c: Array[Byte]) =>
+          assert(p.endsWith(file.getAbsolutePath), "should support space in file name")
+          assert(c === content, "should read file with space in file name")
+      }
+    }
+  }
 }
