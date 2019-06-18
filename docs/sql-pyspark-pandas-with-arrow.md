@@ -86,6 +86,23 @@ The following example shows how to create a scalar Pandas UDF that computes the 
 </div>
 </div>
 
+### Scalar Iterator
+
+Scalar iterator (`SCALAR_ITER`) Pandas UDF is the same as scalar Pandas UDF above except that the
+underlying Python function takes an iterator of batches as input instead of a single batch and,
+instead of returning a single output batch, it yields output batches or returns an iterator of
+output batches.
+It is useful when the UDF execution requires initializing some states, e.g., loading an machine
+learning model file to apply inference to every input batch.
+
+The following example shows how to create scalar iterator Pandas UDFs:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example scalar_iter_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
 ### Grouped Map
 Grouped map Pandas UDFs are used with `groupBy().apply()` which implements the "split-apply-combine" pattern.
 Split-apply-combine consists of three steps:
