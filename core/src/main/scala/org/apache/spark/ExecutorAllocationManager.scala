@@ -504,13 +504,15 @@ private[spark] class ExecutorAllocationManager(
   private[spark] class ExecutorAllocationListener extends SparkListener {
 
     private val stageAttemptToNumTasks = new mutable.HashMap[StageAttempt, Int]
+    // Number of running tasks per stageAttempt including speculative tasks.
+    // Should be 0 when no stages are active.
+    private val stageAttemptToNumRunningTask = new mutable.HashMap[StageAttempt, Int]
     private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
     // Number of speculative tasks to be scheduled in each stageAttempt
     private val stageAttemptToNumSpeculativeTasks = new mutable.HashMap[StageAttempt, Int]
     // The speculative tasks started in each stageAttempt
     private val stageAttemptToSpeculativeTaskIndices =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
-    private val liveTaskIds = new mutable.HashSet[Long]
 
     // stageAttempt to tuple (the number of task with locality preferences, a map where each pair
     // is a node and the number of tasks that would like to be scheduled on that node) map,
@@ -574,10 +576,10 @@ private[spark] class ExecutorAllocationManager(
       val stageId = taskStart.stageId
       val stageAttemptId = taskStart.stageAttemptId
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
-      val taskId = taskStart.taskInfo.taskId
       val taskIndex = taskStart.taskInfo.index
       allocationManager.synchronized {
-        liveTaskIds += taskId
+        stageAttemptToNumRunningTask(stageAttempt) =
+          stageAttemptToNumRunningTask.getOrElse(stageAttempt, 0) + 1
         // If this is the last pending task, mark the scheduler queue as empty
         if (taskStart.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
@@ -596,10 +598,14 @@ private[spark] class ExecutorAllocationManager(
       val stageId = taskEnd.stageId
       val stageAttemptId = taskEnd.stageAttemptId
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
-      val taskId = taskEnd.taskInfo.taskId
       val taskIndex = taskEnd.taskInfo.index
       allocationManager.synchronized {
-        liveTaskIds.remove(taskId)
+        if (stageAttemptToNumRunningTask.contains(stageAttempt)) {
+          stageAttemptToNumRunningTask(stageAttempt) -= 1
+          if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
+            stageAttemptToNumRunningTask -= stageAttempt
+          }
+        }
         // If the task failed, we expect it to be resubmitted later. To ensure we have
         // enough resources to run the resubmitted task, we need to mark the scheduler
         // as backlogged again if it's not already marked as such (SPARK-8366)
@@ -655,7 +661,7 @@ private[spark] class ExecutorAllocationManager(
      * Include running-but-zombie stage attempts
      */
     def totalRunningTasks(): Int = {
-      liveTaskIds.size
+      stageAttemptToNumRunningTask.values.sum
     }
 
     /**
