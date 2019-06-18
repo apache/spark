@@ -18,9 +18,9 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol, HasWeightCol}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -75,9 +75,9 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("3.0.0")
   final val metricLabel: DoubleParam = new DoubleParam(this, "metricLabel",
-    "The class whose metric will be computed in truePositiveRateByLabel|" +
-      "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel." +
-      " Must be >= 0. The default value is 0.",
+    "The class whose metric will be computed in " +
+      s"${supportedMetricNames.filter(_.endsWith("ByLabel")).mkString("(", "|", ")")}. " +
+      "Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
   /** @group getParam */
@@ -92,8 +92,8 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("3.0.0")
   final val beta: DoubleParam = new DoubleParam(this, "beta",
-    "The beta value used in weightedFMeasure|fMeasureByLabel." +
-      "Must be > 0. The default value is 1.",
+    "The beta value, which controls precision vs recall weighting, " +
+      "used in (weightedFMeasure|fMeasureByLabel). Must be > 0. The default value is 1.",
     ParamValidators.gt(0.0))
 
   /** @group getParam */

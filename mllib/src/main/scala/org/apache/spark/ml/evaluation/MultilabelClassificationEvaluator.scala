@@ -64,8 +64,9 @@ class MultilabelClassificationEvaluator (override val uid: String)
   setDefault(metricName -> "f1Measure")
 
   final val metricLabel: DoubleParam = new DoubleParam(this, "metricLabel",
-    "The class whose metric will be computed in precisionByLabel|recallByLabel|" +
-      "f1MeasureByLabel. Must be >= 0. The default value is 0.",
+    "The class whose metric will be computed in " +
+      s"${supportedMetricNames.filter(_.endsWith("ByLabel")).mkString("(", "|", ")")}. " +
+      "Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
   /** @group getParam */
