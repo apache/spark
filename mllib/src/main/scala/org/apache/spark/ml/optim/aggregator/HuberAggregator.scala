@@ -82,7 +82,6 @@ private[ml] class HuberAggregator(
     0.0
   }
   // make transient so we do not serialize between aggregation stages
-  @transient private lazy val featuresStd = bcFeaturesStd.value
   @transient private lazy val coefficients = bcParameters.value.toArray.slice(0, numFeatures)
 
   /**
@@ -99,7 +98,7 @@ private[ml] class HuberAggregator(
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
-      val localFeaturesStd = featuresStd
+      val localFeaturesStd = bcFeaturesStd.value
       val localCoefficients = coefficients
       val localGradientSumArray = gradientSumArray
 
