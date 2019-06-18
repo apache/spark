@@ -605,6 +605,12 @@ object StringTrim {
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
 
+    _FUNC_(BOTH FROM str) - Removes the leading and trailing space characters from `str`.
+
+    _FUNC_(LEADING FROM str) - Removes the leading space characters from `str`.
+
+    _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
+
     _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`
 
     _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`
@@ -626,6 +632,12 @@ object StringTrim {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
+      > SELECT _FUNC_(BOTH FROM '    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(LEADING FROM '    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
+           SparkSQL
       > SELECT _FUNC_('SL', 'SSparkSQLS');
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');

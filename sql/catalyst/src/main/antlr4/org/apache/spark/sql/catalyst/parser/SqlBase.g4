@@ -691,7 +691,7 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
+    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) (argument+=expression)?
       FROM argument+=expression ')'                                                            #functionCall
     | IDENTIFIER '->' expression                                                               #lambda
     | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda

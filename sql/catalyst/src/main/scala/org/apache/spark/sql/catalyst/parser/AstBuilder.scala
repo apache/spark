@@ -1403,7 +1403,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a (windowed) Function expression.
+   * Create a (windowed)/trim Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     def replaceFunctions(
@@ -1420,7 +1420,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case SqlBaseParser.LEADING => funcID.copy(funcName = "ltrim")
           case SqlBaseParser.TRAILING => funcID.copy(funcName = "rtrim")
           case _ => throw new ParseException("Function trim doesn't support with " +
-            s"type ${opt.getType}. Please use BOTH, LEADING or Trailing as trim type", ctx)
+            s"type ${opt.getType}. Please use BOTH, LEADING or TRAILING as trim type", ctx)
         }
       } else {
         funcID
