@@ -614,6 +614,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringLPad(s1, s2, s3), null, row3)
     checkEvaluation(StringLPad(s1, s2, s3), null, row4)
     checkEvaluation(StringLPad(s1, s2, s3), null, row5)
+    checkEvaluation(StringLPad(Literal("hi"), Literal(5)), "   hi")
+    checkEvaluation(StringLPad(Literal("hi"), Literal(1)), "h")
 
     checkEvaluation(StringRPad(Literal("hi"), Literal(5), Literal("??")), "hi???", row1)
     checkEvaluation(StringRPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
@@ -622,6 +624,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringRPad(s1, s2, s3), null, row3)
     checkEvaluation(StringRPad(s1, s2, s3), null, row4)
     checkEvaluation(StringRPad(s1, s2, s3), null, row5)
+    checkEvaluation(StringRPad(Literal("hi"), Literal(5)), "hi   ")
+    checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
   }
 
   test("REPEAT") {
