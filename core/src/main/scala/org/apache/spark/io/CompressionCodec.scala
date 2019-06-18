@@ -22,7 +22,8 @@ import java.util.Locale
 
 import com.github.luben.zstd.{ZstdInputStream, ZstdOutputStream}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
+import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream, LZ4Factory}
+import net.jpountz.xxhash.XXHashFactory
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
@@ -118,14 +119,39 @@ private[spark] object CompressionCodec {
 @DeveloperApi
 class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
 
+  private def lz4Factory: LZ4Factory = {
+    conf.get(IO_COMPRESSION_LZ4_FACTORY) match {
+      case "fastestInstance" => LZ4Factory.fastestInstance()
+      case "fastestJavaInstance" => LZ4Factory.fastestJavaInstance()
+      case "nativeInstance" => LZ4Factory.nativeInstance()
+      case "safeInstance" => LZ4Factory.safeInstance()
+      case "unsafeInstance" => LZ4Factory.unsafeInstance()
+    }
+  }
+
+  private def xxHashFactory: XXHashFactory = {
+    conf.get(IO_COMPRESSION_LZ4_FACTORY) match {
+      case "fastestInstance" => XXHashFactory.fastestInstance()
+      case "fastestJavaInstance" => XXHashFactory.fastestJavaInstance()
+      case "nativeInstance" => XXHashFactory.nativeInstance()
+      case "safeInstance" => XXHashFactory.safeInstance()
+      case "unsafeInstance" => XXHashFactory.unsafeInstance()
+    }
+  }
+
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
-    new LZ4BlockOutputStream(s, blockSize)
+    new LZ4BlockOutputStream(s, blockSize, lz4Factory.fastCompressor())
   }
 
   override def compressedInputStream(s: InputStream): InputStream = {
     val disableConcatenationOfByteStream = false
-    new LZ4BlockInputStream(s, disableConcatenationOfByteStream)
+    val defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
+    new LZ4BlockInputStream(
+      s,
+      lz4Factory.fastDecompressor(),
+      xxHashFactory.newStreamingHash32(defaultSeed).asChecksum,
+      disableConcatenationOfByteStream)
   }
 }
 

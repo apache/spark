@@ -590,6 +590,19 @@ package object config {
       .stringConf
       .createWithDefaultString("AES/CTR/NoPadding")
 
+  private[spark] val IO_COMPRESSION_LZ4_FACTORY =
+    ConfigBuilder("spark.io.compression.lz4.factory")
+      .internal()
+      .stringConf
+      .checkValues(Set(
+        "fastestInstance",
+        "fastestJavaInstance",
+        "nativeInstance",
+        "safeInstance",
+        "unsafeInstance"
+      ))
+      .createWithDefaultString("fastestInstance")
+
   private[spark] val DRIVER_HOST_ADDRESS = ConfigBuilder("spark.driver.host")
     .doc("Address of driver endpoints.")
     .stringConf

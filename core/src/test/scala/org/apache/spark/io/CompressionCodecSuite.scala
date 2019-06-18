@@ -22,6 +22,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config
 
 class CompressionCodecSuite extends SparkFunSuite {
   val conf = new SparkConf(false)
@@ -66,6 +67,22 @@ class CompressionCodecSuite extends SparkFunSuite {
     val codec = CompressionCodec.createCodec(conf, classOf[LZ4CompressionCodec].getName)
     assert(codec.getClass === classOf[LZ4CompressionCodec])
     testConcatenationOfSerializedStreams(codec)
+  }
+
+  test("lz4 factory configuration") {
+    Seq(
+      "fastestInstance",
+      "fastestJavaInstance",
+      "nativeInstance",
+      "safeInstance",
+      "unsafeInstance"
+    ).foreach { factoryConfig =>
+      withClue(s"factory = $factoryConfig") {
+        val newConf = new SparkConf(false).set(config.IO_COMPRESSION_LZ4_FACTORY, factoryConfig)
+        val codec = new LZ4CompressionCodec(newConf)
+        testCodec(codec)
+      }
+    }
   }
 
   test("lzf compression codec") {
