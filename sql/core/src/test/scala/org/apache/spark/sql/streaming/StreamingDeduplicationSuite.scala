@@ -197,32 +197,30 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   }
 
   test("deduplicate with file sink") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
-      withTempDir { output =>
-        withTempDir { checkpointDir =>
-          val outputPath = output.getAbsolutePath
-          val inputData = MemoryStream[String]
-          val result = inputData.toDS().dropDuplicates()
-          val q = result.writeStream
-            .format("parquet")
-            .outputMode(Append)
-            .option("checkpointLocation", checkpointDir.getPath)
-            .start(outputPath)
-          try {
-            inputData.addData("a")
-            q.processAllAvailable()
-            checkDataset(spark.read.parquet(outputPath).as[String], "a")
+    withTempDir { output =>
+      withTempDir { checkpointDir =>
+        val outputPath = output.getAbsolutePath
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS().dropDuplicates()
+        val q = result.writeStream
+          .format("parquet")
+          .outputMode(Append)
+          .option("checkpointLocation", checkpointDir.getPath)
+          .start(outputPath)
+        try {
+          inputData.addData("a")
+          q.processAllAvailable()
+          checkDataset(spark.read.parquet(outputPath).as[String], "a")
 
-            inputData.addData("a") // Dropped
-            q.processAllAvailable()
-            checkDataset(spark.read.parquet(outputPath).as[String], "a")
+          inputData.addData("a") // Dropped
+          q.processAllAvailable()
+          checkDataset(spark.read.parquet(outputPath).as[String], "a")
 
-            inputData.addData("b")
-            q.processAllAvailable()
-            checkDataset(spark.read.parquet(outputPath).as[String], "a", "b")
-          } finally {
-            q.stop()
-          }
+          inputData.addData("b")
+          q.processAllAvailable()
+          checkDataset(spark.read.parquet(outputPath).as[String], "a", "b")
+        } finally {
+          q.stop()
         }
       }
     }
