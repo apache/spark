@@ -749,6 +749,17 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
   //  tests for the condition where the serialization of such a task may result in a stack overflow
   //  if the files list is stored in a recursive data structure
   test("SPARK-27100 stack overflow: read bucketed data with large partitions") {
+    testLargeFilePartitionStackOverflow(true)
+  }
+
+  //  a test with a single non-bucketed partition where the number of files in the partition is
+  //  large tests for the condition where the serialization of such a task may result in a stack
+  //  overflow if the files list is stored in a recursive data structure
+  test("SPARK-27100 stack overflow: read non bucketed data with large partitions") {
+    testLargeFilePartitionStackOverflow(true)
+  }
+
+  private def testLargeFilePartitionStackOverflow ( isBucketed : Boolean) {
     // Need a large number of files in the partition for the overflow
     val numFilesInPartition = 100000
     val partitionValues = InternalRow.apply(Array("a"))
@@ -763,9 +774,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
     }
     val partitionDirectory = PartitionDirectory(partitionValues, files);
 
-    // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
-    val createBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createBucketedReadRDD)
-
     val fileSource =
      FileSourceScanExec(fakeHadoopFsRelation,
       null,
@@ -775,10 +783,24 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
       Seq.empty,
       Option(new TableIdentifier("stackOverflow")))
 
-    val inputRDD = fileSource invokePrivate createBucketedReadRDD(bucketSpec,
+    val inputRDD = if (isBucketed) {
+      // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
+      val createBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createBucketedReadRDD)
+
+      fileSource invokePrivate createBucketedReadRDD(bucketSpec,
         (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
-        Stream(partitionDirectory),
+        Array(partitionDirectory),
         fakeHadoopFsRelation)
+    } else {
+      // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
+      val createNonBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createNonBucketedReadRDD)
+
+      fileSource invokePrivate createNonBucketedReadRDD(
+        (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
+        Array(partitionDirectory),
+        fakeHadoopFsRelation)
+
+    }
     // check to make sure we've created the a big enough file partition.
     // also guarantees that the 'files' Stream is initialized before we
     // attempt to serialize it in the task.
@@ -795,8 +817,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
       ser.serialize(task)
     } catch {
       case ex: StackOverflowError =>
-        fail("Stack Overflow Exception in serializing task to read partitioned bucketed tables")
-      case _ => fail("Exception in serializing task to read partitioned bucketed tables")
+        val bucketingType = if (isBucketed) {
+          "bucketed"
+        } else {
+          "non-bucketed"
+        }
+        fail("Stack Overflow Exception in serializing task to read partitioned %s tables"
+          .format(bucketingType))
+      case _ => fail("Exception in serializing task to read partitioned tables")
     }
   }
 
