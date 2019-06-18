@@ -44,13 +44,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def references: AttributeSet = _references
-
-  /**
-   * This trick is to workaround the scala compiler so that lazy vals can call super.method()
-   */
   @transient
-  private lazy val _references: AttributeSet =
+  lazy val references: AttributeSet =
     AttributeSet.fromAttributeSets(expressions.map(_.references))
 
   /**
