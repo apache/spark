@@ -86,21 +86,21 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
 
   rc <- rawConnection(raw(0), "r+")
 
-  writeBoolean(rc, isStatic)
-  writeString(rc, objId)
-  writeString(rc, methodName)
+  writeObject(isStatic, rc, writeType = FALSE)
+  writeObject(objId, rc, writeType = FALSE)
+  writeObject(methodName, rc, writeType = FALSE)
 
   args <- list(...)
-  writeInt(rc, length(args))
-  writeArgs(rc, args)
+  writeObject(length(args), rc, writeType = FALSE)
+  writeArgs(args, rc)
 
   # Construct the whole request message to send it once,
   # avoiding write-write-read pattern in case of Nagle's algorithm.
   # Refer to http://en.wikipedia.org/wiki/Nagle%27s_algorithm for the details.
   bytesToSend <- rawConnectionValue(rc)
   close(rc)
-  rc <- rawConnection(raw(0), "r+")
-  writeInt(rc, length(bytesToSend))
+  rc <- rawConnection(raw(0L), "r+")
+  writeObject(length(bytesToSend), rc, writeType = FALSE)
   writeBin(bytesToSend, rc)
   requestMessage <- rawConnectionValue(rc)
   close(rc)

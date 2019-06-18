@@ -572,10 +572,10 @@ sparkCheckInstall <- function(sparkHome, master, deployMode) {
 
 # Utility function for sending auth data over a socket and checking the server's reply.
 doServerAuth <- function(con, authSecret) {
-  if (nchar(authSecret) == 0) {
+  if (nchar(authSecret) == 0L) {
     stop("Auth secret not provided.")
   }
-  writeString(con, authSecret)
+  writeObject(authSecret, con, writeType = FALSE)
   flush(con)
   reply <- readString(con)
   if (reply != "ok") {

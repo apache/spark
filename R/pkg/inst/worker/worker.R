@@ -73,14 +73,14 @@ compute <- function(mode, partition, serializer, deserializer, key,
 
 outputResult <- function(serializer, output, outputCon) {
   if (serializer == "byte") {
-    SparkR:::writeRawSerialize(outputCon, output)
+    SparkR:::writeRawSerialize(output, outputCon)
   } else if (serializer == "row") {
-    SparkR:::writeRowSerialize(outputCon, output)
+    SparkR:::writeRowSerialize(output, outputCon)
   } else if (serializer == "arrow") {
-    SparkR:::writeSerializeInArrow(outputCon, output)
+    SparkR:::writeSerializeInArrow(output, outputCon)
   } else {
     # write lines one-by-one with flag
-    lapply(output, function(line) SparkR:::writeString(outputCon, line))
+    lapply(output, writeObject, outputCon, writeType = FALSE)
   }
 }
 
@@ -214,7 +214,7 @@ if (isEmpty != 0) {
           # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
           # rbind.fill might be an anternative to make it faster if plyr is installed.
           combined <- do.call("rbind", outputs)
-          SparkR:::writeSerializeInArrow(outputCon, combined)
+          SparkR:::writeSerializeInArrow(combined, outputCon)
         }
       }
     } else {
@@ -262,11 +262,11 @@ if (isEmpty != 0) {
 
     # Step 2: write out all of the environment as key-value pairs.
     for (name in ls(res)) {
-      SparkR:::writeInt(outputCon, 2L)
-      SparkR:::writeInt(outputCon, as.integer(name))
+      SparkR:::writeObject(2L, outputCon, writeType = FALSE)
+      SparkR:::writeObject(as.integer(name), outputCon, writeType = FALSE)
       # Truncate the accumulator list to the number of elements we have
       length(res[[name]]$data) <- res[[name]]$counter
-      SparkR:::writeRawSerialize(outputCon, res[[name]]$data)
+      SparkR:::writeRawSerialize(res[[name]]$data, outputCon)
     }
     # Timing output
     outputElap <- elapsedSecs()
@@ -276,16 +276,16 @@ if (isEmpty != 0) {
 }
 
 # Report timing
-SparkR:::writeInt(outputCon, specialLengths$TIMING_DATA)
-SparkR:::writeDouble(outputCon, bootTime)
-SparkR:::writeDouble(outputCon, initElap - bootElap)        # init
-SparkR:::writeDouble(outputCon, broadcastElap - initElap)   # broadcast
-SparkR:::writeDouble(outputCon, inputElap - broadcastElap)  # input
-SparkR:::writeDouble(outputCon, computeInputElapsDiff)    # compute
-SparkR:::writeDouble(outputCon, outputComputeElapsDiff)   # output
+SparkR:::writeObject(specialLengths$TIMING_DATA, outputCon, writeType = FALSE)
+SparkR:::writeObject(bootTime, outputCon, writeType = FALSE)
+SparkR:::writeObject(initElap - bootElap, outputCon, writeType = FALSE)        # init
+SparkR:::writeObject(broadcastElap - initElap, outputCon, writeType = FALSE)   # broadcast
+SparkR:::writeObject(inputElap - broadcastElap, outputCon, writeType = FALSE)  # input
+SparkR:::writeObject(computeInputElapsDiff, outputCon, writeType = FALSE)      # compute
+SparkR:::writeObject(outputComputeElapsDiff, outputCon, writeType = FALSE)     # output
 
 # End of output
-SparkR:::writeInt(outputCon, specialLengths$END_OF_STERAM)
+SparkR:::writeObject(specialLengths$END_OF_STERAM, outputCon, writeType = FALSE)
 
 close(outputCon)
 close(inputCon)
