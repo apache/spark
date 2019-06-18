@@ -24,16 +24,12 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.sql.{Column, DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, Literal, Or}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.datasources.orc.OrcFilters
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
@@ -136,34 +132,6 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       }
     }
 
-    benchmark.run()
-  }
-
-  def filterPushDownBenchmarkWithColumn(
-    values: Int,
-    title: String,
-    whereColumn: Column,
-    selectExpr: String = "*"
-  ): Unit = {
-    val benchmark = new Benchmark(title, values, minNumIters = 5, output = output)
-    benchmark.addCase("Native ORC Vectorized (Pushdown)") { _ =>
-      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-        spark
-          .table("orcTable")
-          .select(selectExpr)
-          .filter(whereColumn)
-          .collect()
-      }
-    }
-    benchmark.addCase("Native Parquet Vectorized (Pushdown)") { _ =>
-      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-        spark
-          .table("parquetTable")
-          .select(selectExpr)
-          .filter(whereColumn)
-          .collect()
-      }
-    }
     benchmark.run()
   }
 
@@ -394,13 +362,6 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     }
 
     runBenchmark(s"Pushdown benchmark with many filters") {
-      // This benchmark and the next one are similar in that they both test predicate pushdown
-      // where the filter itself is very large. There have been cases where the filter conversion
-      // would take minutes to hours for large filters due to it being implemented with exponential
-      // complexity in the height of the filter tree.
-      // The difference between these two benchmarks is that this one benchmarks pushdown with a
-      // large string filter (`a AND b AND c ...`), whereas the next one benchmarks pushdown with
-      // a large Column-based filter (`col(a) || (col(b) || (col(c)...))`).
       val numRows = 1
       val width = 500
 
@@ -413,28 +374,6 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
             val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" and ")
             // Note: InferFiltersFromConstraints will add more filters to this given filters
             filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
-          }
-        }
-      }
-    }
-
-    runBenchmark(s"Pushdown benchmark with unbalanced Column") {
-      val numRows = 1
-      val width = 200
-
-      withTempPath { dir =>
-        val columns = (1 to width).map(i => s"id c$i")
-        val df = spark.range(1).selectExpr(columns: _*)
-        withTempTable("orcTable", "parquetTable") {
-          saveAsTable(df, dir)
-          Seq(25, 500, 1000).foreach { numFilter =>
-            val whereColumn = (1 to numFilter)
-              .map(i => col("c1") === lit(i))
-              .foldLeft(lit(false))(_ || _)
-            filterPushDownBenchmarkWithColumn(
-              numRows,
-              s"Select 1 row with $numFilter filters",
-              whereColumn)
           }
         }
       }
