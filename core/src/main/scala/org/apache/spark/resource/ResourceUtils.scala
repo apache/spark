@@ -179,8 +179,8 @@ private[spark] object ResourceUtils extends Logging {
         "didn't specify a discovery script!")
     }
     if (!result.name.equals(resourceName)) {
-      throw new SparkException("Error running the resource discovery script, script returned " +
-        s"resource name: ${result.name} and we were expecting $resourceName")
+      throw new SparkException(s"Error running the resource discovery script ${script.get}: " +
+        s"script returned resource name ${result.name} and we were expecting $resourceName.")
     }
     result
   }

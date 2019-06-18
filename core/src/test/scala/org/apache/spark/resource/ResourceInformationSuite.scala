@@ -47,4 +47,18 @@ class ResourceInformationSuite extends SparkFunSuite {
       assert(ex.getMessage.contains(invalidJson), "Error message should include input json.")
     }
   }
+
+  test("ResourceInformation.equals/hashCode") {
+    val a1 = new ResourceInformation("a", addresses = Array("0"))
+    val a21 = new ResourceInformation("a", addresses = Array("0", "1"))
+    val a22 = new ResourceInformation("a", addresses = Array("0", "1"))
+    val b2 = new ResourceInformation("b", addresses = Array("0", "1"))
+    object A2 extends ResourceInformation("a", Array("0", "1"))
+    assert(a1.equals(null) === false)
+    assert(a1.equals(a1))
+    assert(a1.equals(a21) === false)
+    assert(a21.equals(a22) && a21.hashCode() === a22.hashCode())
+    assert(a21.equals(b2) === false)
+    assert(a21.equals(A2) === false)
+  }
 }
