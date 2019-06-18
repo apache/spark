@@ -627,7 +627,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing. It supports the following case-insensitive modes.
+   *    during parsing. It supports the following case-insensitive modes. Note that Spark tries
+   *    to parse only required columns in CSV under column pruning. Therefore, corrupt records
+   *    can be different based on required set of fields. This behavior can be controlled by
+   *    `spark.sql.csv.parser.columnPruning.enabled` (enabled by default).
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
    *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`.
@@ -637,11 +640,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *     than schema is not a corrupted record to CSV. When it meets a record having fewer
    *     tokens than the length of the schema, sets `null` to extra fields. When the record
    *     has more tokens than the length of the schema, it drops extra tokens.</li>
-   *     <li>`DROPMALFORMED` : ignores the whole corrupted records. Note that when CSV parser
-   *     column pruning (`spark.sql.csv.parser.columnPruning.enabled`) is enabled
-   *     (it is enabled by default), the malformed columns can be ignored during parsing if
-   *     they are pruned, resulting the corrupted records are not dropped. Disabling the
-   *     column pruning feature can drop corrupted records even malformed columns are not read.</li>
+   *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
    * </li>
