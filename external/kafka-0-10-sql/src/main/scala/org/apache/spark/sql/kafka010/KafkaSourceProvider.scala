@@ -360,7 +360,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def schema(): StructType = KafkaOffsetReader.kafkaSchema
 
     override def capabilities(): ju.Set[TableCapability] = {
-      Set(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, CONTINUOUS_READ, STREAMING_WRITE).asJava
+      // ACCEPT_ANY_SCHEMA is needed because of the following reasons:
+      // * Kafka writer validates the schema instead of the SQL analyzer (the schema is fixed)
+      // * Read schema differs from write schema (please see Kafka integration guide)
+      Set(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, CONTINUOUS_READ, STREAMING_WRITE,
+        ACCEPT_ANY_SCHEMA).asJava
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
