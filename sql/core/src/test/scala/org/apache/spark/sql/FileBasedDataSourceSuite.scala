@@ -577,7 +577,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
 
     val expectedFileList = mutable.ListBuffer[String]()
 
-    def createFile(path: File): Unit = {
+    def createFile(dir: File, fileName: String, format: String): Unit = {
+      val path = new File(dir, s"${fileName}.${format}")
       Files.write(
         path.toPath,
         s"content of ${path.toString}".getBytes,
@@ -590,7 +591,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     def createDir(path: File, dirName: String, level: Int): Unit = {
       val dir = new File(path, s"dir${dirName}-${level}")
       dir.mkdir()
-      createFile(new File(dir, s"file${level}.bin"))
+      createFile(dir, s"file${level}", "bin")
+      createFile(dir, s"file${level}", "text")
 
       if (level < 4) {
         // create sub-dir
@@ -610,6 +612,14 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         .select("path").collect().map(_.getString(0))
 
       assert(fileList.toSet === expectedFileList.toSet)
+
+      val fileList2 = spark.read.format("binaryFile")
+        .option("recursiveFileLookup", true)
+        .option("pathGlobFilter", "*.bin")
+        .load(dataPath)
+        .select("path").collect().map(_.getString(0))
+
+      assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
     }
   }
 
