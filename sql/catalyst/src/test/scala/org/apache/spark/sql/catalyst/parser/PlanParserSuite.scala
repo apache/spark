@@ -42,6 +42,19 @@ class PlanParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)
 
+  private def cte(plan: LogicalPlan, namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
+    val ctes = namedPlans.map {
+      case (name, (cte, columnAliases)) =>
+        val subquery = if (columnAliases.isEmpty) {
+          cte
+        } else {
+          UnresolvedSubqueryColumnAliases(columnAliases, cte)
+        }
+        name -> SubqueryAlias(name, subquery)
+    }
+    With(plan, ctes)
+  }
+
   test("case insensitive") {
     val plan = table("a").select(star())
     assertEqual("sELEct * FroM a", plan)
@@ -74,24 +87,17 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("common table expressions") {
-    def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
-      val ctes = namedPlans.map {
-        case (name, cte) =>
-          name -> SubqueryAlias(name, cte)
-      }
-      With(plan, ctes)
-    }
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> table("a").select(star())))
+      cte(table("cte1").select(star()), "cte1" -> ((table("a").select(star()), Seq.empty))))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> OneRowRelation().select(1)))
+      cte(table("cte1").select(star()), "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
       cte(table("cte2").select(star()),
-        "cte1" -> OneRowRelation().select(1),
-        "cte2" -> table("cte1").select(star())))
+        "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
+        "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
       "Found duplicate keys 'cte1'")
@@ -711,6 +717,19 @@ class PlanParserSuite extends AnalysisTest {
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
       OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
     )
+
+    assertEqual(
+      "SELECT TRIM(BOTH FROM '  bunch o blanks  ')",
+      OneRowRelation().select('TRIM.function("  bunch o blanks  "))
+    )
+    assertEqual(
+      "SELECT TRIM(LEADING FROM '  bunch o blanks  ')",
+      OneRowRelation().select('ltrim.function("  bunch o blanks  "))
+    )
+    assertEqual(
+      "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
+      OneRowRelation().select('rtrim.function("  bunch o blanks  "))
+    )
   }
 
   test("precedence of set operations") {
@@ -800,5 +819,28 @@ class PlanParserSuite extends AnalysisTest {
       parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
     }.getMessage
     assert(m2.contains("mismatched input 'IN' expecting"))
+  }
+
+  test("relation in v2 catalog") {
+    assertEqual("TABLE testcat.db.tab", table("testcat", "db", "tab"))
+    assertEqual("SELECT * FROM testcat.db.tab", table("testcat", "db", "tab").select(star()))
+
+    assertEqual(
+      """
+        |WITH cte1 AS (SELECT * FROM testcat.db.tab)
+        |SELECT * FROM cte1
+      """.stripMargin,
+      cte(table("cte1").select(star()),
+        "cte1" -> ((table("testcat", "db", "tab").select(star()), Seq.empty))))
+
+    assertEqual(
+      "SELECT /*+ BROADCAST(tab) */ * FROM testcat.db.tab",
+      table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
+  }
+
+  test("CTE with column alias") {
+    assertEqual(
+      "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
+      cte(table("t").select(star()), "t" -> ((table("a").select('c), Seq("x")))))
   }
 }

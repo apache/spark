@@ -64,4 +64,5 @@ case class BatchEvalPython(
 case class ArrowEvalPython(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
-    child: LogicalPlan) extends BaseEvalPython
+    child: LogicalPlan,
+    evalType: Int) extends BaseEvalPython

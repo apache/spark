@@ -104,6 +104,8 @@ object DataSourceV2Relation {
     DataSourceV2Relation(table, output, options)
   }
 
+  def create(table: Table): DataSourceV2Relation = create(table, CaseInsensitiveStringMap.empty)
+
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.
    */

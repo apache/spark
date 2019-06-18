@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[parquet] class ParquetFilters(
+class ParquetFilters(
     schema: MessageType,
     pushDownDate: Boolean,
     pushDownTimestamp: Boolean,

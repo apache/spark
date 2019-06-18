@@ -731,7 +731,7 @@ private[spark] class BlockManager(
       case Some(info) =>
         val level = info.level
         logDebug(s"Level for block $blockId is $level")
-        val taskAttemptId = Option(TaskContext.get()).map(_.taskAttemptId())
+        val taskContext = Option(TaskContext.get())
         if (level.useMemory && memoryStore.contains(blockId)) {
           val iter: Iterator[Any] = if (level.deserialized) {
             memoryStore.getValues(blockId).get
@@ -743,7 +743,7 @@ private[spark] class BlockManager(
           // from a different thread which does not have TaskContext set; see SPARK-18406 for
           // discussion.
           val ci = CompletionIterator[Any, Iterator[Any]](iter, {
-            releaseLock(blockId, taskAttemptId)
+            releaseLock(blockId, taskContext)
           })
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
@@ -762,7 +762,7 @@ private[spark] class BlockManager(
             }
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
-            releaseLockAndDispose(blockId, diskData, taskAttemptId)
+            releaseLockAndDispose(blockId, diskData, taskContext)
           })
           Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
@@ -991,13 +991,20 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Release a lock on the given block with explicit TID.
-   * The param `taskAttemptId` should be passed in case we can't get the correct TID from
-   * TaskContext, for example, the input iterator of a cached RDD iterates to the end in a child
+   * Release a lock on the given block with explicit TaskContext.
+   * The param `taskContext` should be passed in case we can't get the correct TaskContext,
+   * for example, the input iterator of a cached RDD iterates to the end in a child
    * thread.
    */
-  def releaseLock(blockId: BlockId, taskAttemptId: Option[Long] = None): Unit = {
-    blockInfoManager.unlock(blockId, taskAttemptId)
+  def releaseLock(blockId: BlockId, taskContext: Option[TaskContext] = None): Unit = {
+    val taskAttemptId = taskContext.map(_.taskAttemptId())
+    // SPARK-27666. When a task completes, Spark automatically releases all the blocks locked
+    // by this task. We should not release any locks for a task that is already completed.
+    if (taskContext.isDefined && taskContext.get.isCompleted) {
+      logWarning(s"Task ${taskAttemptId.get} already completed, not releasing lock for $blockId")
+    } else {
+      blockInfoManager.unlock(blockId, taskAttemptId)
+    }
   }
 
   /**
@@ -1666,8 +1673,8 @@ private[spark] class BlockManager(
   def releaseLockAndDispose(
       blockId: BlockId,
       data: BlockData,
-      taskAttemptId: Option[Long] = None): Unit = {
-    releaseLock(blockId, taskAttemptId)
+      taskContext: Option[TaskContext] = None): Unit = {
+    releaseLock(blockId, taskContext)
     data.dispose()
   }
 
