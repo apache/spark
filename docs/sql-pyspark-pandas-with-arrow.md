@@ -89,8 +89,9 @@ The following example shows how to create a scalar Pandas UDF that computes the 
 ### Scalar Iterator
 
 Scalar iterator (`SCALAR_ITER`) Pandas UDF is the same as scalar Pandas UDF above except that the
-underlying Python function takes an iterator of batches as input instead of a single batch and 
-it yields output batches instead of returning a single output batch.
+underlying Python function takes an iterator of batches as input instead of a single batch and,
+instead of returning a single output batch, it yields output batches or returns an iterator of
+output batches.
 It is useful when the UDF execution requires initializing some states, e.g., loading an machine
 learning model file to apply inference to every input batch.
 

@@ -151,6 +151,7 @@ def scalar_iter_pandas_udf_example(spark):
     # Wrap your code with try/finally or use context managers to ensure
     # the release of resources at the end.
     y_bc = spark.sparkContext.broadcast(1)
+
     @pandas_udf("long", PandasUDFType.SCALAR_ITER)
     def plus_y(batch_iter):
         y = y_bc.value  # initialize states
