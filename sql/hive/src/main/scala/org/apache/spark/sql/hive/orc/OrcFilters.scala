@@ -148,20 +148,13 @@ private[orc] object OrcFilters extends Logging {
     }
   }
 
-  private def buildSearchArgument(
-      dataTypeMap: Map[String, DataType],
-      expression: Filter,
-      builder: Builder): Option[Builder] = {
-    createBuilder(dataTypeMap, expression, builder)
-  }
-
   /**
    * @param dataTypeMap a map from the attribute name to its data type.
    * @param expression the input filter predicates.
    * @param builder the input SearchArgument.Builder.
    * @return the builder so far.
    */
-  private def createBuilder(
+  private def buildSearchArgument(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
@@ -177,19 +170,19 @@ private[orc] object OrcFilters extends Logging {
     expression match {
       case And(left, right) =>
         for {
-          lhs <- createBuilder(dataTypeMap, left, builder.startAnd())
-          rhs <- createBuilder(dataTypeMap, right, lhs)
+          lhs <- buildSearchArgument(dataTypeMap, left, builder.startAnd())
+          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
         } yield rhs.end()
 
       case Or(left, right) =>
         for {
-          lhs <- createBuilder(dataTypeMap, left, builder.startOr())
-          rhs <- createBuilder(dataTypeMap, right, lhs)
+          lhs <- buildSearchArgument(dataTypeMap, left, builder.startOr())
+          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
         } yield rhs.end()
 
       case Not(child) =>
         for {
-          negate <- createBuilder(dataTypeMap, child, builder.startNot())
+          negate <- buildSearchArgument(dataTypeMap, child, builder.startNot())
         } yield negate.end()
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
