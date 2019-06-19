@@ -294,8 +294,15 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     common ++ others
   }
 
+  def emptyChild(child: LogicalPlan) : Boolean = child match {
+    case u: UnaryNode => emptyChild(u.child)
+    case l: LocalRelation => l.data.isEmpty
+    case _ => false
+  }
+
   override protected lazy val validConstraints: Set[Expression] = {
     children
+      .filterNot(emptyChild)
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
   }

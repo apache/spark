@@ -101,6 +101,34 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test(
+    """
+      | single inner join with pre-existing filters: filter out values on either side
+      | let side is a union with empty relation.
+    """.stripMargin) {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val combined = Union(
+      testRelation.where('a.attr === 0) ::
+        testRelation.where('a.attr === 1) ::
+        testRelation.where(And('a.attr !== 1, 'a.attr !== 0)) :: Nil)
+      .where(IsNotNull('a))
+      .subquery('combined)
+
+    val originalQuery = x.where(In('a.attr, mutable.ArrayBuffer(0, 2)))
+      .join(combined, condition = Some("x.a".attr === "combined.a")).analyze
+
+    val left = x.where(IsNotNull('a) && And('a.attr !== 0, 'a.attr !== 1))
+    val right = y.where(IsNotNull('a) && IsNotNull('b) && 'a === 10 && 'b > 5)
+    val correctAnswer = left.join(right,
+      condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+
   test("single outer join: no null filters are generated") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
@@ -166,7 +194,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull('b) &&'a === 'b)
+      .where(IsNotNull('a) && IsNotNull('b) && 'a === 'b)
       .select('a, 'b.as('d)).as("t")
       .join(t2.where(IsNotNull('a)), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
