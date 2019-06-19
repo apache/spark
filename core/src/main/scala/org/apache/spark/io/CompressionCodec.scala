@@ -139,14 +139,21 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
     }
   }
 
+  private def defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
+
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
-    new LZ4BlockOutputStream(s, blockSize, lz4Factory.fastCompressor())
+    val syncFlush = false
+    new LZ4BlockOutputStream(
+      s,
+      blockSize,
+      lz4Factory.fastCompressor(),
+      xxHashFactory.newStreamingHash32(defaultSeed).asChecksum,
+      syncFlush)
   }
 
   override def compressedInputStream(s: InputStream): InputStream = {
     val disableConcatenationOfByteStream = false
-    val defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
     new LZ4BlockInputStream(
       s,
       lz4Factory.fastDecompressor(),
