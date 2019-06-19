@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SortExec}
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
@@ -403,7 +404,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
     }
   }
 
-  private def joinCondition(joinCols: Seq[String])(left: DataFrame, right: DataFrame): Column = {
+  private def joinCondition(joinCols: Seq[String]) (left: DataFrame, right: DataFrame): Column = {
     joinCols.map(col => left(col) === right(col)).reduce(_ && _)
   }
 
@@ -745,87 +746,99 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
     }
   }
 
-  //  a test with a single bucketed partition where the number of files in the partition is large
-  //  tests for the condition where the serialization of such a task may result in a stack overflow
-  //  if the files list is stored in a recursive data structure
-  test("SPARK-27100 stack overflow: read bucketed data with large partitions") {
-    testLargeFilePartitionStackOverflow(true)
-  }
-
-  //  a test with a single non-bucketed partition where the number of files in the partition is
-  //  large tests for the condition where the serialization of such a task may result in a stack
+  //  A test with a partition where the number of files in the partition is
+  //  large. tests for the condition where the serialization of such a task may result in a stack
   //  overflow if the files list is stored in a recursive data structure
-  test("SPARK-27100 stack overflow: read non bucketed data with large partitions") {
-    testLargeFilePartitionStackOverflow(true)
-  }
-
-  private def testLargeFilePartitionStackOverflow ( isBucketed : Boolean) {
+  test("SPARK-27100 stack overflow: read data with large partitions") {
     // Need a large number of files in the partition for the overflow
     val numFilesInPartition = 100000
-    val partitionValues = InternalRow.apply(Array("a"))
 
-    val schema = new StructType()
-    val fakeHadoopFsRelation = new HadoopFsRelation(null, schema, schema, null, null, null)(spark)
-    val optionalBucketSet = null
-    val bucketSpec = new BucketSpec(1, Seq("a"), Seq("b"))
-    val files = (0 to numFilesInPartition).toStream.map { i =>
-      new FileStatus(10, false, 1, 512, 1000,
-        new Path(s"file${i}_0.zzz"))
+    def getInputRDD(sparkSession: SparkSession, isBucketed: Boolean): RDD[InternalRow] = {
+      val partitionValues = InternalRow.apply(Array("a"))
+
+      val schema = new StructType()
+      val fakeHadoopFsRelation = new HadoopFsRelation(null, schema, schema, null,
+        new ParquetFileFormat, null)(sparkSession)
+      val optionalBucketSet = null
+      val bucketSpec = new BucketSpec(1, Seq("a"), Seq("b"))
+      val files = (0 to numFilesInPartition - 1).toStream.map { i =>
+        new FileStatus(10, false, 1, 512, 1000,
+          new Path(s"file${i}_0.zzz"))
+      }
+      val partitionDirectory = PartitionDirectory(partitionValues, files);
+
+      val fileSource =
+        FileSourceScanExec(fakeHadoopFsRelation,
+          null,
+          schema,
+          null,
+          Option(optionalBucketSet),
+          Seq.empty,
+          Option(new TableIdentifier("stackOverflow")))
+
+      val inputRDD = if (isBucketed) {
+        // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
+        val createBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createBucketedReadRDD)
+
+        fileSource invokePrivate createBucketedReadRDD(bucketSpec,
+          (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
+          Array(partitionDirectory),
+          fakeHadoopFsRelation)
+      } else {
+        // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
+        val createNonBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createNonBucketedReadRDD)
+
+        fileSource invokePrivate createNonBucketedReadRDD(
+          (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
+          Array(partitionDirectory),
+          fakeHadoopFsRelation)
+
+      }
+      inputRDD
     }
-    val partitionDirectory = PartitionDirectory(partitionValues, files);
 
-    val fileSource =
-     FileSourceScanExec(fakeHadoopFsRelation,
-      null,
-      schema,
-      null,
-      Option(optionalBucketSet),
-      Seq.empty,
-      Option(new TableIdentifier("stackOverflow")))
-
-    val inputRDD = if (isBucketed) {
-      // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
-      val createBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createBucketedReadRDD)
-
-      fileSource invokePrivate createBucketedReadRDD(bucketSpec,
-        (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
-        Array(partitionDirectory),
-        fakeHadoopFsRelation)
-    } else {
-      // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
-      val createNonBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createNonBucketedReadRDD)
-
-      fileSource invokePrivate createNonBucketedReadRDD(
-        (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
-        Array(partitionDirectory),
-        fakeHadoopFsRelation)
-
+    def createAndSerializeTask(inputRDD: RDD[InternalRow], bucketingType: String) {
+      // Create a task encapsulating the FilePartition
+      val task = new ShuffleMapTask(0, 0,
+        null, inputRDD.partitions(0), Seq(TaskLocation("host0", "execA")), new Properties, null)
+      // Serialize the task and catch the exception
+      val env = SparkEnv.get
+      val ser = env.closureSerializer.newInstance()
+      try {
+        ser.serialize(task)
+      } catch {
+        case ex: StackOverflowError =>
+          fail("Stack Overflow Exception in serializing task to read partitioned %s tables"
+            .format(bucketingType))
+      }
     }
+
+    // Bucketed partitions
+
+    val bucketedInputRDD = getInputRDD(spark, true);
     // check to make sure we've created the a big enough file partition.
     // also guarantees that the 'files' Stream is initialized before we
     // attempt to serialize it in the task.
-    val count = inputRDD.partitions(0).asInstanceOf[FilePartition].files.length;
-    assert(count == numFilesInPartition + 1)
+    val bucketedCount = bucketedInputRDD.partitions(0).asInstanceOf[FilePartition].files.length;
+    assert(bucketedCount == numFilesInPartition)
+    createAndSerializeTask(bucketedInputRDD, "bucketed")
 
-    // Create a task encapsulating the FilePartition
-    val task = new ShuffleMapTask(0, 0,
-      null, inputRDD.partitions(0), Seq(TaskLocation("host0", "execA")), new Properties, null)
-    // Serialize the task and catch the exception
-    val env = SparkEnv.get
-    val ser = env.closureSerializer.newInstance()
-    try {
-      ser.serialize(task)
-    } catch {
-      case ex: StackOverflowError =>
-        val bucketingType = if (isBucketed) {
-          "bucketed"
-        } else {
-          "non-bucketed"
-        }
-        fail("Stack Overflow Exception in serializing task to read partitioned %s tables"
-          .format(bucketingType))
-      case _ => fail("Exception in serializing task to read partitioned tables")
+    // Non Bucketed partitions
+
+    // create a new session so we can change the config and force a large number of files
+    // in each partition
+    val newSession = spark.cloneSession()
+    newSession.conf.set("spark.sql.files.openCostInBytes", 0);
+    val unbucketedInputRDD = getInputRDD(newSession, false);
+    val unbucketedCount = unbucketedInputRDD.partitions(0).asInstanceOf[FilePartition].files.length;
+    if (spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive") {
+      assert(unbucketedCount == numFilesInPartition)
+    } else {
+      // default parallelism of 2 causes the files to be split into two partitions
+      assert(unbucketedCount == numFilesInPartition / 2)
     }
+    createAndSerializeTask(unbucketedInputRDD, "non-bucketed")
+
   }
 
 }
