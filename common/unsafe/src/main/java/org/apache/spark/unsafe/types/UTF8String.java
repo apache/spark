@@ -32,6 +32,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
@@ -1002,12 +1003,29 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String replace(UTF8String search, UTF8String replace) {
-    if (EMPTY_UTF8.equals(search)) {
+    // This implementation is loosely based on commons-lang3's StringUtils.replace().
+    if (numBytes == 0 || search.numBytes == 0) {
       return this;
     }
-    String replaced = toString().replace(
-      search.toString(), replace.toString());
-    return fromString(replaced);
+    // Find the first occurrence of the search string.
+    int start = 0;
+    int end = this.find(search, start);
+    if (end == -1) {
+      // Search string was not found, so string is unchanged.
+      return this;
+    }
+    // At least one match was found. Estimate space needed for result.
+    // The 16x multiplier here is chosen to match commons-lang3's implementation.
+    int increase = Math.max(0, replace.numBytes - search.numBytes) * 16;
+    final UTF8StringBuilder buf = new UTF8StringBuilder(numBytes + increase);
+    while (end != -1) {
+      buf.appendBytes(this.base, this.offset + start, end - start);
+      buf.append(replace);
+      start = end + search.numBytes;
+      end = this.find(search, start);
+    }
+    buf.appendBytes(this.base, this.offset + start, numBytes - start);
+    return buf.build();
   }
 
   // TODO: Need to use `Code Point` here instead of Char in case the character longer than 2 bytes
