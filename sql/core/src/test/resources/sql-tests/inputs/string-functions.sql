@@ -40,11 +40,11 @@ SELECT substring('Spark SQL' from -3);
 SELECT substring('Spark SQL' from 5 for 1);
 
 -- trim/ltrim/rtrim
-SELECT trim('yxTomxx', 'xyz');
-SELECT trim('xxxbarxxx', 'x');
-SELECT ltrim('zzzytest', 'xyz');
-SELECT ltrim('zzzytestxyz', 'xyz');
-SELECT ltrim('xyxXxyLAST WORD', 'xy');
-SELECT rtrim('testxxzx', 'xyz');
-SELECT rtrim('xyztestxxzx', 'xyz');
-SELECT rtrim('TURNERyxXxy', 'xy');
+SELECT trim('yxTomxx', 'xyz'), trim(BOTH 'xyz' FROM 'yxTomxx');
+SELECT trim('xxxbarxxx', 'x'), trim(BOTH 'x' FROM 'xxxbarxxx');
+SELECT ltrim('zzzytest', 'xyz'), trim(LEADING 'xyz' FROM 'zzzytest');
+SELECT ltrim('zzzytestxyz', 'xyz'), trim(LEADING 'xyz' FROM 'zzzytestxyz');
+SELECT ltrim('xyxXxyLAST WORD', 'xy'), trim(LEADING 'xy' FROM 'xyxXxyLAST WORD');
+SELECT rtrim('testxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'testxxzx');
+SELECT rtrim('xyztestxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'xyztestxxzx');
+SELECT rtrim('TURNERyxXxy', 'xy'), trim(TRAILING 'xy' FROM 'TURNERyxXxy');

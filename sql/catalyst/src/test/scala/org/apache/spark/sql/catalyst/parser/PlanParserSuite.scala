@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -702,33 +702,40 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("TRIM function") {
-    intercept("select ltrim(both 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
-    intercept("select rtrim(trailing 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
+    def assertTrimPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
 
-    assertEqual(
+    intercept("select ltrim(both 'S' from 'SS abc S'", "mismatched input 'from' expecting {')'")
+    intercept("select rtrim(trailing 'S' from 'SS abc S'", "mismatched input 'from' expecting {')'")
+
+    assertTrimPlans(
       "SELECT TRIM(BOTH '@$%&( )abc' FROM '@ $ % & ()abc ' )",
-        OneRowRelation().select('TRIM.function("@$%&( )abc", "@ $ % & ()abc "))
+      StringTrim(Literal("@ $ % & ()abc "), Some(Literal("@$%&( )abc")))
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(LEADING 'c []' FROM '[ ccccbcc ')",
-        OneRowRelation().select('ltrim.function("c []", "[ ccccbcc "))
+      StringTrimLeft(Literal("[ ccccbcc "), Some(Literal("c []")))
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
-      OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
+      StringTrimRight(Literal("bc...,,,&&&ccc"), Some(Literal("c&^,.")))
     )
 
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(BOTH FROM '  bunch o blanks  ')",
-      OneRowRelation().select('TRIM.function("  bunch o blanks  "))
+      StringTrim(Literal("  bunch o blanks  "), None)
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(LEADING FROM '  bunch o blanks  ')",
-      OneRowRelation().select('ltrim.function("  bunch o blanks  "))
+      StringTrimLeft(Literal("  bunch o blanks  "), None)
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
-      OneRowRelation().select('rtrim.function("  bunch o blanks  "))
+      StringTrimRight(Literal("  bunch o blanks  "), None)
     )
   }
 

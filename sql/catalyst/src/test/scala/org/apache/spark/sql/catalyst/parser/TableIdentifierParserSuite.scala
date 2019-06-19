@@ -246,6 +246,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "transaction",
     "transactions",
     "trigger",
+    "trim",
     "true",
     "truncate",
     "unarchive",
