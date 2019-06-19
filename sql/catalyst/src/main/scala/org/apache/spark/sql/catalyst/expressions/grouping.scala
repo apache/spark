@@ -98,7 +98,9 @@ case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
   since = "2.0.0")
 // scalastyle:on line.size.limit
 case class Grouping(child: Expression) extends Expression with Unevaluable {
-  override def references: AttributeSet = AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
+  @transient
+  override lazy val references: AttributeSet =
+    AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
   override def children: Seq[Expression] = child :: Nil
   override def dataType: DataType = ByteType
   override def nullable: Boolean = false
@@ -133,7 +135,9 @@ case class Grouping(child: Expression) extends Expression with Unevaluable {
   since = "2.0.0")
 // scalastyle:on line.size.limit
 case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Unevaluable {
-  override def references: AttributeSet = AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
+  @transient
+  override lazy val references: AttributeSet =
+    AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
   override def children: Seq[Expression] = groupByExprs
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = false
