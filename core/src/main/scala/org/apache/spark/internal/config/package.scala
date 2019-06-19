@@ -1166,8 +1166,8 @@ package object config {
         " `nativeInstance` (JNI binding)," +
         " `safeInstance` (pure Java)," +
         " `unsafeInstance` (Java which uses sun.misc.Unsafe)," +
-        " `fastestInstance` (which uses the fastest available implementation), or" +
-        " `fastestJavaInstance` (which uses the fastest available non-JNI implementation).")
+        " `fastestInstance` (uses the fastest available implementation), or" +
+        " `fastestJavaInstance` (uses the fastest available non-JNI implementation).")
       .stringConf
       .checkValues(Set(
         "fastestInstance",

@@ -1142,12 +1142,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>fastestInstance</td>
   <td>
     Selects the implementation of LZ4 compression.
-    Can be either
-    `nativeInstance` (JNI binding),
-    `safeInstance` (pure Java),
-    `unsafeInstance` (Java which uses sun.misc.Unsafe),
-    `fastestInstance` (which uses the fastest available implementation), or
-    `fastestJavaInstance` (which uses the fastest available non-JNI implementation).
+    Can be either:
+    <ul>
+      <li><code>nativeInstance</code> (JNI binding)</li>
+      <li><code>safeInstance</code> (pure Java)</li>
+      <li><code>unsafeInstance</code> (Java which uses sun.misc.Unsafe)</li>
+      <li><code>fastestInstance</code> (uses the fastest available implementation)</li>
+      <li><code>fastestJavaInstance</code> (uses the fastest available non-JNI implementation)</li>
+    </ul>
   </td>
 </tr>
 <tr>
