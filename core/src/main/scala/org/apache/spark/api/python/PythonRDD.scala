@@ -137,8 +137,9 @@ private[spark] object PythonRDD extends Logging {
    * (effectively a collect()), but allows you to run on a certain subset of partitions,
    * or to enable local execution.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a server object
+   *         that can be used to sync the JVM serving thread in Python.
    */
   def runJob(
       sc: SparkContext,
@@ -156,8 +157,9 @@ private[spark] object PythonRDD extends Logging {
   /**
    * A helper function to collect an RDD as an iterator, then serve it via socket.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a server object
+   *         that can be used to sync the JVM serving thread in Python.
    */
   def collectAndServe[T](rdd: RDD[T]): Array[Any] = {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
@@ -171,16 +173,15 @@ private[spark] object PythonRDD extends Logging {
    * and -1 meaining an error occurred during collection. This function is used by
    * pyspark.rdd._local_iterator_from_socket().
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from these jobs, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a server object
+   *         that can be used to sync the JVM serving thread in Python.
    */
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
-    val (port, secret) = SocketAuthServer.setupOneConnectionServer(
-        authHelper, "serve toLocalIterator") { s =>
-      val out = new DataOutputStream(s.getOutputStream)
-      val in = new DataInputStream(s.getInputStream)
+    val handleFunc = (sock: Socket) => {
+      val out = new DataOutputStream(sock.getOutputStream)
+      val in = new DataInputStream(sock.getInputStream)
       Utils.tryWithSafeFinally {
-
         // Collects a partition on each iteration
         val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
           rdd.sparkContext.runJob(rdd, (iter: Iterator[Any]) => iter.toArray, Seq(i)).head
@@ -219,7 +220,9 @@ private[spark] object PythonRDD extends Logging {
         in.close()
       }
     }
-    Array(port, secret)
+
+    val server = new SocketFuncServer(authHelper, "serve toLocalIterator", handleFunc)
+    Array(server.port, server.secret, server)
   }
 
   def readRDDFromFile(
@@ -443,8 +446,9 @@ private[spark] object PythonRDD extends Logging {
    *
    * The thread will terminate after all the data are sent or any exceptions happen.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a server object
+   *         that can be used to sync the JVM serving thread in Python.
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
     serveToStream(threadName) { out =>
@@ -464,33 +468,14 @@ private[spark] object PythonRDD extends Logging {
    *
    * The thread will terminate after the block of code is executed or any
    * exceptions happen.
+   *
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a server object
+   *         that can be used to sync the JVM serving thread in Python.
    */
   private[spark] def serveToStream(
       threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
-    SocketAuthHelper.serveToStream(threadName, authHelper)(writeFunc)
-  }
-
-  /**
-   * Create a socket server object and background thread to execute the writeFunc
-   * with the given OutputStream.
-   *
-   * This is the same as serveToStream, only it returns a server object that
-   * can be used to sync in Python.
-   */
-  private[spark] def serveToStreamWithSync(
-      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
-
-    val handleFunc = (sock: Socket) => {
-      val out = new BufferedOutputStream(sock.getOutputStream())
-      Utils.tryWithSafeFinally {
-        writeFunc(out)
-      } {
-        out.close()
-      }
-    }
-
-    val server = new SocketFuncServer(authHelper, threadName, handleFunc)
-    Array(server.port, server.secret, server)
+    SocketAuthServer.serveToStream(threadName, authHelper)(writeFunc)
   }
 
   private def getMergedConf(confAsMap: java.util.HashMap[String, String],

@@ -1080,8 +1080,9 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
-        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
+        port, auth_secret, _ = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd,
+                                                          partitions)
+        return list(_load_from_socket(port, auth_secret, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
