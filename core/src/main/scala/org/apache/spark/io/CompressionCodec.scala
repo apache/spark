@@ -128,7 +128,7 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
   @transient private[this] lazy val lz4Factory: LZ4Factory = LZ4Factory.fastestInstance()
   @transient private[this] lazy val xxHashFactory: XXHashFactory = XXHashFactory.fastestInstance()
 
-  private def defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
+  private[this] val defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     val blockSize = conf.get(IO_COMPRESSION_LZ4_BLOCKSIZE).toInt
