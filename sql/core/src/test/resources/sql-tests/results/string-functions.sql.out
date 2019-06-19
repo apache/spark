@@ -205,64 +205,64 @@ k
 
 
 -- !query 25
-SELECT trim('yxTomxx', 'xyz')
+SELECT trim('yxTomxx', 'xyz'), trim(BOTH 'xyz' FROM 'yxTomxx')
 -- !query 25 schema
-struct<trim(yxTomxx, xyz):string>
+struct<trim(yxTomxx, xyz):string,trim(yxTomxx, xyz):string>
 -- !query 25 output
-Tom
+Tom	Tom
 
 
 -- !query 26
-SELECT trim('xxxbarxxx', 'x')
+SELECT trim('xxxbarxxx', 'x'), trim(BOTH 'x' FROM 'xxxbarxxx')
 -- !query 26 schema
-struct<trim(xxxbarxxx, x):string>
+struct<trim(xxxbarxxx, x):string,trim(xxxbarxxx, x):string>
 -- !query 26 output
-bar
+bar	bar
 
 
 -- !query 27
-SELECT ltrim('zzzytest', 'xyz')
+SELECT ltrim('zzzytest', 'xyz'), trim(LEADING 'xyz' FROM 'zzzytest')
 -- !query 27 schema
-struct<ltrim(zzzytest, xyz):string>
+struct<ltrim(zzzytest, xyz):string,ltrim(zzzytest, xyz):string>
 -- !query 27 output
-test
+test	test
 
 
 -- !query 28
-SELECT ltrim('zzzytestxyz', 'xyz')
+SELECT ltrim('zzzytestxyz', 'xyz'), trim(LEADING 'xyz' FROM 'zzzytestxyz')
 -- !query 28 schema
-struct<ltrim(zzzytestxyz, xyz):string>
+struct<ltrim(zzzytestxyz, xyz):string,ltrim(zzzytestxyz, xyz):string>
 -- !query 28 output
-testxyz
+testxyz	testxyz
 
 
 -- !query 29
-SELECT ltrim('xyxXxyLAST WORD', 'xy')
+SELECT ltrim('xyxXxyLAST WORD', 'xy'), trim(LEADING 'xy' FROM 'xyxXxyLAST WORD')
 -- !query 29 schema
-struct<ltrim(xyxXxyLAST WORD, xy):string>
+struct<ltrim(xyxXxyLAST WORD, xy):string,ltrim(xyxXxyLAST WORD, xy):string>
 -- !query 29 output
-XxyLAST WORD
+XxyLAST WORD	XxyLAST WORD
 
 
 -- !query 30
-SELECT rtrim('testxxzx', 'xyz')
+SELECT rtrim('testxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'testxxzx')
 -- !query 30 schema
-struct<rtrim(testxxzx, xyz):string>
+struct<rtrim(testxxzx, xyz):string,rtrim(testxxzx, xyz):string>
 -- !query 30 output
-test
+test	test
 
 
 -- !query 31
-SELECT rtrim('xyztestxxzx', 'xyz')
+SELECT rtrim('xyztestxxzx', 'xyz'), trim(TRAILING 'xyz' FROM 'xyztestxxzx')
 -- !query 31 schema
-struct<rtrim(xyztestxxzx, xyz):string>
+struct<rtrim(xyztestxxzx, xyz):string,rtrim(xyztestxxzx, xyz):string>
 -- !query 31 output
-xyztest
+xyztest	xyztest
 
 
 -- !query 32
-SELECT rtrim('TURNERyxXxy', 'xy')
+SELECT rtrim('TURNERyxXxy', 'xy'), trim(TRAILING 'xy' FROM 'TURNERyxXxy')
 -- !query 32 schema
-struct<rtrim(TURNERyxXxy, xy):string>
+struct<rtrim(TURNERyxXxy, xy):string,rtrim(TURNERyxXxy, xy):string>
 -- !query 32 output
-TURNERyxX
+TURNERyxX	TURNERyxX
