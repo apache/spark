@@ -119,25 +119,14 @@ private[spark] object CompressionCodec {
 @DeveloperApi
 class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
 
-  private def lz4Factory: LZ4Factory = {
-    conf.get(IO_COMPRESSION_LZ4_FACTORY) match {
-      case "fastestInstance" => LZ4Factory.fastestInstance()
-      case "fastestJavaInstance" => LZ4Factory.fastestJavaInstance()
-      case "nativeInstance" => LZ4Factory.nativeInstance()
-      case "safeInstance" => LZ4Factory.safeInstance()
-      case "unsafeInstance" => LZ4Factory.unsafeInstance()
-    }
-  }
-
-  private def xxHashFactory: XXHashFactory = {
-    conf.get(IO_COMPRESSION_LZ4_FACTORY) match {
-      case "fastestInstance" => XXHashFactory.fastestInstance()
-      case "fastestJavaInstance" => XXHashFactory.fastestJavaInstance()
-      case "nativeInstance" => XXHashFactory.nativeInstance()
-      case "safeInstance" => XXHashFactory.safeInstance()
-      case "unsafeInstance" => XXHashFactory.unsafeInstance()
-    }
-  }
+  // SPARK-28102: if the LZ4 JNI libraries fail to initialize then `fastestInstance()` calls fall
+  // back to non-JNI implementations but do not remember the fact that JNI failed to load, so
+  // repeated calls to `fastestInstance()` will cause performance problems because the JNI load
+  // will be repeatedly re-attempted and that path is slow because it throws exceptions from a
+  // static synchronized method (causing lock contention). To avoid this problem, we cache the
+  // result of the `fastestInstance()` calls ourselves (both factories are thread-safe).
+  @transient private[this] lazy val lz4Factory: LZ4Factory = LZ4Factory.fastestInstance()
+  @transient private[this] lazy val xxHashFactory: XXHashFactory = XXHashFactory.fastestInstance()
 
   private def defaultSeed: Int = 0x9747b28c // LZ4BlockOutputStream.DEFAULT_SEED
 

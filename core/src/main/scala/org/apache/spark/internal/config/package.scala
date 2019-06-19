@@ -1159,25 +1159,6 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
-  private[spark] val IO_COMPRESSION_LZ4_FACTORY =
-    ConfigBuilder("spark.io.compression.lz4.factory")
-      .doc("Selects the implementation of LZ4 compression (default is `fastestInstance`)." +
-        " Can be either" +
-        " `nativeInstance` (JNI binding)," +
-        " `safeInstance` (pure Java)," +
-        " `unsafeInstance` (Java which uses sun.misc.Unsafe)," +
-        " `fastestInstance` (uses the fastest available implementation), or" +
-        " `fastestJavaInstance` (uses the fastest available non-JNI implementation).")
-      .stringConf
-      .checkValues(Set(
-        "fastestInstance",
-        "fastestJavaInstance",
-        "nativeInstance",
-        "safeInstance",
-        "unsafeInstance"
-      ))
-      .createWithDefaultString("fastestInstance")
-
   private[spark] val IO_COMPRESSION_CODEC =
     ConfigBuilder("spark.io.compression.codec")
       .doc("The codec used to compress internal data such as RDD partitions, event log, " +
