@@ -665,7 +665,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Collect all window specifications defined in the WINDOW clause.
     val baseWindowMap = ctx.namedWindow.asScala.map {
       wCtx =>
-        (wCtx.identifier.getText, typedVisit[WindowSpec](wCtx.windowSpec))
+        (wCtx.name.getText, typedVisit[WindowSpec](wCtx.windowSpec))
     }.toMap
 
     // Handle cases like
@@ -927,7 +927,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     val tvf = UnresolvedTableValuedFunction(
-      func.identifier.getText, func.expression.asScala.map(expression), aliases)
+      func.funcName.getText, func.expression.asScala.map(expression), aliases)
     tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
@@ -1026,7 +1026,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Sequence of Strings for an identifier list.
    */
   override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
-    ctx.identifier.asScala.map(_.getText)
+    ctx.ident.asScala.map(_.getText)
   }
 
   /* ********************************************************************************************
@@ -1086,8 +1086,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitNamedExpression(ctx: NamedExpressionContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
-    if (ctx.identifier != null) {
-      Alias(e, ctx.identifier.getText)()
+    if (ctx.name != null) {
+      Alias(e, ctx.name.getText)()
     } else if (ctx.identifierList != null) {
       MultiAlias(e, visitIdentifierList(ctx.identifierList))
     } else {
@@ -1479,7 +1479,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a reference to a window frame, i.e. [[WindowSpecReference]].
    */
   override def visitWindowRef(ctx: WindowRefContext): WindowSpecReference = withOrigin(ctx) {
-    WindowSpecReference(ctx.identifier.getText)
+    WindowSpecReference(ctx.name.getText)
   }
 
   /**
@@ -1958,7 +1958,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     StructField(
-      identifier.getText,
+      colName.getText,
       cleanedDataType,
       nullable = true,
       builder.build())
@@ -2012,7 +2012,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               }
             }
 
-            orderedIdCtx.identifier.getText
+            orderedIdCtx.ident.getText
           })
   }
 
