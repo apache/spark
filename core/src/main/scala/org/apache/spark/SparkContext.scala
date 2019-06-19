@@ -1799,6 +1799,20 @@ class SparkContext(config: SparkConf) extends Logging {
         // For local paths with backslashes on Windows, URI throws an exception
         addJarFile(new File(path))
       } else {
+        /**
+          * Check Path valid
+          */
+        val uriPath = new Path(path).toUri
+        val schemeCorrectedPath = uriPath.getScheme match {
+          case null => new File(path).getCanonicalFile.toURI.toString
+          case "local" => "file:" + uriPath.getPath
+          case _ => path
+        }
+        val hadoopPath = new Path(schemeCorrectedPath)
+        val fs = hadoopPath.getFileSystem(hadoopConfiguration)
+        if(!fs.exists(hadoopPath))
+          throw new FileNotFoundException(s"Jar ${schemeCorrectedPath} not found")
+
         val uri = new URI(path)
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
