@@ -15,23 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.resource
 
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX, SPARK_TASK_PREFIX}
+import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 
-/**
- * Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
- * The array of addresses are resource specific and its up to the user to interpret the address.
- *
- * One example is GPUs, where the addresses would be the indices of the GPUs
- *
- * @param name the name of the resource
- * @param addresses an array of strings describing the addresses of the resource
- */
-@Evolving
-class ResourceInformation(
-    val name: String,
-    val addresses: Array[String]) extends Serializable {
+object TestResourceIDs {
+  val DRIVER_GPU_ID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
+  val EXECUTOR_GPU_ID = ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
+  val TASK_GPU_ID = ResourceID(SPARK_TASK_PREFIX, GPU)
 
-  override def toString: String = s"[name: ${name}, addresses: ${addresses.mkString(",")}]"
+  val DRIVER_FPGA_ID = ResourceID(SPARK_DRIVER_PREFIX, FPGA)
+  val EXECUTOR_FPGA_ID = ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
+  val TASK_FPGA_ID = ResourceID(SPARK_TASK_PREFIX, FPGA)
 }

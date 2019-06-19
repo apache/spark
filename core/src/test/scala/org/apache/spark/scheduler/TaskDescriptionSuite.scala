@@ -23,9 +23,9 @@ import java.util.Properties
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.ResourceInformation
-import org.apache.spark.ResourceName.GPU
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceUtils.GPU
 
 class TaskDescriptionSuite extends SparkFunSuite {
   test("encoding and then decoding a TaskDescription results in the same TaskDescription") {
