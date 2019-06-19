@@ -595,7 +595,7 @@ private[hive] class TestHiveQueryExecution(
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(tableIdent) => tableIdent.table }
+        logical.collect { case UnresolvedRelation(ident) => ident.last }
     val resolver = sparkSession.sessionState.conf.resolver
     val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
       referencedTables.exists(resolver(_, testTable))

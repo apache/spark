@@ -111,19 +111,27 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def collectEvaluableUDFsFromExpressions(expressions: Seq[Expression]): Seq[PythonUDF] = {
-    // Eval type checker is set once when we find the first evaluable UDF and its value
-    // shouldn't change later.
-    // Used to check if subsequent UDFs are of the same type as the first UDF. (since we can only
+    // If fisrt UDF is SQL_SCALAR_PANDAS_ITER_UDF, then only return this UDF,
+    // otherwise check if subsequent UDFs are of the same type as the first UDF. (since we can only
     // extract UDFs of the same eval type)
-    var evalTypeChecker: Option[EvalTypeChecker] = None
+
+    var firstVisitedScalarUDFEvalType: Option[Int] = None
+
+    def canChainUDF(evalType: Int): Boolean = {
+      if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) {
+        false
+      } else {
+        evalType == firstVisitedScalarUDFEvalType.get
+      }
+    }
 
     def collectEvaluableUDFs(expr: Expression): Seq[PythonUDF] = expr match {
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
-        && evalTypeChecker.isEmpty =>
-        evalTypeChecker = Some((otherEvalType: EvalType) => otherEvalType == udf.evalType)
+        && firstVisitedScalarUDFEvalType.isEmpty =>
+        firstVisitedScalarUDFEvalType = Some(udf.evalType)
         Seq(udf)
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf)
-        && evalTypeChecker.get(udf.evalType) =>
+        && canChainUDF(udf.evalType) =>
         Seq(udf)
       case e => e.children.flatMap(collectEvaluableUDFs)
     }
@@ -175,16 +183,20 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 
-          val evaluation = validUdfs.partition(
-            _.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-          ) match {
-            case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
-              ArrowEvalPython(vectorizedUdfs, resultAttrs, child)
-            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
-              BatchEvalPython(plainUdfs, resultAttrs, child)
+          val evalTypes = validUdfs.map(_.evalType).toSet
+          if (evalTypes.size != 1) {
+            throw new AnalysisException(
+              s"Expected udfs have the same evalType but got different evalTypes: " +
+              s"${evalTypes.mkString(",")}")
+          }
+          val evalType = evalTypes.head
+          val evaluation = evalType match {
+            case PythonEvalType.SQL_BATCHED_UDF =>
+              BatchEvalPython(validUdfs, resultAttrs, child)
+            case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
+              ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
-              throw new AnalysisException(
-                "Expected either Scalar Pandas UDFs or Batched UDFs but got both")
+              throw new AnalysisException("Unexcepted UDF evalType")
           }
 
           attributeMap ++= validUdfs.zip(resultAttrs)

@@ -268,10 +268,10 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
         fields = list(self.schema)
-        fields[0], fields[7] = fields[7], fields[0]  # swap str with timestamp
+        fields[0], fields[1] = fields[1], fields[0]  # swap str with int
         wrong_schema = StructType(fields)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, ".*cast.*[s|S]tring.*timestamp.*"):
+            with self.assertRaisesRegexp(Exception, "integer.*required.*got.*str"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):

@@ -31,13 +31,9 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_
 
 package object config {
 
-  private[spark] val SPARK_DRIVER_RESOURCE_PREFIX = "spark.driver.resource."
-  private[spark] val SPARK_EXECUTOR_RESOURCE_PREFIX = "spark.executor.resource."
-  private[spark] val SPARK_TASK_RESOURCE_PREFIX = "spark.task.resource."
-
-  private[spark] val SPARK_RESOURCE_AMOUNT_SUFFIX = ".amount"
-  private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX = ".discoveryScript"
-  private[spark] val SPARK_RESOURCE_VENDOR_SUFFIX = ".vendor"
+  private[spark] val SPARK_DRIVER_PREFIX = "spark.driver"
+  private[spark] val SPARK_EXECUTOR_PREFIX = "spark.executor"
+  private[spark] val SPARK_TASK_PREFIX = "spark.task"
 
   private[spark] val DRIVER_RESOURCES_FILE =
     ConfigBuilder("spark.driver.resourcesFile")
@@ -1187,6 +1183,7 @@ package object config {
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
       .intConf
+      .checkValue(_ >= 0, "The buffer size must not be negative")
       .createWithDefault(65536)
 
   private[spark] val LOCALITY_WAIT_PROCESS = ConfigBuilder("spark.locality.wait.process")

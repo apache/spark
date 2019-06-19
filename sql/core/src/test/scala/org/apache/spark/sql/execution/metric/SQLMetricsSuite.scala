@@ -437,28 +437,31 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     )
     assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
 
-    withTempDir { tempDir =>
-      val dir = new File(tempDir, "pqS").getCanonicalPath
+    // TODO: test file source V2 as well when its statistics is correctly computed.
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+      withTempDir { tempDir =>
+        val dir = new File(tempDir, "pqS").getCanonicalPath
 
-      spark.range(10).write.parquet(dir)
-      spark.read.parquet(dir).createOrReplaceTempView("pqS")
+        spark.range(10).write.parquet(dir)
+        spark.read.parquet(dir).createOrReplaceTempView("pqS")
 
-      // The executed plan looks like:
-      // Exchange RoundRobinPartitioning(2)
-      // +- BroadcastNestedLoopJoin BuildLeft, Cross
-      //   :- BroadcastExchange IdentityBroadcastMode
-      //   :  +- Exchange RoundRobinPartitioning(3)
-      //   :     +- *Range (0, 30, step=1, splits=2)
-      //   +- *FileScan parquet [id#465L] Batched: true, Format: Parquet, Location: ...(ignored)
-      val res3 = InputOutputMetricsHelper.run(
-        spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
-      )
-      // The query above is executed in the following stages:
-      //   1. range(30)                   => (30, 0, 30)
-      //   2. sql("select * from pqS")    => (0, 30, 0)
-      //   3. crossJoin(...) of 1. and 2. => (10, 0, 300)
-      //   4. shuffle & return results    => (0, 300, 0)
-      assert(res3 === (30L, 0L, 30L) :: (0L, 30L, 0L) :: (10L, 0L, 300L) :: (0L, 300L, 0L) :: Nil)
+        // The executed plan looks like:
+        // Exchange RoundRobinPartitioning(2)
+        // +- BroadcastNestedLoopJoin BuildLeft, Cross
+        //   :- BroadcastExchange IdentityBroadcastMode
+        //   :  +- Exchange RoundRobinPartitioning(3)
+        //   :     +- *Range (0, 30, step=1, splits=2)
+        //   +- *FileScan parquet [id#465L] Batched: true, Format: Parquet, Location: ...(ignored)
+        val res3 = InputOutputMetricsHelper.run(
+          spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+        )
+        // The query above is executed in the following stages:
+        //   1. range(30)                   => (30, 0, 30)
+        //   2. sql("select * from pqS")    => (0, 30, 0)
+        //   3. crossJoin(...) of 1. and 2. => (10, 0, 300)
+        //   4. shuffle & return results    => (0, 300, 0)
+        assert(res3 === (30L, 0L, 30L) :: (0L, 30L, 0L) :: (10L, 0L, 300L) :: (0L, 300L, 0L) :: Nil)
+      }
     }
   }
 
