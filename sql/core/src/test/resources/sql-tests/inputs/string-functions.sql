@@ -46,4 +46,14 @@ FROM (
     encode(string(id + 2), 'utf-8') col3,
     encode(string(id + 3), 'utf-8') col4
   FROM range(10)
-)
+);
+
+-- trim/ltrim/rtrim
+SELECT trim('yxTomxx', 'xyz');
+SELECT trim('xxxbarxxx', 'x');
+SELECT ltrim('zzzytest', 'xyz');
+SELECT ltrim('zzzytestxyz', 'xyz');
+SELECT ltrim('xyxXxyLAST WORD', 'xy');
+SELECT rtrim('testxxzx', 'xyz');
+SELECT rtrim('xyztestxxzx', 'xyz');
+SELECT rtrim('TURNERyxXxy', 'xy');
