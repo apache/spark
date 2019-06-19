@@ -1138,6 +1138,19 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.io.compression.lz4.factory</code></td>
+  <td>fastestInstance</td>
+  <td>
+    Selects the implementation of LZ4 compression.
+    Can be either
+    `nativeInstance` (JNI binding),
+    `safeInstance` (pure Java),
+    `unsafeInstance` (Java which uses sun.misc.Unsafe),
+    `fastestInstance` (which uses the fastest available implementation), or
+    `fastestJavaInstance` (which uses the fastest available non-JNI implementation).
+  </td>
+</tr>
+<tr>
   <td><code>spark.io.compression.snappy.blockSize</code></td>
   <td>32k</td>
   <td>

@@ -590,19 +590,6 @@ package object config {
       .stringConf
       .createWithDefaultString("AES/CTR/NoPadding")
 
-  private[spark] val IO_COMPRESSION_LZ4_FACTORY =
-    ConfigBuilder("spark.io.compression.lz4.factory")
-      .internal()
-      .stringConf
-      .checkValues(Set(
-        "fastestInstance",
-        "fastestJavaInstance",
-        "nativeInstance",
-        "safeInstance",
-        "unsafeInstance"
-      ))
-      .createWithDefaultString("fastestInstance")
-
   private[spark] val DRIVER_HOST_ADDRESS = ConfigBuilder("spark.driver.host")
     .doc("Address of driver endpoints.")
     .stringConf
@@ -1171,6 +1158,25 @@ package object config {
         "usage when LZ4 is used.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
+
+  private[spark] val IO_COMPRESSION_LZ4_FACTORY =
+    ConfigBuilder("spark.io.compression.lz4.factory")
+      .doc("Selects the implementation of LZ4 compression (default is `fastestInstance`)." +
+        " Can be either" +
+        " `nativeInstance` (JNI binding)," +
+        " `safeInstance` (pure Java)," +
+        " `unsafeInstance` (Java which uses sun.misc.Unsafe)," +
+        " `fastestInstance` (which uses the fastest available implementation), or" +
+        " `fastestJavaInstance` (which uses the fastest available non-JNI implementation).")
+      .stringConf
+      .checkValues(Set(
+        "fastestInstance",
+        "fastestJavaInstance",
+        "nativeInstance",
+        "safeInstance",
+        "unsafeInstance"
+      ))
+      .createWithDefaultString("fastestInstance")
 
   private[spark] val IO_COMPRESSION_CODEC =
     ConfigBuilder("spark.io.compression.codec")
