@@ -62,6 +62,7 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
+  @transient
   override lazy val references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
 
   private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {

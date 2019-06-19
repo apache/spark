@@ -47,6 +47,7 @@ case class ExpandExec(
   // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
+  @transient
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
