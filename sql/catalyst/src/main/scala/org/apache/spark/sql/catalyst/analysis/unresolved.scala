@@ -46,7 +46,8 @@ case class UnresolvedRelation(multipartIdentifier: Seq[String]) extends LeafNode
   /** Returns a `.` separated name for this relation. */
   def tableName: String = multipartIdentifier.quoted
 
-  override def output: Seq[Attribute] = Nil
+  @transient
+  override lazy val output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
 }
@@ -70,7 +71,8 @@ case class UnresolvedInlineTable(
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
   override lazy val resolved = false
-  override def output: Seq[Attribute] = Nil
+  @transient
+  override lazy val output: Seq[Attribute] = Nil
 }
 
 /**
@@ -93,7 +95,8 @@ case class UnresolvedTableValuedFunction(
     outputNames: Seq[String])
   extends LeafNode {
 
-  override def output: Seq[Attribute] = Nil
+  @transient
+  override lazy val output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
 }
@@ -467,7 +470,8 @@ case class UnresolvedSubqueryColumnAliases(
     child: LogicalPlan)
   extends UnaryNode {
 
-  override def output: Seq[Attribute] = Nil
+  @transient
+  override lazy val output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
 }

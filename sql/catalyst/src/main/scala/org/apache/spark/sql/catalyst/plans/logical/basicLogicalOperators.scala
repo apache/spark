@@ -38,7 +38,8 @@ import org.apache.spark.util.random.RandomSampler
  * at the top of the logical query plan.
  */
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 }
 
 /**
@@ -46,12 +47,14 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
  * recognize a subquery as such, and it allows us to write subquery aware transformations.
  */
 case class Subquery(child: LogicalPlan) extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  @transient
+  override lazy val output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val resolved: Boolean = {
@@ -124,12 +127,14 @@ case class Generate(
     nullableOutput
   }
 
-  def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
+  @transient
+  lazy val output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
 
@@ -173,7 +178,8 @@ case class Intersect(
 
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
-  override def output: Seq[Attribute] =
+  @transient
+  override lazy val output: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
@@ -196,7 +202,8 @@ case class Except(
     isAll: Boolean) extends SetOperation(left, right) {
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
-  override def output: Seq[Attribute] = left.output
+  @transient
+  override lazy val output: Seq[Attribute] = left.output
 
   override protected lazy val validConstraints: Set[Expression] = leftConstraints
 }
@@ -237,7 +244,8 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
   }
 
   // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] = {
+  @transient
+  override lazy val output: Seq[Attribute] = {
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
@@ -309,7 +317,8 @@ case class Join(
     hint: JoinHint)
   extends BinaryNode with PredicateHelper {
 
-  override def output: Seq[Attribute] = {
+  @transient
+  override lazy val output: Seq[Attribute] = {
     joinType match {
       case j: ExistenceJoin =>
         left.output :+ j.exists
@@ -540,7 +549,8 @@ case class InsertIntoTable(
 
   // We don't want `table` in children as sometimes we don't want to transform it.
   override def children: Seq[LogicalPlan] = query :: Nil
-  override def output: Seq[Attribute] = Seq.empty
+  @transient
+  override lazy val output: Seq[Attribute] = Seq.empty
   override lazy val resolved: Boolean = false
 }
 
@@ -564,7 +574,8 @@ case class InsertIntoDir(
     overwrite: Boolean = true)
   extends UnaryNode {
 
-  override def output: Seq[Attribute] = Seq.empty
+  @transient
+  override lazy val output: Seq[Attribute] = Seq.empty
   override lazy val resolved: Boolean = false
 }
 
@@ -606,7 +617,8 @@ case class View(
  *                     Each CTE can see the base tables and the previously defined CTEs only.
  */
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
     val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]", maxFields)
@@ -619,7 +631,8 @@ case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 }
 
 /**
@@ -632,7 +645,8 @@ case class Sort(
     order: Seq[SortOrder],
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def outputOrdering: Seq[SortOrder] = order
 }
@@ -726,7 +740,8 @@ case class Aggregate(
     !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
-  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  @transient
+  override lazy val output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val validConstraints: Set[Expression] = {
@@ -741,7 +756,8 @@ case class Window(
     orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] =
+  @transient
+  override lazy val output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
@@ -856,7 +872,8 @@ case class GroupingSets(
     child: LogicalPlan,
     aggregations: Seq[NamedExpression]) extends UnaryNode {
 
-  override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
+  @transient
+  override lazy val output: Seq[Attribute] = aggregations.map(_.toAttribute)
 
   // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
   // will change in analysis.
@@ -881,7 +898,8 @@ case class Pivot(
     aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
   override lazy val resolved = false // Pivot will be replaced after being resolved.
-  override def output: Seq[Attribute] = {
+  @transient
+  override lazy val output: Seq[Attribute] = {
     val pivotAgg = aggregates match {
       case agg :: Nil =>
         pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
@@ -934,7 +952,8 @@ object Limit {
  * See [[Limit]] for more information.
  */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -950,7 +969,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
  * See [[Limit]] for more information.
  */
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 
   override def maxRowsPerPartition: Option[Long] = {
     limitExpr match {
@@ -973,7 +993,8 @@ case class SubqueryAlias(
 
   def alias: String = name.identifier
 
-  override def output: Seq[Attribute] = {
+  @transient
+  override lazy val output: Seq[Attribute] = {
     val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
     child.output.map(_.withQualifier(qualifierList))
   }
@@ -1023,7 +1044,8 @@ case class Sample(
       s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
   }
 
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 }
 
 /**
@@ -1031,7 +1053,8 @@ case class Sample(
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 }
 
 /**
@@ -1040,7 +1063,8 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 abstract class RepartitionOperation extends UnaryNode {
   def shuffle: Boolean
   def numPartitions: Int
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 }
 
 /**
@@ -1097,7 +1121,8 @@ case class RepartitionByExpression(
  */
 case class OneRowRelation() extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
-  override def output: Seq[Attribute] = Nil
+  @transient
+  override lazy val output: Seq[Attribute] = Nil
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
@@ -1113,5 +1138,6 @@ case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 }

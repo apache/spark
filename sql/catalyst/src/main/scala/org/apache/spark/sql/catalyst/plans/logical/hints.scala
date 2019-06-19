@@ -31,7 +31,8 @@ case class UnresolvedHint(name: String, parameters: Seq[Any], child: LogicalPlan
   extends UnaryNode {
 
   override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 }
 
 /**
@@ -41,7 +42,8 @@ case class UnresolvedHint(name: String, parameters: Seq[Any], child: LogicalPlan
 case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
   extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output
+  @transient
+  override lazy val output: Seq[Attribute] = child.output
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }

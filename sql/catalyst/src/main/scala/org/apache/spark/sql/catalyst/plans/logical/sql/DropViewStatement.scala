@@ -27,7 +27,8 @@ case class DropViewStatement(
     viewName: Seq[String],
     ifExists: Boolean) extends ParsedStatement {
 
-  override def output: Seq[Attribute] = Seq.empty
+  @transient
+  override lazy val output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq.empty
 }

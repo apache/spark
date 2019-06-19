@@ -41,7 +41,8 @@ private[sql] abstract class ParsedStatement extends LogicalPlan {
     case other => other
   }
 
-  override def output: Seq[Attribute] = Seq.empty
+  @transient
+  override lazy val output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq.empty
 
