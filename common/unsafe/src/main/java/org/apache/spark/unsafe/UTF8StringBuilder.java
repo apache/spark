@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions.codegen;
+package org.apache.spark.unsafe;
 
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -34,7 +33,18 @@ public class UTF8StringBuilder {
 
   public UTF8StringBuilder() {
     // Since initial buffer size is 16 in `StringBuilder`, we set the same size here
-    this.buffer = new byte[16];
+    this(16);
+  }
+
+  public UTF8StringBuilder(int initialSize) {
+    if (initialSize < 0) {
+      throw new IllegalArgumentException("Size must be non-negative");
+    }
+    if (initialSize > ARRAY_MAX) {
+      throw new IllegalArgumentException(
+        "Size " + initialSize + " exceeded maximum size of " + ARRAY_MAX);
+    }
+    this.buffer = new byte[initialSize];
   }
 
   // Grows the buffer by at least `neededSize`
@@ -70,6 +80,17 @@ public class UTF8StringBuilder {
 
   public void append(String value) {
     append(UTF8String.fromString(value));
+  }
+
+  public void appendBytes(Object base, long offset, int length) {
+    grow(length);
+    Platform.copyMemory(
+      base,
+      offset,
+      buffer,
+      cursor,
+      length);
+    cursor += length;
   }
 
   public UTF8String build() {
