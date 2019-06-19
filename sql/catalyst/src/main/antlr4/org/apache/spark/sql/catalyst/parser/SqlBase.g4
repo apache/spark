@@ -694,8 +694,6 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) (argument+=expression)?
-      FROM argument+=expression ')'                                                            #functionCall
     | IDENTIFIER '->' expression                                                               #lambda
     | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -705,6 +703,8 @@ primaryExpression
     | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
     | (SUBSTR | SUBSTRING) '(' str=valueExpression (FROM | ',') pos=valueExpression
       ((FOR | ',') len=valueExpression)? ')'                                                   #substring
+    | TRIM '(' trimOption=(BOTH | LEADING | TRAILING) (trimStr=valueExpression)?
+       FROM srcStr=valueExpression ')'                                                         #trim
     ;
 
 constant
@@ -1059,6 +1059,7 @@ ansiNonReserved
     | TRANSACTION
     | TRANSACTIONS
     | TRANSFORM
+    | TRIM
     | TRUE
     | TRUNCATE
     | UNARCHIVE
@@ -1319,6 +1320,7 @@ nonReserved
     | TRANSACTION
     | TRANSACTIONS
     | TRANSFORM
+    | TRIM
     | TRUE
     | TRUNCATE
     | TYPE
@@ -1577,6 +1579,7 @@ TRAILING: 'TRAILING';
 TRANSACTION: 'TRANSACTION';
 TRANSACTIONS: 'TRANSACTIONS';
 TRANSFORM: 'TRANSFORM';
+TRIM: 'TRIM';
 TRUE: 'TRUE';
 TRUNCATE: 'TRUNCATE';
 TYPE: 'TYPE';
