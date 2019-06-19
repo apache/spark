@@ -105,39 +105,6 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(firstBytes20Set === expectedFirstBytes20Set)
   }
 
-  test("recursive loading") {
-    val imagesPath = spark.read.format("image")
-      .option("dropInvalid", true)
-      .option("recursiveFileLookup", true)
-      .load(recursiveImagePath)
-      .select(col("image.origin"))
-      .collect()
-      .map { row =>
-        val path = row.getString(0)
-        val keyStr = "data/mllib/images/"
-        path.substring(path.indexOf(keyStr) + keyStr.length)
-      }
-
-    assert(Set(imagesPath: _*) === Set(
-      "origin/multi-channel/chr30.4.184.jpg",
-      "partitioned/cls=multichannel/date=2018-02/grayscale.jpg",
-      "origin/multi-channel/grayscale.jpg",
-      "partitioned/cls=kittens/date=2018-02/54893.jpg",
-      "origin/kittens/54893.jpg",
-      "partitioned/cls=kittens/date=2018-02/DP802813.jpg",
-      "origin/kittens/DP802813.jpg",
-      "partitioned/cls=kittens/date=2018-01/29.5.a_b_EGDP022204.jpg",
-      "origin/kittens/29.5.a_b_EGDP022204.jpg",
-      "partitioned/cls=kittens/date=2018-02/DP153539.jpg",
-      "origin/kittens/DP153539.jpg",
-      "partitioned/cls=multichannel/date=2018-01/BGRA_alpha_60.png",
-      "origin/multi-channel/BGRA_alpha_60.png",
-      "partitioned/cls=multichannel/date=2018-01/BGRA.png",
-      "origin/multi-channel/BGRA.png",
-      "partitioned/cls=multichannel/date=2018-02/chr30.4.184.jpg"
-    ))
-  }
-
   // number of channels and first 20 bytes of OpenCV representation
   // - default representation for 3-channel RGB images is BGR row-wise:
   //   (B00, G00, R00,      B10, G10, R10,      ...)
