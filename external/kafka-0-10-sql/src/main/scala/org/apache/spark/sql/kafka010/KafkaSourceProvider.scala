@@ -355,7 +355,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
   class KafkaTable extends Table with SupportsRead with SupportsWrite {
 
-    override def name(): String = s"KafkaTable"
+    override def name(): String = "KafkaTable"
 
     override def schema(): StructType = KafkaOffsetReader.kafkaSchema
 
