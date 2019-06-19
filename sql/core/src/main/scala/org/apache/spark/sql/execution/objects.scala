@@ -62,7 +62,8 @@ trait ObjectConsumerExec extends UnaryExecNode {
   assert(child.output.length == 1)
 
   // This operator always need all columns of its child, even it doesn't reference to.
-  override def references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = child.outputSet
 
   def inputObjectType: DataType = child.output.head.dataType
 }
