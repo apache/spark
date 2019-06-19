@@ -126,22 +126,15 @@ private[orc] object OrcFilters extends Logging {
       // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
       // As per the logical in And predicate, we can push down (a1 OR b1).
       case Or(left, right) =>
-        val leftResultOptional = convertibleFiltersHelper(left, canPartialPushDown)
-        val rightResultOptional = convertibleFiltersHelper(right, canPartialPushDown)
-        if (leftResultOptional.isEmpty || rightResultOptional.isEmpty) {
-          None
-        } else {
-          Some(Or(leftResultOptional.get, rightResultOptional.get))
-        }
+        for {
+          lhs <- convertibleFiltersHelper(left, canPartialPushDown)
+          rhs <- convertibleFiltersHelper(right, canPartialPushDown)
+        } yield Or(lhs, rhs)
       case Not(pred) =>
-        val resultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
-        resultOptional.map(Not)
+        val childResultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
+        childResultOptional.map(Not)
       case other =>
-        if (buildSearchArgument(dataTypeMap, other, newBuilder()).isDefined) {
-          Some(other)
-        } else {
-          None
-        }
+        for (_ <- buildSearchArgument(dataTypeMap, other, newBuilder())) yield other
     }
     filters.flatMap { filter =>
       convertibleFiltersHelper(filter, true)
