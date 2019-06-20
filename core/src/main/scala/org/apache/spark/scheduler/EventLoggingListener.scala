@@ -74,9 +74,7 @@ private[spark] class EventLoggingListener(
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   private val compressionCodec =
     if (shouldCompress) {
-      val codecName =
-        sparkConf.get(EVENT_LOG_COMPRESSION_CODEC).getOrElse(sparkConf.get(IO_COMPRESSION_CODEC))
-      Some(CompressionCodec.createCodec(sparkConf, codecName))
+      Some(CompressionCodec.createCodec(sparkConf, sparkConf.get(EVENT_LOG_COMPRESSION_CODEC)))
     } else {
       None
     }

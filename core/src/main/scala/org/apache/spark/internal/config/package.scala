@@ -98,14 +98,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_COMPRESSION_CODEC =
-    ConfigBuilder("spark.eventLog.compression.codec")
-      .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
-        "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
-        "the codec. If this is not given, spark.io.compression.codec will be used.")
-      .stringConf
-      .createOptional
-
   private[spark] val EVENT_LOG_BLOCK_UPDATES =
     ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
       .booleanConf
@@ -1165,7 +1157,7 @@ package object config {
 
   private[spark] val IO_COMPRESSION_CODEC =
     ConfigBuilder("spark.io.compression.codec")
-      .doc("The codec used to compress internal data such as RDD partitions, " +
+      .doc("The codec used to compress internal data such as RDD partitions, event log, " +
         "broadcast variables and shuffle outputs. By default, Spark provides four codecs: " +
         "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
         "the codec")
@@ -1187,6 +1179,13 @@ package object config {
         "level will result in better compression at the expense of more CPU and memory")
       .intConf
       .createWithDefault(1)
+
+  private[spark] val EVENT_LOG_COMPRESSION_CODEC =
+    ConfigBuilder("spark.eventLog.compression.codec")
+      .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
+        "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
+        "the codec. If this is not given, spark.io.compression.codec will be used.")
+      .fallbackConf(IO_COMPRESSION_CODEC)
 
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
