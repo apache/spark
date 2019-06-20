@@ -60,8 +60,9 @@ class RankingEvaluator (override val uid: String)
   setDefault(metricName -> "meanAveragePrecision")
 
   final val k = new IntParam(this, "k",
-    "The ranking position value used in meanAveragePrecisionAtK|precisionAtK|ndcgAtK|recallAtK." +
-    " Must be > 0. The default value is 10.",
+    "The ranking position value used in " +
+      s"${supportedMetricNames.filter(_.endsWith("AtK")).mkString("(", "|", ")")}  " +
+      "Must be > 0. The default value is 10.",
     ParamValidators.gt(0))
 
   /** @group getParam */
@@ -100,6 +101,8 @@ class RankingEvaluator (override val uid: String)
       case "recallAtK" => metrics.recallAt($(k))
     }
   }
+
+  override def isLargerBetter: Boolean = true
 
   override def copy(extra: ParamMap): RankingEvaluator = defaultCopy(extra)
 }
