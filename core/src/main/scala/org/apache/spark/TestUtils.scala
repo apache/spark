@@ -20,10 +20,12 @@ package org.apache.spark
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{HttpURLConnection, URI, URL}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files => JavaFiles}
+import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, Properties}
-import java.util.concurrent.{CountDownLatch, TimeoutException, TimeUnit}
+import java.util.{Arrays, EnumSet, Properties}
+import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
 import javax.net.ssl._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
@@ -36,8 +38,11 @@ import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.log4j.PropertyConfigurator
+import org.json4s.JsonAST.JValue
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -172,22 +177,38 @@ private[spark] object TestUtils {
   /**
    * Run some code involving jobs submitted to the given context and assert that the jobs spilled.
    */
-  def assertSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
-    val spillListener = new SpillListener
-    sc.addSparkListener(spillListener)
-    body
-    assert(spillListener.numSpilledStages > 0, s"expected $identifier to spill, but did not")
+  def assertSpilled(sc: SparkContext, identifier: String)(body: => Unit): Unit = {
+    val listener = new SpillListener
+    withListener(sc, listener) { _ =>
+      body
+    }
+    assert(listener.numSpilledStages > 0, s"expected $identifier to spill, but did not")
   }
 
   /**
    * Run some code involving jobs submitted to the given context and assert that the jobs
    * did not spill.
    */
-  def assertNotSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
-    val spillListener = new SpillListener
-    sc.addSparkListener(spillListener)
-    body
-    assert(spillListener.numSpilledStages == 0, s"expected $identifier to not spill, but did")
+  def assertNotSpilled(sc: SparkContext, identifier: String)(body: => Unit): Unit = {
+    val listener = new SpillListener
+    withListener(sc, listener) { _ =>
+      body
+    }
+    assert(listener.numSpilledStages == 0, s"expected $identifier to not spill, but did")
+  }
+
+  /**
+   * Asserts that exception message contains the message. Please note this checks all
+   * exceptions in the tree.
+   */
+  def assertExceptionMsg(exception: Throwable, msg: String): Unit = {
+    var e = exception
+    var contains = e.getMessage.contains(msg)
+    while (e.getCause != null && !contains) {
+      e = e.getCause
+      contains = e.getMessage.contains(msg)
+    }
+    assert(contains, s"Exception tree doesn't contain the expected message: $msg")
   }
 
   /**
@@ -230,6 +251,21 @@ private[spark] object TestUtils {
       connection.getResponseCode()
     } finally {
       connection.disconnect()
+    }
+  }
+
+  /**
+   * Runs some code with the given listener installed in the SparkContext. After the code runs,
+   * this method will wait until all events posted to the listener bus are processed, and then
+   * remove the listener from the bus.
+   */
+  def withListener[L <: SparkListener](sc: SparkContext, listener: L) (body: L => Unit): Unit = {
+    sc.addSparkListener(listener)
+    try {
+      body(listener)
+    } finally {
+      sc.listenerBus.waitUntilEmpty(TimeUnit.SECONDS.toMillis(10))
+      sc.listenerBus.removeListener(listener)
     }
   }
 
@@ -280,6 +316,22 @@ private[spark] object TestUtils {
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 
+  /** Creates a temp JSON file that contains the input JSON record. */
+  def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
+    val file = File.createTempFile(prefix, ".json", dir)
+    JavaFiles.write(file.toPath, compact(render(jsonValue)).getBytes())
+    file.getPath
+  }
+
+  /** Creates a temp bash script that prints the given output. */
+  def createTempScriptWithExpectedOutput(dir: File, prefix: String, output: String): String = {
+    val file = File.createTempFile(prefix, ".sh", dir)
+    val script = s"cat <<EOF\n$output\nEOF\n"
+    Files.write(script, file, StandardCharsets.UTF_8)
+    JavaFiles.setPosixFilePermissions(file.toPath,
+      EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+    file.getPath
+  }
 }
 
 
@@ -289,30 +341,22 @@ private[spark] object TestUtils {
 private class SpillListener extends SparkListener {
   private val stageIdToTaskMetrics = new mutable.HashMap[Int, ArrayBuffer[TaskMetrics]]
   private val spilledStageIds = new mutable.HashSet[Int]
-  private val stagesDone = new CountDownLatch(1)
 
-  def numSpilledStages: Int = {
-    // Long timeout, just in case somehow the job end isn't notified.
-    // Fails if a timeout occurs
-    assert(stagesDone.await(10, TimeUnit.SECONDS))
+  def numSpilledStages: Int = synchronized {
     spilledStageIds.size
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     stageIdToTaskMetrics.getOrElseUpdate(
       taskEnd.stageId, new ArrayBuffer[TaskMetrics]) += taskEnd.taskMetrics
   }
 
-  override def onStageCompleted(stageComplete: SparkListenerStageCompleted): Unit = {
+  override def onStageCompleted(stageComplete: SparkListenerStageCompleted): Unit = synchronized {
     val stageId = stageComplete.stageInfo.stageId
     val metrics = stageIdToTaskMetrics.remove(stageId).toSeq.flatten
     val spilled = metrics.map(_.memoryBytesSpilled).sum > 0
     if (spilled) {
       spilledStageIds += stageId
     }
-  }
-
-  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-    stagesDone.countDown()
   }
 }

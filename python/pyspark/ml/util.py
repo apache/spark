@@ -63,7 +63,7 @@ class Identifiable(object):
         Generate a unique unicode id for the object. The default implementation
         concatenates the class name, "_", and 12 random hex chars.
         """
-        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[12:])
+        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[-12:])
 
 
 @inherit_doc
@@ -611,3 +611,29 @@ class DefaultParamsReader(MLReader):
         py_type = DefaultParamsReader.__get_class(pythonClassName)
         instance = py_type.load(path)
         return instance
+
+
+@inherit_doc
+class HasTrainingSummary(object):
+    """
+    Base class for models that provides Training summary.
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of the model trained on the training set. An exception is thrown if
+        no summary exists.
+        """
+        return (self._call_java("summary"))

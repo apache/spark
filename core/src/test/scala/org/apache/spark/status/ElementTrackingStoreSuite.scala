@@ -17,14 +17,60 @@
 
 package org.apache.spark.status
 
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+
 import org.mockito.Mockito._
+import org.scalatest.Matchers._
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Status._
+import org.apache.spark.status.ElementTrackingStore._
 import org.apache.spark.util.kvstore._
 
-class ElementTrackingStoreSuite extends SparkFunSuite {
+class ElementTrackingStoreSuite extends SparkFunSuite with Eventually {
 
-  import config._
+  test("asynchronous tracking single-fire") {
+    val store = mock(classOf[KVStore])
+    val tracking = new ElementTrackingStore(store, new SparkConf()
+      .set(ASYNC_TRACKING_ENABLED, true))
+
+    var done = new AtomicBoolean(false)
+    var type1 = new AtomicInteger(0)
+    var queued0: WriteQueueResult = null
+    var queued1: WriteQueueResult = null
+    var queued2: WriteQueueResult = null
+    var queued3: WriteQueueResult = null
+
+    tracking.addTrigger(classOf[Type1], 1) { count =>
+      val count = type1.getAndIncrement()
+
+      count match {
+        case 0 =>
+          // while in the asynchronous thread, attempt to increment twice.  The first should
+          // succeed, the second should be skipped
+          queued1 = tracking.write(new Type1, checkTriggers = true)
+          queued2 = tracking.write(new Type1, checkTriggers = true)
+        case 1 =>
+          // Verify that once we've started deliver again, that we can enqueue another
+          queued3 = tracking.write(new Type1, checkTriggers = true)
+        case 2 =>
+          done.set(true)
+      }
+    }
+
+    when(store.count(classOf[Type1])).thenReturn(2L)
+    queued0 = tracking.write(new Type1, checkTriggers = true)
+    eventually {
+      done.get() shouldEqual true
+    }
+
+    tracking.close(false)
+    assert(queued0 == WriteQueued)
+    assert(queued1 == WriteQueued)
+    assert(queued2 == WriteSkippedQueue)
+    assert(queued3 == WriteQueued)
+  }
 
   test("tracking for multiple types") {
     val store = mock(classOf[KVStore])

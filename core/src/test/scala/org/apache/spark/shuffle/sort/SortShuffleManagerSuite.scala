@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle.sort
 
-import org.mockito.Mockito._
+import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.Matchers
@@ -30,6 +30,8 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
  * performed in other suites.
  */
 class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
+
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   import SortShuffleManager.canUseSerializedShuffle
 

@@ -50,7 +50,7 @@ object CodecStreams {
    */
   def createInputStreamWithCloseResource(config: Configuration, path: Path): InputStream = {
     val inputStream = createInputStream(config, path)
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => inputStream.close()))
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => inputStream.close()))
     inputStream
   }
 

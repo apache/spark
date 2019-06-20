@@ -17,7 +17,7 @@
 
 <!DOCTYPE module PUBLIC
           "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
-          "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
+          "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <!--
 
@@ -71,13 +71,13 @@
         If you wish to turn off checking for a section of code, you can put a comment in the source
         before and after the section, with the following syntax:
 
-          // checkstyle:off no.XXX (such as checkstyle.off: NoFinalizer)
+          // checkstyle.off: XXX (such as checkstyle.off: NoFinalizer)
           ...  // stuff that breaks the styles
-          // checkstyle:on
+          // checkstyle.on: XXX (such as checkstyle.on: NoFinalizer)
         -->
         <module name="SuppressionCommentFilter">
-            <property name="offCommentFormat" value="checkstyle.off\: ([\w\|]+)"/>
-            <property name="onCommentFormat" value="checkstyle.on\: ([\w\|]+)"/>
+            <property name="offCommentFormat" value="checkstyle\.off\: ([\w\|]+)"/>
+            <property name="onCommentFormat" value="checkstyle\.on\: ([\w\|]+)"/>
             <property name="checkFormat" value="$1"/>
         </module>
         <module name="OuterTypeFilename"/>
@@ -180,5 +180,10 @@
         <module name="UnusedImports"/>
         <module name="RedundantImport"/>
         <module name="RedundantModifier"/>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="throw new \w+Error\("/>
+            <property name="message" value="Avoid throwing error in application code."/>
+        </module>
+
     </module>
 </module>

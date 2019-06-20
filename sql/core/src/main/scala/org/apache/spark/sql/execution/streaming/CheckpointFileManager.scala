@@ -56,7 +56,7 @@ trait CheckpointFileManager {
    * @param overwriteIfPossible If true, then the implementations must do a best-effort attempt to
    *                            overwrite the file if it already exists. It should not throw
    *                            any exception if the file exists. However, if false, then the
-   *                            implementation must not overwrite if the file alraedy exists and
+   *                            implementation must not overwrite if the file already exists and
    *                            must throw `FileAlreadyExistsException` in that case.
    */
   def createAtomic(path: Path, overwriteIfPossible: Boolean): CancellableFSDataOutputStream
@@ -69,7 +69,7 @@ trait CheckpointFileManager {
 
   /** List all the files in a path. */
   def list(path: Path): Array[FileStatus] = {
-    list(path, new PathFilter { override def accept(path: Path): Boolean = true })
+    list(path, (_: Path) => true)
   }
 
   /** Make directory at the give path and all its parent directories as needed. */
@@ -103,7 +103,7 @@ object CheckpointFileManager extends Logging {
      * @param overwriteIfPossible If true, then the implementations must do a best-effort attempt to
      *                            overwrite the file if it already exists. It should not throw
      *                            any exception if the file exists. However, if false, then the
-     *                            implementation must not overwrite if the file alraedy exists and
+     *                            implementation must not overwrite if the file already exists and
      *                            must throw `FileAlreadyExistsException` in that case.
      */
     def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit
@@ -236,14 +236,12 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
     fs.open(path)
   }
 
-  override def exists(path: Path): Boolean = {
-    try
-      return fs.getFileStatus(path) != null
-    catch {
-      case e: FileNotFoundException =>
-        return false
+  override def exists(path: Path): Boolean =
+    try {
+      fs.getFileStatus(path) != null
+    } catch {
+      case _: FileNotFoundException => false
     }
-  }
 
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     if (!overwriteIfPossible && fs.exists(dstPath)) {

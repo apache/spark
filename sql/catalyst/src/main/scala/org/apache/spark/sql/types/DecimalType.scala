@@ -21,10 +21,9 @@ import java.util.Locale
 
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-
 
 /**
  * The data type representing `java.math.BigDecimal` values.
@@ -39,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   if (scale > precision) {
@@ -48,7 +47,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw new AnalysisException(s"DecimalType can only support precision up to 38")
+    throw new AnalysisException(
+      s"${DecimalType.simpleString} can only support precision up to ${DecimalType.MAX_PRECISION}")
   }
 
   // default constructor for Java
@@ -109,7 +109,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object DecimalType extends AbstractDataType {
   import scala.math.min
 
@@ -120,6 +120,7 @@ object DecimalType extends AbstractDataType {
   val MINIMUM_ADJUSTED_SCALE = 6
 
   // The decimal types compatible with other numeric types
+  private[sql] val BooleanDecimal = DecimalType(1, 0)
   private[sql] val ByteDecimal = DecimalType(3, 0)
   private[sql] val ShortDecimal = DecimalType(5, 0)
   private[sql] val IntDecimal = DecimalType(10, 0)
