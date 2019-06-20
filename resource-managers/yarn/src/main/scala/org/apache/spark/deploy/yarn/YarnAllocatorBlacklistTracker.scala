@@ -28,7 +28,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.BlacklistTracker
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * YarnAllocatorBlacklistTracker is responsible for tracking the blacklisted nodes
@@ -55,6 +55,8 @@ private[spark] class YarnAllocatorBlacklistTracker(
   private val launchBlacklistEnabled = sparkConf.get(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED)
 
   private val maxFailuresPerHost = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
+
+  private val excludeNodes = sparkConf.get(YARN_EXCLUDE_NODES).toSet
 
   private val allocatorBlacklist = new HashMap[String, Long]()
 
@@ -105,7 +107,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private def refreshBlacklistedNodes(): Unit = {
     removeExpiredYarnBlacklistedNodes()
-    val allBlacklistedNodes = schedulerBlacklist ++ allocatorBlacklist.keySet
+    val allBlacklistedNodes = excludeNodes ++ schedulerBlacklist ++ allocatorBlacklist.keySet
     synchronizeBlacklistedNodeWithYarn(allBlacklistedNodes)
   }
 
@@ -120,7 +122,9 @@ private[spark] class YarnAllocatorBlacklistTracker(
     if (removals.nonEmpty) {
       logInfo(s"removing nodes from YARN application master's blacklist: $removals")
     }
-    amClient.updateBlacklist(additions.asJava, removals.asJava)
+    if (additions.nonEmpty || removals.nonEmpty) {
+      amClient.updateBlacklist(additions.asJava, removals.asJava)
+    }
     currentBlacklistedYarnNodes = nodesToBlacklist
   }
 

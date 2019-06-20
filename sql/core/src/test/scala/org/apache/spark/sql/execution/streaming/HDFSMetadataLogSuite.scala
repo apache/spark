@@ -131,9 +131,10 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
   testQuietly("HDFSMetadataLog: metadata directory collision") {
     withTempDir { temp =>
-      val waiter = new Waiter
-      val maxBatchId = 100
-      for (id <- 0 until 10) {
+      val waiter = new Waiter()
+      val maxBatchId = 10
+      val numThreads = 5
+      for (id <- 0 until numThreads) {
         new UninterruptibleThread(s"HDFSMetadataLog: metadata directory collision - thread $id") {
           override def run(): Unit = waiter {
             val metadataLog =
@@ -146,7 +147,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
                 nextBatchId += 1
               }
             } catch {
-              case e: ConcurrentModificationException =>
+              case _: ConcurrentModificationException =>
               // This is expected since there are multiple writers
             } finally {
               waiter.dismiss()
@@ -155,7 +156,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
         }.start()
       }
 
-      waiter.await(timeout(10.seconds), dismissals(10))
+      waiter.await(timeout(10.seconds), dismissals(numThreads))
       val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.getLatest() === Some(maxBatchId -> maxBatchId.toString))
       assert(
@@ -178,5 +179,11 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), None, Some(5L)))
     intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), Some(5L)))
     intercept[IllegalStateException](verifyBatchIds(Seq(1, 2, 4, 5), Some(1L), Some(5L)))
+
+    // Related to SPARK-26629, this capatures the behavior for verifyBatchIds when startId > endId
+    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(2L), Some(1L)))
+    intercept[AssertionError](verifyBatchIds(Seq(2), Some(2L), Some(1L)))
+    intercept[AssertionError](verifyBatchIds(Seq(1), Some(2L), Some(1L)))
+    intercept[AssertionError](verifyBatchIds(Seq(0), Some(2L), Some(1L)))
   }
 }

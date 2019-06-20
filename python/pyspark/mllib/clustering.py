@@ -33,7 +33,6 @@ from pyspark import SparkContext, since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
-from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
@@ -184,7 +183,7 @@ class KMeansModel(Saveable, Loader):
     >>> model.k
     2
     >>> model.computeCost(sc.parallelize(data))
-    2.0000000000000004
+    2.0
     >>> model = KMeans.train(sc.parallelize(data), 2)
     >>> sparse_data = [
     ...     SparseVector(3, {1: 1.0}),
@@ -647,7 +646,7 @@ class PowerIterationClustering(object):
     @classmethod
     @since('1.5.0')
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
-        """
+        r"""
         :param rdd:
           An RDD of (i, j, s\ :sub:`ij`\) tuples representing the
           affinity matrix, which is the matrix A in the PIC paper.  The
@@ -1042,7 +1041,13 @@ class LDA(object):
 
 def _test():
     import doctest
+    import numpy
     import pyspark.mllib.clustering
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.clustering.__dict__.copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)

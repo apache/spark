@@ -25,6 +25,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -93,8 +94,7 @@ public final class UnsafeKVExternalSorter {
         taskContext,
         comparatorSupplier,
         prefixComparator,
-        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
-                                     UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
+        (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
         canUseRadixSort);
@@ -160,8 +160,7 @@ public final class UnsafeKVExternalSorter {
         taskContext,
         comparatorSupplier,
         prefixComparator,
-        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
-                                     UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
+        (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
         inMemSorter);

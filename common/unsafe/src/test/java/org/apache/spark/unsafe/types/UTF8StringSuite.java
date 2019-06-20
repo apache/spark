@@ -25,8 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
-import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
-import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
+import org.apache.spark.unsafe.Platform;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -394,12 +393,52 @@ public class UTF8StringSuite {
 
   @Test
   public void split() {
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
-      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+    UTF8String[] negativeAndZeroLimitCase =
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
+  }
+
+  @Test
+  public void replace() {
+    assertEquals(
+      fromString("re123ace"),
+      fromString("replace").replace(fromString("pl"), fromString("123")));
+    assertEquals(
+      fromString("reace"),
+      fromString("replace").replace(fromString("pl"), fromString("")));
+    assertEquals(
+      fromString("replace"),
+      fromString("replace").replace(fromString(""), fromString("123")));
+    // tests for multiple replacements
+    assertEquals(
+      fromString("a12ca12c"),
+      fromString("abcabc").replace(fromString("b"), fromString("12")));
+    assertEquals(
+      fromString("adad"),
+      fromString("abcdabcd").replace(fromString("bc"), fromString("")));
+    // tests for single character search and replacement strings
+    assertEquals(
+      fromString("AbcAbc"),
+      fromString("abcabc").replace(fromString("a"), fromString("A")));
+    assertEquals(
+      fromString("abcabc"),
+      fromString("abcabc").replace(fromString("Z"), fromString("A")));
+    // Tests with non-ASCII characters
+    assertEquals(
+      fromString("花ab界"),
+      fromString("花花世界").replace(fromString("花世"), fromString("ab")));
+    assertEquals(
+      fromString("a水c"),
+      fromString("a火c").replace(fromString("火"), fromString("水")));
+    // Tests for a large number of replacements, triggering UTF8StringBuilder resize
+    assertEquals(
+      fromString("abcd").repeat(17),
+      fromString("a").repeat(17).replace(fromString("a"), fromString("abcd")));
   }
 
   @Test
@@ -514,13 +553,28 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void writeToOutputStreamUnderflow() throws IOException {
+    // offset underflow is apparently supported?
+    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
+
+    for (int i = 1; i <= Platform.BYTE_ARRAY_OFFSET; ++i) {
+      UTF8String.fromAddress(test, Platform.BYTE_ARRAY_OFFSET - i, test.length + i)
+          .writeTo(outputStream);
+      final ByteBuffer buffer = ByteBuffer.wrap(outputStream.toByteArray(), i, test.length);
+      assertEquals("01234567", StandardCharsets.UTF_8.decode(buffer).toString());
+      outputStream.reset();
+    }
+  }
+
+  @Test
   public void writeToOutputStreamSlice() throws IOException {
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
 
     for (int i = 0; i < test.length; ++i) {
       for (int j = 0; j < test.length - i; ++j) {
-        new UTF8String(ByteArrayMemoryBlock.fromArray(test).subBlock(i, j))
+        UTF8String.fromAddress(test, Platform.BYTE_ARRAY_OFFSET + i, j)
             .writeTo(outputStream);
 
         assertArrayEquals(Arrays.copyOfRange(test, i, i + j), outputStream.toByteArray());
@@ -551,7 +605,7 @@ public class UTF8StringSuite {
 
     for (final long offset : offsets) {
       try {
-        new UTF8String(ByteArrayMemoryBlock.fromArray(test).subBlock(offset, test.length))
+        fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length)
             .writeTo(outputStream);
 
         throw new IllegalStateException(Long.toString(offset));
@@ -578,25 +632,26 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void writeToOutputStreamLongArray() throws IOException {
+  public void writeToOutputStreamIntArray() throws IOException {
     // verify that writes work on objects that are not byte arrays
-    final ByteBuffer buffer = StandardCharsets.UTF_8.encode("3千大千世界");
+    final ByteBuffer buffer = StandardCharsets.UTF_8.encode("大千世界");
     buffer.position(0);
     buffer.order(ByteOrder.nativeOrder());
 
     final int length = buffer.limit();
-    assertEquals(16, length);
+    assertEquals(12, length);
 
-    final int longs = length / 8;
-    final long[] array = new long[longs];
+    final int ints = length / 4;
+    final int[] array = new int[ints];
 
-    for (int i = 0; i < longs; ++i) {
-      array[i] = buffer.getLong();
+    for (int i = 0; i < ints; ++i) {
+      array[i] = buffer.getInt();
     }
 
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    new UTF8String(OnHeapMemoryBlock.fromArray(array)).writeTo(outputStream);
-    assertEquals("3千大千世界", outputStream.toString("UTF-8"));
+    fromAddress(array, Platform.INT_ARRAY_OFFSET, length)
+        .writeTo(outputStream);
+    assertEquals("大千世界", outputStream.toString("UTF-8"));
   }
 
   @Test

@@ -20,7 +20,8 @@
   "maxMemory" : 384093388,
   "addTime" : "2016-11-15T23:20:38.836GMT",
   "executorLogs" : { },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "3",
   "hostPort" : "172.22.0.111:64543",
@@ -46,7 +47,8 @@
     "stdout" : "http://172.22.0.111:64521/logPage/?appId=app-20161115172038-0000&executorId=3&logType=stdout",
     "stderr" : "http://172.22.0.111:64521/logPage/?appId=app-20161115172038-0000&executorId=3&logType=stderr"
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "2",
   "hostPort" : "172.22.0.111:64539",
@@ -72,7 +74,8 @@
     "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
     "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "1",
   "hostPort" : "172.22.0.111:64541",
@@ -98,7 +101,8 @@
     "stdout" : "http://172.22.0.111:64518/logPage/?appId=app-20161115172038-0000&executorId=1&logType=stdout",
     "stderr" : "http://172.22.0.111:64518/logPage/?appId=app-20161115172038-0000&executorId=1&logType=stderr"
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "0",
   "hostPort" : "172.22.0.111:64540",
@@ -124,5 +128,6 @@
     "stdout" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stdout",
     "stderr" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stderr"
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 } ]

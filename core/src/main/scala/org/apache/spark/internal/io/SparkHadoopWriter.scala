@@ -116,11 +116,13 @@ object SparkHadoopWriter extends Logging {
       jobTrackerId, commitJobId, sparkPartitionId, sparkAttemptNumber)
     committer.setupTask(taskContext)
 
-    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
-
     // Initiate the writer.
     config.initWriter(taskContext, sparkPartitionId)
     var recordsWritten = 0L
+
+    // We must initialize the callback for calculating bytes written after the statistic table
+    // is initialized in FileSystem which is happened in initWriter.
+    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
 
     // Write all rows in RDD partition.
     try {
@@ -256,7 +258,7 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
   private def getOutputFormat(): OutputFormat[K, V] = {
     require(outputFormat != null, "Must call initOutputFormat first.")
 
-    outputFormat.newInstance()
+    outputFormat.getConstructor().newInstance()
   }
 
   // --------------------------------------------------------------------------
@@ -379,7 +381,7 @@ class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfigura
   private def getOutputFormat(): NewOutputFormat[K, V] = {
     require(outputFormat != null, "Must call initOutputFormat first.")
 
-    outputFormat.newInstance()
+    outputFormat.getConstructor().newInstance()
   }
 
   // --------------------------------------------------------------------------

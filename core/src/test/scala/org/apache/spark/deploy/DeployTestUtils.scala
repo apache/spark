@@ -64,6 +64,7 @@ private[deploy] object DeployTestUtils {
       1234,
       null,
       "workerId",
+      "http://",
       "host",
       123,
       "publicAddress",

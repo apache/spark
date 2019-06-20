@@ -91,7 +91,7 @@ class HadoopMapReduceCommitProtocol(
   private def stagingDir = new Path(path, ".spark-staging-" + jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    val format = context.getOutputFormatClass.newInstance()
+    val format = context.getOutputFormatClass.getConstructor().newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
     format match {
       case c: Configurable => c.setConf(context.getConfiguration)
