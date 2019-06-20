@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.{util => ju}
-
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
+import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReaderFactory}
 
 
 private[kafka010] class KafkaBatch(
@@ -35,15 +33,21 @@ private[kafka010] class KafkaBatch(
     startingOffsets: KafkaOffsetRangeLimit,
     endingOffsets: KafkaOffsetRangeLimit)
     extends Batch with Logging {
+  assert(startingOffsets != LatestOffsetRangeLimit,
+    "Starting offset not allowed to be set to latest offsets.")
+  assert(endingOffsets != EarliestOffsetRangeLimit,
+    "Ending offset not allowed to be set to earliest offsets.")
 
-  private val pollTimeoutMs =
-    sourceOptions.getOrElse(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, "512").toLong
+  private val pollTimeoutMs = sourceOptions.getOrElse(
+    KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
+    (SparkEnv.get.conf.get(NETWORK_TIMEOUT) * 1000L).toString
+  ).toLong
 
   override def planInputPartitions(): Array[InputPartition] = {
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-relation-${ju.UUID.randomUUID}"
+    val uniqueGroupId = KafkaSourceProvider.batchUniqueGroupId(sourceOptions)
 
     val kafkaOffsetReader = new KafkaOffsetReader(
       strategy,
@@ -54,8 +58,8 @@ private[kafka010] class KafkaBatch(
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val (fromPartitionOffsets, untilPartitionOffsets) = {
       try {
-        (getPartitionOffsets(kafkaOffsetReader, startingOffsets),
-          getPartitionOffsets(kafkaOffsetReader, endingOffsets))
+        (kafkaOffsetReader.fetchPartitionOffsets(startingOffsets),
+          kafkaOffsetReader.fetchPartitionOffsets(endingOffsets))
       } finally {
         kafkaOffsetReader.close()
       }
@@ -94,117 +98,6 @@ private[kafka010] class KafkaBatch(
     KafkaBatchReaderFactory
   }
 
-  private def getPartitionOffsets(
-      kafkaReader: KafkaOffsetReader,
-      kafkaOffsets: KafkaOffsetRangeLimit): Map[TopicPartition, Long] = {
-    def validateTopicPartitions(partitions: Set[TopicPartition],
-      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
-      assert(partitions == partitionOffsets.keySet,
-        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
-          "Use -1 for latest, -2 for earliest, if you don't care.\n" +
-          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions}")
-      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
-      partitionOffsets
-    }
-    val partitions = kafkaReader.fetchTopicPartitions()
-    // Obtain TopicPartition offsets with late binding support
-    kafkaOffsets match {
-      case EarliestOffsetRangeLimit => partitions.map {
-        case tp => tp -> KafkaOffsetRangeLimit.EARLIEST
-      }.toMap
-      case LatestOffsetRangeLimit => partitions.map {
-        case tp => tp -> KafkaOffsetRangeLimit.LATEST
-      }.toMap
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        validateTopicPartitions(partitions, partitionOffsets)
-    }
-  }
-
   override def toString: String =
     s"KafkaBatch(strategy=$strategy, start=$startingOffsets, end=$endingOffsets)"
-}
-
-/** Partition of the KafkaBatch */
-private[kafka010] case class KafkaBatchInputPartition(
-    offsetRange: KafkaOffsetRange,
-    executorKafkaParams: ju.Map[String, Object],
-    pollTimeoutMs: Long,
-    failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends InputPartition {
-  override def preferredLocations(): Array[String] =
-    offsetRange.preferredLoc.map(Seq(_)).getOrElse(Seq.empty).toArray
-}
-
-private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory {
-  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    val p = partition.asInstanceOf[KafkaBatchInputPartition]
-    KafkaBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
-      p.failOnDataLoss, p.reuseKafkaConsumer)
-  }
-}
-
-/** A [[PartitionReader]] for reading Kafka data in a batch query. */
-private[kafka010] case class KafkaBatchPartitionReader(
-    offsetRange: KafkaOffsetRange,
-    executorKafkaParams: ju.Map[String, Object],
-    pollTimeoutMs: Long,
-    failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends PartitionReader[InternalRow] with Logging {
-
-  private val consumer = KafkaDataConsumer.acquire(
-    offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
-
-  private val rangeToRead = resolveRange(offsetRange)
-  private val converter = new KafkaRecordToUnsafeRowConverter
-
-  private var nextOffset = rangeToRead.fromOffset
-  private var nextRow: UnsafeRow = _
-
-  override def next(): Boolean = {
-    if (nextOffset < rangeToRead.untilOffset) {
-      val record = consumer.get(nextOffset, rangeToRead.untilOffset, pollTimeoutMs, failOnDataLoss)
-      if (record != null) {
-        nextRow = converter.toUnsafeRow(record)
-        nextOffset = record.offset + 1
-        true
-      } else {
-        false
-      }
-    } else {
-      false
-    }
-  }
-
-  override def get(): UnsafeRow = {
-    assert(nextRow != null)
-    nextRow
-  }
-
-  override def close(): Unit = {
-    consumer.release()
-  }
-
-  private def resolveRange(range: KafkaOffsetRange): KafkaOffsetRange = {
-    if (range.fromOffset < 0 || range.untilOffset < 0) {
-      // Late bind the offset range
-      val availableOffsetRange = consumer.getAvailableOffsetRange()
-      val fromOffset = if (range.fromOffset < 0) {
-        assert(range.fromOffset == KafkaOffsetRangeLimit.EARLIEST,
-          s"earliest offset ${range.fromOffset} does not equal ${KafkaOffsetRangeLimit.EARLIEST}")
-        availableOffsetRange.earliest
-      } else {
-        range.fromOffset
-      }
-      val untilOffset = if (range.untilOffset < 0) {
-        assert(range.untilOffset == KafkaOffsetRangeLimit.LATEST,
-          s"latest offset ${range.untilOffset} does not equal ${KafkaOffsetRangeLimit.LATEST}")
-        availableOffsetRange.latest
-      } else {
-        range.untilOffset
-      }
-      KafkaOffsetRange(range.topicPartition, fromOffset, untilOffset, range.preferredLoc)
-    } else {
-      range
-    }
-  }
 }

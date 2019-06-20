@@ -406,19 +406,17 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
       val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
         caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
-      assert(startingRelationOffsets != LatestOffsetRangeLimit)
 
       val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
         caseInsensitiveParams, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
-      assert(endingRelationOffsets != EarliestOffsetRangeLimit)
 
       new KafkaBatch(
         strategy(caseInsensitiveParams),
-        sourceOptions = parameters,
-        specifiedKafkaParams = specifiedKafkaParams,
-        failOnDataLoss = failOnDataLoss(caseInsensitiveParams),
-        startingOffsets = startingRelationOffsets,
-        endingOffsets = endingRelationOffsets)
+        parameters,
+        specifiedKafkaParams,
+        failOnDataLoss(caseInsensitiveParams),
+        startingRelationOffsets,
+        endingRelationOffsets)
     }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
@@ -589,7 +587,17 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .build()
 
   /**
-   * Returns a unique consumer group (group.id), allowing the user to set the prefix of
+   * Returns a unique batch consumer group (group.id), allowing the user to set the prefix of
+   * the consumer group
+   */
+  private[kafka010] def batchUniqueGroupId(parameters: Map[String, String]): String = {
+    val groupIdPrefix = parameters
+      .getOrElse(GROUP_ID_PREFIX, "spark-kafka-relation")
+    s"${groupIdPrefix}-${UUID.randomUUID}"
+  }
+
+  /**
+   * Returns a unique streaming consumer group (group.id), allowing the user to set the prefix of
    * the consumer group
    */
   private def streamingUniqueGroupId(
