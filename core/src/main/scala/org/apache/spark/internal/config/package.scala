@@ -1165,7 +1165,7 @@ package object config {
 
   private[spark] val IO_COMPRESSION_CODEC =
     ConfigBuilder("spark.io.compression.codec")
-      .doc("The codec used to compress internal data such as RDD partitions, " +
+      .doc("The codec used to compress internal data such as RDD partitions, event log, " +
         "broadcast variables and shuffle outputs. By default, Spark provides four codecs: " +
         "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
         "the codec")
