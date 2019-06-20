@@ -745,32 +745,16 @@ class PlanParserSuite extends AnalysisTest {
         OneRowRelation().select('OVERLAY.function("Spark SQL", "_", 6))
     )
     assertEqual(
-      "SELECT OVERLAY(null PLACING '_' FROM 6)",
-        OneRowRelation().select('OVERLAY.function(null, "_", 6))
-    )
-    assertEqual(
       "SELECT OVERLAY('Spark SQL' PLACING 'CORE' FROM 7)",
         OneRowRelation().select('OVERLAY.function("Spark SQL", "CORE", 7))
-    )
-    assertEqual(
-      "SELECT OVERLAY(null PLACING 'CORE' FROM 7)",
-        OneRowRelation().select('OVERLAY.function(null, "CORE", 7))
     )
     assertEqual(
       "SELECT OVERLAY('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0)",
       OneRowRelation().select('OVERLAY.function("Spark SQL", "ANSI ", 7, 0))
     )
     assertEqual(
-      "SELECT OVERLAY(null PLACING 'ANSI ' FROM 7 FOR 0)",
-      OneRowRelation().select('OVERLAY.function(null, "ANSI ", 7, 0))
-    )
-    assertEqual(
       "SELECT OVERLAY('Spark SQL' PLACING 'tructured' FROM 2 FOR 4)",
       OneRowRelation().select('OVERLAY.function("Spark SQL", "tructured", 2, 4))
-    )
-    assertEqual(
-      "SELECT OVERLAY(null PLACING 'tructured' FROM 2 FOR 4)",
-      OneRowRelation().select('OVERLAY.function(null, "tructured", 2, 4))
     )
   }
 
