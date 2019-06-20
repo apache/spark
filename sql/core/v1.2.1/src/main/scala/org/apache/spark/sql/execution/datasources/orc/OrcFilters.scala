@@ -124,7 +124,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         val childResultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
         childResultOptional.map(Not)
       case other =>
-        for (_ <- buildSearchArgument(dataTypeMap, other, newBuilder())) yield other
+        for (_ <- buildLeafSearchArgument(dataTypeMap, other, newBuilder())) yield other
     }
     filters.flatMap { filter =>
       convertibleFiltersHelper(filter, true)
@@ -173,9 +173,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    def getType(attribute: String): PredicateLeaf.Type =
-      getPredicateLeafType(dataTypeMap(attribute))
-
     import org.apache.spark.sql.sources._
 
     expression match {
@@ -196,10 +193,30 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           negate <- buildSearchArgument(dataTypeMap, child, builder.startNot())
         } yield negate.end()
 
-      // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
-      // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
-      // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+      case other => buildLeafSearchArgument(dataTypeMap, other, builder)
+    }
+  }
 
+  /**
+   * Build a SearchArgument for a leaf predicate and return the builder so far.
+   *
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the input filter predicates.
+   * @param builder the input SearchArgument.Builder.
+   * @return the builder so far.
+   */
+  private def buildLeafSearchArgument(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      builder: Builder): Option[Builder] = {
+    def getType(attribute: String): PredicateLeaf.Type =
+      getPredicateLeafType(dataTypeMap(attribute))
+
+    import org.apache.spark.sql.sources._
+    // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
+    // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
+    // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+    expression match {
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))

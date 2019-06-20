@@ -134,7 +134,7 @@ private[orc] object OrcFilters extends Logging {
         val childResultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
         childResultOptional.map(Not)
       case other =>
-        for (_ <- buildSearchArgument(dataTypeMap, other, newBuilder())) yield other
+        for (_ <- buildLeafSearchArgument(dataTypeMap, other, newBuilder())) yield other
     }
     filters.flatMap { filter =>
       convertibleFiltersHelper(filter, true)
@@ -142,6 +142,8 @@ private[orc] object OrcFilters extends Logging {
   }
 
   /**
+   * Build a SearchArgument and return the builder so far.
+   *
    * @param dataTypeMap a map from the attribute name to its data type.
    * @param expression the input filter predicates.
    * @param builder the input SearchArgument.Builder.
@@ -151,15 +153,6 @@ private[orc] object OrcFilters extends Logging {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
-    def isSearchableType(dataType: DataType): Boolean = dataType match {
-      // Only the values in the Spark types below can be recognized by
-      // the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
-      case ByteType | ShortType | FloatType | DoubleType => true
-      case IntegerType | LongType | StringType | BooleanType => true
-      case TimestampType | _: DecimalType => true
-      case _ => false
-    }
-
     expression match {
       case And(left, right) =>
         for {
@@ -178,6 +171,35 @@ private[orc] object OrcFilters extends Logging {
           negate <- buildSearchArgument(dataTypeMap, child, builder.startNot())
         } yield negate.end()
 
+      case other => buildLeafSearchArgument(dataTypeMap, other, builder)
+    }
+  }
+
+  /**
+   * Build a SearchArgument for a leaf predicate and return the builder so far.
+   *
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the input filter predicates.
+   * @param builder the input SearchArgument.Builder.
+   * @return the builder so far.
+   */
+  private def buildLeafSearchArgument(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      builder: Builder): Option[Builder] = {
+    def isSearchableType(dataType: DataType): Boolean = dataType match {
+      // Only the values in the Spark types below can be recognized by
+      // the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
+      case ByteType | ShortType | FloatType | DoubleType => true
+      case IntegerType | LongType | StringType | BooleanType => true
+      case TimestampType | _: DecimalType => true
+      case _ => false
+    }
+    import org.apache.spark.sql.sources._
+    // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
+    // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
+    // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+    expression match {
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
       // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
