@@ -50,10 +50,6 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
 
   protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
-  private def assignString(topic: String, partitions: Iterable[Int]): String = {
-    JsonUtils.partitions(partitions.map(p => new TopicPartition(topic, p)))
-  }
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     testUtils = new KafkaTestUtils
