@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 import java.net.URI
+import java.nio.ByteBuffer
 import java.util.Properties
 
 import scala.util.Random
@@ -762,13 +763,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
       val optionalBucketSet = null
       val bucketSpec = new BucketSpec(1, Seq("a"), Seq("b"))
       val files = (0 to numFilesInPartition - 1).toStream.map { i =>
-        new FileStatus(10, false, 1, 512, 1000,
-          new Path(s"file${i}_0.zzz"))
+        new FileStatus(10, false, 1, 512, 1000, new Path(s"file${i}_0.zzz"))
       }
       val partitionDirectory = PartitionDirectory(partitionValues, files);
 
-      val fileSource =
-        FileSourceScanExec(fakeHadoopFsRelation,
+      val fileSource = FileSourceScanExec(fakeHadoopFsRelation,
           null,
           schema,
           null,
@@ -780,24 +779,24 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
         // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
         val createBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createBucketedReadRDD)
 
-        fileSource invokePrivate createBucketedReadRDD(bucketSpec,
+        fileSource.invokePrivate(createBucketedReadRDD(bucketSpec,
           (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
           Array(partitionDirectory),
-          fakeHadoopFsRelation)
+          fakeHadoopFsRelation))
       } else {
-        // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
+        // Create a non Bucketed RDD. This is a private method so we need to call this indirectly.
         val createNonBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createNonBucketedReadRDD)
 
-        fileSource invokePrivate createNonBucketedReadRDD(
+        fileSource.invokePrivate(createNonBucketedReadRDD(
           (file: PartitionedFile) => Seq(InternalRow(1)).toIterator,
           Array(partitionDirectory),
-          fakeHadoopFsRelation)
+          fakeHadoopFsRelation))
 
       }
       inputRDD
     }
 
-    def createAndSerializeTask(inputRDD: RDD[InternalRow], bucketingType: String) {
+    def tryCreateAndSerializeTask(inputRDD: RDD[InternalRow], bucketingType: String): ByteBuffer = {
       // Create a task encapsulating the FilePartition
       val task = new ShuffleMapTask(0, 0,
         null, inputRDD.partitions(0), Seq(TaskLocation("host0", "execA")), new Properties, null)
@@ -821,7 +820,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
     // attempt to serialize it in the task.
     val bucketedCount = bucketedInputRDD.partitions(0).asInstanceOf[FilePartition].files.length;
     assert(bucketedCount == numFilesInPartition)
-    createAndSerializeTask(bucketedInputRDD, "bucketed")
+    tryCreateAndSerializeTask(bucketedInputRDD, "bucketed")
 
     // Non Bucketed partitions
 
@@ -837,8 +836,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
       // default parallelism of 2 causes the files to be split into two partitions
       assert(unbucketedCount == numFilesInPartition / 2)
     }
-    createAndSerializeTask(unbucketedInputRDD, "non-bucketed")
-
+    tryCreateAndSerializeTask(unbucketedInputRDD, "non-bucketed")
   }
 
 }
