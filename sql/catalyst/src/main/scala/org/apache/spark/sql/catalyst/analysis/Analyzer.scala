@@ -104,6 +104,8 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
+  override protected def defaultCatalogName: Option[String] = conf.defaultV2Catalog
+
   override protected def lookupCatalog(name: String): CatalogPlugin =
     throw new CatalogNotFoundException("No catalog lookup function")
 
@@ -712,6 +714,10 @@ class Analyzer(
         } else {
           u
         }
+
+      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
+          if catalog.isTemporaryTable(ident) =>
+        resolveRelation(lookupTableFromCatalog(ident, u, AnalysisContext.get.defaultDatabase))
 
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View

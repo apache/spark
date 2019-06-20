@@ -21,9 +21,10 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalog.v2.Identifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
@@ -37,7 +38,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.conf.set("spark.sql.catalog.session", classOf[TestInMemoryTableCatalog].getName)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -47,8 +48,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   after {
     spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
-    spark.sql("DROP TABLE source")
-    spark.sql("DROP TABLE source2")
+    spark.catalog("session").asInstanceOf[TestInMemoryTableCatalog].clearTables()
   }
 
   test("CreateTable: use v2 plan because catalog is set") {
@@ -66,13 +66,13 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("CreateTable: use v2 plan because provider is v2") {
+  test("CreateTable: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $orc2")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = spark.catalog("session").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    assert(table.name == "testcat.table_name")
+    assert(table.name == "session.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> orc2).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
@@ -137,22 +137,23 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), Seq.empty)
   }
 
-  test("CreateTable: fail analysis when default catalog is needed but missing") {
-    val originalDefaultCatalog = conf.getConfString("spark.sql.default.catalog")
-    try {
-      conf.unsetConf("spark.sql.default.catalog")
+  test("CreateTable: use default catalog for v2 sources when default catalog is set") {
+    val sparkSession = spark.newSession()
+    sparkSession.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    sparkSession.conf.set("spark.sql.default.catalog", "testcat")
+    sparkSession.sql(s"CREATE TABLE table_name (id bigint, data string) USING foo")
 
-      val exc = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
-      }
+    val testCatalog = sparkSession.catalog("testcat").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-      assert(exc.getMessage.contains("No catalog specified for table"))
-      assert(exc.getMessage.contains("table_name"))
-      assert(exc.getMessage.contains("no default catalog is set"))
+    assert(table.name == "testcat.table_name")
+    assert(table.partitioning.isEmpty)
+    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
-    } finally {
-      conf.setConfString("spark.sql.default.catalog", originalDefaultCatalog)
-    }
+    // check that the table is empty
+    val rdd = sparkSession.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
   test("CreateTableAsSelect: use v2 plan because catalog is set") {
@@ -172,13 +173,13 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
   }
 
-  test("CreateTableAsSelect: use v2 plan because provider is v2") {
+  test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = spark.catalog("session").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    assert(table.name == "testcat.table_name")
+    assert(table.name == "session.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> orc2).asJava)
     assert(table.schema == new StructType()
@@ -251,22 +252,43 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), spark.table("source"))
   }
 
-  test("CreateTableAsSelect: fail analysis when default catalog is needed but missing") {
-    val originalDefaultCatalog = conf.getConfString("spark.sql.default.catalog")
-    try {
-      conf.unsetConf("spark.sql.default.catalog")
+  test("CreateTableAsSelect: use default catalog for v2 sources when default catalog is set") {
+    val sparkSession = spark.newSession()
+    sparkSession.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    sparkSession.conf.set("spark.sql.default.catalog", "testcat")
 
-      val exc = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
-      }
+    val df = sparkSession.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
 
-      assert(exc.getMessage.contains("No catalog specified for table"))
-      assert(exc.getMessage.contains("table_name"))
-      assert(exc.getMessage.contains("no default catalog is set"))
+    // setting the default catalog breaks the reference to source because the default catalog is
+    // used and AsTableIdentifier no longer matches
+    sparkSession.sql(s"CREATE TABLE table_name USING foo AS SELECT id, data FROM source")
 
-    } finally {
-      conf.setConfString("spark.sql.default.catalog", originalDefaultCatalog)
-    }
+    val testCatalog = sparkSession.catalog("testcat").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+
+    assert(table.name == "testcat.table_name")
+    assert(table.partitioning.isEmpty)
+    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.schema == new StructType()
+        .add("id", LongType, nullable = false)
+        .add("data", StringType))
+
+    val rdd = sparkSession.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), sparkSession.table("source"))
+  }
+
+  test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
+    val sparkSession = spark.newSession()
+    sparkSession.conf.set("spark.sql.catalog.session", classOf[V2SessionCatalog].getName)
+
+    val df = sparkSession.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+
+    sparkSession.sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
+
+    // use the catalog name to force loading with the v2 catalog
+    checkAnswer(sparkSession.sql(s"TABLE session.table_name"), sparkSession.table("source"))
   }
 
   test("DropTable: basic") {
