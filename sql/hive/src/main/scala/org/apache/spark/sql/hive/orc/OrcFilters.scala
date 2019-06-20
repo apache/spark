@@ -195,7 +195,9 @@ private[orc] object OrcFilters extends Logging {
       case TimestampType | _: DecimalType => true
       case _ => false
     }
+
     import org.apache.spark.sql.sources._
+
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
