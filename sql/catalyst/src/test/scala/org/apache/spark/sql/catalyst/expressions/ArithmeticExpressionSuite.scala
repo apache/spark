@@ -123,13 +123,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, tpe)
     }
     DataTypeTestUtils.integralType.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Multiply, CalendarIntervalType, tpe)
-      checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, CalendarIntervalType)
+      checkConsistencyBetweenInterpretedAndCodegen(MultiplyInterval, CalendarIntervalType, tpe)
+      checkConsistencyBetweenInterpretedAndCodegen(MultiplyInterval, tpe, CalendarIntervalType)
     }
 
     // Type checking error
     assert(
-      Multiply(Literal(new CalendarInterval(1, 0)), Literal(3)).checkInputDataTypes() ==
+      MultiplyInterval(Literal(new CalendarInterval(1, 0)), Literal(3)).checkInputDataTypes() ==
         TypeCheckResult.TypeCheckSuccess)
 
   }
