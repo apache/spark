@@ -849,7 +849,7 @@ abstract class QuaternaryExpression extends Expression {
 
       ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
       ev.copy(code = s"""
@@ -858,8 +858,8 @@ abstract class QuaternaryExpression extends Expression {
         ${secondGen.code}
         ${thridGen.code}
         ${fourthGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        ${CodeGenerator{.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
