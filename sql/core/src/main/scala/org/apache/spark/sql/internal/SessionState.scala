@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.internal
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
+import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql._
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
+import org.apache.spark.util.Utils
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -156,6 +157,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
+    checkJarPath(path)
     session.sparkContext.addJar(path)
     val uri = new Path(path).toUri
     val jarURL = if (uri.getScheme == null) {
@@ -167,5 +169,33 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     }
     session.sharedState.jarClassLoader.addURL(jarURL)
     Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
+  }
+
+  /**
+    * [SPARK-29106]
+    * Check Jar File exits before add to SparkContext
+    *
+    * @param path
+    */
+  def checkJarPath(path: String): Unit = {
+    //    for Windows path, it will be checked when RPC 's fileServer.addJar
+    if (!path.contains("\\")) {
+      val uri = new Path(path).toUri
+      val schemeCorrectedPath = uri.getScheme match {
+        case null => new File(path).getCanonicalFile.toURI.toString
+        case "local" => "file:" + uri.getPath
+        case _ => path
+      }
+      val hadoopPath = new Path(schemeCorrectedPath)
+      val scheme = new URI(schemeCorrectedPath).getScheme
+      if (!Array("http", "https", "ftp").contains(scheme)) {
+        val fs = hadoopPath.getFileSystem(session.sparkContext.hadoopConfiguration)
+        if (!fs.exists(hadoopPath))
+          throw new FileNotFoundException(s"Jar ${schemeCorrectedPath} not found")
+      } else {
+        // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
+        Utils.validateURL(uri)
+      }
+    }
   }
 }
