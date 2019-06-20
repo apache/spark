@@ -191,10 +191,8 @@ private[spark] object PythonRDD extends Logging {
         var complete = false
         while (!complete) {
 
-          // Read request for data
+          // Read request for data, value of zero will stop iteration or non-zero to continue
           if (in.readInt() == 0) {
-
-            // Client requested to stop iteration
             complete = true
           } else if (collectPartitionIter.hasNext) {
 
@@ -209,7 +207,6 @@ private[spark] object PythonRDD extends Logging {
             out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
             out.flush()
           } else {
-
             // Send response there are no more partitions to read and close
             out.writeInt(0)
             complete = true
