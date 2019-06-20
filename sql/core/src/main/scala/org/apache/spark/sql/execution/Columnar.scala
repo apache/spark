@@ -453,16 +453,12 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
 
         TaskContext.get().addTaskCompletionListener[Unit] { _ =>
           if (cb != null) {
-            cb.close
+            cb.close()
             cb = null
           }
         }
 
         override def hasNext: Boolean = {
-          if (cb != null) {
-            cb.close()
-            cb = null
-          }
           rowIterator.hasNext
         }
 
