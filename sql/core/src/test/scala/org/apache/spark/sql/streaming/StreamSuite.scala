@@ -218,11 +218,12 @@ class StreamSuite extends StreamTest {
       }
     }
 
-    // TODO: fix file source V2 as well.
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
-      val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
-      assertDF(df)
-      assertDF(df)
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
+    Seq("", "parquet").foreach { useV1SourceReader =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReader) {
+        assertDF(df)
+        assertDF(df)
+      }
     }
   }
 
