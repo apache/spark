@@ -753,12 +753,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
     // Need a large number of files in the partition for the overflow
     val numFilesInPartition = 100000
 
-    def getInputRDD(sparkSession: SparkSession, isBucketed: Boolean): RDD[InternalRow] = {
+    def getInputRDD(isBucketed: Boolean): RDD[InternalRow] = {
       val partitionValues = InternalRow.apply(Array("a"))
 
       val schema = new StructType()
       val fakeHadoopFsRelation =
-        HadoopFsRelation(null, schema, schema, null, new ParquetFileFormat, null)(sparkSession)
+        HadoopFsRelation(null, schema, schema, null, new ParquetFileFormat, null)(spark)
       val optionalBucketSet = null
       val files = (0 until numFilesInPartition).toStream.map { i =>
         new FileStatus(10, false, 1, 512, 1000, new Path(s"file${i}_0.zzz"))
@@ -766,12 +766,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
       val partitionDirectory = PartitionDirectory(partitionValues, files)
 
       val fileSource = FileSourceScanExec(fakeHadoopFsRelation,
-          null,
-          schema,
-          null,
-          Option(optionalBucketSet),
-          Seq.empty,
-          Option(new TableIdentifier("stackOverflow")))
+        null,
+        schema,
+        null,
+        Option(optionalBucketSet),
+        Seq.empty,
+        Option(new TableIdentifier("stackOverflow")))
 
       val inputRDD = if (isBucketed) {
         // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
@@ -810,7 +810,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
     }
 
     // Bucketed partitions
-    val bucketedInputRDD = getInputRDD(spark, isBucketed = true)
+    val bucketedInputRDD = getInputRDD(isBucketed = true)
     // check to make sure we've created the a big enough file partition.
     // also guarantees that the 'files' Stream is initialized before we
     // attempt to serialize it in the task.
@@ -821,16 +821,17 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
     // Non Bucketed partitions
     // create a new session so we can change the config and force a large number of files
     // in each partition
-    val newSession = spark.cloneSession()
-    newSession.conf.set("spark.sql.files.openCostInBytes", 0)
-    val unbucketedInputRDD = getInputRDD(newSession, isBucketed = false)
-    val unbucketedCount = unbucketedInputRDD.partitions(0).asInstanceOf[FilePartition].files.length
-    if (spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive") {
-      assert(unbucketedCount == numFilesInPartition)
-    } else {
-      // default parallelism of 2 causes the files to be split into two partitions
-      assert(unbucketedCount == numFilesInPartition / 2)
+    withSQLConf(SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+      val unbucketedInputRDD = getInputRDD(isBucketed = false)
+      val unbucketedCount =
+        unbucketedInputRDD.partitions(0).asInstanceOf[FilePartition].files.length
+      if (spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive") {
+        assert(unbucketedCount == numFilesInPartition)
+      } else {
+        // default parallelism of 2 causes the files to be split into two partitions
+        assert(unbucketedCount == numFilesInPartition / 2)
+      }
+      tryCreateAndSerializeTask(unbucketedInputRDD, "non-bucketed")
     }
-    tryCreateAndSerializeTask(unbucketedInputRDD, "non-bucketed")
   }
 }
