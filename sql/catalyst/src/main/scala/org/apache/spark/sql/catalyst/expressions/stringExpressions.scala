@@ -500,14 +500,18 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     val isMax = ctx.freshName("isMax")
     val length = ctx.freshName("length")
     val integer = classOf[java.lang.Integer].getName
+    val head = ctx.freshName("head")
+    val tail = ctx.freshName("tail")
     defineCodeGen(ctx, ev, (input, replace, pos, len) => {
       s"""
-        boolean $isMax = $len.equals($integer.MAX_VALUE)
-        int $length = $len
+        boolean $isMax = $len.equals($integer.MAX_VALUE);
+        int $length = $len;
         if ($isMax) {
-          $length = $replace.toString.size
+          $length = $replace.toString.size;
         }
-        $input.substringSQL(1, $pos - 1) + $replace + $input.substringSQL($pos + $length, $integer.MAX_VALUE);
+        UTF8String $head = $input.substringSQL(1, $pos - 1);
+        UTF8String $tail = $input.substringSQL($pos + $length, $integer.MAX_VALUE);
+        $head + $replace + $tail;
       }
       """
     })
