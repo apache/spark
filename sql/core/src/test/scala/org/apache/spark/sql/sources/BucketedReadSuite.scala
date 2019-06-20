@@ -760,7 +760,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
       val fakeHadoopFsRelation =
         HadoopFsRelation(null, schema, schema, null, new ParquetFileFormat, null)(sparkSession)
       val optionalBucketSet = null
-      val bucketSpec = BucketSpec(1, Seq("a"), Seq("b"))
       val files = (0 until numFilesInPartition).toStream.map { i =>
         new FileStatus(10, false, 1, 512, 1000, new Path(s"file${i}_0.zzz"))
       }
@@ -777,6 +776,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Privat
       val inputRDD = if (isBucketed) {
         // Create a Bucketed RDD. This is a private method so we need to call this indirectly.
         val createBucketedReadRDD = PrivateMethod[RDD[InternalRow]]('createBucketedReadRDD)
+        val bucketSpec = BucketSpec(1, Seq("a"), Seq("b"))
 
         fileSource.invokePrivate(createBucketedReadRDD(bucketSpec,
           (_: PartitionedFile) => Seq(InternalRow(1)).toIterator,
