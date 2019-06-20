@@ -104,7 +104,7 @@ private[spark] class SocketFuncServer(
 private[spark] object SocketAuthServer {
 
   /**
-   * Convienince function to create a socket server and run a user function in a background
+   * Convenience function to create a socket server and run a user function in a background
    * thread to write to an output stream.
    *
    * @param threadName Name for the background serving thread.

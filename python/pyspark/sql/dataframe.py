@@ -379,9 +379,9 @@ class DataFrame(object):
             self._support_repr_html = True
         if self.sql_ctx._conf.isReplEagerEvalEnabled():
             max_num_rows = max(self.sql_ctx._conf.replEagerEvalMaxNumRows(), 0)
-            port, auth_secret, _ = self._jdf.getRowsToPython(
+            socket_info = self._jdf.getRowsToPython(
                 max_num_rows, self.sql_ctx._conf.replEagerEvalTruncate())
-            rows = list(_load_from_socket(port, auth_secret, BatchedSerializer(PickleSerializer())))
+            rows = list(_load_from_socket(socket_info, BatchedSerializer(PickleSerializer())))
             head = rows[0]
             row_data = rows[1:]
             has_more_data = len(row_data) > max_num_rows
@@ -513,8 +513,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port, auth_secret, _ = self._jdf.collectToPython()
-        return list(_load_from_socket(port, auth_secret, BatchedSerializer(PickleSerializer())))
+            socket_info = self._jdf.collectToPython()
+        return list(_load_from_socket(socket_info, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -527,8 +527,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port, auth_secret, _ = self._jdf.toPythonIterator()
-        return _local_iterator_from_socket(port, auth_secret, BatchedSerializer(PickleSerializer()))
+            socket_info = self._jdf.toPythonIterator()
+        return _local_iterator_from_socket(socket_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -2204,7 +2204,7 @@ class DataFrame(object):
 
         # Collect list of un-ordered batches where last element is a list of correct order indices
         try:
-            results = list(_load_from_socket(port, auth_secret, ArrowCollectSerializer()))
+            results = list(_load_from_socket((port, auth_secret), ArrowCollectSerializer()))
         finally:
             # Join serving thread and raise any exceptions from collectAsArrowToPython
             jserver_obj.getResult()
