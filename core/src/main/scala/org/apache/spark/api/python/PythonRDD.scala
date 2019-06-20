@@ -181,44 +181,47 @@ private[spark] object PythonRDD extends Logging {
     val handleFunc = (sock: Socket) => {
       val out = new DataOutputStream(sock.getOutputStream)
       val in = new DataInputStream(sock.getInputStream)
-      Utils.tryWithSafeFinally {
+      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Collects a partition on each iteration
         val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
           rdd.sparkContext.runJob(rdd, (iter: Iterator[Any]) => iter.toArray, Seq(i)).head
         }
 
-        // Read request for data and send next partition if nonzero
+        // Write data until iteration is complete, client stops iteration, or error occurs
         var complete = false
-        while (!complete && in.readInt() != 0) {
-          if (collectPartitionIter.hasNext) {
-            try {
-              // Attempt to collect the next partition
-              val partitionArray = collectPartitionIter.next()
+        while (!complete) {
 
-              // Send response there is a partition to read
-              out.writeInt(1)
+          // Read request for data
+          if (in.readInt() == 0) {
 
-              // Write the next object and signal end of data for this iteration
-              writeIteratorToStream(partitionArray.toIterator, out)
-              out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
-              out.flush()
-            } catch {
-              case e: SparkException =>
-                // Send response that an error occurred followed by error message
-                out.writeInt(-1)
-                writeUTF(e.getMessage, out)
-                complete = true
-            }
+            // Client requested to stop iteration
+            complete = true
+          } else if (collectPartitionIter.hasNext) {
+
+            // Client requested more data, attempt to collect the next partition
+            val partitionArray = collectPartitionIter.next()
+
+            // Send response there is a partition to read
+            out.writeInt(1)
+
+            // Write the next object and signal end of data for this iteration
+            writeIteratorToStream(partitionArray.toIterator, out)
+            out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+            out.flush()
           } else {
+
             // Send response there are no more partitions to read and close
             out.writeInt(0)
             complete = true
           }
         }
-      } {
+      })(catchBlock = {
+        // Send response that an error occurred, original exception is re-thrown
+        out.writeInt(-1)
+      }, finallyBlock = {
         out.close()
         in.close()
-      }
+      })
     }
 
     val server = new SocketFuncServer(authHelper, "serve toLocalIterator", handleFunc)
