@@ -22,7 +22,7 @@ import java.nio.channels.Channels
 
 import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.ipc.WriteChannel
-import org.apache.arrow.vector.ipc.message.MessageSerializer
+import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 
 
 class InterleavedArrowWriter( leftRoot: VectorSchemaRoot,
@@ -40,12 +40,15 @@ class InterleavedArrowWriter( leftRoot: VectorSchemaRoot,
 
   def writeBatch(): Unit = {
     this.ensureStarted()
-    val leftBatch = leftUnloader.getRecordBatch
-    val rightBatch = rightUnloader.getRecordBatch
-    MessageSerializer.serialize(out, leftBatch)
-    MessageSerializer.serialize(out, rightBatch)
-    leftBatch.close()
-    rightBatch.close()
+    writeRecordBatch(leftUnloader.getRecordBatch)
+    writeRecordBatch(rightUnloader.getRecordBatch)
+  }
+
+  private def writeRecordBatch(b: ArrowRecordBatch): Unit = {
+    try
+      MessageSerializer.serialize(out, b)
+    finally
+      b.close()
   }
 
   private def ensureStarted(): Unit = {

@@ -52,62 +52,51 @@ else:
     pandas_requirement_message or pyarrow_requirement_message)
 class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
 
-    @property
-    def data(self):
-        return self.spark.range(10).toDF('id') \
-            .withColumn("vs", array([lit(i) for i in range(20, 30)])) \
-            .withColumn("v", explode(col('vs'))).drop('vs')
+    def test_simple(self):
 
-    def test_supported_types(self):
+        pdf1 = pd.DataFrame.from_dict({
+            'id': ['a', 'a', 'b', 'b'],
+            't': [1.0, 2.0, 1.0, 2.0],
+            'x': [10, 10, 30, 40]
 
-        df1 = self.spark.createDataFrame(
-            pd.DataFrame.from_dict({
-            'id' : [1,1,10, 10, 1,1],
-            'x' : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-        }))
+        })
 
-        df2 = self.spark.createDataFrame(
-            pd.DataFrame.from_dict({
-                'id2': [1,1,10, 10, 1,1],
-                'a': [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-            }))
+        pdf2 = pd.DataFrame.from_dict({
+            'id2': ['a', 'b'],
+            't': [0.5, 0.5],
+            'y': [7.0, 8.0]
+        })
 
         output_schema = StructType([
-            StructField("id", LongType()),
-            StructField("x", DoubleType()),
+            StructField("id", StringType()),
+            StructField("t", DoubleType()),
+            StructField("x", IntegerType()),
+            StructField("y", DoubleType()),
         ])
+
 
         @pandas_udf(output_schema, functionType=PandasUDFType.COGROUPED_MAP)
-        def foo(left, right):
-            print("hello")
+        def pandas_merge(left, right):
             print(left)
-            print("goodbye")
+            print("#########")
             print(right)
-            return left
-
-        output_schema2 = StructType([
-            StructField("id", LongType())
-        ])
-        @pandas_udf(output_schema, functionType=PandasUDFType.GROUPED_MAP)
-        def foo2(key, df):
-            print('key is ' + str(key))
-            print(df)
-            return df
+            print("#########")
+            import pandas as pd
+            left.sort_values(by='t', inplace=True)
+            right.sort_values(by='t', inplace=True)
+            result = pd.merge_asof(left, right, on='t').reset_index()
+            print(result)
+            return result
 
 
-        df1.groupby(col("id") > 5)\
-            .apply(foo2)\
-            .show()
+        df1 = self.spark.createDataFrame(pdf1)
+        df2 = self.spark.createDataFrame(pdf2)
 
+        gd1 = df1.groupby('id')
+        gd2 = df2.groupby('id2')
 
+        gd1\
+            .cogroup(gd2)\
+            .apply(pandas_merge)\
+            .explain()
 
-
-if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_cogrouped_map import *
-
-    try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)

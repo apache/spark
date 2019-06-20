@@ -60,12 +60,16 @@ case class FlatMapCoGroupsInPandasExec(
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
+
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
       val cogroup = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
         .map{case (k, l, r) => (l, r)}
       val context = TaskContext.get()
+      println("in zipPartitions: left schema is " + left.schema)
+      println("in zipPartitions: right schema is " +  right.schema)
+
       val columnarBatchIter = new InterleavedArrowPythonRunner(
         chainedFunc,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
