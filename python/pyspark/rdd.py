@@ -139,15 +139,15 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def _create_local_socket(socket_info):
+def _create_local_socket(sock_info):
     """
     Create a local socket that can be used to load deserialized data from the JVM
 
-    :param socket_info: Tuple of the port number and authentication secret of a local socket.
+    :param sock_info: Tuple of the port number and authentication secret of a local socket.
     :return: sockfile file descriptor of the local socket
     """
-    port = socket_info[0]
-    auth_secret = socket_info[1]
+    port = sock_info[0]
+    auth_secret = sock_info[1]
     sockfile, sock = local_connect_and_auth(port, auth_secret)
     # The RDD materialization time is unpredictable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
@@ -155,26 +155,26 @@ def _create_local_socket(socket_info):
     return sockfile
 
 
-def _load_from_socket(socket_info, serializer):
+def _load_from_socket(sock_info, serializer):
     """
     Connect to a local socket described by sock_info and use the given serializer to yield data
 
-    :param socket_info: Tuple of the port number and authentication secret of a local socket.
+    :param sock_info: Tuple of the port number and authentication secret of a local socket.
     :param serializer: The PySpark serializer to use
     :return: result of Serializer.load_stream, usually a generator that yields deserialized data
     """
-    sockfile = _create_local_socket(socket_info)
+    sockfile = _create_local_socket(sock_info)
     # The socket will be automatically closed when garbage-collected.
     return serializer.load_stream(sockfile)
 
 
-def _local_iterator_from_socket(socket_info, serializer):
+def _local_iterator_from_socket(sock_info, serializer):
 
     class PyLocalIterable(object):
         """ Create a synchronous local iterable over a socket """
 
-        def __init__(self, _socket_info, _serializer):
-            self._sockfile = _create_local_socket(_socket_info)
+        def __init__(self, _sock_info, _serializer):
+            self._sockfile = _create_local_socket(_sock_info)
             self._serializer = _serializer
             self._read_iter = iter([])  # Initialize as empty iterator
             self._read_status = 1
@@ -214,7 +214,7 @@ def _local_iterator_from_socket(socket_info, serializer):
                     # Ignore any errors, socket is automatically closed when garbage-collected
                     pass
 
-    return iter(PyLocalIterable(socket_info, serializer))
+    return iter(PyLocalIterable(sock_info, serializer))
 
 
 def ignore_unicode_prefix(f):
@@ -885,8 +885,8 @@ class RDD(object):
             to be small, as all the data is loaded into the driver's memory.
         """
         with SCCallSiteSync(self.context) as css:
-            socket_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
-        return list(_load_from_socket(socket_info, self._jrdd_deserializer))
+            sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
+        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
     def reduce(self, f):
         """
@@ -2455,8 +2455,8 @@ class RDD(object):
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         with SCCallSiteSync(self.context) as css:
-            socket_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
-        return _local_iterator_from_socket(socket_info, self._jrdd_deserializer)
+            sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
+        return _local_iterator_from_socket(sock_info, self._jrdd_deserializer)
 
     def barrier(self):
         """
