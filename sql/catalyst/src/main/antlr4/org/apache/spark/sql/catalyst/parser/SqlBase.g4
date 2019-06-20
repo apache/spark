@@ -600,8 +600,6 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
-      FROM argument+=expression ')'                                                            #functionCall
     | IDENTIFIER '->' expression                                                               #lambda
     | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -609,6 +607,8 @@ primaryExpression
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
     | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
+    | TRIM '(' trimOption=(BOTH | LEADING | TRAILING) (trimStr=valueExpression)?
+       FROM srcStr=valueExpression ')'                                                         #trim
     ;
 
 constant
@@ -758,6 +758,7 @@ nonReserved
     | IF
     | POSITION
     | EXTRACT
+    | TRIM
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
@@ -898,6 +899,7 @@ TRAILING: 'TRAILING';
 IF: 'IF';
 POSITION: 'POSITION';
 EXTRACT: 'EXTRACT';
+TRIM: 'TRIM';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
