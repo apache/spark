@@ -454,6 +454,66 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   override def prettyName: String = "replace"
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(input, replace, pos[, len]) - Replace `input` with `replace` that starts at `pos` and is of length `len`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL' PLACING '_' FROM 6);
+       Spark_SQL
+      > SELECT _FUNC_('Spark SQL' PLACING 'CORE' FROM 7);
+       Spark CORE
+      > SELECT _FUNC_('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0);
+       Spark ANSI SQL
+      > SELECT _FUNC_('Spark SQL' PLACING 'tructured' FROM 2 FOR 4);
+       Structured SQL
+  """)
+// scalastyle:on line.size.limit
+case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(str: Expression, replace: Expression, pos: Expression) = {
+    this(str, replace, pos, Literal(Integer.MAX_VALUE))
+  }
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringType, StringType, IntegerType, IntegerType)
+
+  override def children: Seq[Expression] = input :: replace :: pos :: len :: Nil
+
+  override def nullSafeEval(inputEval: Any, replaceEval: Any, posEval: Any, lenEval: Any): Any = {
+    val inputStr = inputEval.asInstanceOf[UTF8String]
+    val replaceStr = replaceEval.asInstanceOf[UTF8String].toString
+    val position = posEval.asInstanceOf[Int]
+    var length = lenEval.asInstanceOf[Int]
+    if (length.equals(Int.MaxValue)) {
+      length = replaceStr.size
+    }
+    val headStr = inputStr.substringSQL(1, position - 1)
+    val tailStr = inputStr.substringSQL(position + length, Int.MaxValue)
+    UTF8String.fromString(headStr.toString + replaceStr + tailStr.toString)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val isMax = ctx.freshName("isMax")
+    val length = ctx.freshName("length")
+    val integer = classOf[java.lang.Integer].getName
+    defineCodeGen(ctx, ev, (input, replace, pos, len) => {
+      s"""
+        boolean $isMax = $len.equals($integer.MAX_VALUE)
+        int $length = $len
+        if ($isMax) {
+          $length = $replace.toString.size
+        }
+        $input.substringSQL(1, $pos - 1) + $replace + $input.substringSQL($pos + $length, $integer.MAX_VALUE);
+      }
+      """
+    })
+  }
+}
+
 object StringTranslate {
 
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)

@@ -694,6 +694,8 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
+    | qualifiedName '(' argument+=expression PLACING argument+=expression
+      FROM argument+=expression (FOR argument+=expression)? ')'                                #functionCall
     | IDENTIFIER '->' expression                                                               #lambda
     | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -1342,6 +1344,7 @@ nonReserved
     | WITH
     | YEAR
     | YEARS
+    | PLACING
     ;
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
@@ -1603,6 +1606,7 @@ WINDOW: 'WINDOW';
 WITH: 'WITH';
 YEAR: 'YEAR';
 YEARS: 'YEARS';
+PLACING: 'PLACING';
 //============================
 // End of the keywords list
 //============================
