@@ -27,8 +27,8 @@ import scala.util.Random
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 
