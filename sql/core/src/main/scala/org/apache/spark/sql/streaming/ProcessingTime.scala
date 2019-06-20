@@ -24,7 +24,7 @@ import scala.concurrent.duration.Duration
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.CalendarInterval
 
 /**
  * A trigger that runs a query periodically based on the processing time. If `interval` is 0,

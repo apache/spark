@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeMapData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.types.CalendarInterval;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -135,8 +135,8 @@ public abstract class UnsafeWriter {
     grow(16);
 
     // Write the months and microseconds fields of Interval to the variable length portion.
-    Platform.putLong(getBuffer(), cursor(), input.months);
-    Platform.putLong(getBuffer(), cursor() + 8, input.microseconds);
+    Platform.putLong(getBuffer(), cursor(), input.months());
+    Platform.putLong(getBuffer(), cursor() + 8, input.microseconds());
 
     setOffsetAndSize(ordinal, 16);
 

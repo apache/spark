@@ -30,8 +30,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{FlatMapGroupsWithState, _}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.{CalendarInterval, IntegerType, LongType, MetadataBuilder}
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends Command

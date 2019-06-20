@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.types.CalendarInterval
 import org.apache.spark.sql.types.MetadataBuilder
-import org.apache.spark.unsafe.types.CalendarInterval
 
 object EventTimeWatermark {
   /** The [[org.apache.spark.sql.types.Metadata]] key used to hold the eventTime watermark delay. */

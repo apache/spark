@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
-import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.sql.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -88,8 +88,8 @@ public class ColumnVectorUtils {
         }
       } else if (t instanceof CalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);
-        col.getChild(0).putInts(0, capacity, c.months);
-        col.getChild(1).putLongs(0, capacity, c.microseconds);
+        col.getChild(0).putInts(0, capacity, c.months());
+        col.getChild(1).putLongs(0, capacity, c.microseconds());
       } else if (t instanceof DateType) {
         col.putInts(0, capacity, row.getInt(fieldIdx));
       } else if (t instanceof TimestampType) {
@@ -164,8 +164,8 @@ public class ColumnVectorUtils {
       } else if (t instanceof CalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)o;
         dst.appendStruct(false);
-        dst.getChild(0).appendInt(c.months);
-        dst.getChild(1).appendLong(c.microseconds);
+        dst.getChild(0).appendInt(c.months());
+        dst.getChild(1).appendLong(c.microseconds());
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {

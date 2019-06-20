@@ -24,7 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.CalendarInterval
 
 
 /**

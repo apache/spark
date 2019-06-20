@@ -22,7 +22,6 @@ import java.sql.{Date, Timestamp}
 import org.scalacheck.{Arbitrary, Gen}
 
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Property is a high-level specification of behavior that should hold for a range of data points.

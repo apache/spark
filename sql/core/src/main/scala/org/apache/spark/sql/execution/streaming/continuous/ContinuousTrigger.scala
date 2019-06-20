@@ -25,7 +25,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.streaming.{ProcessingTime, Trigger}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.CalendarInterval
 
 /**
  * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at

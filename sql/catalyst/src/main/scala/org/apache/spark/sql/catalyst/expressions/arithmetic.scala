@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
@@ -58,7 +57,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 
   protected override def nullSafeEval(input: Any): Any = {
     if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input.asInstanceOf[CalendarInterval].negate()
+      input.asInstanceOf[CalendarInterval].negate
     } else {
       numeric.negate(input)
     }

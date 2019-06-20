@@ -27,7 +27,6 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random

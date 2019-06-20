@@ -23,7 +23,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.CalendarInterval
 
 class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   protected def checkSQL(e: Expression, expectedSQL: String): Unit = {

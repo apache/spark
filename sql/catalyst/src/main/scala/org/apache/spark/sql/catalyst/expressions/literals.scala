@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Scala
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 object Literal {
   val TrueLiteral: Literal = Literal(true, BooleanType)
