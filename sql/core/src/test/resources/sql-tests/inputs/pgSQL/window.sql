@@ -617,7 +617,7 @@ from range(-9223372036854775806, -9223372036854775804) x;
 -- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 
 -- with UNION
--- [ERROR] SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
+SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
 
 create table t1 (f1 int, f2 int) using parquet;
 insert into t1 values (1,1),(1,2),(2,2);
