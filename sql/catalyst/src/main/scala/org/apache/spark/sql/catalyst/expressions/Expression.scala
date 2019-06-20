@@ -847,18 +847,17 @@ abstract class QuaternaryExpression extends Expression {
           }
       }
 
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = false;
+      ev.copy(code = code"""
         ${firstGen.code}
         ${secondGen.code}
         ${thridGen.code}
         ${fourthGen.code}
-        ${CodeGenerator{.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
   }
