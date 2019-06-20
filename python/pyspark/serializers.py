@@ -359,6 +359,24 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         return "ArrowStreamPandasSerializer"
 
 
+class InterleavedArrowReader(object):
+
+    def __init__(self, stream):
+        import pyarrow as pa
+        self._schema1 = pa.read_schema(stream)
+        self._schema2 = pa.read_schema(stream)
+        self._reader = pa.MessageReader.open_stream(stream)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        import pyarrow as pa
+        batch1 = pa.read_record_batch(self._reader.read_next_message(),  self._schema1)
+        batch2 = pa.read_record_batch(self._reader.read_next_message(),  self._schema2)
+        return batch1, batch2
+
+
 class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     """
     Serializer used by Python worker to evaluate Pandas UDFs
@@ -402,6 +420,22 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
     def __repr__(self):
         return "ArrowStreamPandasUDFSerializer"
+
+
+class InterleavedArrowStreamPandasSerializer(ArrowStreamPandasUDFSerializer):
+
+    def __init__(self, timezone, safecheck, assign_cols_by_name):
+        super(InterleavedArrowStreamPandasSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
+
+    def load_stream(self, stream):
+        """
+        Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
+        """
+        import pyarrow as pa
+        reader = InterleavedArrowReader(pa.input_stream(stream))
+        for batch1, batch2 in reader:
+            yield ( [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch1]).itercolumns()],
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch2]).itercolumns()])
 
 
 class BatchedSerializer(Serializer):

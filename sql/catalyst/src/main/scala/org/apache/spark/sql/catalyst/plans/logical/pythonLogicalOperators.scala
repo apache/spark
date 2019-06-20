@@ -39,6 +39,18 @@ case class FlatMapGroupsInPandas(
   override val producedAttributes = AttributeSet(output)
 }
 
+
+case class FlatMapCoGroupsInPandas(
+                                  leftAttributes: Seq[Attribute],
+                                  rightAttributes: Seq[Attribute],
+                                  functionExpr: Expression,
+                                  output: Seq[Attribute],
+                                  left: LogicalPlan,
+                                  right: LogicalPlan) extends BinaryNode {
+  override val producedAttributes = AttributeSet(output)
+}
+
+
 trait BaseEvalPython extends UnaryNode {
 
   def udfs: Seq[PythonUDF]

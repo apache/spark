@@ -22,6 +22,7 @@ from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import *
+from pyspark.sql.cogroup import CoGroupedData
 
 __all__ = ["GroupedData"]
 
@@ -219,6 +220,9 @@ class GroupedData(object):
         else:
             jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self._df)
+
+    def cogroup(self, other):
+        return CoGroupedData(self, other)
 
     @since(2.3)
     def apply(self, udf):

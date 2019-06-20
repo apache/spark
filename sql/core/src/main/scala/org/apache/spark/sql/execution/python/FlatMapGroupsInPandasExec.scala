@@ -90,10 +90,14 @@ case class FlatMapGroupsInPandasExec(
     // argOffsets[1 .. argOffsets[0]+1] is the arg offsets for grouping attributes
     // argOffsets[argOffsets[0]+1 .. ] is the arg offsets for data attributes
 
+    println("grouping attributes are " + groupingAttributes.mkString(","))
+    println("data attributes are " + child.output.mkString(","))
     val dataAttributes = child.output.drop(groupingAttributes.length)
     val groupingIndicesInData = groupingAttributes.map { attribute =>
       dataAttributes.indexWhere(attribute.semanticEquals)
     }
+    println("dataAttributes attributes are " + dataAttributes.mkString(","))
+    println("groupingIndicesInData  are " + groupingIndicesInData.mkString(","))
 
     val groupingArgOffsets = new ArrayBuffer[Int]
     val nonDupGroupingAttributes = new ArrayBuffer[Attribute]
@@ -116,15 +120,25 @@ case class FlatMapGroupsInPandasExec(
         }
     }
 
+    println("nonDupGroupingAttributes.length: " + nonDupGroupingAttributes.length)
+    println("nonDupGroupingAttributes.length: " + nonDupGroupingAttributes.length)
+    println("dataAttributes.length: " + dataAttributes.length)
+
     val dataArgOffsets = nonDupGroupingAttributes.length until
       (nonDupGroupingAttributes.length + dataAttributes.length)
 
+
     val argOffsets = Array(Array(groupingAttributes.length) ++ groupingArgOffsets ++ dataArgOffsets)
+
+    println("numAttributes are " + groupingAttributes.length)
+    println("groupingArgOffsets are " + groupingArgOffsets.mkString(","))
+    println("dataArgOffsets are " + dataArgOffsets.mkString(","))
+
 
     // Attributes after deduplication
     val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
     val dedupSchema = StructType.fromAttributes(dedupAttributes)
-
+    println("dedupSchema is " + dedupSchema)
     inputRDD.mapPartitionsInternal { iter =>
       val grouped = if (groupingAttributes.isEmpty) {
         Iterator(iter)

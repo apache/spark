@@ -38,7 +38,7 @@ from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowStreamPandasUDFSerializer
+    BatchedSerializer, ArrowStreamPandasUDFSerializer, InterleavedArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type, StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
@@ -103,8 +103,25 @@ def wrap_scalar_pandas_udf(f, return_type):
     return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
-def wrap_grouped_map_pandas_udf(f, return_type, argspec):
+def wrap_cogrouped_map_pandas_udf(f, return_type):
 
+    def wrapped(left, right):
+        import pandas as pd
+        result = f(pd.concat(left, axis=1), pd.concat(right, axis=1))
+        if not isinstance(result, pd.DataFrame):
+            raise TypeError("Return type of the user-defined function should be "
+                            "pandas.DataFrame, but is {}".format(type(result)))
+        if not len(result.columns) == len(return_type):
+            raise RuntimeError(
+                "Number of columns of the returned pandas.DataFrame "
+                "doesn't match specified schema. "
+                "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
+        return result
+
+    return lambda v: [(wrapped(v[0], v[1]), to_arrow_type(return_type))]
+
+
+def wrap_grouped_map_pandas_udf(f, return_type, argspec):
     def wrapped(key_series, value_series):
         import pandas as pd
 
@@ -233,6 +250,7 @@ def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                     PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
@@ -255,9 +273,12 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
         # pandas Series. See SPARK-27240.
-        df_for_struct = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-        ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name,
-                                             df_for_struct)
+        if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+            ser = InterleavedArrowStreamPandasSerializer(timezone, safecheck, assign_cols_by_name)
+        else:
+            df_for_struct = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+            ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name,
+                                                 df_for_struct)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 
@@ -282,6 +303,14 @@ def read_udfs(pickleSer, infile, eval_type):
         arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
         arg1 = ["a[%d]" % o for o in arg_offsets[split_offset:]]
         mapper_str = "lambda a: f([%s], [%s])" % (", ".join(arg0), ", ".join(arg1))
+    elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+        # We assume there is only one UDF here because cogrouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+        arg_offsets, udf = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        udfs['f'] = udf
+        mapper_str = "lambda a: f(a)"
     else:
         # Create function like this:
         #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))

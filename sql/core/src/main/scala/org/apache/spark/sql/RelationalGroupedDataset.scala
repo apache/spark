@@ -47,8 +47,8 @@ import org.apache.spark.sql.types.{NumericType, StructType}
  */
 @Stable
 class RelationalGroupedDataset protected[sql](
-    df: DataFrame,
-    groupingExprs: Seq[Expression],
+    private val df: DataFrame,
+    private val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
@@ -519,6 +519,33 @@ class RelationalGroupedDataset protected[sql](
     val project = Project(groupingNamedExpressions ++ child.output, child)
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
     val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
+
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  private[sql] def flatMapCoGroupsInPandas
+  (r: RelationalGroupedDataset, expr: PythonUDF): DataFrame = {
+    require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      "Must pass a cogrouped map udf")
+    require(expr.dataType.isInstanceOf[StructType],
+      s"The returnType of the udf must be a ${StructType.simpleString}")
+
+    val leftGroupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val rightGroupingNamedExpressions = r.groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val leftAttributes = leftGroupingNamedExpressions.map(_.toAttribute)
+    val rightAttributes = rightGroupingNamedExpressions.map(_.toAttribute)
+    val left = df.logicalPlan
+    val right = r.df.logicalPlan
+    val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)
 
     Dataset.ofRows(df.sparkSession, plan)
   }
