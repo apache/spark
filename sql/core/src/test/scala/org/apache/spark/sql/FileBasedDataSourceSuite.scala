@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter, FileNotFoundException}
+import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -570,6 +571,75 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       val df2 = spark.read.option("pathGlobFilter", "*.txt").text(path.getCanonicalPath)
       checkAnswer(df2, input)
     }
+  }
+
+  test("Option recursiveFileLookup: recursive loading correctly") {
+
+    val expectedFileList = mutable.ListBuffer[String]()
+
+    def createFile(dir: File, fileName: String, format: String): Unit = {
+      val path = new File(dir, s"${fileName}.${format}")
+      Files.write(
+        path.toPath,
+        s"content of ${path.toString}".getBytes,
+        StandardOpenOption.CREATE, StandardOpenOption.WRITE
+      )
+      val fsPath = new Path(path.getAbsoluteFile.toURI).toString
+      expectedFileList.append(fsPath)
+    }
+
+    def createDir(path: File, dirName: String, level: Int): Unit = {
+      val dir = new File(path, s"dir${dirName}-${level}")
+      dir.mkdir()
+      createFile(dir, s"file${level}", "bin")
+      createFile(dir, s"file${level}", "text")
+
+      if (level < 4) {
+        // create sub-dir
+        createDir(dir, "sub0", level + 1)
+        createDir(dir, "sub1", level + 1)
+      }
+    }
+
+    withTempPath { path =>
+      path.mkdir()
+      createDir(path, "root", 0)
+
+      val dataPath = new File(path, "dirroot-0").getAbsolutePath
+      val fileList = spark.read.format("binaryFile")
+        .option("recursiveFileLookup", true)
+        .load(dataPath)
+        .select("path").collect().map(_.getString(0))
+
+      assert(fileList.toSet === expectedFileList.toSet)
+
+      val fileList2 = spark.read.format("binaryFile")
+        .option("recursiveFileLookup", true)
+        .option("pathGlobFilter", "*.bin")
+        .load(dataPath)
+        .select("path").collect().map(_.getString(0))
+
+      assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
+    }
+  }
+
+  test("Option recursiveFileLookup: disable partition inferring") {
+    val dataPath = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/text-partitioned").toString
+
+    val df = spark.read.format("binaryFile")
+      .option("recursiveFileLookup", true)
+      .load(dataPath)
+
+    assert(!df.columns.contains("year"), "Expect partition inferring disabled")
+    val fileList = df.select("path").collect().map(_.getString(0))
+
+    val expectedFileList = Array(
+      dataPath + "/year=2014/data.txt",
+      dataPath + "/year=2015/data.txt"
+    ).map(path => new Path(path).toString)
+
+    assert(fileList.toSet === expectedFileList.toSet)
   }
 
   test("Return correct results when data columns overlap with partition columns") {
