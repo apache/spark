@@ -136,10 +136,10 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       // Verify that both pre and post processing of the plan worked.
       val found = df.queryExecution.executedPlan.collect {
         case rep: ReplacedRowToColumnarExec => 1
-        case proj: ColumnarProjectExec => 1
-        case c2r: ColumnarToRowExec => 1
+        case proj: ColumnarProjectExec => 10
+        case c2r: ColumnarToRowExec => 100
       }.sum
-      assert(found == 3)
+      assert(found == 111)
 
       // Verify that we get back the expected, wrong, result
       val result = df.collect()
