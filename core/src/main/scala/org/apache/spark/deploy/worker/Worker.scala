@@ -818,7 +818,6 @@ private[deploy] object Worker extends Logging {
     rpcEnv.awaitTermination()
   }
 
-  // scalastyle:off argcount
   def startRpcEnvAndEndpoint(
       host: String,
       port: Int,
@@ -830,7 +829,6 @@ private[deploy] object Worker extends Logging {
       workerNumber: Option[Int] = None,
       conf: SparkConf = new SparkConf,
       resourceFileOpt: Option[String] = None): RpcEnv = {
-    // scalastyle:on argcount
 
     // The LocalSparkCluster runs multiple local sparkWorkerX RPC Environments
     val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
