@@ -84,6 +84,10 @@ class SqsSourceOptions(parameters: CaseInsensitiveMap[String]) extends Logging {
     throw new IllegalArgumentException("SQS Url is not specified")
   }
 
+  val region: String = parameters.get("region").getOrElse {
+    throw new IllegalArgumentException("Region is not specified")
+  }
+
   val fileFormatClassName: String = parameters.get("fileFormat").getOrElse {
     throw new IllegalArgumentException("Specifying file format is mandatory with sqs source")
   }

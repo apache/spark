@@ -37,6 +37,7 @@ class SqsSourceOptionsSuite extends StreamTest {
             .option("fileFormat", "json")
             .schema(dummySchema)
             .option("sqsUrl", "https://DUMMY_URL")
+            .option("region", "us-east-1")
             .option(option._1, option._2)
             .load()
 
@@ -78,7 +79,7 @@ class SqsSourceOptionsSuite extends StreamTest {
 
   test("missing mandatory options") {
 
-    def testMissingMandatoryOptions(options: (String, String))(expectedMsg: String): Unit = {
+    def testMissingMandatoryOptions(options: List[(String, String)])(expectedMsg: String): Unit = {
 
       var query: StreamingQuery = null
 
@@ -89,10 +90,12 @@ class SqsSourceOptionsSuite extends StreamTest {
             .readStream
             .format("s3-sqs")
             .schema(dummySchema)
-            .option(options._1, options._2)
-            .load()
 
-          query = reader.writeStream
+          val readerWithOptions = options.map { option =>
+           reader.option(option._1, option._2)
+          }.last.load()
+
+          query = readerWithOptions.writeStream
             .format("memory")
             .queryName("missingMandatoryOptions")
             .start()
@@ -109,11 +112,11 @@ class SqsSourceOptionsSuite extends StreamTest {
     }
 
     // No fileFormat specified
-    testMissingMandatoryOptions("sqsUrl" -> "https://DUMMY_URL")(
+    testMissingMandatoryOptions(List("sqsUrl" -> "https://DUMMY_URL", "region"->"us-east-1"))(
       "Specifying file format is mandatory with sqs source")
 
     // Sqs URL not specified
-    testMissingMandatoryOptions("fileFormat" -> "json")(
+    testMissingMandatoryOptions(List("fileFormat" -> "json", "region"->"us-east-1"))(
       "SQS Url is not specified")
   }
 
@@ -130,6 +133,7 @@ class SqsSourceOptionsSuite extends StreamTest {
           .format("s3-sqs")
           .option("sqsUrl", "https://DUMMY_URL")
           .option("fileFormat", "json")
+          .option("region", "us-east-1")
           .load()
 
         query = reader.writeStream

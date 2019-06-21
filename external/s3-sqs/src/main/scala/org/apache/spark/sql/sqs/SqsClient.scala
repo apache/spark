@@ -43,6 +43,7 @@ class SqsClient(sourceOptions: SqsSourceOptions,
   private val sqsMaxRetries = sourceOptions.maxRetries
   private val maxConnections = sourceOptions.maxConnections
   private val ignoreFileDeletion = sourceOptions.ignoreFileDeletion
+  private val region = sourceOptions.region
   val sqsUrl = sourceOptions.sqsUrl
 
   @volatile var exception: Option[Exception] = None
@@ -210,6 +211,7 @@ class SqsClient(sourceOptions: SqsSourceOptions,
           .standard()
           .withClientConfiguration(new ClientConfiguration().withMaxConnections(maxConnections))
           .withCredentials(basicAwsCredentialsProvider)
+          .withRegion(region)
           .build()
       } else {
         logInfo("Using the credentials attached to the instance")
