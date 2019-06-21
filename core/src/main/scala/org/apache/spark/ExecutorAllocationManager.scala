@@ -555,6 +555,9 @@ private[spark] class ExecutorAllocationManager(
       val stageAttemptId = stageCompleted.stageInfo.attemptNumber()
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
+        // do NOT remove stageAttempt from stageAttemptToNumRunningTasks,
+        // because the attempt may still have running tasks,
+        // even after another attempt for the stage is submitted.
         stageAttemptToNumTasks -= stageAttempt
         stageAttemptToNumSpeculativeTasks -= stageAttempt
         stageAttemptToTaskIndices -= stageAttempt
