@@ -105,58 +105,53 @@ case class AggregateInPandasExec(
       StructField(s"_$i", dt)
     })
 
-    inputRDD.mapPartitionsInternal { iter =>
+    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
+      val prunedProj = UnsafeProjection.create(allInputs, child.output)
 
-      // Only execute on non-empty partitions
-      if (iter.nonEmpty) {
-        val prunedProj = UnsafeProjection.create(allInputs, child.output)
-
-        val grouped = if (groupingExpressions.isEmpty) {
-          // Use an empty unsafe row as a place holder for the grouping key
-          Iterator((new UnsafeRow(), iter))
-        } else {
-          GroupedIterator(iter, groupingExpressions, child.output)
-        }.map { case (key, rows) =>
-          (key, rows.map(prunedProj))
-        }
-
-        val context = TaskContext.get()
-
-        // The queue used to buffer input rows so we can drain it to
-        // combine input with output from Python.
-        val queue = HybridRowQueue(context.taskMemoryManager(),
-          new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExpressions.length)
-        context.addTaskCompletionListener[Unit] { _ =>
-          queue.close()
-        }
-
-        // Add rows to queue to join later with the result.
-        val projectedRowIter = grouped.map { case (groupingKey, rows) =>
-          queue.add(groupingKey.asInstanceOf[UnsafeRow])
-          rows
-        }
-
-        val columnarBatchIter = new ArrowPythonRunner(
-          pyFuncs,
-          PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-          argOffsets,
-          aggInputSchema,
-          sessionLocalTimeZone,
-          pythonRunnerConf).compute(projectedRowIter, context.partitionId(), context)
-
-        val joinedAttributes =
-          groupingExpressions.map(_.toAttribute) ++ udfExpressions.map(_.resultAttribute)
-        val joined = new JoinedRow
-        val resultProj = UnsafeProjection.create(resultExpressions, joinedAttributes)
-
-        columnarBatchIter.map(_.rowIterator.next()).map { aggOutputRow =>
-          val leftRow = queue.remove()
-          val joinedRow = joined(leftRow, aggOutputRow)
-          resultProj(joinedRow)
-        }
+      val grouped = if (groupingExpressions.isEmpty) {
+        // Use an empty unsafe row as a place holder for the grouping key
+        Iterator((new UnsafeRow(), iter))
       } else {
-        Iterator.empty
+        GroupedIterator(iter, groupingExpressions, child.output)
+      }.map { case (key, rows) =>
+        (key, rows.map(prunedProj))
       }
-    }
+
+      val context = TaskContext.get()
+
+      // The queue used to buffer input rows so we can drain it to
+      // combine input with output from Python.
+      val queue = HybridRowQueue(context.taskMemoryManager(),
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExpressions.length)
+      context.addTaskCompletionListener[Unit] { _ =>
+        queue.close()
+      }
+
+      // Add rows to queue to join later with the result.
+      val projectedRowIter = grouped.map { case (groupingKey, rows) =>
+        queue.add(groupingKey.asInstanceOf[UnsafeRow])
+        rows
+      }
+
+      val columnarBatchIter = new ArrowPythonRunner(
+        pyFuncs,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        argOffsets,
+        aggInputSchema,
+        sessionLocalTimeZone,
+        pythonRunnerConf).compute(projectedRowIter, context.partitionId(), context)
+
+      val joinedAttributes =
+        groupingExpressions.map(_.toAttribute) ++ udfExpressions.map(_.resultAttribute)
+      val joined = new JoinedRow
+      val resultProj = UnsafeProjection.create(resultExpressions, joinedAttributes)
+
+      columnarBatchIter.map(_.rowIterator.next()).map { aggOutputRow =>
+        val leftRow = queue.remove()
+        val joinedRow = joined(leftRow, aggOutputRow)
+        resultProj(joinedRow)
+      }
+    }}
   }
 }

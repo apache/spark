@@ -18,6 +18,7 @@
 import unittest
 
 from pyspark.rdd import PythonEvalType
+from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, mean, sum, \
     udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import *
@@ -460,6 +461,18 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
         expected = [1, 5]
         self.assertEqual(actual, expected)
+
+    def test_grouped_with_empty_partition(self):
+        data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
+        expected = [Row(id=1, sum=5), Row(id=2, x=4)]
+        num_parts = len(data) + 1
+        df = self.spark.createDataFrame(self.sc.parallelize(data, numSlices=num_parts))
+
+        f = pandas_udf(lambda x: x.sum(),
+                       'int', PandasUDFType.GROUPED_AGG)
+
+        result = df.groupBy('id').agg(f(df['x']).alias('sum')).collect()
+        self.assertEqual(result, expected)
 
 
 if __name__ == "__main__":

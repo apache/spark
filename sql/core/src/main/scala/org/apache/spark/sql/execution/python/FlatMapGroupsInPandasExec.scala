@@ -125,45 +125,38 @@ case class FlatMapGroupsInPandasExec(
     val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
     val dedupSchema = StructType.fromAttributes(dedupAttributes)
 
-    inputRDD.mapPartitionsInternal { iter =>
-
-      // Only execute on non-empty partitions
-      if (iter.nonEmpty) {
-
-        val grouped = if (groupingAttributes.isEmpty) {
-          Iterator(iter)
-        } else {
-          val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
-          val dedupProj = UnsafeProjection.create(dedupAttributes, child.output)
-          groupedIter.map {
-            case (_, groupedRowIter) => groupedRowIter.map(dedupProj)
-          }
-        }
-
-        val context = TaskContext.get()
-
-        val columnarBatchIter = new ArrowPythonRunner(
-          chainedFunc,
-          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-          argOffsets,
-          dedupSchema,
-          sessionLocalTimeZone,
-          pythonRunnerConf).compute(grouped, context.partitionId(), context)
-
-        val unsafeProj = UnsafeProjection.create(output, output)
-
-        columnarBatchIter.flatMap { batch =>
-          // Grouped Map UDF returns a StructType column in ColumnarBatch, select the children here
-          val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
-          val outputVectors = output.indices.map(structVector.getChild)
-          val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
-          flattenedBatch.setNumRows(batch.numRows())
-          flattenedBatch.rowIterator.asScala
-        }.map(unsafeProj)
-
+    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
+      val grouped = if (groupingAttributes.isEmpty) {
+        Iterator(iter)
       } else {
-        Iterator.empty
+        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
+        val dedupProj = UnsafeProjection.create(dedupAttributes, child.output)
+        groupedIter.map {
+          case (_, groupedRowIter) => groupedRowIter.map(dedupProj)
+        }
       }
-    }
+
+      val context = TaskContext.get()
+
+      val columnarBatchIter = new ArrowPythonRunner(
+        chainedFunc,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        argOffsets,
+        dedupSchema,
+        sessionLocalTimeZone,
+        pythonRunnerConf).compute(grouped, context.partitionId(), context)
+
+      val unsafeProj = UnsafeProjection.create(output, output)
+
+      columnarBatchIter.flatMap { batch =>
+        // Grouped Map UDF returns a StructType column in ColumnarBatch, select the children here
+        val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
+        val outputVectors = output.indices.map(structVector.getChild)
+        val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
+        flattenedBatch.setNumRows(batch.numRows())
+        flattenedBatch.rowIterator.asScala
+      }.map(unsafeProj)
+    }}
   }
 }
