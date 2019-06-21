@@ -103,7 +103,7 @@ class SqsFileCache(maxAgeMs: Long, fileNameOnly: Boolean) extends Logging {
       uncommittedFiles.toList
     }
 
-    protected def reportTimeTaken[T](operation: String)(body: => T): T = {
+    private def reportTimeTaken[T](operation: String)(body: => T): T = {
       val startTime = System.currentTimeMillis()
       val result = body
       val endTime = System.currentTimeMillis()
