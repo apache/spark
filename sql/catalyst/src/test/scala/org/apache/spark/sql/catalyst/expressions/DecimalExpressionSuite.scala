@@ -50,7 +50,7 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 2), true), d1)
     checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 3), true), null)
     intercept[ArithmeticException](CheckOverflow(Literal(d1), DecimalType(4, 3), false).eval())
-    intercept[ArithmeticException](checkEvaluationWithGeneratedMutableProjection(
+    intercept[ArithmeticException](checkEvaluationWithMutableProjection(
       CheckOverflow(Literal(d1), DecimalType(4, 3), false), null))
 
     val d2 = Decimal(101, 3, 1)
@@ -59,7 +59,7 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 2), true), d2)
     checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 3), true), null)
     intercept[ArithmeticException](CheckOverflow(Literal(d2), DecimalType(4, 3), false).eval())
-    intercept[ArithmeticException](checkEvaluationWithGeneratedMutableProjection(
+    intercept[ArithmeticException](checkEvaluationWithMutableProjection(
       CheckOverflow(Literal(d2), DecimalType(4, 3), false), null))
 
     checkEvaluation(CheckOverflow(
