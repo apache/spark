@@ -31,13 +31,11 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * A physical plan that evaluates a [[PythonUDF]]
  */
-case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
-  extends EvalPythonExec(udfs, output, child) {
+case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
+  extends EvalPythonExec(udfs, resultAttrs, child) {
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
-      bufferSize: Int,
-      reuseWorker: Boolean,
       argOffsets: Array[Array[Int]],
       iter: Iterator[InternalRow],
       schema: StructType,
@@ -68,8 +66,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     }.grouped(100).map(x => pickle.dumps(x.toArray))
 
     // Output iterator for results from Python.
-    val outputIterator = new PythonUDFRunner(
-        funcs, bufferSize, reuseWorker, PythonEvalType.SQL_BATCHED_UDF, argOffsets)
+    val outputIterator = new PythonUDFRunner(funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -84,6 +81,10 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
     outputIterator.flatMap { pickedResult =>
       val unpickledBatch = unpickle.loads(pickedResult)
+      // `Opcodes.MEMOIZE` of Protocol 4 (Python 3.4+) will store objects in internal map
+      // of `Unpickler`. This map is cleared when calling `Unpickler.close()`. Pyrolite
+      // doesn't clear it up, so we manually clear it.
+      unpickle.close()
       unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
     }.map { result =>
       if (udfs.length == 1) {

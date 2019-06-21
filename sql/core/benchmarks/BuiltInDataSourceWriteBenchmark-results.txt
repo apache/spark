@@ -1,0 +1,60 @@
+================================================================================================
+Parquet writer benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Parquet writer benchmark:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Output Single Int Column                      2354 / 2438          6.7         149.7       1.0X
+Output Single Double Column                   2462 / 2485          6.4         156.5       1.0X
+Output Int and String Column                  8083 / 8100          1.9         513.9       0.3X
+Output Partitions                             5015 / 5027          3.1         318.8       0.5X
+Output Buckets                                6883 / 6887          2.3         437.6       0.3X
+
+
+================================================================================================
+ORC writer benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+ORC writer benchmark:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Output Single Int Column                      1769 / 1789          8.9         112.4       1.0X
+Output Single Double Column                   1989 / 2009          7.9         126.5       0.9X
+Output Int and String Column                  7323 / 7400          2.1         465.6       0.2X
+Output Partitions                             4374 / 4381          3.6         278.1       0.4X
+Output Buckets                                6086 / 6104          2.6         386.9       0.3X
+
+
+================================================================================================
+JSON writer benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+JSON writer benchmark:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Output Single Int Column                      2954 / 4085          5.3         187.8       1.0X
+Output Single Double Column                   3832 / 3837          4.1         243.6       0.8X
+Output Int and String Column                 9591 / 10336          1.6         609.8       0.3X
+Output Partitions                             4956 / 4994          3.2         315.1       0.6X
+Output Buckets                                6608 / 6676          2.4         420.1       0.4X
+
+
+================================================================================================
+CSV writer benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+CSV writer benchmark:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Output Single Int Column                      4118 / 4125          3.8         261.8       1.0X
+Output Single Double Column                   4888 / 4891          3.2         310.8       0.8X
+Output Int and String Column                  9788 / 9872          1.6         622.3       0.4X
+Output Partitions                             6578 / 6640          2.4         418.2       0.6X
+Output Buckets                                9125 / 9171          1.7         580.2       0.5X
+
+

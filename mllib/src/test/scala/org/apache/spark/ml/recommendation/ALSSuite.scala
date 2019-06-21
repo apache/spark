@@ -23,7 +23,6 @@ import java.util.Random
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
-import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.commons.io.FileUtils
@@ -594,13 +593,14 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       (check: (ALSModel, ALSModel) => Unit)
       (check2: (ALSModel, ALSModel, DataFrame, Encoder[_]) => Unit): Unit = {
     val dfs = genRatingsDFWithNumericCols(spark, column)
-    val df = dfs.find {
-      case (numericTypeWithEncoder, _) => numericTypeWithEncoder.numericType == baseType
-    } match {
-      case Some((_, df)) => df
+    val maybeDf = dfs.find { case (numericTypeWithEncoder, _) =>
+      numericTypeWithEncoder.numericType == baseType
     }
+    assert(maybeDf.isDefined)
+    val df = maybeDf.get._2
+
     val expected = estimator.fit(df)
-    val actuals = dfs.filter(_ != baseType).map(t => (t, estimator.fit(t._2)))
+    val actuals = dfs.map(t => (t, estimator.fit(t._2)))
     actuals.foreach { case (_, actual) => check(expected, actual) }
     actuals.foreach { case (t, actual) => check2(expected, actual, t._2, t._1.encoder) }
 
@@ -612,7 +612,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       estimator.fit(strDF)
     }
     assert(thrown.getMessage.contains(
-      s"$column must be of type NumericType but was actually of type StringType"))
+      s"$column must be of type numeric but was actually of type string"))
   }
 
   private class NumericTypeWithEncoder[A](val numericType: NumericType)
@@ -695,12 +695,14 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     withClue("transform should fail when ids exceed integer range. ") {
       val model = als.fit(df)
       def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
-        assert(intercept[SparkException] {
+        val e1 = intercept[SparkException] {
           model.transform(dataFrame).first
-        }.getMessage.contains(msg))
-        assert(intercept[StreamingQueryException] {
+        }
+        TestUtils.assertExceptionMsg(e1, msg)
+        val e2 = intercept[StreamingQueryException] {
           testTransformer[A](dataFrame, model, "prediction") { _ => }
-        }.getMessage.contains(msg))
+        }
+        TestUtils.assertExceptionMsg(e2, msg)
       }
       testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
         df("item")))

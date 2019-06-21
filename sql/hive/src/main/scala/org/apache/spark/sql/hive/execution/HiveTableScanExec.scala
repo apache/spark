@@ -62,6 +62,8 @@ case class HiveTableScanExec(
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 
+  override def nodeName: String = s"Scan hive ${relation.tableMeta.qualifiedName}"
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -78,9 +80,9 @@ case class HiveTableScanExec(
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
   private lazy val boundPruningPred = partitionPruningPred.reduceLeftOption(And).map { pred =>
-    require(
-      pred.dataType == BooleanType,
-      s"Data type of predicate $pred must be BooleanType rather than ${pred.dataType}.")
+    require(pred.dataType == BooleanType,
+      s"Data type of predicate $pred must be ${BooleanType.catalogString} rather than " +
+        s"${pred.dataType.catalogString}.")
 
     BindReferences.bindReference(pred, relation.partitionCols)
   }
@@ -118,7 +120,7 @@ case class HiveTableScanExec(
 
     HiveShim.appendReadColumns(hiveConf, neededColumnIDs, output.map(_.name))
 
-    val deserializer = tableDesc.getDeserializerClass.newInstance
+    val deserializer = tableDesc.getDeserializerClass.getConstructor().newInstance()
     deserializer.initialize(hiveConf, tableDesc.getProperties)
 
     // Specifies types and object inspectors of columns to be scanned.
@@ -180,7 +182,7 @@ case class HiveTableScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
-    // with multiple partitions.
+    // multiple partitions.
     val rdd = if (!relation.isPartitioned) {
       Utils.withDummyCallSite(sqlContext.sparkContext) {
         hadoopReader.makeRDDForTable(hiveQlTable)

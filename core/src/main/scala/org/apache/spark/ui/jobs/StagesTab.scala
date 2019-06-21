@@ -19,10 +19,11 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.StageStatus
-import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils}
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 /** Web UI showing progress status of all stages in the given SparkContext. */
 private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
@@ -40,14 +41,12 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
     store
       .environmentInfo()
       .sparkProperties
-      .contains(("spark.scheduler.mode", SchedulingMode.FAIR.toString))
+      .contains((SCHEDULER_MODE.key, SchedulingMode.FAIR.toString))
   }
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      // stripXSS is called first to remove suspicious characters used in XSS attacks
-      val stageId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
-      stageId.foreach { id =>
+      Option(request.getParameter("id")).map(_.toInt).foreach { id =>
         store.asOption(store.lastStageAttempt(id)).foreach { stage =>
           val status = stage.status
           if (status == StageStatus.ACTIVE || status == StageStatus.PENDING) {

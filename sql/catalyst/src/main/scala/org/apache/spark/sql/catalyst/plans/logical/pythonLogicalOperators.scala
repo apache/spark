@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
 
 /**
  * FlatMap groups using an udf: pandas.Dataframe -> pandas.DataFrame.
@@ -38,3 +38,32 @@ case class FlatMapGroupsInPandas(
    */
   override val producedAttributes = AttributeSet(output)
 }
+
+trait BaseEvalPython extends UnaryNode {
+
+  def udfs: Seq[PythonUDF]
+
+  def resultAttrs: Seq[Attribute]
+
+  override def output: Seq[Attribute] = child.output ++ resultAttrs
+
+  @transient
+  override lazy val references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
+}
+
+/**
+ * A logical plan that evaluates a [[PythonUDF]]
+ */
+case class BatchEvalPython(
+    udfs: Seq[PythonUDF],
+    resultAttrs: Seq[Attribute],
+    child: LogicalPlan) extends BaseEvalPython
+
+/**
+ * A logical plan that evaluates a [[PythonUDF]] with Apache Arrow.
+ */
+case class ArrowEvalPython(
+    udfs: Seq[PythonUDF],
+    resultAttrs: Seq[Attribute],
+    child: LogicalPlan,
+    evalType: Int) extends BaseEvalPython

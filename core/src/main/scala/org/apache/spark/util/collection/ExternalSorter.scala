@@ -27,7 +27,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
@@ -109,7 +109,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val serInstance = serializer.newInstance()
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
-  private val fileBufferSize = conf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
+  private val fileBufferSize = conf.get(config.SHUFFLE_FILE_BUFFER_SIZE).toInt * 1024
 
   // Size of object batches when reading/writing from serializers.
   //
@@ -118,7 +118,7 @@ private[spark] class ExternalSorter[K, V, C](
   //
   // NOTE: Setting this too low can cause excessive copying when serializing, since some serializers
   // grow internal data structures by growing + copying every time the number of objects doubles.
-  private val serializerBatchSize = conf.getLong("spark.shuffle.spill.batchSize", 10000)
+  private val serializerBatchSize = conf.get(config.SHUFFLE_SPILL_BATCH_SIZE)
 
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
@@ -143,12 +143,10 @@ private[spark] class ExternalSorter[K, V, C](
   // user. (A partial ordering means that equal keys have comparator.compare(k, k) = 0, but some
   // non-equal keys also have this, so we need to do a later pass to find truly equal keys).
   // Note that we ignore this if no aggregator and no ordering are given.
-  private val keyComparator: Comparator[K] = ordering.getOrElse(new Comparator[K] {
-    override def compare(a: K, b: K): Int = {
-      val h1 = if (a == null) 0 else a.hashCode()
-      val h2 = if (b == null) 0 else b.hashCode()
-      if (h1 < h2) -1 else if (h1 == h2) 0 else 1
-    }
+  private val keyComparator: Comparator[K] = ordering.getOrElse((a: K, b: K) => {
+    val h1 = if (a == null) 0 else a.hashCode()
+    val h2 = if (b == null) 0 else b.hashCode()
+    if (h1 < h2) -1 else if (h1 == h2) 0 else 1
   })
 
   private def comparator: Option[Comparator[K]] = {
@@ -363,17 +361,15 @@ private[spark] class ExternalSorter[K, V, C](
    * Merge-sort a sequence of (K, C) iterators using a given a comparator for the keys.
    */
   private def mergeSort(iterators: Seq[Iterator[Product2[K, C]]], comparator: Comparator[K])
-      : Iterator[Product2[K, C]] =
-  {
+      : Iterator[Product2[K, C]] = {
     val bufferedIters = iterators.filter(_.hasNext).map(_.buffered)
     type Iter = BufferedIterator[Product2[K, C]]
-    val heap = new mutable.PriorityQueue[Iter]()(new Ordering[Iter] {
-      // Use the reverse of comparator.compare because PriorityQueue dequeues the max
-      override def compare(x: Iter, y: Iter): Int = -comparator.compare(x.head._1, y.head._1)
-    })
+    // Use the reverse order (compare(y,x)) because PriorityQueue dequeues the max
+    val heap = new mutable.PriorityQueue[Iter]()(
+      (x: Iter, y: Iter) => comparator.compare(y.head._1, x.head._1))
     heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {
-      override def hasNext: Boolean = !heap.isEmpty
+      override def hasNext: Boolean = heap.nonEmpty
 
       override def next(): Product2[K, C] = {
         if (!hasNext) {
@@ -400,13 +396,12 @@ private[spark] class ExternalSorter[K, V, C](
       mergeCombiners: (C, C) => C,
       comparator: Comparator[K],
       totalOrder: Boolean)
-      : Iterator[Product2[K, C]] =
-  {
+      : Iterator[Product2[K, C]] = {
     if (!totalOrder) {
       // We only have a partial ordering, e.g. comparing the keys by hash code, which means that
       // multiple distinct keys might be treated as equal by the ordering. To deal with this, we
       // need to read all keys considered equal by the ordering at once and compare them.
-      new Iterator[Iterator[Product2[K, C]]] {
+      val it = new Iterator[Iterator[Product2[K, C]]] {
         val sorted = mergeSort(iterators, comparator).buffered
 
         // Buffers reused across elements to decrease memory allocation
@@ -446,7 +441,8 @@ private[spark] class ExternalSorter[K, V, C](
           // equal by the partial order; we flatten this below to get a flat iterator of (K, C).
           keys.iterator.zip(combiners.iterator)
         }
-      }.flatMap(i => i)
+      }
+      it.flatten
     } else {
       // We have a total ordering, so the objects with the same key are sequential.
       new Iterator[Product2[K, C]] {
@@ -650,7 +646,7 @@ private[spark] class ExternalSorter[K, V, C](
     if (spills.isEmpty) {
       // Special case: if we have only in-memory data, we don't need to merge streams, and perhaps
       // we don't even need to sort by anything other than partition ID
-      if (!ordering.isDefined) {
+      if (ordering.isEmpty) {
         // The user hasn't requested sorted keys, so only sort by partition ID, not key
         groupByPartition(destructiveIterator(collection.partitionedDestructiveSortedIterator(None)))
       } else {
@@ -727,9 +723,10 @@ private[spark] class ExternalSorter[K, V, C](
     spills.clear()
     forceSpillFiles.foreach(s => s.file.delete())
     forceSpillFiles.clear()
-    if (map != null || buffer != null) {
+    if (map != null || buffer != null || readingIterator != null) {
       map = null // So that the memory can be garbage-collected
       buffer = null // So that the memory can be garbage-collected
+      readingIterator = null // So that the memory can be garbage-collected
       releaseMemory()
     }
   }
@@ -793,8 +790,8 @@ private[spark] class ExternalSorter[K, V, C](
 
           def nextPartition(): Int = cur._1._1
         }
-        logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
-          s" it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
+        logInfo(s"Task ${TaskContext.get().taskAttemptId} force spilling in-memory map to disk " +
+          s"and it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
         forceSpillFiles += spillFile
         val spillReader = new SpillReader(spillFile)

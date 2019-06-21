@@ -170,7 +170,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
-    spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt2")
+    spark.read.json(rdd2.toDS()).createOrReplaceTempView("jt2")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
@@ -542,6 +542,26 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
         checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
+    withTempPath { path =>
+      Seq((1, 1), (2, 2)).toDF("i", "part")
+        .write.partitionBy("part")
+        .parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1) :: Row(2, 2) :: Nil)
+
+      Seq((1, 2), (1, 3)).toDF("i", "part")
+        .write.partitionBy("part").mode("overwrite")
+        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath),
+        Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
+
+      Seq((1, 2), (1, 3)).toDF("i", "part")
+        .write.partitionBy("part").mode("overwrite")
+        .option("partitionOverwriteMode", "static").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 2) :: Row(1, 3) :: Nil)
     }
   }
 

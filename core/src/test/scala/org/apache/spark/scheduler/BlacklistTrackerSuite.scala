@@ -17,10 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{never, verify, when}
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mockito.MockitoSugar
 
@@ -443,20 +442,20 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       (2, 2),
       (2, 3)
     ).foreach { case (maxTaskFailures, maxNodeAttempts) =>
-      conf.set(config.MAX_TASK_FAILURES, maxTaskFailures)
+      conf.set(config.TASK_MAX_FAILURES, maxTaskFailures)
       conf.set(config.MAX_TASK_ATTEMPTS_PER_NODE.key, maxNodeAttempts.toString)
       val excMsg = intercept[IllegalArgumentException] {
         BlacklistTracker.validateBlacklistConfs(conf)
       }.getMessage()
       assert(excMsg === s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-        s"( = ${maxNodeAttempts}) was >= ${config.MAX_TASK_FAILURES.key} " +
+        s"( = ${maxNodeAttempts}) was >= ${config.TASK_MAX_FAILURES.key} " +
         s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
         s"Spark will not be robust to one bad node.  Decrease " +
-        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
+        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.TASK_MAX_FAILURES.key}, " +
         s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
     }
 
-    conf.remove(config.MAX_TASK_FAILURES)
+    conf.remove(config.TASK_MAX_FAILURES)
     conf.remove(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
     Seq(
@@ -480,17 +479,16 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   test("blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
-    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
+    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer { (_: InvocationOnMock) =>
       // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
       // is updated before we ask the executor allocation client to kill all the executors
       // on a particular host.
-      override def answer(invocation: InvocationOnMock): Boolean = {
-        if (blacklist.nodeBlacklist.contains("hostA") == false) {
-          throw new IllegalStateException("hostA should be on the blacklist")
-        }
+      if (blacklist.nodeBlacklist.contains("hostA")) {
         true
+      } else {
+        throw new IllegalStateException("hostA should be on the blacklist")
       }
-    })
+    }
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
 
     // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
@@ -552,17 +550,16 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   test("fetch failure blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
-    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
+    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer { (_: InvocationOnMock) =>
       // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
       // is updated before we ask the executor allocation client to kill all the executors
       // on a particular host.
-      override def answer(invocation: InvocationOnMock): Boolean = {
-        if (blacklist.nodeBlacklist.contains("hostA") == false) {
-          throw new IllegalStateException("hostA should be on the blacklist")
-        }
+      if (blacklist.nodeBlacklist.contains("hostA")) {
         true
+      } else {
+        throw new IllegalStateException("hostA should be on the blacklist")
       }
-    })
+    }
 
     conf.set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)

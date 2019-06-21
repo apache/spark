@@ -1,0 +1,83 @@
+- text: Getting Started
+  url: sql-getting-started.html
+  subitems:
+    - text: "Starting Point: SparkSession"
+      url: sql-getting-started.html#starting-point-sparksession
+    - text: Creating DataFrames
+      url: sql-getting-started.html#creating-dataframes
+    - text: Untyped Dataset Operations (DataFrame operations)
+      url: sql-getting-started.html#untyped-dataset-operations-aka-dataframe-operations
+    - text: Running SQL Queries Programmatically
+      url: sql-getting-started.html#running-sql-queries-programmatically
+    - text: Global Temporary View
+      url: sql-getting-started.html#global-temporary-view
+    - text: Creating Datasets
+      url: sql-getting-started.html#creating-datasets
+    - text: Interoperating with RDDs
+      url: sql-getting-started.html#interoperating-with-rdds
+    - text: Aggregations
+      url: sql-getting-started.html#aggregations
+- text: Data Sources
+  url: sql-data-sources.html
+  subitems:
+    - text: "Generic Load/Save Functions"
+      url: sql-data-sources-load-save-functions.html
+    - text: Parquet Files
+      url: sql-data-sources-parquet.html
+    - text: ORC Files
+      url: sql-data-sources-orc.html
+    - text: JSON Files
+      url: sql-data-sources-json.html
+    - text: Hive Tables
+      url: sql-data-sources-hive-tables.html
+    - text: JDBC To Other Databases
+      url: sql-data-sources-jdbc.html
+    - text: Avro Files
+      url: sql-data-sources-avro.html
+    - text: Troubleshooting
+      url: sql-data-sources-troubleshooting.html
+- text: Performance Tuning
+  url: sql-performance-tuning.html
+  subitems:
+    - text: Caching Data In Memory
+      url: sql-performance-tuning.html#caching-data-in-memory
+    - text: Other Configuration Options
+      url: sql-performance-tuning.html#other-configuration-options
+    - text: Broadcast Hint for SQL Queries
+      url: sql-performance-tuning.html#broadcast-hint-for-sql-queries
+- text: Distributed SQL Engine
+  url: sql-distributed-sql-engine.html
+  subitems:
+    - text: "Running the Thrift JDBC/ODBC server"
+      url: sql-distributed-sql-engine.html#running-the-thrift-jdbcodbc-server
+    - text: Running the Spark SQL CLI
+      url: sql-distributed-sql-engine.html#running-the-spark-sql-cli
+- text: PySpark Usage Guide for Pandas with Apache Arrow
+  url: sql-pyspark-pandas-with-arrow.html
+  subitems:
+    - text: Apache Arrow in Spark
+      url: sql-pyspark-pandas-with-arrow.html#apache-arrow-in-spark
+    - text: "Enabling for Conversion to/from Pandas"
+      url: sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
+    - text: "Pandas UDFs (a.k.a. Vectorized UDFs)"
+      url: sql-pyspark-pandas-with-arrow.html#pandas-udfs-aka-vectorized-udfs
+    - text: Usage Notes
+      url: sql-pyspark-pandas-with-arrow.html#usage-notes
+- text: Migration Guide
+  url: sql-migration-guide.html
+  subitems:
+    - text: Spark SQL Upgrading Guide
+      url: sql-migration-guide-upgrade.html
+    - text: Compatibility with Apache Hive
+      url: sql-migration-guide-hive-compatibility.html
+    - text: SQL Reserved/Non-Reserved Keywords
+      url: sql-reserved-and-non-reserved-keywords.html
+- text: Reference
+  url: sql-reference.html
+  subitems:
+    - text: Data Types
+      url: sql-reference.html#data-types
+    - text: NaN Semantics
+      url: sql-reference.html#nan-semantics
+    - text: Arithmetic operations
+      url: sql-reference.html#arithmetic-operations

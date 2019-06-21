@@ -18,11 +18,12 @@
 package org.apache.spark.sql.types
 
 import java.io.Serializable
+import java.util.Locale
 import java.util.regex.Pattern
 
 
 /**
- * The public representation of interval type.
+ * The internal representation of interval type.
  */
 
 object CalendarInterval {
@@ -33,33 +34,37 @@ object CalendarInterval {
   val MICROS_PER_DAY: Long = MICROS_PER_HOUR * 24
   val MICROS_PER_WEEK: Long = MICROS_PER_DAY * 7
 
-/**
- * A function to generate regex which matches interval string's unit part like "3 years".
- *
- * First, we can leave out some units in interval string, and we only care about the value of
- * unit, so here we use non-capturing group to wrap the actual regex.
- * At the beginning of the actual regex, we should match spaces before the unit part.
- * Next is the number part, starts with an optional "-" to represent negative value. We use
- * capturing group to wrap this part as we need the value later.
- * Finally is the unit name, ends with an optional "s".
- */
+  /**
+    * A function to generate regex which matches interval string's unit part like "3 years".
+    *
+    * First, we can leave out some units in interval string, and we only care about the value of
+    * unit, so here we use non-capturing group to wrap the actual regex.
+    * At the beginning of the actual regex, we should match spaces before the unit part.
+    * Next is the number part, starts with an optional "-" to represent negative value. We use
+    * capturing group to wrap this part as we need the value later.
+    * Finally is the unit name, ends with an optional "s".
+    */
   private def unitRegex(unit: String) = "(?:\\s+(-?\\d+)\\s+" + unit + "s?)?"
 
-  private val p = Pattern.compile("interval" + unitRegex("year") +
-    unitRegex("month") + unitRegex("week") + unitRegex("day") +
-    unitRegex("hour") + unitRegex("minute") + unitRegex("second") +
-    unitRegex("millisecond") + unitRegex("microsecond"))
+  private val p = Pattern.compile("interval" + unitRegex("year") + unitRegex("month") +
+    unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
+    unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"))
   private val yearMonthPattern = Pattern.compile("^(?:['|\"])?([+|-])?(\\d+)-(\\d+)(?:['|\"])?$")
-  private val dayTimePattern = Pattern.compile(
-    "^(?:['|\"])?([+|-])?(\\d+) (\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$")
+  private val dayTimePattern = Pattern.compile("^(?:['|\"])?([+|-])?((\\d+) )?" +
+    "(\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$")
   private val quoteTrimPattern = Pattern.compile("^(?:['|\"])?(.*?)(?:['|\"])?$")
 
-  private def toLong(s: String) = if (s == null) 0L else s.toLong
+  private def toLong(s: String) = if (s == null) 0L
+  else s.toLong
 
+  /**
+    * Convert a string to CalendarInterval. Return null if the input string is not a valid interval.
+    * This method is case-sensitive and all characters in the input string should be in lower case.
+    */
   def fromString(s: String): CalendarInterval = {
     if (s == null) return null
     val m = p.matcher(s.trim)
-    if (!m.matches || s.trim == "interval") null
+    if (!m.matches || s == "interval") null
     else {
       val months = toLong(m.group(1)) * 12 + toLong(m.group(2))
       var microseconds = toLong(m.group(3)) * MICROS_PER_WEEK
@@ -73,6 +78,24 @@ object CalendarInterval {
     }
   }
 
+  /**
+    * Convert a string to CalendarInterval. Unlike fromString, this method is case-insensitive and
+    * will throw IllegalArgumentException when the input string is not a valid interval.
+    *
+    * @throws IllegalArgumentException if the string is not a valid internal.
+    */
+  def fromCaseInsensitiveString(s: String): CalendarInterval = {
+    if (s == null || s.trim.isEmpty) {
+      throw new IllegalArgumentException("Interval cannot be null or blank.")
+    }
+    val sInLowerCase = s.trim.toLowerCase(Locale.ROOT)
+    val interval = if (sInLowerCase.startsWith("interval ")) sInLowerCase
+    else "interval " + sInLowerCase
+    val cal = fromString(interval)
+    if (cal == null) throw new IllegalArgumentException("Invalid interval: " + s)
+    cal
+  }
+
   @throws[IllegalArgumentException]
   def toLongWithRange(fieldName: String, s: String, minValue: Long, maxValue: Long): Long = {
     var result = 0L
@@ -80,26 +103,30 @@ object CalendarInterval {
       result = s.toLong
       if (result < minValue || result > maxValue) {
         throw new IllegalArgumentException(
-          s"${fieldName} ${result} outside range [${minValue}, ${maxValue}")
+          s"${fieldName} ${result} outside range [${minValue}, ${maxValue}]")
       }
     }
     result
   }
 
-/**
- * Parse YearMonth string in form: [-]YYYY-MM
- *
- * adapted from HiveIntervalYearMonth.valueOf
- */
+  /**
+    * Parse YearMonth string in form: [-]YYYY-MM
+    *
+    * adapted from HiveIntervalYearMonth.valueOf
+    */
   @throws[IllegalArgumentException]
   def fromYearMonthString(s: String): CalendarInterval = {
     var result : CalendarInterval = null
-    if (s == null) throw new IllegalArgumentException("Interval year-month string was null")
+    if (s == null) {
+      throw new IllegalArgumentException("Interval year-month string was null")
+    }
+
     val m = yearMonthPattern.matcher(s.trim)
     if (!m.matches) {
       throw new IllegalArgumentException(
         "Interval string does not match year-month format of 'y-m': " + s)
-    } else try {
+    }
+    else try {
       val sign = if (m.group(1) != null && m.group(1) == "-") -1
       else 1
       val years = toLongWithRange("year", m.group(2), 0, Integer.MAX_VALUE).toInt
@@ -113,11 +140,11 @@ object CalendarInterval {
     result
   }
 
-/**
- * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn
- *
- * adapted from HiveIntervalDayTime.valueOf
- */
+  /**
+    * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
+    *
+    * adapted from HiveIntervalDayTime.valueOf
+    */
   @throws[IllegalArgumentException]
   def fromDayTimeString(s: String): CalendarInterval = {
     var result : CalendarInterval = null
@@ -130,12 +157,13 @@ object CalendarInterval {
     else try {
       val sign = if (m.group(1) != null && m.group(1) == "-") -1
       else 1
-      val days = toLongWithRange("day", m.group(2), 0, Integer.MAX_VALUE)
-      val hours = toLongWithRange("hour", m.group(3), 0, 23)
-      val minutes = toLongWithRange("minute", m.group(4), 0, 59)
-      val seconds = toLongWithRange("second", m.group(5), 0, 59)
+      val days = if (m.group(2) == null) 0
+      else toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE)
+      val hours = toLongWithRange("hour", m.group(4), 0, 23)
+      val minutes = toLongWithRange("minute", m.group(5), 0, 59)
+      val seconds = toLongWithRange("second", m.group(6), 0, 59)
       // Hive allow nanosecond precision interval
-      val nanos = toLongWithRange("nanosecond", m.group(7), 0L, 999999999L)
+      val nanos = toLongWithRange("nanosecond", m.group(8), 0L, 999999999L)
       result = new CalendarInterval(0, sign * (days * MICROS_PER_DAY +
         hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
         seconds * MICROS_PER_SECOND + nanos / 1000L))
@@ -203,21 +231,21 @@ object CalendarInterval {
     result
   }
 
-/**
- * Parse second_nano string in ss.nnnnnnnnn format to microseconds
- */
+  /**
+    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
+    */
   @throws[IllegalArgumentException]
   def parseSecondNano(secondNano: String): Long = {
     val parts = secondNano.split("\\.")
     if (parts.length == 1) {
-      toLongWithRange("second", parts(0), Long.MinValue / MICROS_PER_SECOND, Long.MaxValue /
-        MICROS_PER_SECOND) * MICROS_PER_SECOND
+      toLongWithRange("second", parts(0), Long.MinValue/ MICROS_PER_SECOND,
+        Long.MaxValue / MICROS_PER_SECOND) * MICROS_PER_SECOND
     }
     else if (parts.length == 2) {
       val seconds = if (parts(0) == "") 0L
       else {
-        toLongWithRange("second", parts(0),
-          Long.MinValue / MICROS_PER_SECOND, Long.MaxValue / MICROS_PER_SECOND)
+        toLongWithRange("second", parts(0), Long.MinValue / MICROS_PER_SECOND,
+          Long.MaxValue / MICROS_PER_SECOND)
       }
       val nanos = toLongWithRange("nanosecond", parts(1), 0L, 999999999L)
       seconds * MICROS_PER_SECOND + nanos / 1000L
@@ -229,7 +257,7 @@ object CalendarInterval {
   }
 }
 
-final case class CalendarInterval(val months: Int, val microseconds: Long) extends Serializable {
+final class CalendarInterval(val months: Int, val microseconds: Long) extends Serializable {
   def milliseconds: Long = this.microseconds / CalendarInterval.MICROS_PER_MILLI
 
   def add(that: CalendarInterval): CalendarInterval = {
@@ -277,6 +305,7 @@ final case class CalendarInterval(val months: Int, val microseconds: Long) exten
       rest %= CalendarInterval.MICROS_PER_MILLI
       appendUnit(sb, rest, "microsecond")
     }
+    else if (months == 0) sb.append(" 0 microseconds")
     sb.toString
   }
 

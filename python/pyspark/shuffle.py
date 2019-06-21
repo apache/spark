@@ -37,7 +37,7 @@ try:
     process = None
 
     def get_used_memory():
-        """ Return the used memory in MB """
+        """ Return the used memory in MiB """
         global process
         if process is None or process._pid != os.getpid():
             process = psutil.Process(os.getpid())
@@ -50,7 +50,7 @@ try:
 except ImportError:
 
     def get_used_memory():
-        """ Return the used memory in MB """
+        """ Return the used memory in MiB """
         if platform.system() == 'Linux':
             for line in open('/proc/self/status'):
                 if line.startswith('VmRSS:'):

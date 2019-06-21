@@ -47,11 +47,23 @@ private[spark] abstract class StreamFileInputFormat[T]
   def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int) {
     val defaultMaxSplitBytes = sc.getConf.get(config.FILES_MAX_PARTITION_BYTES)
     val openCostInBytes = sc.getConf.get(config.FILES_OPEN_COST_IN_BYTES)
-    val defaultParallelism = sc.defaultParallelism
+    val defaultParallelism = Math.max(sc.defaultParallelism, minPartitions)
     val files = listStatus(context).asScala
     val totalBytes = files.filterNot(_.isDirectory).map(_.getLen + openCostInBytes).sum
     val bytesPerCore = totalBytes / defaultParallelism
     val maxSplitSize = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+
+    // For small files we need to ensure the min split size per node & rack <= maxSplitSize
+    val jobConfig = context.getConfiguration
+    val minSplitSizePerNode = jobConfig.getLong(CombineFileInputFormat.SPLIT_MINSIZE_PERNODE, 0L)
+    val minSplitSizePerRack = jobConfig.getLong(CombineFileInputFormat.SPLIT_MINSIZE_PERRACK, 0L)
+
+    if (maxSplitSize < minSplitSizePerNode) {
+      super.setMinSplitSizeNode(maxSplitSize)
+    }
+    if (maxSplitSize < minSplitSizePerRack) {
+      super.setMinSplitSizeRack(maxSplitSize)
+    }
     super.setMaxSplitSize(maxSplitSize)
   }
 

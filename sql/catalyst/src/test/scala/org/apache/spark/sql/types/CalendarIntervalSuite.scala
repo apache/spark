@@ -1,454 +1,226 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+* Licensed to the Apache Software Foundation (ASF) under one or more
+* contributor license agreements.  See the NOTICE file distributed with
+* this work for additional information regarding copyright ownership.
+* The ASF licenses this file to You under the Apache License, Version 2.0
+* (the "License"); you may not use this file except in compliance with
+* the License.  You may obtain a copy of the License at
+*
+*    http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
 
 package org.apache.spark.sql.types
 
-import com.fasterxml.jackson.core.JsonParseException
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.junit.Assert._
+import org.junit.Test
 
-class CalendarIntervalSuite extends SparkFunSuite {
+import org.apache.spark.sql.types.CalendarInterval._
 
-  test("construct an ArrayType") {
-    val array = ArrayType(StringType)
+object CalendarIntervalSuite {
+  private def testSingleUnit(unit: String, number: Int, months: Int, microseconds: Long): Unit = {
+    val input1 = "interval " + number + " " + unit
+    val input2 = "interval " + number + " " + unit + "s"
+    val result = new CalendarInterval(months, microseconds)
+    assertEquals(fromString(input1), result)
+    assertEquals(fromString(input2), result)
+  }
+}
 
-    assert(ArrayType(StringType, true) === array)
+class CalendarIntervalSuite {
+  @Test def equalsTest(): Unit = {
+    val i1 = new CalendarInterval(3, 123)
+    val i2 = new CalendarInterval(3, 321)
+    val i3 = new CalendarInterval(1, 123)
+    val i4 = new CalendarInterval(3, 123)
+    assertNotSame(i1, i2)
+    assertNotSame(i1, i3)
+    assertNotSame(i2, i3)
+    assertEquals(i1, i4)
   }
 
-  test("construct an MapType") {
-    val map = MapType(StringType, IntegerType)
-
-    assert(MapType(StringType, IntegerType, true) === map)
+  @Test def toStringTest(): Unit = {
+    var i : CalendarInterval = null
+    i = new CalendarInterval(0, 0)
+    assertEquals("interval 0 microseconds", i.toString)
+    i = new CalendarInterval(34, 0)
+    assertEquals("interval 2 years 10 months", i.toString)
+    i = new CalendarInterval(-34, 0)
+    assertEquals("interval -2 years -10 months", i.toString)
+    i = new CalendarInterval(0, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123)
+    assertEquals("interval 3 weeks 13 hours 123 microseconds", i.toString)
+    i = new CalendarInterval(0, -3 * MICROS_PER_WEEK - 13 * MICROS_PER_HOUR - 123)
+    assertEquals("interval -3 weeks -13 hours -123 microseconds", i.toString)
+    i = new CalendarInterval(34, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123)
+    assertEquals("interval 2 years 10 months 3 weeks 13 hours 123 microseconds", i.toString)
   }
 
-  test("construct with add") {
-    val struct = (new StructType)
-      .add("a", IntegerType, true)
-      .add("b", LongType, false)
-      .add("c", StringType, true)
-
-    assert(StructField("b", LongType, false) === struct("b"))
+  @Test def fromStringTest(): Unit = {
+    CalendarIntervalSuite.testSingleUnit("year", 3, 36, 0)
+    CalendarIntervalSuite.testSingleUnit("month", 3, 3, 0)
+    CalendarIntervalSuite.testSingleUnit("week", 3, 0, 3 * MICROS_PER_WEEK)
+    CalendarIntervalSuite.testSingleUnit("day", 3, 0, 3 * MICROS_PER_DAY)
+    CalendarIntervalSuite.testSingleUnit("hour", 3, 0, 3 * MICROS_PER_HOUR)
+    CalendarIntervalSuite.testSingleUnit("minute", 3, 0, 3 * MICROS_PER_MINUTE)
+    CalendarIntervalSuite.testSingleUnit("second", 3, 0, 3 * MICROS_PER_SECOND)
+    CalendarIntervalSuite.testSingleUnit("millisecond", 3, 0, 3 * MICROS_PER_MILLI)
+    CalendarIntervalSuite.testSingleUnit("microsecond", 3, 0, 3)
+    var input : String = null
+    input = "interval   -5  years  23   month"
+    val result = new CalendarInterval(-5 * 12 + 23, 0)
+    assertEquals(fromString(input), result)
+    input = "interval   -5  years  23   month   "
+    assertEquals(fromString(input), result)
+    input = "  interval   -5  years  23   month   "
+    assertEquals(fromString(input), result)
+    // Error cases
+    input = "interval   3month 1 hour"
+    assertNull(fromString(input))
+    input = "interval 3 moth 1 hour"
+    assertNull(fromString(input))
+    input = "interval"
+    assertNull(fromString(input))
+    input = "int"
+    assertNull(fromString(input))
+    input = ""
+    assertNull(fromString(input))
+    input = null
+    assertNull(fromString(input))
   }
 
-  test("construct with add from StructField") {
-    // Test creation from StructField type
-    val struct = (new StructType)
-      .add(StructField("a", IntegerType, true))
-      .add(StructField("b", LongType, false))
-      .add(StructField("c", StringType, true))
-
-    assert(StructField("b", LongType, false) === struct("b"))
-  }
-
-  test("construct with add from StructField with comments") {
-    // Test creation from StructField using four different ways
-    val struct = (new StructType)
-      .add("a", "int", true, "test1")
-      .add("b", StringType, true, "test3")
-      .add(StructField("c", LongType, false).withComment("test4"))
-      .add(StructField("d", LongType))
-
-    assert(StructField("a", IntegerType, true).withComment("test1") == struct("a"))
-    assert(StructField("b", StringType, true).withComment("test3") == struct("b"))
-    assert(StructField("c", LongType, false).withComment("test4") == struct("c"))
-    assert(StructField("d", LongType) == struct("d"))
-
-    assert(struct("c").getComment() == Option("test4"))
-    assert(struct("d").getComment().isEmpty)
-  }
-
-  test("construct with String DataType") {
-    // Test creation with DataType as String
-    val struct = (new StructType)
-      .add("a", "int", true)
-      .add("b", "long", false)
-      .add("c", "string", true)
-
-    assert(StructField("a", IntegerType, true) === struct("a"))
-    assert(StructField("b", LongType, false) === struct("b"))
-    assert(StructField("c", StringType, true) === struct("c"))
-  }
-
-  test("extract fields from a StructType") {
-    val struct = StructType(
-      StructField("a", IntegerType, true) ::
-      StructField("b", LongType, false) ::
-      StructField("c", StringType, true) ::
-      StructField("d", FloatType, true) :: Nil)
-
-    assert(StructField("b", LongType, false) === struct("b"))
-
-    intercept[IllegalArgumentException] {
-      struct("e")
+  @Test def fromCaseInsensitiveStringTest(): Unit = {
+    for (input <- Array[String]("5 MINUTES", "5 minutes", "5 Minutes")) {
+      assertEquals(fromCaseInsensitiveString(input), new CalendarInterval(0, 5L * 60 * 1000000))
     }
-
-    val expectedStruct = StructType(
-      StructField("b", LongType, false) ::
-      StructField("d", FloatType, true) :: Nil)
-
-    assert(expectedStruct === struct(Set("b", "d")))
-    intercept[IllegalArgumentException] {
-      struct(Set("b", "d", "e", "f"))
+    for (input <- Array[String](null, "", " ")) {
+      try {
+        fromCaseInsensitiveString(input)
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assertTrue(e.getMessage.contains("cannot be null or blank"))
+      }
     }
-  }
-
-  test("extract field index from a StructType") {
-    val struct = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    assert(struct.fieldIndex("a") === 0)
-    assert(struct.fieldIndex("b") === 1)
-
-    intercept[IllegalArgumentException] {
-      struct.fieldIndex("non_existent")
+    for (input <- Array[String]("interval", "interval1 day", "foo", "foo 1 day")) {
+      try {
+        fromCaseInsensitiveString(input)
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          assertTrue(e.getMessage.contains("Invalid interval"))
+      }
     }
   }
 
-  test("fieldsMap returns map of name to StructField") {
-    val struct = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val mapped = StructType.fieldsMap(struct.fields)
-
-    val expected = Map(
-      "a" -> StructField("a", LongType),
-      "b" -> StructField("b", FloatType))
-
-    assert(mapped === expected)
-  }
-
-  test("fieldNames and names returns field names") {
-    val struct = StructType(
-      StructField("a", LongType) :: StructField("b", FloatType) :: Nil)
-
-    assert(struct.fieldNames === Seq("a", "b"))
-    assert(struct.names === Seq("a", "b"))
-  }
-
-  test("merge where right contains type conflict") {
-    val left = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val right = StructType(
-      StructField("b", LongType) :: Nil)
-
-    val message = intercept[SparkException] {
-      left.merge(right)
-    }.getMessage
-    assert(message.equals("Failed to merge fields 'b' and 'b'. " +
-      "Failed to merge incompatible data types FloatType and LongType"))
-  }
-
-  test("existsRecursively") {
-    val struct = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-    assert(struct.existsRecursively(_.isInstanceOf[LongType]))
-    assert(struct.existsRecursively(_.isInstanceOf[StructType]))
-    assert(!struct.existsRecursively(_.isInstanceOf[IntegerType]))
-
-    val mapType = MapType(struct, StringType)
-    assert(mapType.existsRecursively(_.isInstanceOf[LongType]))
-    assert(mapType.existsRecursively(_.isInstanceOf[StructType]))
-    assert(mapType.existsRecursively(_.isInstanceOf[StringType]))
-    assert(mapType.existsRecursively(_.isInstanceOf[MapType]))
-    assert(!mapType.existsRecursively(_.isInstanceOf[IntegerType]))
-
-    val arrayType = ArrayType(mapType)
-    assert(arrayType.existsRecursively(_.isInstanceOf[LongType]))
-    assert(arrayType.existsRecursively(_.isInstanceOf[StructType]))
-    assert(arrayType.existsRecursively(_.isInstanceOf[StringType]))
-    assert(arrayType.existsRecursively(_.isInstanceOf[MapType]))
-    assert(arrayType.existsRecursively(_.isInstanceOf[ArrayType]))
-    assert(!arrayType.existsRecursively(_.isInstanceOf[IntegerType]))
-  }
-
-  def checkDataTypeFromJson(dataType: DataType): Unit = {
-    test(s"from Json - $dataType") {
-      assert(DataType.fromJson(dataType.json) === dataType)
+  @Test def fromYearMonthStringTest(): Unit = {
+    var input : String = null
+    var i : CalendarInterval = null
+    input = "99-10"
+    i = new CalendarInterval(99 * 12 + 10, 0L)
+    assertEquals(fromYearMonthString(input), i)
+    input = "-8-10"
+    i = new CalendarInterval(-8 * 12 - 10, 0L)
+    assertEquals(fromYearMonthString(input), i)
+    try {
+      input = "99-15"
+      fromYearMonthString(input)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assertTrue(e.getMessage.contains("month 15 outside range"))
     }
   }
 
-  def checkDataTypeFromDDL(dataType: DataType): Unit = {
-    test(s"from DDL - $dataType") {
-      val parsed = StructType.fromDDL(s"a ${dataType.sql}")
-      val expected = new StructType().add("a", dataType)
-      assert(parsed.sameType(expected))
+  @Test def fromDayTimeStringTest(): Unit = {
+    var input : String = null
+    var i : CalendarInterval = null
+    input = "5 12:40:30.999999999"
+    i = new CalendarInterval(0, 5 * MICROS_PER_DAY +
+      12 * MICROS_PER_HOUR + 40 * MICROS_PER_MINUTE +
+      30 * MICROS_PER_SECOND + 999999L)
+    assertEquals(fromDayTimeString(input), i)
+    input = "10 0:12:0.888"
+    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE)
+    assertEquals(fromDayTimeString(input), i)
+    input = "-3 0:0:0"
+    i = new CalendarInterval(0, -3 * MICROS_PER_DAY)
+    assertEquals(fromDayTimeString(input), i)
+    try {
+      input = "5 30:12:20"
+      fromDayTimeString(input)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assertTrue(e.getMessage.contains("hour 30 outside range"))
+    }
+    try {
+      input = "5 30-12"
+      fromDayTimeString(input)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assertTrue(e.getMessage.contains("not match day-time format"))
     }
   }
 
-  checkDataTypeFromJson(NullType)
-
-  checkDataTypeFromJson(BooleanType)
-  checkDataTypeFromDDL(BooleanType)
-
-  checkDataTypeFromJson(ByteType)
-  checkDataTypeFromDDL(ByteType)
-
-  checkDataTypeFromJson(ShortType)
-  checkDataTypeFromDDL(ShortType)
-
-  checkDataTypeFromJson(IntegerType)
-  checkDataTypeFromDDL(IntegerType)
-
-  checkDataTypeFromJson(LongType)
-  checkDataTypeFromDDL(LongType)
-
-  checkDataTypeFromJson(FloatType)
-  checkDataTypeFromDDL(FloatType)
-
-  checkDataTypeFromJson(DoubleType)
-  checkDataTypeFromDDL(DoubleType)
-
-  checkDataTypeFromJson(DecimalType(10, 5))
-  checkDataTypeFromDDL(DecimalType(10, 5))
-
-  checkDataTypeFromJson(DecimalType.SYSTEM_DEFAULT)
-  checkDataTypeFromDDL(DecimalType.SYSTEM_DEFAULT)
-
-  checkDataTypeFromJson(DateType)
-  checkDataTypeFromDDL(DateType)
-
-  checkDataTypeFromJson(TimestampType)
-  checkDataTypeFromDDL(TimestampType)
-
-  checkDataTypeFromJson(StringType)
-  checkDataTypeFromDDL(StringType)
-
-  checkDataTypeFromJson(BinaryType)
-  checkDataTypeFromDDL(BinaryType)
-
-  checkDataTypeFromJson(ArrayType(DoubleType, true))
-  checkDataTypeFromDDL(ArrayType(DoubleType, true))
-
-  checkDataTypeFromJson(ArrayType(StringType, false))
-  checkDataTypeFromDDL(ArrayType(StringType, false))
-
-  checkDataTypeFromJson(MapType(IntegerType, StringType, true))
-  checkDataTypeFromDDL(MapType(IntegerType, StringType, true))
-
-  checkDataTypeFromJson(MapType(IntegerType, ArrayType(DoubleType), false))
-  checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false))
-
-  val metadata = new MetadataBuilder()
-    .putString("name", "age")
-    .build()
-  val structType = StructType(Seq(
-    StructField("a", IntegerType, nullable = true),
-    StructField("b", ArrayType(DoubleType), nullable = false),
-    StructField("c", DoubleType, nullable = false, metadata)))
-  checkDataTypeFromJson(structType)
-  checkDataTypeFromDDL(structType)
-
-  test("fromJson throws an exception when given type string is invalid") {
-    var message = intercept[IllegalArgumentException] {
-      DataType.fromJson(""""abcd"""")
-    }.getMessage
-    assert(message.contains(
-      "Failed to convert the JSON string 'abcd' to a data type."))
-
-    message = intercept[IllegalArgumentException] {
-      DataType.fromJson("""{"abcd":"a"}""")
-    }.getMessage
-    assert(message.contains(
-      """Failed to convert the JSON string '{"abcd":"a"}' to a data type"""))
-
-    message = intercept[IllegalArgumentException] {
-      DataType.fromJson("""{"fields": [{"a":123}], "type": "struct"}""")
-    }.getMessage
-    assert(message.contains(
-      """Failed to convert the JSON string '{"a":123}' to a field."""))
-
-    // Malformed JSON string
-    message = intercept[JsonParseException] {
-      DataType.fromJson("abcd")
-    }.getMessage
-    assert(message.contains("Unrecognized token 'abcd'"))
-  }
-
-  def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
-    test(s"Check the default size of $dataType") {
-      assert(dataType.defaultSize === expectedDefaultSize)
+  @Test def fromSingleUnitStringTest(): Unit = {
+    var input : String = null
+    var i : CalendarInterval = null
+    input = "12"
+    i = new CalendarInterval(12 * 12, 0L)
+    assertEquals(fromSingleUnitString("year", input), i)
+    input = "100"
+    i = new CalendarInterval(0, 100 * MICROS_PER_DAY)
+    assertEquals(fromSingleUnitString("day", input), i)
+    input = "1999.38888"
+    i = new CalendarInterval(0, 1999 * MICROS_PER_SECOND + 38)
+    assertEquals(fromSingleUnitString("second", input), i)
+    try {
+      input = String.valueOf(Integer.MAX_VALUE)
+      fromSingleUnitString("year", input)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assertTrue(e.getMessage.contains("outside range"))
+    }
+    try {
+      input = String.valueOf(Long.MaxValue / MICROS_PER_HOUR + 1)
+      fromSingleUnitString("hour", input)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assertTrue(e.getMessage.contains("outside range"))
     }
   }
 
-  checkDefaultSize(NullType, 1)
-  checkDefaultSize(BooleanType, 1)
-  checkDefaultSize(ByteType, 1)
-  checkDefaultSize(ShortType, 2)
-  checkDefaultSize(IntegerType, 4)
-  checkDefaultSize(LongType, 8)
-  checkDefaultSize(FloatType, 4)
-  checkDefaultSize(DoubleType, 8)
-  checkDefaultSize(DecimalType(10, 5), 8)
-  checkDefaultSize(DecimalType.SYSTEM_DEFAULT, 16)
-  checkDefaultSize(DateType, 4)
-  checkDefaultSize(TimestampType, 8)
-  checkDefaultSize(StringType, 20)
-  checkDefaultSize(BinaryType, 100)
-  checkDefaultSize(ArrayType(DoubleType, true), 8)
-  checkDefaultSize(ArrayType(StringType, false), 20)
-  checkDefaultSize(MapType(IntegerType, StringType, true), 24)
-  checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 12)
-  checkDefaultSize(structType, 20)
-
-  def checkEqualsIgnoreCompatibleNullability(
-      from: DataType,
-      to: DataType,
-      expected: Boolean): Unit = {
-    val testName =
-      s"equalsIgnoreCompatibleNullability: (from: $from, to: $to)"
-    test(testName) {
-      assert(DataType.equalsIgnoreCompatibleNullability(from, to) === expected)
-    }
+  @Test def addTest(): Unit = {
+    var input = "interval 3 month 1 hour"
+    var input2 = "interval 2 month 100 hour"
+    var interval = fromString(input)
+    var interval2 = fromString(input2)
+    assertEquals(interval.add(interval2), new CalendarInterval(5, 101 * MICROS_PER_HOUR))
+    input = "interval -10 month -81 hour"
+    input2 = "interval 75 month 200 hour"
+    interval = fromString(input)
+    interval2 = fromString(input2)
+    assertEquals(interval.add(interval2), new CalendarInterval(65, 119 * MICROS_PER_HOUR))
   }
 
-  checkEqualsIgnoreCompatibleNullability(
-    from = ArrayType(DoubleType, containsNull = true),
-    to = ArrayType(DoubleType, containsNull = true),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = ArrayType(DoubleType, containsNull = false),
-    to = ArrayType(DoubleType, containsNull = false),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = ArrayType(DoubleType, containsNull = false),
-    to = ArrayType(DoubleType, containsNull = true),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = ArrayType(DoubleType, containsNull = true),
-    to = ArrayType(DoubleType, containsNull = false),
-    expected = false)
-  checkEqualsIgnoreCompatibleNullability(
-    from = ArrayType(DoubleType, containsNull = false),
-    to = ArrayType(StringType, containsNull = false),
-    expected = false)
-
-  checkEqualsIgnoreCompatibleNullability(
-    from = MapType(StringType, DoubleType, valueContainsNull = true),
-    to = MapType(StringType, DoubleType, valueContainsNull = true),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = MapType(StringType, DoubleType, valueContainsNull = false),
-    to = MapType(StringType, DoubleType, valueContainsNull = false),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = MapType(StringType, DoubleType, valueContainsNull = false),
-    to = MapType(StringType, DoubleType, valueContainsNull = true),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = MapType(StringType, DoubleType, valueContainsNull = true),
-    to = MapType(StringType, DoubleType, valueContainsNull = false),
-    expected = false)
-  checkEqualsIgnoreCompatibleNullability(
-    from = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
-    to = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
-    expected = false)
-  checkEqualsIgnoreCompatibleNullability(
-    from = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
-    to = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
-    expected = true)
-
-
-  checkEqualsIgnoreCompatibleNullability(
-    from = StructType(StructField("a", StringType, nullable = true) :: Nil),
-    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = StructType(StructField("a", StringType, nullable = false) :: Nil),
-    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = StructType(StructField("a", StringType, nullable = false) :: Nil),
-    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
-    expected = true)
-  checkEqualsIgnoreCompatibleNullability(
-    from = StructType(StructField("a", StringType, nullable = true) :: Nil),
-    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
-    expected = false)
-  checkEqualsIgnoreCompatibleNullability(
-    from = StructType(
-      StructField("a", StringType, nullable = false) ::
-      StructField("b", StringType, nullable = true) :: Nil),
-    to = StructType(
-      StructField("a", StringType, nullable = false) ::
-      StructField("b", StringType, nullable = false) :: Nil),
-    expected = false)
-
-  def checkCatalogString(dt: DataType): Unit = {
-    test(s"catalogString: $dt") {
-      val dt2 = CatalystSqlParser.parseDataType(dt.catalogString)
-      assert(dt === dt2)
-    }
+  @Test def subtractTest(): Unit = {
+    var input = "interval 3 month 1 hour"
+    var input2 = "interval 2 month 100 hour"
+    var interval = fromString(input)
+    var interval2 = fromString(input2)
+    assertEquals(interval.subtract(interval2), new CalendarInterval(1, -99 * MICROS_PER_HOUR))
+    input = "interval -10 month -81 hour"
+    input2 = "interval 75 month 200 hour"
+    interval = fromString(input)
+    interval2 = fromString(input2)
+    assertEquals(interval.subtract(interval2), new CalendarInterval(-85, -281 * MICROS_PER_HOUR))
   }
-  def createStruct(n: Int): StructType = new StructType(Array.tabulate(n) {
-    i => StructField(s"col$i", IntegerType, nullable = true)
-  })
-
-  checkCatalogString(BooleanType)
-  checkCatalogString(ByteType)
-  checkCatalogString(ShortType)
-  checkCatalogString(IntegerType)
-  checkCatalogString(LongType)
-  checkCatalogString(FloatType)
-  checkCatalogString(DoubleType)
-  checkCatalogString(DecimalType(10, 5))
-  checkCatalogString(BinaryType)
-  checkCatalogString(StringType)
-  checkCatalogString(DateType)
-  checkCatalogString(TimestampType)
-  checkCatalogString(createStruct(4))
-  checkCatalogString(createStruct(40))
-  checkCatalogString(ArrayType(IntegerType))
-  checkCatalogString(ArrayType(createStruct(40)))
-  checkCatalogString(MapType(IntegerType, StringType))
-  checkCatalogString(MapType(IntegerType, createStruct(40)))
-
-  def checkEqualsStructurally(from: DataType, to: DataType, expected: Boolean): Unit = {
-    val testName = s"equalsStructurally: (from: $from, to: $to)"
-    test(testName) {
-      assert(DataType.equalsStructurally(from, to) === expected)
-    }
-  }
-
-  checkEqualsStructurally(BooleanType, BooleanType, true)
-  checkEqualsStructurally(IntegerType, IntegerType, true)
-  checkEqualsStructurally(IntegerType, LongType, false)
-  checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true)
-  checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, false), false)
-
-  checkEqualsStructurally(
-    new StructType().add("f1", IntegerType),
-    new StructType().add("f2", IntegerType),
-    true)
-  checkEqualsStructurally(
-    new StructType().add("f1", IntegerType),
-    new StructType().add("f2", IntegerType, false),
-    false)
-
-  checkEqualsStructurally(
-    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
-    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
-    true)
-  checkEqualsStructurally(
-    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
-    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
-    false)
 }

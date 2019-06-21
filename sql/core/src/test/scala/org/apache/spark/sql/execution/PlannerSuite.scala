@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, Repartition, Sort, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
@@ -172,15 +172,17 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("SPARK-11390 explain should print PushedFilters of PhysicalRDD") {
-    withTempPath { file =>
-      val path = file.getCanonicalPath
-      testData.write.parquet(path)
-      val df = spark.read.parquet(path)
-      df.createOrReplaceTempView("testPushed")
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        testData.write.parquet(path)
+        val df = spark.read.parquet(path)
+        df.createOrReplaceTempView("testPushed")
 
-      withTempView("testPushed") {
-        val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
-        assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
+        withTempView("testPushed") {
+          val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
+          assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
+        }
       }
     }
   }
@@ -293,7 +295,7 @@ class PlannerSuite extends SharedSQLContext {
       case Repartition (numPartitions, shuffle, Repartition(_, shuffleChild, _)) =>
         assert(numPartitions === 5)
         assert(shuffle === false)
-        assert(shuffleChild === true)
+        assert(shuffleChild)
     }
   }
 
@@ -624,7 +626,7 @@ class PlannerSuite extends SharedSQLContext {
         dataType = LongType,
         nullable = false
       ) (exprId = exprId,
-        qualifier = Some("col1_qualifier")
+        qualifier = Seq("col1_qualifier")
       )
 
     val attribute2 =
@@ -704,6 +706,23 @@ class PlannerSuite extends SharedSQLContext {
     df.queryExecution.executedPlan.execute()
   }
 
+  test("SPARK-25278: physical nodes should be different instances for same logical nodes") {
+    val range = Range(1, 1, 1, 1)
+    val df = Union(range, range)
+    val ranges = df.queryExecution.optimizedPlan.collect {
+      case r: Range => r
+    }
+    assert(ranges.length == 2)
+    // Ensure the two Range instances are equal according to their equal method
+    assert(ranges.head == ranges.last)
+    val execRanges = df.queryExecution.sparkPlan.collect {
+      case r: RangeExec => r
+    }
+    assert(execRanges.length == 2)
+    // Ensure the two RangeExec instances are different instances
+    assert(!execRanges.head.eq(execRanges.last))
+  }
+
   test("SPARK-24556: always rewrite output partitioning in ReusedExchangeExec " +
     "and InMemoryTableScanExec") {
     def checkOutputPartitioningRewrite(
@@ -763,6 +782,57 @@ class PlannerSuite extends SharedSQLContext {
         classOf[PartitioningCollection])
     }
   }
+
+  test("SPARK-26812: wrong nullability for complex datatypes in union") {
+    def testUnionOutputType(input1: DataType, input2: DataType, output: DataType): Unit = {
+      val query = Union(
+        LocalRelation(StructField("a", input1)), LocalRelation(StructField("a", input2)))
+      assert(query.output.head.dataType == output)
+    }
+
+    // Map
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = true))
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = true))
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = false))
+
+    // Array
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = true),
+      ArrayType(StringType, containsNull = true))
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = true),
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = true))
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = false))
+
+    // Struct
+    testUnionOutputType(
+      StructType(Seq(
+        StructField("f1", StringType, nullable = false),
+        StructField("f2", StringType, nullable = true),
+        StructField("f3", StringType, nullable = false))),
+      StructType(Seq(
+        StructField("f1", StringType, nullable = true),
+        StructField("f2", StringType, nullable = false),
+        StructField("f3", StringType, nullable = false))),
+      StructType(Seq(
+        StructField("f1", StringType, nullable = true),
+        StructField("f2", StringType, nullable = true),
+        StructField("f3", StringType, nullable = false))))
+  }
 }
 
 // Used for unit-testing EnsureRequirements
@@ -773,6 +843,6 @@ private case class DummySparkPlan(
     override val requiredChildDistribution: Seq[Distribution] = Nil,
     override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
   ) extends SparkPlan {
-  override protected def doExecute(): RDD[InternalRow] = throw new NotImplementedError
+  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
 }

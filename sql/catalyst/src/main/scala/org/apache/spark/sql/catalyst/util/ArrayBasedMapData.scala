@@ -19,6 +19,12 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.{Map => JavaMap}
 
+/**
+ * A simple `MapData` implementation which is backed by 2 arrays.
+ *
+ * Note that, user is responsible to guarantee that the key array does not have duplicated
+ * elements, otherwise the behavior is undefined.
+ */
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
   require(keyArray.numElements() == valueArray.numElements())
 
@@ -42,11 +48,10 @@ object ArrayBasedMapData {
    * @param valueConverter This function is applied over all the values of the input map to
    *                       obtain the output map's values
    */
-  def apply(
-      javaMap: JavaMap[_, _],
+  def apply[K, V](
+      javaMap: JavaMap[K, V],
       keyConverter: (Any) => Any,
       valueConverter: (Any) => Any): ArrayBasedMapData = {
-    import scala.language.existentials
 
     val keys: Array[Any] = new Array[Any](javaMap.size())
     val values: Array[Any] = new Array[Any](javaMap.size())
@@ -83,6 +88,9 @@ object ArrayBasedMapData {
    * Creates a [[ArrayBasedMapData]] by applying the given converters over
    * each (key -> value) pair from the given iterator
    *
+   * Note that, user is responsible to guarantee that the key array does not have duplicated
+   * elements, otherwise the behavior is undefined.
+   *
    * @param iterator Input iterator
    * @param size Number of elements
    * @param keyConverter This function is applied over all the keys extracted from the
@@ -108,6 +116,12 @@ object ArrayBasedMapData {
     ArrayBasedMapData(keys, values)
   }
 
+  /**
+   * Creates a [[ArrayBasedMapData]] from a key and value array.
+   *
+   * Note that, user is responsible to guarantee that the key array does not have duplicated
+   * elements, otherwise the behavior is undefined.
+   */
   def apply(keys: Array[_], values: Array[_]): ArrayBasedMapData = {
     new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
   }

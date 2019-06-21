@@ -18,13 +18,15 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.tree._
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -32,6 +34,7 @@ private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Convert the given data to a DataFrame, and set the features and label metadata.
+   *
    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
    * @param categoricalFeatures  Map: categorical feature index to number of distinct values
@@ -39,16 +42,22 @@ private[ml] object TreeTests extends SparkFunSuite {
    * @return DataFrame with metadata
    */
   def setMetadata(
-      data: RDD[LabeledPoint],
+      data: RDD[_],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
+    val dataOfInstance: RDD[Instance] = data.map {
+      _ match {
+        case instance: Instance => instance
+        case labeledPoint: LabeledPoint => labeledPoint.toInstance
+      }
+    }
     val spark = SparkSession.builder()
       .sparkContext(data.sparkContext)
       .getOrCreate()
     import spark.implicits._
 
-    val df = data.toDF()
-    val numFeatures = data.first().features.size
+    val df = dataOfInstance.toDF()
+    val numFeatures = dataOfInstance.first().features.size
     val featuresAttributes = Range(0, numFeatures).map { feature =>
       if (categoricalFeatures.contains(feature)) {
         NominalAttribute.defaultAttr.withIndex(feature).withNumValues(categoricalFeatures(feature))
@@ -64,7 +73,7 @@ private[ml] object TreeTests extends SparkFunSuite {
     }
     val labelMetadata = labelAttribute.toMetadata()
     df.select(df("features").as("features", featuresMetadata),
-      df("label").as("label", labelMetadata))
+      df("label").as("label", labelMetadata), df("weight"))
   }
 
   /**
@@ -80,6 +89,7 @@ private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Set label metadata (particularly the number of classes) on a DataFrame.
+   *
    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
    * @param numClasses  Number of classes label can take. If 0, mark as continuous.
@@ -112,7 +122,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       checkEqual(a.rootNode, b.rootNode)
     } catch {
       case ex: Exception =>
-        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
+        fail("checkEqual failed since the two trees were not identical.\n" +
           "TREE A:\n" + a.toDebugString + "\n" +
           "TREE B:\n" + b.toDebugString + "\n", ex)
     }
@@ -124,8 +134,8 @@ private[ml] object TreeTests extends SparkFunSuite {
    *       make mistakes such as creating loops of Nodes.
    */
   private def checkEqual(a: Node, b: Node): Unit = {
-    assert(a.prediction === b.prediction)
-    assert(a.impurity === b.impurity)
+    assert(a.prediction ~== b.prediction absTol 1e-8)
+    assert(a.impurity ~== b.impurity absTol 1e-8)
     (a, b) match {
       case (aye: InternalNode, bee: InternalNode) =>
         assert(aye.split === bee.split)
@@ -133,7 +143,7 @@ private[ml] object TreeTests extends SparkFunSuite {
         checkEqual(aye.rightChild, bee.rightChild)
       case (aye: LeafNode, bee: LeafNode) => // do nothing
       case _ =>
-        throw new AssertionError("Found mismatched nodes")
+        fail("Found mismatched nodes")
     }
   }
 
@@ -148,7 +158,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       }
       assert(a.treeWeights === b.treeWeights)
     } catch {
-      case ex: Exception => throw new AssertionError(
+      case ex: Exception => fail(
         "checkEqual failed since the two tree ensembles were not identical")
     }
   }
@@ -156,27 +166,20 @@ private[ml] object TreeTests extends SparkFunSuite {
   /**
    * Helper method for constructing a tree for testing.
    * Given left, right children, construct a parent node.
+   *
    * @param split  Split for parent node
    * @return  Parent node with children attached
    */
-  def buildParentNode(left: Node, right: Node, split: Split, isClassification: Boolean): Node = {
+  def buildParentNode(left: Node, right: Node, split: Split): Node = {
     val leftImp = left.impurityStats
     val rightImp = right.impurityStats
     val parentImp = leftImp.copy.add(rightImp)
-    val leftWeight = leftImp.count / parentImp.count.toDouble
-    val rightWeight = rightImp.count / parentImp.count.toDouble
+    val leftWeight = leftImp.count / parentImp.count
+    val rightWeight = rightImp.count / parentImp.count
     val gain = parentImp.calculate() -
       (leftWeight * leftImp.calculate() + rightWeight * rightImp.calculate())
     val pred = parentImp.predict
-    if (isClassification) {
-      new ClassificationInternalNode(pred, parentImp.calculate(), gain,
-        left.asInstanceOf[ClassificationNode], right.asInstanceOf[ClassificationNode],
-        split, parentImp)
-    } else {
-      new RegressionInternalNode(pred, parentImp.calculate(), gain,
-        left.asInstanceOf[RegressionNode], right.asInstanceOf[RegressionNode],
-        split, parentImp)
-    }
+    new InternalNode(pred, parentImp.calculate(), gain, left, right, split, parentImp)
   }
 
   /**
