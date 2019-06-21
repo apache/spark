@@ -42,6 +42,7 @@ import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
+    val numLateInputRows: Long,
     val memoryUsedBytes: Long,
     val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
@@ -52,12 +53,14 @@ class StateOperatorProgress private[sql](
   /** The pretty (i.e. indented) JSON representation of this progress. */
   def prettyJson: String = pretty(render(jsonValue))
 
-  private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, customMetrics)
+  private[sql] def copy(newNumRowsUpdated: Long, newNumLateInputRows: Long): StateOperatorProgress =
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, newNumLateInputRows, memoryUsedBytes,
+      customMetrics)
 
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
+    ("numLateInputRows" -> JInt(numLateInputRows)) ~
     ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
     ("customMetrics" -> {
       if (!customMetrics.isEmpty) {

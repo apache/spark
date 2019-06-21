@@ -222,7 +222,7 @@ trait ProgressReporter extends Logging {
     lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StateStoreWriter] =>
         val progress = p.asInstanceOf[StateStoreWriter].getProgress()
-        if (hasExecuted) progress else progress.copy(newNumRowsUpdated = 0)
+        if (hasExecuted) progress else progress.copy(newNumRowsUpdated = 0, newNumLateInputRows = 0)
     }
   }
 

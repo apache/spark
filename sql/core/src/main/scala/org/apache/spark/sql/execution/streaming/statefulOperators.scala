@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -37,6 +37,84 @@ import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
 
+case class CountLateRowsExec(
+    eventTimeWatermark: Option[Long] = None,
+    child: SparkPlan)
+  extends UnaryExecNode with WatermarkSupport with CodegenSupport {
+
+  // No need to determine key expressions here.
+  override def keyExpressions: Seq[Attribute] = Seq.empty
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override lazy val metrics = Map(
+    "numLateRows" -> SQLMetrics.createMetric(sparkContext,
+      "number of input rows later than watermark plus allowed delay"))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val numLateRows = longMetric("numLateRows")
+    child.execute().mapPartitionsWithIndex { (_, iter) =>
+      watermarkPredicateForData match {
+        case Some(pred) =>
+          iter.map { row =>
+            val r = pred.eval(row)
+            if (r) numLateRows += 1
+            row
+          }
+
+        case None => iter
+      }
+    }
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val numLateRows = metricTerm(ctx, "numLateRows")
+
+    val generated = watermarkExpression match {
+      case Some(expr) =>
+        val bound = BindReferences.bindReference(expr, child.output)
+        val evaluated = evaluateRequiredVariables(child.output, input, expr.references)
+
+        // Generate the code for the predicate.
+        val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+        val nullCheck = if (bound.nullable) {
+          s"${ev.isNull} || "
+        } else {
+          s""
+        }
+
+        s"""
+           |$evaluated
+           |${ev.code}
+           |if (${nullCheck}${ev.value}) {
+           |  $numLateRows.add(1);
+           |}
+       """.stripMargin
+
+      case None => ""
+    }
+
+    // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
+    s"""
+       |do {
+       |  $generated
+       |  ${consume(ctx, input)}
+       |} while(false);
+     """.stripMargin
+  }
+}
 
 /** Used to identify the state store for a given operator. */
 case class StatefulOperatorStateInfo(
@@ -96,11 +174,16 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
       new java.util.HashMap(customMetrics.mapValues(long2Long).asJava)
 
+    val numLateInputRows = self.children.flatMap(_.collectFirst {
+      case d: CountLateRowsExec => d
+    }).map(_.metrics("numLateRows").value).sum
+
     new StateOperatorProgress(
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
+      numLateInputRows = numLateInputRows,
       memoryUsedBytes = longMetric("stateMemory").value,
-      javaConvertedCustomMetrics
+      customMetrics = javaConvertedCustomMetrics
     )
   }
 

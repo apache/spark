@@ -626,20 +626,20 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     testStream(result, Update)(
       AddData(inputData, "a"),
       CheckNewAnswer(("a", "1")),
-      assertNumStateRows(total = 1, updated = 1),
+      assertNumStateRows(total = 1, updated = 1, lateInput = 0),
       AddData(inputData, "a", "b"),
       CheckNewAnswer(("a", "2"), ("b", "1")),
-      assertNumStateRows(total = 2, updated = 2),
+      assertNumStateRows(total = 2, updated = 2, lateInput = 0),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
       CheckNewAnswer(("b", "2")),
-      assertNumStateRows(total = 1, updated = 2),
+      assertNumStateRows(total = 1, updated = 2, lateInput = 0),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
       CheckNewAnswer(("a", "1"), ("c", "1")),
-      assertNumStateRows(total = 3, updated = 2)
+      assertNumStateRows(total = 3, updated = 2, lateInput = 0)
     )
   }
 
@@ -768,17 +768,17 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       AddData(inputData, "a"),
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(("a", "1")),
-      assertNumStateRows(total = 1, updated = 1),
+      assertNumStateRows(total = 1, updated = 1, lateInput = 0),
 
       AddData(inputData, "b"),
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(("b", "1")),
-      assertNumStateRows(total = 2, updated = 1),
+      assertNumStateRows(total = 2, updated = 1, lateInput = 0),
 
       AddData(inputData, "b"),
       AdvanceManualClock(10 * 1000),
       CheckNewAnswer(("a", "-1"), ("b", "2")),
-      assertNumStateRows(total = 1, updated = 2),
+      assertNumStateRows(total = 1, updated = 2, lateInput = 0),
 
       StopStream,
       StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
@@ -786,7 +786,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       AddData(inputData, "c"),
       AdvanceManualClock(11 * 1000),
       CheckNewAnswer(("b", "-1"), ("c", "1")),
-      assertNumStateRows(total = 1, updated = 2),
+      assertNumStateRows(total = 1, updated = 2, lateInput = 0),
 
       AdvanceManualClock(12 * 1000),
       AssertOnQuery { _ => clock.getTimeMillis() == 35000 },
@@ -798,7 +798,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         }
       },
       CheckNewAnswer(("c", "-1")),
-      assertNumStateRows(total = 0, updated = 1)
+      assertNumStateRows(total = 0, updated = 1, lateInput = 0)
     )
   }
 
@@ -978,20 +978,20 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     testStream(result, Update)(
       AddData(inputData, "a"),
       CheckNewAnswer(("a", "1")),
-      assertNumStateRows(total = 1, updated = 1),
+      assertNumStateRows(total = 1, updated = 1, lateInput = 0),
       AddData(inputData, "a", "b"),
       CheckNewAnswer(("a", "2"), ("b", "1")),
-      assertNumStateRows(total = 2, updated = 2),
+      assertNumStateRows(total = 2, updated = 2, lateInput = 0),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "b"), // should remove state for "a" and return count as -1
       CheckNewAnswer(("a", "-1"), ("b", "2")),
-      assertNumStateRows(total = 1, updated = 2),
+      assertNumStateRows(total = 1, updated = 2, lateInput = 0),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1
       CheckNewAnswer(("a", "1"), ("c", "1")),
-      assertNumStateRows(total = 3, updated = 2)
+      assertNumStateRows(total = 3, updated = 2, lateInput = 0)
     )
   }
 

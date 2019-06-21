@@ -298,9 +298,11 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),   // Advance watermark to 15 seconds
       CheckNewAnswer((10, 5)),
       assertNumStateRows(2),
+      assertNumLateRows(0),
       AddData(inputData, 10),   // Should not emit anything as data less than watermark
       CheckNewAnswer(),
-      assertNumStateRows(2)
+      assertNumStateRows(2),
+      assertNumLateRows(1)
     )
   }
 
@@ -321,12 +323,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       AddData(inputData, 25),     // Advance watermark to 15 seconds
       CheckNewAnswer((25, 1)),
       assertNumStateRows(2),
+      assertNumLateRows(0),
       AddData(inputData, 10, 25), // Ignore 10 as its less than watermark
       CheckNewAnswer((25, 2)),
       assertNumStateRows(2),
+      assertNumLateRows(1),
       AddData(inputData, 10),     // Should not emit anything as data less than watermark
       CheckNewAnswer(),
-      assertNumStateRows(2)
+      assertNumStateRows(2),
+      assertNumLateRows(1)
     )
   }
 
@@ -377,8 +382,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     testStream(df)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
       CheckAnswer(),
+      assertNumLateRows(0),
       AddData(inputData, 25), // Advance watermark to 15 seconds
       CheckAnswer((10, 5)),
+      assertNumLateRows(0),
       StopStream,
       AssertOnQuery { q => // purge commit and clear the sink
         val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L)
@@ -389,12 +396,15 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       StartStream(),
       AddData(inputData, 10, 27, 30), // Advance watermark to 20 seconds, 10 should be ignored
       CheckAnswer((15, 1)),
+      assertNumLateRows(1),
       StopStream,
       StartStream(),
       AddData(inputData, 17), // Watermark should still be 20 seconds, 17 should be ignored
       CheckAnswer((15, 1)),
+      assertNumLateRows(1),
       AddData(inputData, 40), // Advance watermark to 30 seconds, emit first data 25
-      CheckNewAnswer((25, 2))
+      CheckNewAnswer((25, 2)),
+      assertNumLateRows(0)
     )
   }
 
@@ -486,18 +496,24 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
         .agg(count("*") as 'count)
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    // No eviction when asked to compute complete results.
+    // No state eviction when asked to compute complete results.
+    // It still counts late input rows, though.
     testStream(windowedAggregation, OutputMode.Complete)(
       AddData(inputData, 10, 11, 12),
       CheckAnswer((10, 3)),
+      assertNumLateRows(0),
       AddData(inputData, 25),
       CheckAnswer((10, 3), (25, 1)),
+      assertNumLateRows(0),
       AddData(inputData, 25),
       CheckAnswer((10, 3), (25, 2)),
+      assertNumLateRows(0),
       AddData(inputData, 10),
       CheckAnswer((10, 4), (25, 2)),
+      assertNumLateRows(1),
       AddData(inputData, 25),
-      CheckAnswer((10, 4), (25, 3))
+      CheckAnswer((10, 4), (25, 3)),
+      assertNumLateRows(0)
     )
   }
 
@@ -753,6 +769,13 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     q.processAllAvailable()
     val progressWithData = q.recentProgress.lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
+    true
+  }
+
+  private def assertNumLateRows(numLateRows: Long): AssertOnQuery = AssertOnQuery { q =>
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
+    assert(progressWithData.stateOperators(0).numLateInputRows === numLateRows)
     true
   }
 

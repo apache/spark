@@ -132,6 +132,9 @@ class IncrementalExecution(
     }
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
+      case m: CountLateRowsExec =>
+        m.copy(eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
+
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
                StateStoreRestoreExec(_, None, _, child))) =>

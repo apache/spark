@@ -38,7 +38,11 @@ object MimaExcludes {
   lazy val v31excludes = v30excludes ++ Seq(
     // [SPARK-31077] Remove ChiSqSelector dependency on mllib.ChiSqSelectorModel
     // private constructor
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this"),
+
+    // [SPARK-24634][SQL] Add a new metric regarding number of rows later than watermark
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.streaming.StateOperatorProgress.<init>$default$4"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StateOperatorProgress.<init>$default$4")
   )
 
   // Exclude rules for 3.0.x

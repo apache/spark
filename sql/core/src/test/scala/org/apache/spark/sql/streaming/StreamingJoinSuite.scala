@@ -142,31 +142,32 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
     testStream(joined)(
       AddData(input1, 1),
       CheckAnswer(),
-      assertNumStateRows(total = 1, updated = 1),
+      assertNumStateRows(total = 1, updated = 1, lateInput = 0),
 
       AddData(input2, 1),
       CheckAnswer((1, 10, 2, 3)),
-      assertNumStateRows(total = 2, updated = 1),
+      assertNumStateRows(total = 2, updated = 1, lateInput = 0),
       StopStream,
       StartStream(),
 
       AddData(input1, 25),
       CheckNewAnswer(),   // watermark = 15, no-data-batch should remove 2 rows having window=[0,10]
-      assertNumStateRows(total = 1, updated = 1),
+      assertNumStateRows(total = 1, updated = 1, lateInput = 0),
 
       AddData(input2, 25),
       CheckNewAnswer((25, 30, 50, 75)),
-      assertNumStateRows(total = 2, updated = 1),
+      assertNumStateRows(total = 2, updated = 1, lateInput = 0),
       StopStream,
       StartStream(),
 
       AddData(input2, 1),
       CheckNewAnswer(),                             // Should not join as < 15 removed
-      assertNumStateRows(total = 2, updated = 0),   // row not add as 1 < state key watermark = 15
-
+      // row not add as 1 < state key watermark = 15
+      // note that input row is not discarded as right side doesn't have watermark
+      assertNumStateRows(total = 2, updated = 0, lateInput = 0),
       AddData(input1, 5),
       CheckNewAnswer(),                             // Same reason as above
-      assertNumStateRows(total = 2, updated = 0)
+      assertNumStateRows(total = 2, updated = 0, lateInput = 1)
     )
   }
 
@@ -195,12 +196,12 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckNewAnswer((1, 5, 11)),
       AddData(rightInput, (1, 10)),
       CheckNewAnswer(), // no match as leftTime 5 is not < rightTime 10 - 5
-      assertNumStateRows(total = 3, updated = 3),
+      assertNumStateRows(total = 3, updated = 3, lateInput = 0),
 
       // Increase event time watermark to 20s by adding data with time = 30s on both inputs
       AddData(leftInput, (1, 3), (1, 30)),
       CheckNewAnswer((1, 3, 10), (1, 3, 11)),
-      assertNumStateRows(total = 5, updated = 2),
+      assertNumStateRows(total = 5, updated = 2, lateInput = 0),
       AddData(rightInput, (0, 30)),
       CheckNewAnswer(),
 
@@ -208,7 +209,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       // so left side going to only receive data where leftTime > 20
       // right side state constraint:    20 < leftTime < rightTime - 5   ==>   rightTime > 25
       // right state where rightTime <= 25 will be cleared, (1, 11) and (1, 10) removed
-      assertNumStateRows(total = 4, updated = 1),
+      assertNumStateRows(total = 4, updated = 1, lateInput = 0),
 
       // New data to right input should match with left side (1, 3) and (1, 5), as left state should
       // not be cleared. But rows rightTime <= 20 should be filtered due to event time watermark and
@@ -219,12 +220,12 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       // (1, 28) ==> passed filter, matched with left (1, 3) and (1, 5), added to state
       AddData(rightInput, (1, 20), (1, 21), (1, 28)),
       CheckNewAnswer((1, 3, 21), (1, 5, 21), (1, 3, 28), (1, 5, 28)),
-      assertNumStateRows(total = 5, updated = 1),
+      assertNumStateRows(total = 5, updated = 1, lateInput = 1),
 
       // New data to left input with leftTime <= 20 should be filtered due to event time watermark
       AddData(leftInput, (1, 20), (1, 21)),
       CheckNewAnswer((1, 21, 28)),
-      assertNumStateRows(total = 6, updated = 1)
+      assertNumStateRows(total = 6, updated = 1, lateInput = 1)
     )
   }
 
@@ -276,7 +277,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckAnswer(),
       AddData(rightInput, (1, 14), (1, 15), (1, 25), (1, 26), (1, 30), (1, 31)),
       CheckNewAnswer((1, 20, 15), (1, 20, 25), (1, 20, 26), (1, 20, 30)),
-      assertNumStateRows(total = 7, updated = 7),
+      assertNumStateRows(total = 7, updated = 7, lateInput = 0),
 
       // If rightTime = 60, then it matches only leftTime = [50, 65]
       AddData(rightInput, (1, 60)),
@@ -289,11 +290,11 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       //    Should drop < 20 from left, i.e., none
       // Right state value watermark = 30 - 5 = slightly less than 25 (since condition has <=)
       //    Should drop < 25 from the right, i.e., 14 and 15
-      assertNumStateRows(total = 10, updated = 5), // 12 - 2 removed
+      assertNumStateRows(total = 10, updated = 5, lateInput = 0), // 12 - 2 removed
 
       AddData(leftInput, (1, 30), (1, 31)),     // 30 should not be processed or added to state
       CheckNewAnswer((1, 31, 26), (1, 31, 30), (1, 31, 31)),
-      assertNumStateRows(total = 11, updated = 1),  // only 31 added
+      assertNumStateRows(total = 11, updated = 1, lateInput = 1),  // only 31 added
 
       // Advance the watermark
       AddData(rightInput, (1, 80)),
@@ -303,11 +304,11 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       //    Should drop < 36 from left, i.e., 20, 31 (30 was not added)
       // Right state value watermark = 46 - 5 = slightly less than 41 (since condition has <=)
       //    Should drop < 41 from the right, i.e., 25, 26, 30, 31
-      assertNumStateRows(total = 6, updated = 1),  // 12 - 6 removed
+      assertNumStateRows(total = 6, updated = 1, lateInput = 0),  // 12 - 6 removed
 
       AddData(rightInput, (1, 46), (1, 50)),     // 46 should not be processed or added to state
       CheckNewAnswer((1, 49, 50), (1, 50, 50)),
-      assertNumStateRows(total = 7, updated = 1)   // 50 added
+      assertNumStateRows(total = 7, updated = 1, lateInput = 1)   // 50 added
     )
   }
 
@@ -467,7 +468,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
       // batch 2: same result as above test
       CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
-      assertNumStateRows(11, 6),
+      assertNumStateRows(11, 6, 0),
       Execute { query =>
         // Verify state format = 1
         val f = query.lastExecution.executedPlan.collect {
@@ -539,7 +540,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       // The left rows with leftValue <= 4 should generate their outer join row now and
       // not get added to the state.
       CheckNewAnswer(Row(3, 10, 6, "9"), Row(1, 10, 2, null), Row(2, 10, 4, null)),
-      assertNumStateRows(total = 4, updated = 4),
+      assertNumStateRows(total = 4, updated = 4, lateInput = 0),
       // We shouldn't get more outer join rows when the watermark advances.
       MultiAddData(leftInput, 20)(rightInput, 21),
       CheckNewAnswer(),
@@ -567,7 +568,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
       // The right rows with rightValue <= 7 should never be added to the state.
       CheckNewAnswer(Row(3, 10, 6, "9")),     // rightValue = 9 > 7 hence joined and added to state
-      assertNumStateRows(total = 4, updated = 4),
+      assertNumStateRows(total = 4, updated = 4, lateInput = 0),
       // When the watermark advances, we get the outer join rows just as we would if they
       // were added but didn't match the full join condition.
       MultiAddData(leftInput, 20)(rightInput, 21),  // watermark = 10, no-data-batch computes nulls
@@ -596,7 +597,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
       // The left rows with leftValue <= 4 should never be added to the state.
       CheckNewAnswer(Row(3, 10, 6, "9")),     // leftValue = 7 > 4 hence joined and added to state
-      assertNumStateRows(total = 4, updated = 4),
+      assertNumStateRows(total = 4, updated = 4, lateInput = 0),
       // When the watermark advances, we get the outer join rows just as we would if they
       // were added but didn't match the full join condition.
       MultiAddData(leftInput, 20)(rightInput, 21), // watermark = 10, no-data-batch computes nulls
@@ -626,7 +627,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       // The right rows with rightValue <= 7 should generate their outer join row now and
       // not get added to the state.
       CheckNewAnswer(Row(3, 10, 6, "9"), Row(1, 10, null, "3"), Row(2, 10, null, "6")),
-      assertNumStateRows(total = 4, updated = 4),
+      assertNumStateRows(total = 4, updated = 4, lateInput = 0),
       // We shouldn't get more outer join rows when the watermark advances.
       MultiAddData(leftInput, 20)(rightInput, 21),
       CheckNewAnswer(),
@@ -645,11 +646,11 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       MultiAddData(leftInput, 21)(rightInput, 22), // watermark = 11, no-data-batch computes nulls
       CheckNewAnswer(Row(1, 10, 2, null), Row(2, 10, 4, null)),
-      assertNumStateRows(total = 2, updated = 12),
+      assertNumStateRows(total = 2, updated = 12, lateInput = 0),
 
       AddData(leftInput, 22),
       CheckNewAnswer(Row(22, 30, 44, 66)),
-      assertNumStateRows(total = 3, updated = 1)
+      assertNumStateRows(total = 3, updated = 1, lateInput = 0)
     )
   }
 
@@ -663,11 +664,11 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
 
       MultiAddData(leftInput, 21)(rightInput, 22), // watermark = 11, no-data-batch computes nulls
       CheckNewAnswer(Row(6, 10, null, 18), Row(7, 10, null, 21)),
-      assertNumStateRows(total = 2, updated = 12),
+      assertNumStateRows(total = 2, updated = 12, lateInput = 0),
 
       AddData(leftInput, 22),
       CheckNewAnswer(Row(22, 30, 44, 66)),
-      assertNumStateRows(total = 3, updated = 1)
+      assertNumStateRows(total = 3, updated = 1, lateInput = 0)
     )
   }
 
@@ -703,15 +704,15 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         CheckNewAnswer((1, 1, 5, 10)),
         AddData(rightInput, (1, 11)),
         CheckNewAnswer(), // no match as left time is too low
-        assertNumStateRows(total = 5, updated = 5),
+        assertNumStateRows(total = 5, updated = 5, lateInput = 0),
 
         // Increase event time watermark to 20s by adding data with time = 30s on both inputs
         AddData(leftInput, (1, 7), (1, 30)),
         CheckNewAnswer((1, 1, 7, 10), (1, 1, 7, 11)),
-        assertNumStateRows(total = 7, updated = 2),
+        assertNumStateRows(total = 7, updated = 2, lateInput = 0),
         AddData(rightInput, (0, 30)), // watermark = 30 - 10 = 20, no-data-batch computes nulls
         CheckNewAnswer(outerResult),
-        assertNumStateRows(total = 2, updated = 1)
+        assertNumStateRows(total = 2, updated = 1, lateInput = 0)
       )
     }
   }
@@ -736,40 +737,41 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       // leftValue <= 10 should generate outer join rows even though it matches right keys
       MultiAddData(leftInput, 1, 2, 3)(rightInput, 1, 2, 3),
       CheckNewAnswer(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null)),
-      assertNumStateRows(total = 3, updated = 3), // only right 1, 2, 3 added
+      assertNumStateRows(total = 3, updated = 3, lateInput = 0), // only right 1, 2, 3 added
 
       MultiAddData(leftInput, 20)(rightInput, 21), // watermark = 10, no-data-batch cleared < 10
       CheckNewAnswer(),
-      assertNumStateRows(total = 2, updated = 2),  // only 20 and 21 left in state
+      assertNumStateRows(total = 2, updated = 2, lateInput = 0),  // only 20 and 21 left in state
 
       AddData(rightInput, 20),
       CheckNewAnswer(Row(20, 30, 40, 60)),
-      assertNumStateRows(total = 3, updated = 1),
+      assertNumStateRows(total = 3, updated = 1, lateInput = 0),
 
       // leftValue and rightValue both satisfying condition should not generate outer join rows
       MultiAddData(leftInput, 40, 41)(rightInput, 40, 41), // watermark = 31
       CheckNewAnswer((40, 50, 80, 120), (41, 50, 82, 123)),
-      assertNumStateRows(total = 4, updated = 4),   // only left 40, 41 + right 40,41 left in state
+      // only left 40, 41 + right 40,41 left in state
+      assertNumStateRows(total = 4, updated = 4, lateInput = 0),
 
       MultiAddData(leftInput, 70)(rightInput, 71), // watermark = 60
       CheckNewAnswer(),
-      assertNumStateRows(total = 2, updated = 2), // only 70, 71 left in state
+      assertNumStateRows(total = 2, updated = 2, lateInput = 0), // only 70, 71 left in state
 
       AddData(rightInput, 70),
       CheckNewAnswer((70, 80, 140, 210)),
-      assertNumStateRows(total = 3, updated = 1),
+      assertNumStateRows(total = 3, updated = 1, lateInput = 0),
 
       // rightValue between 300 and 1000 should generate outer join rows even though it matches left
       MultiAddData(leftInput, 101, 102, 103)(rightInput, 101, 102, 103), // watermark = 91
       CheckNewAnswer(),
-      assertNumStateRows(total = 6, updated = 3), // only 101 - 103 left in state
+      assertNumStateRows(total = 6, updated = 3, lateInput = 0), // only 101 - 103 left in state
 
       MultiAddData(leftInput, 1000)(rightInput, 1001),
       CheckNewAnswer(
         Row(101, 110, 202, null),
         Row(102, 110, 204, null),
         Row(103, 110, 206, null)),
-      assertNumStateRows(total = 2, updated = 2)
+      assertNumStateRows(total = 2, updated = 2, lateInput = 0)
     )
   }
 
@@ -803,7 +805,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
       // right: (2, 2L), (4, 4L)
       CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
-      assertNumStateRows(7, 7),
+      assertNumStateRows(7, 7, 0),
 
       AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
       // batch 2 - global watermark = 5
@@ -817,7 +819,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       // NOTE: look for evicted rows in right which are not evicted from left - they were
       // properly joined in batch 1
       CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
-      assertNumStateRows(13, 8),
+      assertNumStateRows(13, 8, 0),
 
       AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
       // batch 3
@@ -832,7 +834,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckNewAnswer(
         Row(12, 12L, 12, 12L), Row(14, 14L, 14, 14L),
         Row(1, 1L, null, null), Row(3, 3L, null, null)),
-      assertNumStateRows(15, 7)
+      assertNumStateRows(15, 7, 0)
     )
   }
 
@@ -866,17 +868,17 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     testStream(query)(
       AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
       CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
-      assertNumStateRows(7, 7),
+      assertNumStateRows(7, 7, 0),
 
       AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
       CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
-      assertNumStateRows(13, 8),
+      assertNumStateRows(13, 8, 0),
 
       AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
       CheckNewAnswer(
         Row(12, 12L, 12, 12L), Row(14, 14L, 14, 14L),
         Row(null, null, 1, 1L), Row(null, null, 3, 3L)),
-      assertNumStateRows(15, 7)
+      assertNumStateRows(15, 7, 0)
     )
   }
 

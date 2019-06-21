@@ -502,10 +502,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       expectShuffling: Boolean,
       expectedPartition: Int): Boolean = {
     val executedPlan = se.lastExecution.executedPlan
-    val restore = executedPlan
-      .collect { case ss: StateStoreRestoreExec => ss }
-      .head
-    restore.child match {
+    val nodeToCheck = executedPlan
+      .collect {
+        case StateStoreRestoreExec(_, _, _, s: CountLateRowsExec) => s.child
+        case ss: StateStoreRestoreExec => ss.child
+      }.head
+    nodeToCheck match {
       case node: UnaryExecNode =>
         assert(node.outputPartitioning.numPartitions === expectedPartition,
           "Didn't get the expected number of partitions.")
