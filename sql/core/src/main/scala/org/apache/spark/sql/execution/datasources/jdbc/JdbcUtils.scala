@@ -439,6 +439,10 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setLong(pos, rs.getLong(pos + 1))
 
+    case ByteType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setByte(pos, rs.getByte(pos + 1))
+
     case ShortType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setShort(pos, rs.getShort(pos + 1))
@@ -797,6 +801,7 @@ object JdbcUtils extends Logging {
       tableSchema: StructType,
       customSchema: String,
       nameEquality: Resolver): StructType = {
+
     if (null != customSchema && customSchema.nonEmpty) {
       val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
