@@ -694,8 +694,6 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' argument+=expression PLACING argument+=expression
-      FROM argument+=expression (FOR argument+=expression)? ')'                                #functionCall
     | IDENTIFIER '->' expression                                                               #lambda
     | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -707,6 +705,8 @@ primaryExpression
       ((FOR | ',') len=valueExpression)? ')'                                                   #substring
     | TRIM '(' trimOption=(BOTH | LEADING | TRAILING) (trimStr=valueExpression)?
        FROM srcStr=valueExpression ')'                                                         #trim
+    | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
+      FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
     ;
 
 constant
@@ -1004,6 +1004,7 @@ ansiNonReserved
     | OUT
     | OUTPUTFORMAT
     | OVER
+    | OVERLAY
     | OVERWRITE
     | PARTITION
     | PARTITIONED
@@ -1255,12 +1256,14 @@ nonReserved
     | OUTPUTFORMAT
     | OVER
     | OVERLAPS
+    | OVERLAY
     | OVERWRITE
     | PARTITION
     | PARTITIONED
     | PARTITIONS
     | PERCENTLIT
     | PIVOT
+    | PLACING
     | POSITION
     | PRECEDING
     | PRIMARY
@@ -1344,7 +1347,6 @@ nonReserved
     | WITH
     | YEAR
     | YEARS
-    | PLACING
     ;
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
@@ -1512,12 +1514,14 @@ OUTER: 'OUTER';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
 OVER: 'OVER';
 OVERLAPS: 'OVERLAPS';
+OVERLAY: 'OVERLAY';
 OVERWRITE: 'OVERWRITE';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';
 PERCENTLIT: 'PERCENT';
 PIVOT: 'PIVOT';
+PLACING: 'PLACING';
 POSITION: 'POSITION';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
@@ -1606,7 +1610,6 @@ WINDOW: 'WINDOW';
 WITH: 'WITH';
 YEAR: 'YEAR';
 YEARS: 'YEARS';
-PLACING: 'PLACING';
 //============================
 // End of the keywords list
 //============================
