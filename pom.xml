@@ -106,6 +106,7 @@
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
     <module>external/avro</module>
+    <module>external/s3-sqs</module>
     <module>graph/api</module>
     <module>graph/cypher</module>
     <module>graph/graph</module>
