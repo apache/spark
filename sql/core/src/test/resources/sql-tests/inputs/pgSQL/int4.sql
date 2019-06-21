@@ -23,7 +23,8 @@ INSERT INTO INT4_TBL VALUES ('2147483647');
 
 INSERT INTO INT4_TBL VALUES ('-2147483647');
 
--- bad input values -- should give errors
+-- [SPARK-27923] Spark SQL insert these bad inputs to NULL
+-- bad input values
 -- INSERT INTO INT4_TBL(f1) VALUES ('1000000000000');
 -- INSERT INTO INT4_TBL(f1) VALUES ('asdf');
 -- INSERT INTO INT4_TBL(f1) VALUES ('     ');
@@ -31,8 +32,6 @@ INSERT INTO INT4_TBL VALUES ('-2147483647');
 -- INSERT INTO INT4_TBL(f1) VALUES ('- 1234');
 -- INSERT INTO INT4_TBL(f1) VALUES ('123       5');
 -- INSERT INTO INT4_TBL(f1) VALUES ('');
-
-select * from INT4_TBL;
 
 
 SELECT '' AS five, * FROM INT4_TBL;
