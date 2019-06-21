@@ -228,4 +228,15 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     val decimal = Decimal.apply(bigInt)
     assert(decimal.toJavaBigDecimal.unscaledValue.toString === "9223372036854775808")
   }
+
+  test("SPARK-26038: toScalaBigInt/toJavaBigInteger") {
+    // not fitting long
+    val decimal = Decimal("1234568790123456789012348790.1234879012345678901234568790")
+    assert(decimal.toScalaBigInt == scala.math.BigInt("1234568790123456789012348790"))
+    assert(decimal.toJavaBigInteger == new java.math.BigInteger("1234568790123456789012348790"))
+    // fitting long
+    val decimalLong = Decimal(123456789123456789L, 18, 9)
+    assert(decimalLong.toScalaBigInt == scala.math.BigInt("123456789"))
+    assert(decimalLong.toJavaBigInteger == new java.math.BigInteger("123456789"))
+  }
 }
