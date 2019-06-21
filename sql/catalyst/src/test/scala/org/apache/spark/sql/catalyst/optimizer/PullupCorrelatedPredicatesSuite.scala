@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{In, ListQuery}
+import org.apache.spark.sql.catalyst.expressions.{InSubquery, ListQuery}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -42,7 +42,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         .select('c)
     val outerQuery =
       testRelation
-        .where(In('a, Seq(ListQuery(correlatedSubquery))))
+        .where(InSubquery(Seq('a), ListQuery(correlatedSubquery)))
         .select('a).analyze
     assert(outerQuery.resolved)
 

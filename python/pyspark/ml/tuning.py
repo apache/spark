@@ -115,7 +115,11 @@ class ParamGridBuilder(object):
         """
         keys = self._param_grid.keys()
         grid_values = self._param_grid.values()
-        return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
+
+        def to_key_value_pairs(keys, values):
+            return [(key, key.typeConverter(value)) for key, value in zip(keys, values)]
+
+        return [dict(to_key_value_pairs(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
 class ValidatorParams(HasSeed):
@@ -500,15 +504,15 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
     ...      (Vectors.dense([0.5]), 0.0),
     ...      (Vectors.dense([0.6]), 1.0),
     ...      (Vectors.dense([1.0]), 1.0)] * 10,
-    ...     ["features", "label"])
+    ...     ["features", "label"]).repartition(1)
     >>> lr = LogisticRegression()
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
     >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
-    ...     parallelism=2)
+    ...     parallelism=1, seed=42)
     >>> tvsModel = tvs.fit(dataset)
     >>> evaluator.evaluate(tvsModel.transform(dataset))
-    0.8333...
+    0.833...
 
     .. versionadded:: 2.0.0
     """

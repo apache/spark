@@ -95,4 +95,20 @@ private case object OracleDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  /**
+   * The SQL query used to truncate a table.
+   * @param table The table to truncate
+   * @param cascade Whether or not to cascade the truncation. Default value is the
+   *                value of isCascadingTruncateTable()
+   * @return The SQL query to use for truncating a table
+   */
+  override def getTruncateQuery(
+      table: String,
+      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade match {
+      case Some(true) => s"TRUNCATE TABLE $table CASCADE"
+      case _ => s"TRUNCATE TABLE $table"
+    }
+  }
 }

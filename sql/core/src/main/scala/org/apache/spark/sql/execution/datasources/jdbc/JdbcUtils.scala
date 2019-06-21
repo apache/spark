@@ -48,6 +48,7 @@ object JdbcUtils extends Logging {
    * Returns a factory for creating connections to the given JDBC URL.
    *
    * @param options - JDBC options that contains url, table and other information.
+   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
    */
   def createConnectionFactory(options: JDBCOptions): () => Connection = {
     val driverClass: String = options.driverClass
@@ -60,7 +61,11 @@ object JdbcUtils extends Logging {
         throw new IllegalStateException(
           s"Did not find registered driver with class $driverClass")
       }
-      driver.connect(options.url, options.asConnectionProperties)
+      val connection: Connection = driver.connect(options.url, options.asConnectionProperties)
+      require(connection != null,
+        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+
+      connection
     }
   }
 
@@ -105,7 +110,12 @@ object JdbcUtils extends Logging {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(dialect.getTruncateQuery(options.table))
+      val truncateQuery = if (options.isCascadeTruncate.isDefined) {
+        dialect.getTruncateQuery(options.table, options.isCascadeTruncate)
+      } else {
+        dialect.getTruncateQuery(options.table)
+      }
+      statement.executeUpdate(truncateQuery)
     } finally {
       statement.close()
     }
@@ -175,7 +185,7 @@ object JdbcUtils extends Logging {
 
   private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
-      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
+      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
 
   /**
@@ -433,6 +443,10 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setShort(pos, rs.getShort(pos + 1))
 
+    case ByteType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos, rs.getByte(pos + 1))
+
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
@@ -480,7 +494,7 @@ object JdbcUtils extends Logging {
 
         case LongType if metadata.contains("binarylong") =>
           throw new IllegalArgumentException(s"Unsupported array element " +
-            s"type ${dt.simpleString} based on binary")
+            s"type ${dt.catalogString} based on binary")
 
         case ArrayType(_, _) =>
           throw new IllegalArgumentException("Nested arrays unsupported")
@@ -494,7 +508,7 @@ object JdbcUtils extends Logging {
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
-    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
+    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.catalogString}")
   }
 
   private def nullSafeConvert[T](input: T, f: T => Any): Any = {

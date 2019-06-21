@@ -21,7 +21,7 @@ import scala.collection.Map
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  *
  * @since 1.6.0
  */
-@InterfaceStability.Evolving
+@Evolving
 abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   protected def _sqlContext: SQLContext
@@ -81,9 +81,14 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 2.2.0 */
   implicit def newDateEncoder: Encoder[java.sql.Date] = Encoders.DATE
 
+  /** @since 3.0.0 */
+  implicit def newLocalDateEncoder: Encoder[java.time.LocalDate] = Encoders.LOCALDATE
+
   /** @since 2.2.0 */
   implicit def newTimeStampEncoder: Encoder[java.sql.Timestamp] = Encoders.TIMESTAMP
 
+  /** @since 3.0.0 */
+  implicit def newInstantEncoder: Encoder[java.time.Instant] = Encoders.INSTANT
 
   // Boxed primitives
 

@@ -16,10 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.PodBuilder
-
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SecretVolumeUtils, SparkPod}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.k8s.{KubernetesTestConf, SecretVolumeUtils, SparkPod}
 
 class MountSecretsFeatureStepSuite extends SparkFunSuite {
 
@@ -32,19 +30,8 @@ class MountSecretsFeatureStepSuite extends SparkFunSuite {
     val secretNamesToMountPaths = Map(
       SECRET_FOO -> SECRET_MOUNT_PATH,
       SECRET_BAR -> SECRET_MOUNT_PATH)
-    val sparkConf = new SparkConf(false)
-    val kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesExecutorSpecificConf("1", new PodBuilder().build()),
-      "resource-name-prefix",
-      "app-id",
-      Map.empty,
-      Map.empty,
-      secretNamesToMountPaths,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Seq.empty[String])
+    val kubernetesConf = KubernetesTestConf.createExecutorConf(
+      secretNamesToMountPaths = secretNamesToMountPaths)
 
     val step = new MountSecretsFeatureStep(kubernetesConf)
     val driverPodWithSecretsMounted = step.configurePod(baseDriverPod).pod

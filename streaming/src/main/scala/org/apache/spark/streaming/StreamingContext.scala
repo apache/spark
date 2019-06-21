@@ -38,6 +38,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
@@ -188,7 +189,7 @@ class StreamingContext private[streaming] (
   private[streaming] val progressListener = new StreamingJobProgressListener(this)
 
   private[streaming] val uiTab: Option[StreamingTab] =
-    if (conf.getBoolean("spark.ui.enabled", true)) {
+    if (conf.get(UI_ENABLED)) {
       Some(new StreamingTab(this))
     } else {
       None
@@ -409,6 +410,8 @@ class StreamingContext private[streaming] (
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
+   * The text files must be encoded as UTF-8.
+   *
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): DStream[String] = withNamedScope("text file stream") {
@@ -537,7 +540,7 @@ class StreamingContext private[streaming] (
         ExecutorAllocationManager.isDynamicAllocationEnabled(conf)) {
       logWarning("Dynamic Allocation is enabled for this application. " +
         "Enabling Dynamic allocation for Spark Streaming applications can cause data loss if " +
-        "Write Ahead Log is not enabled for non-replayable sources like Flume. " +
+        "Write Ahead Log is not enabled for non-replayable sources. " +
         "See the programming guide for details on how to enable the Write Ahead Log.")
     }
   }

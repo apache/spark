@@ -414,19 +414,25 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("[SPARK-16818] partition pruned file scans implement sameResult correctly") {
-    withTempPath { path =>
-      val tempDir = path.getCanonicalPath
-      spark.range(100)
-        .selectExpr("id", "id as b")
-        .write
-        .partitionBy("id")
-        .parquet(tempDir)
-      val df = spark.read.parquet(tempDir)
-      def getPlan(df: DataFrame): SparkPlan = {
-        df.queryExecution.executedPlan
+    Seq("orc", "").foreach { useV1ReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1ReaderList) {
+        withTempPath { path =>
+          val tempDir = path.getCanonicalPath
+          spark.range(100)
+            .selectExpr("id", "id as b")
+            .write
+            .partitionBy("id")
+            .orc(tempDir)
+          val df = spark.read.orc(tempDir)
+
+          def getPlan(df: DataFrame): SparkPlan = {
+            df.queryExecution.executedPlan
+          }
+
+          assert(getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 2"))))
+          assert(!getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 3"))))
+        }
       }
-      assert(getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 2"))))
-      assert(!getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 3"))))
     }
   }
 
@@ -614,7 +620,7 @@ class TestFileFormat extends TextBasedFileFormat {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    throw new NotImplementedError("JUST FOR TESTING")
+    throw new UnsupportedOperationException("JUST FOR TESTING")
   }
 
   override def buildReader(

@@ -19,8 +19,9 @@
 
 DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
-ASF_REPO="https://git-wip-us.apache.org/repos/asf/spark.git"
-ASF_REPO_WEBUI="https://git-wip-us.apache.org/repos/asf?p=spark.git"
+ASF_REPO="https://gitbox.apache.org/repos/asf/spark.git"
+ASF_REPO_WEBUI="https://gitbox.apache.org/repos/asf?p=spark.git"
+ASF_GITHUB_REPO="https://github.com/apache/spark"
 
 function error {
   echo "$*"
@@ -73,7 +74,7 @@ function fcreate_secure {
 }
 
 function check_for_tag {
-  curl -s --head --fail "$ASF_REPO_WEBUI;a=commit;h=$1" >/dev/null
+  curl -s --head --fail "$ASF_GITHUB_REPO/releases/tag/$1" > /dev/null
 }
 
 function get_release_info {

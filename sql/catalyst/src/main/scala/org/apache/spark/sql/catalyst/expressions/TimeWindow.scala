@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
@@ -80,16 +78,13 @@ case class TimeWindow(
       if (slideDuration <= 0) {
         return TypeCheckFailure(s"The slide duration ($slideDuration) must be greater than 0.")
       }
-      if (startTime < 0) {
-        return TypeCheckFailure(s"The start time ($startTime) must be greater than or equal to 0.")
-      }
       if (slideDuration > windowDuration) {
         return TypeCheckFailure(s"The slide duration ($slideDuration) must be less than or equal" +
           s" to the windowDuration ($windowDuration).")
       }
-      if (startTime >= slideDuration) {
-        return TypeCheckFailure(s"The start time ($startTime) must be less than the " +
-          s"slideDuration ($slideDuration).")
+      if (startTime.abs >= slideDuration) {
+        return TypeCheckFailure(s"The absolute value of start time ($startTime) must be less " +
+          s"than the slideDuration ($slideDuration).")
       }
     }
     dataTypeCheck
@@ -107,20 +102,7 @@ object TimeWindow {
    *         precision.
    */
   private def getIntervalInMicroSeconds(interval: String): Long = {
-    if (StringUtils.isBlank(interval)) {
-      throw new IllegalArgumentException(
-        "The window duration, slide duration and start time cannot be null or blank.")
-    }
-    val intervalString = if (interval.startsWith("interval")) {
-      interval
-    } else {
-      "interval " + interval
-    }
-    val cal = CalendarInterval.fromString(intervalString)
-    if (cal == null) {
-      throw new IllegalArgumentException(
-        s"The provided interval ($interval) did not correspond to a valid interval string.")
-    }
+    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
     if (cal.months > 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")

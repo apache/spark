@@ -80,7 +80,7 @@ class VersionUtils(object):
         (2, 3)
 
         """
-        m = re.search('^(\d+)\.(\d+)(\..*)?$', sparkVersion)
+        m = re.search(r'^(\d+)\.(\d+)(\..*)?$', sparkVersion)
         if m is not None:
             return (int(m.group(1)), int(m.group(2)))
         else:
@@ -104,6 +104,33 @@ def fail_on_stopiteration(f):
             )
 
     return wrapper
+
+
+def _print_missing_jar(lib_name, pkg_name, jar_name, spark_version):
+    print("""
+________________________________________________________________________________________________
+
+  Spark %(lib_name)s libraries not found in class path. Try one of the following.
+
+  1. Include the %(lib_name)s library and its dependencies with in the
+     spark-submit command as
+
+     $ bin/spark-submit --packages org.apache.spark:spark-%(pkg_name)s:%(spark_version)s ...
+
+  2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
+     Group Id = org.apache.spark, Artifact Id = spark-%(jar_name)s, Version = %(spark_version)s.
+     Then, include the jar in the spark-submit command as
+
+     $ bin/spark-submit --jars <spark-%(jar_name)s.jar> ...
+
+________________________________________________________________________________________________
+
+""" % {
+        "lib_name": lib_name,
+        "pkg_name": pkg_name,
+        "jar_name": jar_name,
+        "spark_version": spark_version
+    })
 
 
 if __name__ == "__main__":

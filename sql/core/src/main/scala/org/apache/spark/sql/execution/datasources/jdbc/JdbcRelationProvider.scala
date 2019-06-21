@@ -29,28 +29,11 @@ class JdbcRelationProvider extends CreatableRelationProvider
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    import JDBCOptions._
-
     val jdbcOptions = new JDBCOptions(parameters)
-    val partitionColumn = jdbcOptions.partitionColumn
-    val lowerBound = jdbcOptions.lowerBound
-    val upperBound = jdbcOptions.upperBound
-    val numPartitions = jdbcOptions.numPartitions
-
-    val partitionInfo = if (partitionColumn.isEmpty) {
-      assert(lowerBound.isEmpty && upperBound.isEmpty, "When 'partitionColumn' is not specified, " +
-        s"'$JDBC_LOWER_BOUND' and '$JDBC_UPPER_BOUND' are expected to be empty")
-      null
-    } else {
-      assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty,
-        s"When 'partitionColumn' is specified, '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', and " +
-          s"'$JDBC_NUM_PARTITIONS' are also required")
-      JDBCPartitioningInfo(
-        partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
-    }
     val resolver = sqlContext.conf.resolver
+    val timeZoneId = sqlContext.conf.sessionLocalTimeZone
     val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
-    val parts = JDBCRelation.columnPartition(schema, partitionInfo, resolver, jdbcOptions)
+    val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
     JDBCRelation(schema, parts, jdbcOptions)(sqlContext.sparkSession)
   }
 

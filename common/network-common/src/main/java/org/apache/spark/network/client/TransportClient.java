@@ -318,7 +318,7 @@ public class TransportClient implements Closeable {
     }
 
     @Override
-    public void operationComplete(Future future) throws Exception {
+    public void operationComplete(Future<? super Void> future) throws Exception {
       if (future.isSuccess()) {
         if (logger.isTraceEnabled()) {
           long timeTaken = System.currentTimeMillis() - startTime;

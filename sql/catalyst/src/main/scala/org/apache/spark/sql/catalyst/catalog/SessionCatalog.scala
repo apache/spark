@@ -34,7 +34,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -101,6 +101,8 @@ class SessionCatalog(
   @GuardedBy("this")
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
+  private val validNameFormat = "([\\w_]+)".r
+
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
    * i.e. if this name only contains characters, numbers, and _.
@@ -109,7 +111,6 @@ class SessionCatalog(
    * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
    */
   private def validateName(name: String): Unit = {
-    val validNameFormat = "([\\w_]+)".r
     if (!validNameFormat.pattern.matcher(name).matches()) {
       throw new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
         "Valid names only contain alphabet characters, numbers and _.")
@@ -216,6 +217,11 @@ class SessionCatalog(
     val dbName = formatDatabaseName(db)
     if (dbName == DEFAULT_DATABASE) {
       throw new AnalysisException(s"Can not drop default database")
+    }
+    if (cascade && databaseExists(dbName)) {
+      listTables(dbName).foreach { t =>
+        invalidateCachedTable(QualifiedTableName(dbName, t.table))
+      }
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
@@ -426,6 +432,34 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
     externalCatalog.getTable(db, table)
+  }
+
+  /**
+   * Retrieve all metadata of existing permanent tables/views. If no database is specified,
+   * assume the table/view is in the current database.
+   * Only the tables/views belong to the same database that can be retrieved are returned.
+   * For example, if none of the requested tables could be retrieved, an empty list is returned.
+   * There is no guarantee of ordering of the returned tables.
+   */
+  @throws[NoSuchDatabaseException]
+  def getTablesByName(names: Seq[TableIdentifier]): Seq[CatalogTable] = {
+    if (names.nonEmpty) {
+      val dbs = names.map(_.database.getOrElse(getCurrentDatabase))
+      if (dbs.distinct.size != 1) {
+        val tables = names.map(name => formatTableName(name.table))
+        val qualifiedTableNames = dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}
+        throw new AnalysisException(
+          s"Only the tables/views belong to the same database can be retrieved. Querying " +
+          s"tables/views are $qualifiedTableNames"
+        )
+      }
+      val db = formatDatabaseName(dbs.head)
+      requireDbExists(db)
+      val tables = names.map(name => formatTableName(name.table))
+      externalCatalog.getTablesByName(db, tables)
+    } else {
+      Seq.empty
+    }
   }
 
   /**
@@ -684,6 +718,7 @@ class SessionCatalog(
    *
    * If the relation is a view, we generate a [[View]] operator from the view description, and
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
+   * [[SubqueryAlias]] will also keep track of the name and database(optional) of the table/view
    *
    * @param name The name of the table/view that we look up.
    */
@@ -693,12 +728,13 @@ class SessionCatalog(
       val table = formatTableName(name.table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, viewDef)
+          SubqueryAlias(table, db, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
         if (metadata.tableType == CatalogTableType.VIEW) {
           val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+          logDebug(s"'$viewText' will be used for the view($table).")
           // The relation is a view, so we wrap the relation by:
           // 1. Add a [[View]] operator over the relation to keep track of the view desc;
           // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
@@ -706,9 +742,9 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(table, child)
+          SubqueryAlias(table, db, child)
         } else {
-          SubqueryAlias(table, UnresolvedCatalogRelation(metadata))
+          SubqueryAlias(table, db, UnresolvedCatalogRelation(metadata))
         }
       } else {
         SubqueryAlias(table, tempViews(table))
@@ -1059,7 +1095,7 @@ class SessionCatalog(
   }
 
   /**
-   * overwirte a metastore function in the database specified in `funcDefinition`..
+   * overwrite a metastore function in the database specified in `funcDefinition`..
    * If no database is specified, assume the function is in the current database.
    */
   def alterFunction(funcDefinition: CatalogFunction): Unit = {
@@ -1097,10 +1133,11 @@ class SessionCatalog(
    * Check if the function with the specified name exists
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
-    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
-    requireDbExists(db)
-    functionRegistry.functionExists(name) ||
+    functionRegistry.functionExists(name) || {
+      val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+      requireDbExists(db)
       externalCatalog.functionExists(db, name.funcName)
+    }
   }
 
   // ----------------------------------------------------------------
@@ -1124,13 +1161,23 @@ class SessionCatalog(
       name: String,
       clazz: Class[_],
       input: Seq[Expression]): Expression = {
+    // Unfortunately we need to use reflection here because UserDefinedAggregateFunction
+    // and ScalaUDAF are defined in sql/core module.
     val clsForUDAF =
       Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
     if (clsForUDAF.isAssignableFrom(clazz)) {
       val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-      cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
-        .newInstance(input, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
-        .asInstanceOf[Expression]
+      val e = cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
+        .newInstance(input,
+          clazz.getConstructor().newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
+        .asInstanceOf[ImplicitCastInputTypes]
+
+      // Check input argument size
+      if (e.inputTypes.size != input.size) {
+        throw new AnalysisException(s"Invalid number of arguments for function $name. " +
+          s"Expected: ${e.inputTypes.size}; Found: ${input.size}")
+      }
+      e
     } else {
       throw new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
         s"Use sparkSession.udf.register(...) instead.")
@@ -1209,9 +1256,10 @@ class SessionCatalog(
     databaseExists(db) && externalCatalog.functionExists(db, name.funcName)
   }
 
-  protected def failFunctionLookup(name: FunctionIdentifier): Nothing = {
+  protected[sql] def failFunctionLookup(
+      name: FunctionIdentifier, cause: Option[Throwable] = None): Nothing = {
     throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, cause)
   }
 
   /**

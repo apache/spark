@@ -34,6 +34,7 @@ class ColumnPruningSuite extends PlanTest {
     val batches = Batch("Column pruning", FixedPoint(100),
       PushDownPredicate,
       ColumnPruning,
+      RemoveNoopOperators,
       CollapseProject) :: Nil
   }
 
@@ -140,6 +141,30 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
+  test("Column pruning for ScriptTransformation") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val query =
+      ScriptTransformation(
+        Seq('a, 'b),
+        "func",
+        Seq.empty,
+        input,
+        null).analyze
+    val optimized = Optimize.execute(query)
+
+    val expected =
+      ScriptTransformation(
+        Seq('a, 'b),
+        "func",
+        Seq.empty,
+        Project(
+          Seq('a, 'b),
+          input),
+        null).analyze
+
+    comparePlans(optimized, expected)
+  }
+
   test("Column pruning on Filter") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val plan1 = Filter('a > 1, input).analyze
@@ -156,10 +181,10 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on except/intersect/distinct") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val query = Project('a :: Nil, Except(input, input)).analyze
+    val query = Project('a :: Nil, Except(input, input, isAll = false)).analyze
     comparePlans(Optimize.execute(query), query)
 
-    val query2 = Project('a :: Nil, Intersect(input, input)).analyze
+    val query2 = Project('a :: Nil, Intersect(input, input, isAll = false)).analyze
     comparePlans(Optimize.execute(query2), query2)
     val query3 = Project('a :: Nil, Distinct(input)).analyze
     comparePlans(Optimize.execute(query3), query3)
@@ -316,10 +341,8 @@ class ColumnPruningSuite extends PlanTest {
   test("Column pruning on Union") {
     val input1 = LocalRelation('a.int, 'b.string, 'c.double)
     val input2 = LocalRelation('c.int, 'd.string, 'e.double)
-    val query = Project('b :: Nil,
-      Union(input1 :: input2 :: Nil)).analyze
-    val expected = Project('b :: Nil,
-      Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil)).analyze
+    val query = Project('b :: Nil, Union(input1 :: input2 :: Nil)).analyze
+    val expected = Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil).analyze
     comparePlans(Optimize.execute(query), expected)
   }
 
@@ -330,15 +353,15 @@ class ColumnPruningSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input),
-          ResolvedHint(SubqueryAlias("y", input)), Inner, None)).analyze
+          SubqueryAlias("y", input), Inner, None, JoinHint.NONE)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input)),
-        ResolvedHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
-        Inner, None).analyze
+        Project(Seq($"y.key"), SubqueryAlias("y", input)),
+        Inner, None, JoinHint.NONE).analyze
 
     comparePlans(optimized, expected)
   }
@@ -365,7 +388,7 @@ class ColumnPruningSuite extends PlanTest {
 
     val query2 = Sample(0.0, 0.6, false, 11L, x).select('a as 'aa)
     val optimized2 = Optimize.execute(query2.analyze)
-    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a)).select('a as 'aa)
+    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a as 'aa))
     comparePlans(optimized2, expected2.analyze)
   }
 
@@ -376,6 +399,5 @@ class ColumnPruningSuite extends PlanTest {
     val expected = input.where(rand(0L) > 0.5).where('key < 10).select('key).analyze
     comparePlans(optimized, expected)
   }
-
   // todo: add more tests for column pruning
 }

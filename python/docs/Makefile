@@ -37,7 +37,7 @@ BUILDDIR      ?= _build
 #   2. If both are set, SPHINXBUILD has a higher priority over SPHINXPYTHON
 #   3. By default, SPHINXBUILD is used as 'sphinx-build'.
 
-export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.7-src.zip)
+export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.8.1-src.zip)
 
 # Internal variables.
 PAPEROPT_a4     = -D latex_paper_size=a4

@@ -47,10 +47,10 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     if (predicate.dataType != BooleanType) {
       TypeCheckResult.TypeCheckFailure(
         "type of predicate expression in If should be boolean, " +
-          s"not ${predicate.dataType.simpleString}")
-    } else if (!areInputTypesForMergingEqual) {
+          s"not ${predicate.dataType.catalogString}")
+    } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
-        s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
+        s"(${trueValue.dataType.catalogString} and ${falseValue.dataType.catalogString}).")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -137,7 +137,7 @@ case class CaseWhen(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (areInputTypesForMergingEqual) {
+    if (TypeCoercion.haveSameType(inputTypesForMerging)) {
       // Make sure all branch conditions are boolean types.
       if (branches.forall(_._1.dataType == BooleanType)) {
         TypeCheckResult.TypeCheckSuccess
@@ -148,8 +148,12 @@ case class CaseWhen(
             s"but the ${index + 1}th when expression's type is ${branches(index)._1}")
       }
     } else {
+      val branchesStr = branches.map(_._2.dataType).map(dt => s"WHEN ... THEN ${dt.catalogString}")
+        .mkString(" ")
+      val elseStr = elseValue.map(expr => s" ELSE ${expr.dataType.catalogString}").getOrElse("")
       TypeCheckResult.TypeCheckFailure(
-        "THEN and ELSE expressions should all be same type or coercible to a common type")
+        "THEN and ELSE expressions should all be same type or coercible to a common type," +
+          s" got CASE $branchesStr$elseStr END")
     }
   }
 

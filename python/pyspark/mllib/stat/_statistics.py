@@ -259,7 +259,7 @@ class Statistics(object):
 
         The KS statistic gives us the maximum distance between the
         ECDF and the CDF. Intuitively if this statistic is large, the
-        probabilty that the null hypothesis is true becomes small.
+        probability that the null hypothesis is true becomes small.
         For specific details of the implementation, please have a look
         at the Scala documentation.
 

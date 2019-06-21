@@ -19,7 +19,9 @@ package org.apache.spark.scheduler
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
+import scala.collection.immutable.Map
 import scala.collection.mutable
+import scala.collection.mutable.Set
 import scala.io.Source
 
 import org.apache.hadoop.fs.Path
@@ -29,10 +31,14 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.io._
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
+
 
 /**
  * Test whether EventLoggingListener logs events properly.
@@ -43,6 +49,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
   with Logging {
+
   import EventLoggingListenerSuite._
 
   private val fileSystem = Utils.getHadoopFileSystem("/",
@@ -80,6 +87,20 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     testEventLogging()
   }
 
+  test("spark.eventLog.compression.codec overrides spark.io.compression.codec") {
+    val conf = new SparkConf
+    conf.set(EVENT_LOG_COMPRESS, true)
+
+    // The default value is `spark.io.compression.codec`.
+    val e = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    assert(e.compressionCodecName.contains("lz4"))
+
+    // `spark.eventLog.compression.codec` overrides `spark.io.compression.codec`.
+    conf.set(EVENT_LOG_COMPRESSION_CODEC, "zstd")
+    val e2 = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    assert(e2.compressionCodecName.contains("zstd"))
+  }
+
   test("Basic event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
       testEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
@@ -101,8 +122,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val secretPassword = "secret_password"
     val conf = getLoggingConf(testDirPath, None)
       .set(key, secretPassword)
+    val hadoopconf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
-    val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
+    val envDetails = SparkEnv.environmentDetails(conf, hadoopconf, "FIFO", Seq.empty, Seq.empty)
     val event = SparkListenerEnvironmentUpdate(envDetails)
     val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
     assert(redactedProps(key) == "*********(redacted)")
@@ -116,7 +138,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // Expected IOException, since we haven't enabled log overwrite.
     intercept[IOException] { testEventLogging() }
     // Try again, but enable overwriting.
-    testEventLogging(extraConf = Map("spark.eventLog.overwrite" -> "true"))
+    testEventLogging(extraConf = Map(EVENT_LOG_OVERWRITE.key -> "true"))
   }
 
   test("Event log name") {
@@ -135,6 +157,10 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1.lz4" ===
       EventLoggingListener.getLogPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None, Some("lz4")))
+  }
+
+  test("Executor metrics update") {
+    testStageExecutorMetricsEventLogging()
   }
 
   /* ----------------- *
@@ -251,6 +277,232 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     }
   }
 
+  /**
+   * Test stage executor metrics logging functionality. This checks that peak
+   * values from SparkListenerExecutorMetricsUpdate events during a stage are
+   * logged in a StageExecutorMetrics event for each executor at stage completion.
+   */
+  private def testStageExecutorMetricsEventLogging() {
+    val conf = getLoggingConf(testDirPath, None)
+    val logName = "stageExecutorMetrics-test"
+    val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
+    val listenerBus = new LiveListenerBus(conf)
+
+    // Events to post.
+    val events = Array(
+      SparkListenerApplicationStart("executionMetrics", None,
+        1L, "update", None),
+      createExecutorAddedEvent(1),
+      createExecutorAddedEvent(2),
+      createStageSubmittedEvent(0),
+      // receive 3 metric updates from each executor with just stage 0 running,
+      // with different peak updates for each executor
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(Array(4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L, 7500L, 3500L,
+          6500L, 2500L, 5500L, 1500L, 10L, 90L, 2L, 20L))),
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(Array(1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L, 8500L, 3500L,
+          7500L, 2500L, 6500L, 1500L, 10L, 90L, 2L, 20L))),
+      // exec 1: new stage 0 peaks for metrics at indexes:  2, 4, 6
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(Array(4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L, 8000L, 4000L,
+          7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L))),
+      // exec 2: new stage 0 peaks for metrics at indexes: 0, 4, 6
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(Array(2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L, 9000L, 4000L,
+          8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L))),
+      // exec 1: new stage 0 peaks for metrics at indexes: 5, 7
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(Array(2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L, 8000L, 3500L,
+          7000L, 2500L, 6000L, 1500L, 10L, 90L, 2L, 20L))),
+      // exec 2: new stage 0 peaks for metrics at indexes: 0, 5, 6, 7, 8
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(Array(3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L, 8500L, 3500L,
+          7500L, 2500L, 6500L, 1500L, 10L, 90L, 2L, 20L))),
+      // now start stage 1, one more metric update for each executor, and new
+      // peaks for some stage 1 metrics (as listed), initialize stage 1 peaks
+      createStageSubmittedEvent(1),
+      // exec 1: new stage 0 peaks for metrics at indexes: 0, 3, 7; initialize stage 1 peaks
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(Array(5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L,
+          0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L))),
+      // exec 2: new stage 0 peaks for metrics at indexes: 0, 1, 3, 6, 7, 9;
+      // initialize stage 1 peaks
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 0L, 10L, 50L, 30L, 10L,
+          40L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L))),
+      // complete stage 0, and 3 more updates for each executor with just
+      // stage 1 running
+      createStageCompletedEvent(0),
+      // exec 1: new stage 1 peaks for metrics at indexes: 0, 1, 3
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(Array(6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L, 5000L, 3000L,
+          4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L))),
+      // exec 2: new stage 1 peaks for metrics at indexes: 3, 4, 7, 8
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(Array(5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L,
+          20L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L))),
+      // exec 1: new stage 1 peaks for metrics at indexes: 0, 4, 5, 7
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(Array(7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L, 3000L, 2500L,
+          2000L, 1500L, 1000L, 500L, 10L, 90L, 2L, 20L))),
+      // exec 2: new stage 1 peak for metrics at index: 7
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(Array(5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L,
+          20L, 7000L, 3000L, 6000L, 2000L, 5000L, 1000L, 10L, 90L, 2L, 20L))),
+      // exec 1: no new stage 1 peaks
+      createExecutorMetricsUpdateEvent(1,
+        new ExecutorMetrics(Array(5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L,
+          0L, 4000L, 2500L, 3000L, 1500L, 2000L, 500L, 10L, 90L, 2L, 20L))),
+      createExecutorRemovedEvent(1),
+      // exec 2: new stage 1 peak for metrics at index: 6
+      createExecutorMetricsUpdateEvent(2,
+        new ExecutorMetrics(Array(4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L, 7000L,
+          4000L, 6000L, 3000L, 5000L, 2000L, 10L, 90L, 2L, 20L))),
+      createStageCompletedEvent(1),
+      SparkListenerApplicationEnd(1000L))
+
+    // play the events for the event logger
+    eventLogger.start()
+    listenerBus.start(Mockito.mock(classOf[SparkContext]), Mockito.mock(classOf[MetricsSystem]))
+    listenerBus.addToEventLogQueue(eventLogger)
+    events.foreach(event => listenerBus.post(event))
+    listenerBus.stop()
+    eventLogger.stop()
+
+    // expected StageExecutorMetrics, for the given stage id and executor id
+    val expectedMetricsEvents: Map[(Int, String), SparkListenerStageExecutorMetrics] =
+    Map(
+      ((0, "1"),
+        new SparkListenerStageExecutorMetrics("1", 0, 0,
+          new ExecutorMetrics(Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L,
+            70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)))),
+      ((0, "2"),
+        new SparkListenerStageExecutorMetrics("2", 0, 0,
+          new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L,
+            80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)))),
+      ((1, "1"),
+        new SparkListenerStageExecutorMetrics("1", 1, 0,
+          new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L,
+            50L, 0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)))),
+      ((1, "2"),
+        new SparkListenerStageExecutorMetrics("2", 1, 0,
+          new ExecutorMetrics(Array(7000L, 70L, 50L, 40L, 10L, 30L, 50L, 60L,
+            40L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L)))))
+    // Verify the log file contains the expected events.
+    // Posted events should be logged, except for ExecutorMetricsUpdate events -- these
+    // are consolidated, and the peak values for each stage are logged at stage end.
+    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
+    try {
+      val lines = readLines(logData)
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      assert(lines.size === 14)
+      assert(lines(0).contains("SparkListenerLogStart"))
+      assert(lines(1).contains("SparkListenerApplicationStart"))
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      var logIdx = 1
+      events.foreach {event =>
+        event match {
+          case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
+          case stageCompleted: SparkListenerStageCompleted =>
+            val execIds = Set[String]()
+            (1 to 2).foreach { _ =>
+              val execId = checkStageExecutorMetrics(lines(logIdx),
+                stageCompleted.stageInfo.stageId, expectedMetricsEvents)
+              execIds += execId
+              logIdx += 1
+            }
+            assert(execIds.size == 2) // check that each executor was logged
+            checkEvent(lines(logIdx), event)
+            logIdx += 1
+        case _ =>
+          checkEvent(lines(logIdx), event)
+          logIdx += 1
+        }
+      }
+    } finally {
+      logData.close()
+    }
+  }
+
+  private def createStageSubmittedEvent(stageId: Int) = {
+    SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
+      Seq.empty, Seq.empty, "details"))
+  }
+
+  private def createStageCompletedEvent(stageId: Int) = {
+    SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
+      Seq.empty, Seq.empty, "details"))
+  }
+
+  private def createExecutorAddedEvent(executorId: Int) = {
+    SparkListenerExecutorAdded(0L, executorId.toString,
+      new ExecutorInfo("host1", 1, Map.empty, Map.empty))
+  }
+
+  private def createExecutorRemovedEvent(executorId: Int) = {
+    SparkListenerExecutorRemoved(0L, executorId.toString, "test")
+  }
+
+  private def createExecutorMetricsUpdateEvent(
+      executorId: Int,
+      executorMetrics: ExecutorMetrics): SparkListenerExecutorMetricsUpdate = {
+    val taskMetrics = TaskMetrics.empty
+    taskMetrics.incDiskBytesSpilled(111)
+    taskMetrics.incMemoryBytesSpilled(222)
+    val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
+    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, Some(executorMetrics))
+  }
+
+  /** Check that the Spark history log line matches the expected event. */
+  private def checkEvent(line: String, event: SparkListenerEvent): Unit = {
+    assert(line.contains(event.getClass.toString.split("\\.").last))
+    val parsed = JsonProtocol.sparkEventFromJson(parse(line))
+    assert(parsed.getClass === event.getClass)
+    (event, parsed) match {
+      case (expected: SparkListenerStageSubmitted, actual: SparkListenerStageSubmitted) =>
+        // accumulables can be different, so only check the stage Id
+        assert(expected.stageInfo.stageId == actual.stageInfo.stageId)
+      case (expected: SparkListenerStageCompleted, actual: SparkListenerStageCompleted) =>
+        // accumulables can be different, so only check the stage Id
+        assert(expected.stageInfo.stageId == actual.stageInfo.stageId)
+      case (expected: SparkListenerEvent, actual: SparkListenerEvent) =>
+        assert(expected === actual)
+    }
+  }
+
+  /**
+   * Check that the Spark history log line is an StageExecutorMetrics event, and matches the
+   * expected value for the stage and executor.
+   *
+   * @param line the Spark history log line
+   * @param stageId the stage ID the ExecutorMetricsUpdate is associated with
+   * @param expectedEvents map of expected ExecutorMetricsUpdate events, for (stageId, executorId)
+   */
+  private def checkStageExecutorMetrics(
+      line: String,
+      stageId: Int,
+      expectedEvents: Map[(Int, String), SparkListenerStageExecutorMetrics]): String = {
+    JsonProtocol.sparkEventFromJson(parse(line)) match {
+      case executorMetrics: SparkListenerStageExecutorMetrics =>
+          expectedEvents.get((stageId, executorMetrics.execId)) match {
+            case Some(expectedMetrics) =>
+              assert(executorMetrics.execId === expectedMetrics.execId)
+              assert(executorMetrics.stageId === expectedMetrics.stageId)
+              assert(executorMetrics.stageAttemptId === expectedMetrics.stageAttemptId)
+              ExecutorMetricType.metricToOffset.foreach { metric =>
+                assert(executorMetrics.executorMetrics.getMetricValue(metric._1) ===
+                  expectedMetrics.executorMetrics.getMetricValue(metric._1))
+              }
+            case None =>
+              assert(false)
+        }
+        executorMetrics.execId
+      case _ =>
+        fail("expecting SparkListenerStageExecutorMetrics")
+    }
+  }
+
   private def readLines(in: InputStream): Seq[String] = {
     Source.fromInputStream(in).getLines().toSeq
   }
@@ -291,14 +543,15 @@ object EventLoggingListenerSuite {
   /** Get a SparkConf with event logging enabled. */
   def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None): SparkConf = {
     val conf = new SparkConf
-    conf.set("spark.eventLog.enabled", "true")
-    conf.set("spark.eventLog.logBlockUpdates.enabled", "true")
-    conf.set("spark.eventLog.testing", "true")
-    conf.set("spark.eventLog.dir", logDir.toString)
+    conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_BLOCK_UPDATES, true)
+    conf.set(EVENT_LOG_TESTING, true)
+    conf.set(EVENT_LOG_DIR, logDir.toString)
     compressionCodec.foreach { codec =>
-      conf.set("spark.eventLog.compress", "true")
-      conf.set("spark.io.compression.codec", codec)
+      conf.set(EVENT_LOG_COMPRESS, true)
+      conf.set(EVENT_LOG_COMPRESSION_CODEC, codec)
     }
+    conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
     conf
   }
 

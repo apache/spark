@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
@@ -34,10 +33,19 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.ThreadUtils
+
+object SparkPlan {
+  /** The original [[LogicalPlan]] from which this [[SparkPlan]] is converted. */
+  val LOGICAL_PLAN_TAG = TreeNodeTag[LogicalPlan]("logical_plan")
+
+  /** The [[LogicalPlan]] inherited from its ancestor. */
+  val LOGICAL_PLAN_INHERITED_TAG = TreeNodeTag[LogicalPlan]("logical_plan_inherited")
+}
 
 /**
  * The base class for physical operators.
@@ -47,17 +55,15 @@ import org.apache.spark.util.ThreadUtils
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
   /**
-   * A handle to the SQL Context that was used to create this plan.   Since many operators need
+   * A handle to the SQL Context that was used to create this plan. Since many operators need
    * access to the sqlContext for RDD operations or configuration this field is automatically
    * populated by the query planning infrastructure.
    */
-  @transient
-  final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
+  @transient final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
 
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when SparkPlan nodes are created without the active sessions.
-  // So far, this only happens in the test cases.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.subexpressionEliminationEnabled
   } else {
@@ -69,8 +75,39 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
-    SparkSession.setActiveSession(sqlContext.sparkSession)
+    if (sqlContext != null) {
+      SparkSession.setActiveSession(sqlContext.sparkSession)
+    }
     super.makeCopy(newArgs)
+  }
+
+  /**
+   * @return The logical plan this plan is linked to.
+   */
+  def logicalLink: Option[LogicalPlan] =
+    getTagValue(SparkPlan.LOGICAL_PLAN_TAG)
+      .orElse(getTagValue(SparkPlan.LOGICAL_PLAN_INHERITED_TAG))
+
+  /**
+   * Set logical plan link recursively if unset.
+   */
+  def setLogicalLink(logicalPlan: LogicalPlan): Unit = {
+    setLogicalLink(logicalPlan, false)
+  }
+
+  private def setLogicalLink(logicalPlan: LogicalPlan, inherited: Boolean = false): Unit = {
+    // Stop at a descendant which is the root of a sub-tree transformed from another logical node.
+    if (inherited && getTagValue(SparkPlan.LOGICAL_PLAN_TAG).isDefined) {
+      return
+    }
+
+    val tag = if (inherited) {
+      SparkPlan.LOGICAL_PLAN_INHERITED_TAG
+    } else {
+      SparkPlan.LOGICAL_PLAN_TAG
+    }
+    setTagValue(tag, logicalPlan)
+    children.foreach(_.setLogicalLink(logicalPlan, true))
   }
 
   /**
@@ -250,7 +287,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
       val bos = new ByteArrayOutputStream()
       val out = new DataOutputStream(codec.compressedOutputStream(bos))
-      while (iter.hasNext && (n < 0 || count < n)) {
+      // `iter.hasNext` may produce one row and buffer it, we should only call it when the limit is
+      // not hit.
+      while ((n < 0 || count < n) && iter.hasNext) {
         val row = iter.next().asInstanceOf[UnsafeRow]
         out.writeInt(row.getSizeInBytes)
         row.writeToStream(out, buffer)
@@ -380,7 +419,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       inputSchema: Seq[Attribute],
       useSubexprElimination: Boolean = false): MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
-    GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
+    MutableProjection.create(expressions, inputSchema)
   }
 
   private def genInterpretedPredicate(
@@ -419,11 +458,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
-}
-
-object SparkPlan {
-  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 trait LeafExecNode extends SparkPlan {

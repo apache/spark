@@ -19,6 +19,8 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.execution.debug.codegenStringSeq
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SQLTestUtils
 
 class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
@@ -36,8 +38,12 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   override def afterAll(): Unit = {
-    spark.stop()
-    spark = null
+    try {
+      spark.stop()
+      spark = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
@@ -80,6 +86,20 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           conf.getConfString(StaticSQLConf.CODEGEN_CACHE_MAX_ENTRIES.key) == "300")
       }.collect()
       assert(checks.forall(_ == true))
+    }
+  }
+
+  test("SPARK-22219: refactor to control to generate comment") {
+    Seq(true, false).foreach { flag =>
+      withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString) {
+        val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
+          .queryExecution.executedPlan)
+        assert(res.length == 2)
+        assert(res.forall { case (_, code) =>
+          (code.contains("* Codegend pipeline") == flag) &&
+            (code.contains("// input[") == flag)
+        })
+      }
     }
   }
 }

@@ -166,7 +166,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
         if (_client != null) {
           message.sendWith(_client)
         } else {
-          assert(stopped == true)
+          assert(stopped)
         }
       } catch {
         case NonFatal(e) =>
