@@ -740,21 +740,31 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("OVERLAY function") {
-    assertEqual(
+    def assertOverlayPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
+
+    assertOverlayPlans(
       "SELECT OVERLAY('Spark SQL' PLACING '_' FROM 6)",
-        OneRowRelation().select('OVERLAY.function("Spark SQL", "_", 6))
+      Overlay(Literal("Spark SQL"), Literal("_"), Literal(6), Literal(Int.MaxValue))
     )
-    assertEqual(
+
+    assertOverlayPlans(
       "SELECT OVERLAY('Spark SQL' PLACING 'CORE' FROM 7)",
-        OneRowRelation().select('OVERLAY.function("Spark SQL", "CORE", 7))
+      Overlay(Literal("Spark SQL"), Literal("CORE"), Literal(7), Literal(Int.MaxValue))
     )
-    assertEqual(
+
+    assertOverlayPlans(
       "SELECT OVERLAY('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0)",
-      OneRowRelation().select('OVERLAY.function("Spark SQL", "ANSI ", 7, 0))
+      Overlay(Literal("Spark SQL"), Literal("ANSI "), Literal(7), Literal(0))
     )
-    assertEqual(
+
+    assertOverlayPlans(
       "SELECT OVERLAY('Spark SQL' PLACING 'tructured' FROM 2 FOR 4)",
-      OneRowRelation().select('OVERLAY.function("Spark SQL", "tructured", 2, 4))
+      Overlay(Literal("Spark SQL"), Literal("tructured"), Literal(2), Literal(4))
     )
   }
 
