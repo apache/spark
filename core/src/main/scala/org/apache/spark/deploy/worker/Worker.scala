@@ -29,18 +29,20 @@ import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 import scala.util.control.NonFatal
+
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
-import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceUtils.getOrDiscoverAllResources
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
@@ -54,8 +56,7 @@ private[deploy] class Worker(
     workDirPath: String = null,
     val conf: SparkConf,
     val securityMgr: SecurityManager,
-    resourceFile: Option[String] = None,
-    resourceDiscoveryScript: Map[String, String] = Map.empty,
+    resourceFileOpt: Option[String] = None,
     externalShuffleServiceSupplier: Supplier[ExternalShuffleService] = null)
   extends ThreadSafeRpcEndpoint with Logging {
 
@@ -226,29 +227,14 @@ private[deploy] class Worker(
     metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
   }
 
-  // TODO if we're starting up multi workers under the same host, discovery script won't work.
   private def setupWorkerResources(): Unit = {
     try {
-      resources = resourceFile.map { rFile =>
-//        ResourceDiscoverer.parseAllocatedFromJsonFile(rFile)
-        null
-      }.getOrElse {
-        resourceDiscoveryScript.map { case (rName, rScript) =>
-//          val resInfo = ResourceDiscoverer.getResourceInfo(rScript, rName,
-//            "SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT or (--resource-script)")
-          (rName, null)
-        }
-      }
+      resources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
     } catch {
       case e: Exception =>
         logError("Failed to setup worker resources: ", e)
         System.exit(1)
     }
-
-    logInfo("===============================================================================")
-    logInfo(s"Worker Resources:")
-    resources.foreach { case (k, v) => logInfo(s"$k -> $v") }
-    logInfo("===============================================================================")
   }
 
   /**
@@ -817,7 +803,7 @@ private[deploy] object Worker extends Logging {
     val args = new WorkerArguments(argStrings, conf)
     val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir, conf = conf,
-      resourceFile = args.resourceFile, resourceDiscoveryScript = args.resourceDiscoveryScript)
+      resourceFileOpt = conf.get(SPARK_WORKER_RESOURCE_FILE))
     // With external shuffle service enabled, if we request to launch multiple workers on one host,
     // we can only successfully launch the first worker and the rest fails, because with the port
     // bound, we may launch no more than one external shuffle service on each host.
@@ -843,8 +829,7 @@ private[deploy] object Worker extends Logging {
       workDir: String,
       workerNumber: Option[Int] = None,
       conf: SparkConf = new SparkConf,
-      resourceFile: Option[String] = None,
-      resourceDiscoveryScript: Map[String, String] = Map.empty): RpcEnv = {
+      resourceFileOpt: Option[String] = None): RpcEnv = {
     // scalastyle:on argcount
 
     // The LocalSparkCluster runs multiple local sparkWorkerX RPC Environments
@@ -853,8 +838,7 @@ private[deploy] object Worker extends Logging {
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
     val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL)
     rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
-      masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr,
-      resourceFile, resourceDiscoveryScript))
+      masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr, resourceFileOpt))
     rpcEnv
   }
 

@@ -163,25 +163,6 @@ You can optionally configure the cluster further by setting environment variable
     <td>Configuration properties that apply only to the worker in the form "-Dx=y" (default: none). See below for a list of possible options.</td>
   </tr>
   <tr>
-    <td><code>SPARK_WORKER_RESOURCE_FILE</code></td>
-    <td>
-    Path to resource file, which used to set up resources while worker starting up. The content
-    of resource file should be formatted like <code>[{"name": "gpu", "addresses": ["0","1"]}]</code>.
-    Note that, user should be responsible for configuring different resource addresses for multiple
-    workers on the same host.
-    </td>
-  </tr>
-  <tr>
-    <td><code>SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT</code></td>
-    <td>
-    Path to resource discovery scripts, which used to set up resources while worker starting up. Path should
-    be formatted like <code>gpu:/path1/to1/gpu-script.sh,fpga:/path2/to2/fpga-script.sh</code>. And the output
-    of the script should be formatted like <code>{"name": "gpu", "addresses": ["0","1"]}</code>.
-    Note that, user should be responsible for configuring different resource addresses for multiple
-    workers on the same host.
-    </td>
-    </tr>
-  <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
     <td>Memory to allocate to the Spark master and worker daemons themselves (default: 1g).</td>
   </tr>

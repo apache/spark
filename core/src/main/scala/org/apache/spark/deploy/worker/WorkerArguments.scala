@@ -36,8 +36,6 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   var memory = inferDefaultMemory()
   var masters: Array[String] = null
   var workDir: String = null
-  var resourceFile: Option[String] = None
-  var resourceDiscoveryScript: Map[String, String] = Map.empty
   var propertiesFile: String = null
 
   // Check for settings in environment variables
@@ -55,13 +53,6 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   }
   if (System.getenv("SPARK_WORKER_DIR") != null) {
     workDir = System.getenv("SPARK_WORKER_DIR")
-  }
-  if (System.getenv("SPARK_WORKER_RESOURCE_FILE") != null) {
-    resourceFile = Some(System.getenv("SPARK_WORKER_RESOURCE_FILE"))
-  }
-  if (System.getenv("SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT") != null) {
-    resourceDiscoveryScript = parseResourceDiscoveryScript(
-      System.getenv("SPARK_WORKER_RESOURCE_DISCOVERY_SCRIPT"))
   }
 
   parse(args.toList)
@@ -101,14 +92,6 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       workDir = value
       parse(tail)
 
-    case ("--resource-file") :: value :: tail =>
-      resourceFile = Some(value)
-      parse(tail)
-
-    case ("--resource-script") :: value :: tail =>
-      resourceDiscoveryScript = parseResourceDiscoveryScript(value)
-      parse(tail)
-
     case "--webui-port" :: IntParam(value) :: tail =>
       webUiPort = value
       parse(tail)
@@ -140,37 +123,24 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
    * Print usage and exit JVM with the given exit code.
    */
   def printUsageAndExit(exitCode: Int) {
-    // scalastyle:off
+    // scalastyle:off println
     System.err.println(
       "Usage: Worker [options] <master>\n" +
-      "\n" +
-      "Master must be a URL of the form spark://hostname:port\n" +
-      "\n" +
-      "Options:\n" +
-      "  -c CORES, --cores CORES       Number of cores to use\n" +
-      "  -m MEM, --memory MEM          Amount of memory to use (e.g. 1000M, 2G)\n" +
-      "  -d DIR, --work-dir DIR        Directory to run apps in (default: SPARK_HOME/work)\n" +
-      "  -i IP,  --ip IP               Hostname to listen on (deprecated, please use --host or -h)\n" +
-      "  -h HOST, --host HOST          Hostname to listen on\n" +
-      "  -p PORT, --port PORT          Port to listen on (default: random)\n" +
-      "  --webui-port PORT             Port for web UI (default: 8081)\n" +
-      "  --properties-file FILE        Path to a custom Spark properties file.\n" +
-      "                                Default is conf/spark-defaults.conf.\n" +
-      "  --resource-file RES-FILE      Path to resources(e.g. gpu/fpga) file, default is None.\n" +
-      "  --resource-script RES-SCRIPT  Path to resources(e.g. gpu/fpga) script, default is None.")
-    // scalastyle:on
+        "\n" +
+        "Master must be a URL of the form spark://hostname:port\n" +
+        "\n" +
+        "Options:\n" +
+        "  -c CORES, --cores CORES  Number of cores to use\n" +
+        "  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)\n" +
+        "  -d DIR, --work-dir DIR   Directory to run apps in (default: SPARK_HOME/work)\n" +
+        "  -i HOST, --ip IP         Hostname to listen on (deprecated, please use --host or -h)\n" +
+        "  -h HOST, --host HOST     Hostname to listen on\n" +
+        "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
+        "  --webui-port PORT        Port for web UI (default: 8081)\n" +
+        "  --properties-file FILE   Path to a custom Spark properties file.\n" +
+        "                           Default is conf/spark-defaults.conf.")
+    // scalastyle:on println
     System.exit(exitCode)
-  }
-
-  /**
-   * @param scripts e.g. gpu:/path1/to1/gpu-script.sh,fpga:/path2/to2/fpga-script.sh
-   */
-  private def parseResourceDiscoveryScript(scripts: String): Map[String, String] = {
-    scripts.split(",").map { name2Script =>
-      val rName = name2Script.split(":")(0)
-      val rScript = name2Script.split(":")(1)
-      (rName, rScript)
-    }.toMap
   }
 
   def inferDefaultCores(): Int = {
@@ -198,7 +168,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
         totalMb = 2*1024
         // scalastyle:off println
         System.out.println("Failed to get total physical memory. Using " + totalMb + " MB")
-        // scalastyle:on println
+      // scalastyle:on println
     }
     // Leave out 1 GB for the operating system, but don't return a negative memory size
     math.max(totalMb - 1024, Utils.DEFAULT_DRIVER_MEM_MB)
