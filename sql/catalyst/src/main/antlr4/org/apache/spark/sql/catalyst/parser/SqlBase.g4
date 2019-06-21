@@ -582,12 +582,12 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
-      FROM argument+=expression ')'                                                            #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
+    | TRIM '(' trimOption=(BOTH | LEADING | TRAILING) (trimStr=valueExpression)?
+       FROM srcStr=valueExpression ')'                                                         #trim
     ;
 
 constant
@@ -752,7 +752,7 @@ nonReserved
     | UNBOUNDED | WHEN
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
     | DIRECTORY
-    | BOTH | LEADING | TRAILING
+    | TRIM | BOTH | LEADING | TRAILING
     ;
 
 SELECT: 'SELECT';
@@ -866,6 +866,7 @@ COMMIT: 'COMMIT';
 ROLLBACK: 'ROLLBACK';
 MACRO: 'MACRO';
 IGNORE: 'IGNORE';
+TRIM: 'TRIM';
 BOTH: 'BOTH';
 LEADING: 'LEADING';
 TRAILING: 'TRAILING';
