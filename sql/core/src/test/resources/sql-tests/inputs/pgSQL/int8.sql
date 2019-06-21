@@ -185,7 +185,7 @@ SELECT CAST(float('36854775807.0') AS bigint);
 SELECT CAST(double('922337203685477580700.0') AS bigint);
 
 
--- ]SPARK-28027] Missing some mathematical operators
+-- [SPARK-28027] Missing some mathematical operators
 -- bit operations
 
 -- SELECT q1, q2, q1 & q2 AS `and`, q1 | q2 AS `or`, q1 # q2 AS `xor`, ~q1 AS `not` FROM INT8_TBL;
