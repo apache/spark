@@ -741,9 +741,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   //  overflow if the files list is stored in a recursive data structure
   //  This test is ignored because it takes long to run (~3 min)
   ignore("SPARK-27100 stack overflow: read data with large partitions") {
-    val nCount = 12000
+    val nCount = 20000
     // reshuffle data so that many small files are created
-    val nShufflePartitions = 6000
+    val nShufflePartitions = 10000
     // and with one table partition, should result in 6000 files in one partition
     val nPartitions = 1
     val nBuckets = 2
