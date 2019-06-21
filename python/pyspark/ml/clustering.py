@@ -16,6 +16,7 @@
 #
 
 import sys
+import warnings
 
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
@@ -87,8 +88,16 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("clusterSizes")
 
+    @property
+    @since("2.4.0")
+    def numIter(self):
+        """
+        Number of iterations.
+        """
+        return self._call_java("numIter")
 
-class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
+
+class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by GaussianMixture.
 
@@ -117,22 +126,13 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
     @property
     @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model
-        instance.
-        """
-        return self._call_java("hasSummary")
-
-    @property
-    @since("2.1.0")
     def summary(self):
         """
         Gets summary (e.g. cluster assignments, cluster sizes) of the model trained on the
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return GaussianMixtureSummary(self._call_java("summary"))
+            return GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -303,10 +303,18 @@ class KMeansSummary(ClusteringSummary):
 
     .. versionadded:: 2.1.0
     """
-    pass
+
+    @property
+    @since("2.4.0")
+    def trainingCost(self):
+        """
+        K-means cost (sum of squared distances to the nearest centroid for all points in the
+        training dataset). This is equivalent to sklearn's inertia.
+        """
+        return self._call_java("trainingCost")
 
 
-class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by KMeans.
 
@@ -318,22 +326,6 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self._call_java("clusterCenters")]
 
-    @since("2.0.0")
-    def computeCost(self, dataset):
-        """
-        Return the K-means cost (sum of squared distances of points to their nearest center)
-        for this model on the given data.
-        """
-        return self._call_java("computeCost", dataset)
-
-    @property
-    @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model instance.
-        """
-        return self._call_java("hasSummary")
-
     @property
     @since("2.1.0")
     def summary(self):
@@ -342,15 +334,15 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return KMeansSummary(self._call_java("summary"))
+            return KMeansSummary(super(KMeansModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
 
 @inherit_doc
-class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
-             JavaMLWritable, JavaMLReadable):
+class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol, HasMaxIter,
+             HasTol, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     K-means clustering with a k-means++ like initialization mode
     (the k-means|| algorithm by Bahmani et al).
@@ -364,8 +356,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
-    >>> model.computeCost(df)
-    2.000...
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[0].prediction == rows[1].prediction
@@ -379,6 +369,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     2
     >>> summary.clusterSizes
     [2, 2]
+    >>> summary.trainingCost
+    2.0
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
@@ -406,9 +398,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
                      typeConverter=TypeConverters.toString)
     initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
                       "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
-    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "The distance measure. " +
-                            "Supported options: 'euclidean' and 'cosine'.",
-                            typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -501,7 +490,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         return self.getOrDefault(self.distanceMeasure)
 
 
-class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by BisectingKMeans.
 
@@ -518,16 +507,15 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Computes the sum of squared distances between the input points
         and their corresponding cluster centers.
-        """
-        return self._call_java("computeCost", dataset)
 
-    @property
-    @since("2.1.0")
-    def hasSummary(self):
+        ..note:: Deprecated in 3.0.0. It will be removed in future versions. Use
+           ClusteringEvaluator instead. You can also get the cost on the training dataset in the
+           summary.
         """
-        Indicates whether a training summary exists for this model instance.
-        """
-        return self._call_java("hasSummary")
+        warnings.warn("Deprecated in 3.0.0. It will be removed in future versions. Use "
+                      "ClusteringEvaluator instead. You can also get the cost on the training "
+                      "dataset in the summary.", DeprecationWarning)
+        return self._call_java("computeCost", dataset)
 
     @property
     @since("2.1.0")
@@ -537,15 +525,15 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return BisectingKMeansSummary(self._call_java("summary"))
+            return BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
 
 @inherit_doc
-class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
-                      JavaMLWritable, JavaMLReadable):
+class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol,
+                      HasMaxIter, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
     techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
@@ -566,7 +554,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> len(centers)
     2
     >>> model.computeCost(df)
-    2.000...
+    2.0
     >>> model.hasSummary
     True
     >>> summary = model.summary
@@ -574,6 +562,8 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     2
     >>> summary.clusterSizes
     [2, 2]
+    >>> summary.trainingCost
+    2.000...
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[0].prediction == rows[1].prediction
@@ -585,6 +575,8 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> bkm2 = BisectingKMeans.load(bkm_path)
     >>> bkm2.getK()
     2
+    >>> bkm2.getDistanceMeasure()
+    'euclidean'
     >>> model_path = temp_path + "/bkm_model"
     >>> model.save(model_path)
     >>> model2 = BisectingKMeansModel.load(model_path)
@@ -607,10 +599,10 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
-                 seed=None, k=4, minDivisibleClusterSize=1.0):
+                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean"):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                 seed=None, k=4, minDivisibleClusterSize=1.0)
+                 seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean")
         """
         super(BisectingKMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.BisectingKMeans",
@@ -622,10 +614,10 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     @keyword_only
     @since("2.0.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20,
-                  seed=None, k=4, minDivisibleClusterSize=1.0):
+                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean"):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", maxIter=20, \
-                  seed=None, k=4, minDivisibleClusterSize=1.0)
+                  seed=None, k=4, minDivisibleClusterSize=1.0, distanceMeasure="euclidean")
         Sets params for BisectingKMeans.
         """
         kwargs = self._input_kwargs
@@ -659,6 +651,20 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         return self.getOrDefault(self.minDivisibleClusterSize)
 
+    @since("2.4.0")
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    @since("2.4.0")
+    def getDistanceMeasure(self):
+        """
+        Gets the value of `distanceMeasure` or its default value.
+        """
+        return self.getOrDefault(self.distanceMeasure)
+
     def _create_model(self, java_model):
         return BisectingKMeansModel(java_model)
 
@@ -671,7 +677,15 @@ class BisectingKMeansSummary(ClusteringSummary):
 
     .. versionadded:: 2.1.0
     """
-    pass
+
+    @property
+    @since("3.0.0")
+    def trainingCost(self):
+        """
+        Sum of squared distances to the nearest centroid for all points in the training dataset.
+        This is equivalent to sklearn's inertia.
+        """
+        return self._call_java("trainingCost")
 
 
 @inherit_doc
@@ -997,7 +1011,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setOptimizer(self, value):
         """
         Sets the value of :py:attr:`optimizer`.
-        Currenlty only support 'em' and 'online'.
+        Currently only support 'em' and 'online'.
 
         >>> algo = LDA().setOptimizer("em")
         >>> algo.getOptimizer()
@@ -1164,34 +1178,34 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     .. note:: Experimental
 
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
-    <a href=http://www.icml2010.org/papers/387.pdf>Lin and Cohen</a>. From the abstract:
-    PIC finds a very low-dimensional embedding of a dataset using truncated power
+    `Lin and Cohen <http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>`_. From the
+    abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
     iteration on a normalized pair-wise similarity matrix of the data.
 
     This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
     to run the PowerIterationClustering algorithm.
 
-    .. seealso:: `Wikipedia on Spectral clustering \
-    <http://en.wikipedia.org/wiki/Spectral_clustering>`_
+    .. seealso:: `Wikipedia on Spectral clustering
+        <http://en.wikipedia.org/wiki/Spectral_clustering>`_
 
-   >>> data = [(1, 0, 0.5), \
-               (2, 0, 0.5), (2, 1, 0.7), \
-               (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9), \
-               (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1), \
-               (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
-    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight")
+    >>> data = [(1, 0, 0.5),
+    ...         (2, 0, 0.5), (2, 1, 0.7),
+    ...         (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9),
+    ...         (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1),
+    ...         (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
+    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight").repartition(1)
     >>> pic = PowerIterationClustering(k=2, maxIter=40, weightCol="weight")
     >>> assignments = pic.assignClusters(df)
     >>> assignments.sort(assignments.id).show(truncate=False)
     +---+-------+
     |id |cluster|
     +---+-------+
-    |0  |1      |
-    |1  |1      |
-    |2  |1      |
-    |3  |1      |
-    |4  |1      |
-    |5  |0      |
+    |0  |0      |
+    |1  |0      |
+    |2  |0      |
+    |3  |0      |
+    |4  |0      |
+    |5  |1      |
     +---+-------+
     ...
     >>> pic_path = temp_path + "/pic"
@@ -1332,8 +1346,14 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
 
 if __name__ == "__main__":
     import doctest
+    import numpy
     import pyspark.ml.clustering
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.ml.clustering.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:

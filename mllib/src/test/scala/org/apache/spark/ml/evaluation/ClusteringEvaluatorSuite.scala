@@ -21,10 +21,10 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.DataFrame
 
 
 class ClusteringEvaluatorSuite
@@ -32,11 +32,18 @@ class ClusteringEvaluatorSuite
 
   import testImplicits._
 
-  @transient var irisDataset: Dataset[_] = _
+  @transient var irisDataset: DataFrame = _
+  @transient var newIrisDataset: DataFrame = _
+  @transient var newIrisDatasetD: DataFrame = _
+  @transient var newIrisDatasetF: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     irisDataset = spark.read.format("libsvm").load("../data/mllib/iris_libsvm.txt")
+    val datasets = MLTestingUtils.generateArrayFeatureDataset(irisDataset)
+    newIrisDataset = datasets._1
+    newIrisDatasetD = datasets._2
+    newIrisDatasetF = datasets._3
   }
 
   test("params") {
@@ -66,6 +73,9 @@ class ClusteringEvaluatorSuite
         .setPredictionCol("label")
 
     assert(evaluator.evaluate(irisDataset) ~== 0.6564679231 relTol 1e-5)
+    assert(evaluator.evaluate(newIrisDataset) ~== 0.6564679231 relTol 1e-5)
+    assert(evaluator.evaluate(newIrisDatasetD) ~== 0.6564679231 relTol 1e-5)
+    assert(evaluator.evaluate(newIrisDatasetF) ~== 0.6564679231 relTol 1e-5)
   }
 
   /*
@@ -85,6 +95,9 @@ class ClusteringEvaluatorSuite
       .setDistanceMeasure("cosine")
 
     assert(evaluator.evaluate(irisDataset) ~== 0.7222369298 relTol 1e-5)
+    assert(evaluator.evaluate(newIrisDataset) ~== 0.7222369298 relTol 1e-5)
+    assert(evaluator.evaluate(newIrisDatasetD) ~== 0.7222369298 relTol 1e-5)
+    assert(evaluator.evaluate(newIrisDatasetF) ~== 0.7222369298 relTol 1e-5)
   }
 
   test("number of clusters must be greater than one") {
@@ -121,4 +134,15 @@ class ClusteringEvaluatorSuite
     // with wrong metadata the evaluator throws an Exception
     intercept[SparkException](evaluator.evaluate(dfWrong))
   }
+
+  test("SPARK-27896: single-element clusters should have silhouette score of 0") {
+    val twoSingleItemClusters =
+      irisDataset.where($"label" === 0.0).limit(1).union(
+        irisDataset.where($"label" === 1.0).limit(1))
+    val evaluator = new ClusteringEvaluator()
+      .setFeaturesCol("features")
+      .setPredictionCol("label")
+    assert(evaluator.evaluate(twoSingleItemClusters) === 0.0)
+  }
+
 }

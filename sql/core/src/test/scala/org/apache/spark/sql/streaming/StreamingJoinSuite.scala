@@ -350,7 +350,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
     withTempDir { tempDir =>
       val queryId = UUID.randomUUID
       val opId = 0
-      val path = Utils.createDirectory(tempDir.getAbsolutePath, Random.nextString(10)).toString
+      val path = Utils.createDirectory(tempDir.getAbsolutePath, Random.nextFloat.toString).toString
       val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L, 5)
 
       implicit val sqlContext = spark.sqlContext
@@ -403,6 +403,20 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(input2, 1, 5, 10),
       AddData(input3, 5, 10),
       CheckNewAnswer((5, 10, 5, 15, 5, 25)))
+  }
+
+  test("streaming join should require HashClusteredDistribution from children") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF.select('value as 'a, 'value * 2 as 'b)
+    val df2 = input2.toDF.select('value as 'a, 'value * 2 as 'b).repartition('b)
+    val joined = df1.join(df2, Seq("a", "b")).select('a)
+
+    testStream(joined)(
+      AddData(input1, 1.to(1000): _*),
+      AddData(input2, 1.to(1000): _*),
+      CheckAnswer(1.to(1000): _*))
   }
 }
 

@@ -39,8 +39,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val content =
@@ -58,7 +57,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         </h4> ++
         generateSQLStatsTable(request, sessionStat.sessionId)
       }
-    UIUtils.headerSparkPage(request, "JDBC/ODBC Session", content, parent, Some(5000))
+    UIUtils.headerSparkPage(request, "JDBC/ODBC Session", content, parent)
   }
 
   /** Generate basic stats of the thrift server program */
@@ -86,7 +85,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
-          <a href={"%s/jobs/job?id=%s".format(
+          <a href={"%s/jobs/job/?id=%s".format(
               UIUtils.prependBaseUri(request, parent.basePath), id)}>
             [{id}]
           </a>

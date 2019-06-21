@@ -19,7 +19,6 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.lang.annotation.Annotation
 import java.lang.reflect.Type
-import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, SimpleTimeZone}
 import javax.ws.rs.Produces
@@ -49,7 +48,7 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
   }
   mapper.registerModule(com.fasterxml.jackson.module.scala.DefaultScalaModule)
   mapper.enable(SerializationFeature.INDENT_OUTPUT)
-  mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+  mapper.setSerializationInclusion(JsonInclude.Include.NON_ABSENT)
   mapper.setDateFormat(JacksonMessageWriter.makeISODateFormat)
 
   override def isWriteable(
@@ -68,10 +67,7 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
       mediaType: MediaType,
       multivaluedMap: MultivaluedMap[String, AnyRef],
       outputStream: OutputStream): Unit = {
-    t match {
-      case ErrorWrapper(err) => outputStream.write(err.getBytes(StandardCharsets.UTF_8))
-      case _ => mapper.writeValue(outputStream, t)
-    }
+    mapper.writeValue(outputStream, t)
   }
 
   override def getSize(

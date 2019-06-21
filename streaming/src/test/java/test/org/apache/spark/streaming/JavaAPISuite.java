@@ -1355,7 +1355,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         List<String> out = new ArrayList<>();
         out.add(in + "1");
         out.add(in + "2");
-        return out;
+        return out.iterator();
       });
 
     JavaTestUtils.attachTestOutputStream(flatMapped);

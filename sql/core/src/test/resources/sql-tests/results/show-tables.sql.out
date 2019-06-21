@@ -63,11 +63,14 @@ SHOW TABLES
 -- !query 7 schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query 7 output
+aggtest
 arraydata
 mapdata
+onek
 show_t1
 show_t2
 show_t3
+tenk1
 testdata
 
 
@@ -76,11 +79,14 @@ SHOW TABLES IN showdb
 -- !query 8 schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query 8 output
+aggtest
 arraydata
 mapdata
+onek
 show_t1
 show_t2
 show_t3
+tenk1
 testdata
 
 
@@ -178,6 +184,8 @@ struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
 showdb	show_t1	false	Partition Values: [c=Us, d=1]
 Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
+Created Time [not included in comparison]
+Last Access [not included in comparison]
 
 
 -- !query 15

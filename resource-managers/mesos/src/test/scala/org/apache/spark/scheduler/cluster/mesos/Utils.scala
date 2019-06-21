@@ -25,8 +25,9 @@ import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.{Range => MesosRange, Ranges, Scalar}
 import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.protobuf.ByteString
-import org.mockito.{ArgumentCaptor, Matchers}
-import org.mockito.Mockito._
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{times, verify}
 
 import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 
@@ -84,15 +85,15 @@ object Utils {
   def verifyTaskLaunched(driver: SchedulerDriver, offerId: String): List[TaskInfo] = {
     val captor = ArgumentCaptor.forClass(classOf[java.util.Collection[TaskInfo]])
     verify(driver, times(1)).launchTasks(
-      Matchers.eq(Collections.singleton(createOfferId(offerId))),
+      meq(Collections.singleton(createOfferId(offerId))),
       captor.capture())
     captor.getValue.asScala.toList
   }
 
   def verifyTaskNotLaunched(driver: SchedulerDriver, offerId: String): Unit = {
     verify(driver, times(0)).launchTasks(
-      Matchers.eq(Collections.singleton(createOfferId(offerId))),
-      Matchers.any(classOf[java.util.Collection[TaskInfo]]))
+      meq(Collections.singleton(createOfferId(offerId))),
+      any(classOf[java.util.Collection[TaskInfo]]))
   }
 
   def createOfferId(offerId: String): OfferID = {

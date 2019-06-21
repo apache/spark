@@ -19,6 +19,8 @@ package org.apache
 
 import java.util.Properties
 
+import org.apache.spark.util.VersionUtils
+
 /**
  * Core Spark functionality. [[org.apache.spark.SparkContext]] serves as the main entry point to
  * Spark, while [[org.apache.spark.rdd.RDD]] is the data type representing a distributed collection,
@@ -89,6 +91,7 @@ package object spark {
   }
 
   val SPARK_VERSION = SparkBuildInfo.spark_version
+  val SPARK_VERSION_SHORT = VersionUtils.shortVersion(SparkBuildInfo.spark_version)
   val SPARK_BRANCH = SparkBuildInfo.spark_branch
   val SPARK_REVISION = SparkBuildInfo.spark_revision
   val SPARK_BUILD_USER = SparkBuildInfo.spark_build_user

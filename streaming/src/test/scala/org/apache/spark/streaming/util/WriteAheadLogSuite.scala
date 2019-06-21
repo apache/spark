@@ -26,13 +26,13 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{eq => meq, _}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
+import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
@@ -83,7 +83,7 @@ abstract class CommonWriteAheadLogTests(
 
     val logDirectoryPath = new Path(testDir)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
-    assert(fileSystem.exists(logDirectoryPath) === true)
+    assert(fileSystem.exists(logDirectoryPath))
 
     // Read data using manager and verify
     val readData = readDataUsingWriteAheadLog(testDir, closeFileAfterWrite, allowBatching)
@@ -135,7 +135,7 @@ abstract class CommonWriteAheadLogTests(
     if (waitForCompletion) {
       assert(getLogFilesInDirectory(testDir).size < logFiles.size)
     } else {
-      eventually(Eventually.timeout(1 second), interval(10 milliseconds)) {
+      eventually(Eventually.timeout(1.second), interval(10.milliseconds)) {
         assert(getLogFilesInDirectory(testDir).size < logFiles.size)
       }
     }
@@ -504,7 +504,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // The queue.take() immediately takes the 3, and there is nothing left in the queue at that
     // moment. Then the promise blocks the writing of 3. The rest get queued.
     writeAsync(batchedWal, event1, 3L)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       assert(blockingWal.isBlocked)
       assert(batchedWal.invokePrivate(queueLength()) === 0)
     }
@@ -514,12 +514,12 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // we would like event 5 to be written before event 4 in order to test that they get
     // sorted before being aggregated
     writeAsync(batchedWal, event5, 12L)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       assert(blockingWal.isBlocked)
       assert(batchedWal.invokePrivate(queueLength()) === 3)
     }
     writeAsync(batchedWal, event4, 10L)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
       assert(batchedWal.invokePrivate(queueLength()) === 4)
     }
@@ -528,7 +528,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val buffer = wrapArrayArrayByte(Array(event1))
     val queuedEvents = Set(event2, event3, event4, event5)
 
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       assert(batchedWal.invokePrivate(queueLength()) === 0)
       verify(wal, times(1)).write(meq(buffer), meq(3L))
       // the file name should be the timestamp of the last record, as events should be naturally
@@ -559,7 +559,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // The queue.take() immediately takes the 3, and there is nothing left in the queue at that
     // moment. Then the promise blocks the writing of 3. The rest get queued.
     val promise1 = writeAsync(batchedWal, event1, 3L)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       assert(blockingWal.isBlocked)
       assert(batchedWal.invokePrivate(queueLength()) === 0)
     }
@@ -567,7 +567,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val promise2 = writeAsync(batchedWal, event2, 5L)
     val promise3 = writeAsync(batchedWal, event3, 8L)
 
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       assert(walBatchingThreadPool.getActiveCount === 3)
       assert(blockingWal.isBlocked)
       assert(batchedWal.invokePrivate(queueLength()) === 2) // event1 is being written
@@ -576,7 +576,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val writePromises = Seq(promise1, promise2, promise3)
 
     batchedWal.close()
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       assert(writePromises.forall(_.isCompleted))
       assert(writePromises.forall(_.future.value.get.isFailure)) // all should have failed
     }
@@ -772,7 +772,7 @@ object WriteAheadLogSuite {
 
     override def write(record: ByteBuffer, time: Long): WriteAheadLogRecordHandle = {
       isWriteCalled = true
-      eventually(Eventually.timeout(2 second)) {
+      eventually(Eventually.timeout(2.second)) {
         assert(!blockWrite)
       }
       wal.write(record, time)

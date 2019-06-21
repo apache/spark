@@ -50,7 +50,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         generateSessionStatsTable(request) ++
         generateSQLStatsTable(request)
       }
-    UIUtils.headerSparkPage(request, "JDBC/ODBC Server", content, parent, Some(5000))
+    UIUtils.headerSparkPage(request, "JDBC/ODBC Server", content, parent)
   }
 
   /** Generate basic stats of the thrift server program */
@@ -76,7 +76,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
-          <a href={"%s/jobs/job?id=%s".format(
+          <a href={"%s/jobs/job/?id=%s".format(
             UIUtils.prependBaseUri(request, parent.basePath), id)}>
             [{id}]
           </a>
@@ -147,7 +147,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
-        val sessionLink = "%s/%s/session?id=%s".format(
+        val sessionLink = "%s/%s/session/?id=%s".format(
           UIUtils.prependBaseUri(request, parent.basePath), parent.prefix, session.sessionId)
         <tr>
           <td> {session.userName} </td>

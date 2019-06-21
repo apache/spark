@@ -18,6 +18,12 @@ grammar SqlBase;
 
 @members {
   /**
+   * When false, INTERSECT is given the greater precedence over the other set
+   * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
+   */
+  public boolean legacy_setops_precedence_enbled = false;
+
+  /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
    *
@@ -38,6 +44,11 @@ grammar SqlBase;
       return true;
     }
   }
+
+  /**
+   * When true, ANSI SQL parsing mode is enabled.
+   */
+  public boolean ansi = false;
 }
 
 singleStatement
@@ -50,6 +61,10 @@ singleExpression
 
 singleTableIdentifier
     : tableIdentifier EOF
+    ;
+
+singleMultipartIdentifier
+    : multipartIdentifier EOF
     ;
 
 singleFunctionIdentifier
@@ -66,15 +81,20 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
-    | USE db=identifier                                                #use
-    | CREATE DATABASE (IF NOT EXISTS)? identifier
-        (COMMENT comment=STRING)? locationSpec?
-        (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
-    | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
-    | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | ctes? dmlStatementNoWith                                         #dmlStatement
+    | USE db=errorCapturingIdentifier                                  #use
+    | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
+        ((COMMENT comment=STRING) |
+         locationSpec |
+         (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
+    | ALTER database db=errorCapturingIdentifier
+        SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
+    | DROP database (IF EXISTS)? db=errorCapturingIdentifier
+        (RESTRICT | CASCADE)?                                          #dropDatabase
+    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
-        (PARTITIONED BY partitionColumnNames=identifierList) |
+        (PARTITIONED BY partitioning=transformList) |
         bucketSpec |
         locationSpec |
         (COMMENT comment=STRING) |
@@ -82,7 +102,8 @@ statement
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
         ((COMMENT comment=STRING) |
-        (PARTITIONED BY '(' partitionColumns=colTypeList ')') |
+        (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
+        PARTITIONED BY partitionColumnNames=identifierList) |
         bucketSpec |
         skewSpec |
         rowFormat |
@@ -93,17 +114,31 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq)?                      #analyze
-    | ALTER TABLE tableIdentifier
-        ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
+        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+    | ALTER TABLE multipartIdentifier
+        ADD (COLUMN | COLUMNS)
+        columns=qualifiedColTypeWithPositionList                       #addTableColumns
+    | ALTER TABLE multipartIdentifier
+        ADD (COLUMN | COLUMNS)
+        '(' columns=qualifiedColTypeWithPositionList ')'               #addTableColumns
+    | ALTER TABLE multipartIdentifier
+        RENAME COLUMN from=qualifiedName TO to=identifier              #renameTableColumn
+    | ALTER TABLE multipartIdentifier
+        DROP (COLUMN | COLUMNS) '(' columns=qualifiedNameList ')'      #dropTableColumns
+    | ALTER TABLE multipartIdentifier
+        DROP (COLUMN | COLUMNS) columns=qualifiedNameList              #dropTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
         RENAME TO to=tableIdentifier                                   #renameTable
-    | ALTER (TABLE | VIEW) tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
-    | ALTER (TABLE | VIEW) tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
+    | ALTER TABLE multipartIdentifier
+        (ALTER | CHANGE) COLUMN? qualifiedName
+        (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
     | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN? identifier colType colPosition?                 #changeColumn
+        CHANGE COLUMN?
+        colName=errorCapturingIdentifier colType colPosition?          #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -118,15 +153,18 @@ statement
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
     | ALTER VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
-    | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
+    | ALTER TABLE multipartIdentifier SET locationSpec                 #setTableLocation
+    | ALTER TABLE tableIdentifier partitionSpec SET locationSpec       #setPartitionLocation
     | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
-    | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
-    | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
+    | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
+    | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF NOT EXISTS)? tableIdentifier
-        identifierCommentList? (COMMENT STRING)?
-        (PARTITIONED ON identifierList)?
-        (TBLPROPERTIES tablePropertyList)? AS query                    #createView
+        identifierCommentList?
+        ((COMMENT STRING) |
+         (PARTITIONED ON identifierList) |
+         (TBLPROPERTIES tablePropertyList))*
+        AS query                                                       #createView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
@@ -137,26 +175,27 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
-    | SHOW TABLES ((FROM | IN) db=identifier)?
+    | SHOW TABLES ((FROM | IN) db=errorCapturingIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
-    | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
+    | SHOW TABLE EXTENDED ((FROM | IN) db=errorCapturingIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
-    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
-        ((FROM | IN) db=identifier)?                                   #showColumns
+        ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
+    | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
-    | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
+    | CACHE LAZY? TABLE tableIdentifier
+        (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
     | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
@@ -219,7 +258,7 @@ unsupportedHiveNativeCommands
     ;
 
 createTableHeader
-    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? tableIdentifier
+    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? multipartIdentifier
     ;
 
 bucketSpec
@@ -261,6 +300,11 @@ partitionVal
     : identifier (EQ constant)?
     ;
 
+database
+    : DATABASE
+    | SCHEMA
+    ;
+
 describeFuncName
     : qualifiedName
     | STRING
@@ -278,7 +322,7 @@ ctes
     ;
 
 namedQuery
-    : name=identifier AS? '(' query ')'
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? '(' query ')'
     ;
 
 tableProvider
@@ -331,9 +375,13 @@ resource
     : identifier STRING
     ;
 
+dmlStatementNoWith
+    : insertInto queryTerm queryOrganization                                       #singleInsertQuery
+    | fromClause multiInsertQueryBody+                                             #multiInsertQuery
+    ;
+
 queryNoWith
-    : insertInto? queryTerm queryOrganization                                              #singleInsertQuery
-    | fromClause multiInsertQueryBody+                                                     #multiInsertQuery
+    : queryTerm queryOrganization
     ;
 
 queryOrganization
@@ -341,24 +389,28 @@ queryOrganization
       (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
       (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
-      windows?
+      windowClause?
       (LIMIT (ALL | limit=expression))?
     ;
 
 multiInsertQueryBody
-    : insertInto?
-      querySpecification
-      queryOrganization
+    : insertInto fromStatementBody
     ;
 
 queryTerm
-    : queryPrimary                                                                         #queryTermDefault
-    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+    : queryPrimary                                                                       #queryTermDefault
+    | left=queryTerm {legacy_setops_precedence_enbled}?
+        operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
+        operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
+        operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
 queryPrimary
     : querySpecification                                                    #queryPrimaryDefault
-    | TABLE tableIdentifier                                                 #table
+    | fromStatement                                                         #fromStmt
+    | TABLE multipartIdentifier                                             #table
     | inlineTable                                                           #inlineTableDefault1
     | '(' queryNoWith  ')'                                                  #subquery
     ;
@@ -367,25 +419,58 @@ sortItem
     : expression ordering=(ASC | DESC)? (NULLS nullOrder=(LAST | FIRST))?
     ;
 
+fromStatement
+    : fromClause fromStatementBody+
+    ;
+
+fromStatementBody
+    : transformClause
+      whereClause?
+      queryOrganization
+    | selectClause
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?
+      queryOrganization
+    ;
+
 querySpecification
-    : (((SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
-        | kind=MAP namedExpressionSeq
-        | kind=REDUCE namedExpressionSeq))
-       inRowFormat=rowFormat?
-       (RECORDWRITER recordWriter=STRING)?
-       USING script=STRING
-       (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
-       outRowFormat=rowFormat?
-       (RECORDREADER recordReader=STRING)?
-       fromClause?
-       (WHERE where=booleanExpression)?)
-    | ((kind=SELECT (hints+=hint)* setQuantifier? namedExpressionSeq fromClause?
-       | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
-       lateralView*
-       (WHERE where=booleanExpression)?
-       aggregation?
-       (HAVING having=booleanExpression)?
-       windows?)
+    : transformClause
+      fromClause?
+      whereClause?                                                          #transformQuerySpecification
+    | selectClause
+      fromClause?
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?                                                         #regularQuerySpecification
+    ;
+
+transformClause
+    : (SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
+            | kind=MAP namedExpressionSeq
+            | kind=REDUCE namedExpressionSeq)
+      inRowFormat=rowFormat?
+      (RECORDWRITER recordWriter=STRING)?
+      USING script=STRING
+      (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
+      outRowFormat=rowFormat?
+      (RECORDREADER recordReader=STRING)?
+    ;
+
+selectClause
+    : SELECT (hints+=hint)* setQuantifier? namedExpressionSeq
+    ;
+
+whereClause
+    : WHERE booleanExpression
+    ;
+
+havingClause
+    : HAVING booleanExpression
     ;
 
 hint
@@ -401,11 +486,12 @@ fromClause
     : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
-aggregation
+aggregationClause
     : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
+    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
@@ -414,7 +500,16 @@ groupingSet
     ;
 
 pivotClause
-    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn=identifier IN '(' pivotValues+=constant (',' pivotValues+=constant)* ')' ')'
+    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn IN '(' pivotValues+=pivotValue (',' pivotValues+=pivotValue)* ')' ')'
+    ;
+
+pivotColumn
+    : identifiers+=identifier
+    | '(' identifiers+=identifier (',' identifiers+=identifier)* ')'
+    ;
+
+pivotValue
+    : expression (AS? identifier)?
     ;
 
 lateralView
@@ -439,7 +534,7 @@ joinType
     : INNER?
     | CROSS
     | LEFT OUTER?
-    | LEFT SEMI
+    | LEFT? SEMI
     | RIGHT OUTER?
     | FULL OUTER?
     | LEFT? ANTI
@@ -447,7 +542,7 @@ joinType
 
 joinCriteria
     : ON booleanExpression
-    | USING '(' identifier (',' identifier)* ')'
+    | USING identifierList
     ;
 
 sample
@@ -467,7 +562,7 @@ identifierList
     ;
 
 identifierSeq
-    : identifier (',' identifier)*
+    : ident+=errorCapturingIdentifier (',' ident+=errorCapturingIdentifier)*
     ;
 
 orderedIdentifierList
@@ -475,7 +570,7 @@ orderedIdentifierList
     ;
 
 orderedIdentifier
-    : identifier ordering=(ASC | DESC)?
+    : ident=errorCapturingIdentifier ordering=(ASC | DESC)?
     ;
 
 identifierCommentList
@@ -487,7 +582,7 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? tableAlias      #tableName
+    : multipartIdentifier sample? tableAlias  #tableName
     | '(' queryNoWith ')' sample? tableAlias  #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
@@ -499,7 +594,7 @@ inlineTable
     ;
 
 functionTable
-    : identifier '(' (expression (',' expression)*)? ')' tableAlias
+    : funcName=errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
     ;
 
 tableAlias
@@ -516,20 +611,39 @@ rowFormat
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
     ;
 
+multipartIdentifier
+    : parts+=errorCapturingIdentifier ('.' parts+=errorCapturingIdentifier)*
+    ;
+
 tableIdentifier
-    : (db=identifier '.')? table=identifier
+    : (db=errorCapturingIdentifier '.')? table=errorCapturingIdentifier
     ;
 
 functionIdentifier
-    : (db=identifier '.')? function=identifier
+    : (db=errorCapturingIdentifier '.')? function=errorCapturingIdentifier
     ;
 
 namedExpression
-    : expression (AS? (identifier | identifierList))?
+    : expression (AS? (name=errorCapturingIdentifier | identifierList))?
     ;
 
 namedExpressionSeq
     : namedExpression (',' namedExpression)*
+    ;
+
+transformList
+    : '(' transforms+=transform (',' transforms+=transform)* ')'
+    ;
+
+transform
+    : qualifiedName                                                           #identityTransform
+    | transformName=identifier
+      '(' argument+=transformArgument (',' argument+=transformArgument)* ')'  #applyTransform
+    ;
+
+transformArgument
+    : qualifiedName
+    | constant
     ;
 
 expression
@@ -539,16 +653,9 @@ expression
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
     | EXISTS '(' query ')'                                         #exists
-    | predicated                                                   #booleanDefault
+    | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
-    ;
-
-// workaround for:
-//  https://github.com/antlr/antlr4/issues/780
-//  https://github.com/antlr/antlr4/issues/781
-predicated
-    : valueExpression predicate?
     ;
 
 predicate
@@ -572,7 +679,8 @@ valueExpression
     ;
 
 primaryExpression
-    : CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
@@ -586,13 +694,17 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
-      FROM argument+=expression ')'                                                            #functionCall
+    | IDENTIFIER '->' expression                                                               #lambda
+    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
     | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
+    | (SUBSTR | SUBSTRING) '(' str=valueExpression (FROM | ',') pos=valueExpression
+      ((FOR | ',') len=valueExpression)? ')'                                                   #substring
+    | TRIM '(' trimOption=(BOTH | LEADING | TRAILING) (trimStr=valueExpression)?
+       FROM srcStr=valueExpression ')'                                                         #trim
     ;
 
 constant
@@ -621,11 +733,12 @@ booleanValue
     ;
 
 interval
-    : INTERVAL intervalField*
+    : {ansi}? INTERVAL? intervalField+
+    | {!ansi}? INTERVAL intervalField*
     ;
 
 intervalField
-    : value=intervalValue unit=identifier (TO to=identifier)?
+    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
     ;
 
 intervalValue
@@ -633,8 +746,29 @@ intervalValue
     | STRING
     ;
 
+intervalUnit
+    : DAY
+    | DAYS
+    | HOUR
+    | HOURS
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTE
+    | MINUTES
+    | MONTH
+    | MONTHS
+    | SECOND
+    | SECONDS
+    | WEEK
+    | WEEKS
+    | YEAR
+    | YEARS
+    ;
+
 colPosition
-    : FIRST | AFTER identifier
+    : FIRST | AFTER qualifiedName
     ;
 
 dataType
@@ -644,12 +778,20 @@ dataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
+qualifiedColTypeWithPositionList
+    : qualifiedColTypeWithPosition (',' qualifiedColTypeWithPosition)*
+    ;
+
+qualifiedColTypeWithPosition
+    : name=qualifiedName dataType (COMMENT comment=STRING)? colPosition?
+    ;
+
 colTypeList
     : colType (',' colType)*
     ;
 
 colType
-    : identifier dataType (COMMENT STRING)?
+    : colName=errorCapturingIdentifier dataType (COMMENT STRING)?
     ;
 
 complexColTypeList
@@ -664,22 +806,23 @@ whenClause
     : WHEN condition=expression THEN result=expression
     ;
 
-windows
+windowClause
     : WINDOW namedWindow (',' namedWindow)*
     ;
 
 namedWindow
-    : identifier AS windowSpec
+    : name=errorCapturingIdentifier AS windowSpec
     ;
 
 windowSpec
-    : name=identifier  #windowRef
+    : name=errorCapturingIdentifier         #windowRef
+    | '('name=errorCapturingIdentifier')'   #windowRef
     | '('
       ( CLUSTER BY partition+=expression (',' partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?
         ((ORDER | SORT) BY sortItem (',' sortItem)*)?)
       windowFrame?
-      ')'              #windowDef
+      ')'                                   #windowDef
     ;
 
 windowFrame
@@ -695,20 +838,37 @@ frameBound
     | expression boundType=(PRECEDING | FOLLOWING)
     ;
 
+qualifiedNameList
+    : qualifiedName (',' qualifiedName)*
+    ;
+
 qualifiedName
     : identifier ('.' identifier)*
     ;
 
+// this rule is used for explicitly capturing wrong identifiers such as test-table, which should actually be `test-table`
+// replace identifier with errorCapturingIdentifier where the immediate follow symbol is not an expression, otherwise
+// valid expressions such as "a-b" can be recognized as an identifier
+errorCapturingIdentifier
+    : identifier errorCapturingIdentifierExtra
+    ;
+
+// extra left-factoring grammar
+errorCapturingIdentifierExtra
+    : (MINUS identifier)+    #errorIdent
+    |                        #realIdent
+    ;
+
 identifier
     : strictIdentifier
-    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
-    | UNION | INTERSECT | EXCEPT | SETMINUS
+    | {!ansi}? strictNonReserved
     ;
 
 strictIdentifier
-    : IDENTIFIER             #unquotedIdentifier
-    | quotedIdentifier       #quotedIdentifierAlternative
-    | nonReserved            #unquotedIdentifier
+    : IDENTIFIER              #unquotedIdentifier
+    | quotedIdentifier        #quotedIdentifierAlternative
+    | {ansi}? ansiNonReserved #unquotedIdentifier
+    | {!ansi}? nonReserved    #unquotedIdentifier
     ;
 
 quotedIdentifier
@@ -725,162 +885,727 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-nonReserved
-    : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | DATABASES
-    | ADD
-    | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST | AFTER
-    | MAP | ARRAY | STRUCT
-    | PIVOT | LATERAL | WINDOW | REDUCE | TRANSFORM | SERDE | SERDEPROPERTIES | RECORDREADER
-    | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
-    | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
-    | GROUPING | CUBE | ROLLUP
-    | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN | COST
-    | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
-    | SET | RESET
-    | VIEW | REPLACE
-    | IF
-    | POSITION
-    | EXTRACT
-    | NO | DATA
-    | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
-    | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
-    | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE
-    | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
-    | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | LIST
-    | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
-    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | RECOVER | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
-    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
-    | ASC | DESC | LIMIT | RENAME | SETS
-    | AT | NULLS | OVERWRITE | ALL | ANY | ALTER | AS | BETWEEN | BY | CREATE | DELETE
-    | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
-    | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
-    | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
-    | UNBOUNDED | WHEN
-    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
+// When `spark.sql.parser.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// - Reserved keywords:
+//     Keywords that are reserved and can't be used as identifiers for table, view, column,
+//     function, alias, etc.
+// - Non-reserved keywords:
+//     Keywords that have a special meaning only in particular contexts and can be used as
+//     identifiers in other contexts. For example, `SELECT 1 WEEK` is an interval literal, but WEEK
+//     can be used as identifiers in other places.
+// You can find the full keywords list by searching "Start of the keywords list" in this file.
+// The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
+ansiNonReserved
+    : ADD
+    | AFTER
+    | ALTER
+    | ANALYZE
+    | ARCHIVE
+    | ARRAY
+    | ASC
+    | AT
+    | BETWEEN
+    | BUCKET
+    | BUCKETS
+    | BY
+    | CACHE
+    | CASCADE
+    | CHANGE
+    | CLEAR
+    | CLUSTER
+    | CLUSTERED
+    | CODEGEN
+    | COLLECTION
+    | COLUMNS
+    | COMMENT
+    | COMMIT
+    | COMPACT
+    | COMPACTIONS
+    | COMPUTE
+    | CONCATENATE
+    | COST
+    | CUBE
+    | CURRENT
+    | DATA
+    | DATABASE
+    | DATABASES
+    | DAYS
+    | DBPROPERTIES
+    | DEFINED
+    | DELETE
+    | DELIMITED
+    | DESC
+    | DESCRIBE
+    | DFS
+    | DIRECTORIES
     | DIRECTORY
-    | BOTH | LEADING | TRAILING
+    | DISTRIBUTE
+    | DIV
+    | DROP
+    | ESCAPED
+    | EXCHANGE
+    | EXISTS
+    | EXPLAIN
+    | EXPORT
+    | EXTENDED
+    | EXTERNAL
+    | EXTRACT
+    | FIELDS
+    | FILEFORMAT
+    | FIRST
+    | FOLLOWING
+    | FORMAT
+    | FORMATTED
+    | FUNCTION
+    | FUNCTIONS
+    | GLOBAL
+    | GROUPING
+    | HOURS
+    | IF
+    | IGNORE
+    | IMPORT
+    | INDEX
+    | INDEXES
+    | INPATH
+    | INPUTFORMAT
+    | INSERT
+    | INTERVAL
+    | ITEMS
+    | KEYS
+    | LAST
+    | LATERAL
+    | LAZY
+    | LIKE
+    | LIMIT
+    | LINES
+    | LIST
+    | LOAD
+    | LOCAL
+    | LOCATION
+    | LOCK
+    | LOCKS
+    | LOGICAL
+    | MACRO
+    | MAP
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTES
+    | MONTHS
+    | MSCK
+    | NO
+    | NULLS
+    | OF
+    | OPTION
+    | OPTIONS
+    | OUT
+    | OUTPUTFORMAT
+    | OVER
+    | OVERWRITE
+    | PARTITION
+    | PARTITIONED
+    | PARTITIONS
+    | PERCENTLIT
+    | PIVOT
+    | POSITION
+    | PRECEDING
+    | PRINCIPALS
+    | PURGE
+    | QUERY
+    | RANGE
+    | RECORDREADER
+    | RECORDWRITER
+    | RECOVER
+    | REDUCE
+    | REFRESH
+    | RENAME
+    | REPAIR
+    | REPLACE
+    | RESET
+    | RESTRICT
+    | REVOKE
+    | RLIKE
+    | ROLE
+    | ROLES
+    | ROLLBACK
+    | ROLLUP
+    | ROW
+    | ROWS
+    | SCHEMA
+    | SECONDS
+    | SEPARATED
+    | SERDE
+    | SERDEPROPERTIES
+    | SET
+    | SETS
+    | SHOW
+    | SKEWED
+    | SORT
+    | SORTED
+    | START
+    | STATISTICS
+    | STORED
+    | STRATIFY
+    | STRUCT
+    | SUBSTR
+    | SUBSTRING
+    | TABLES
+    | TABLESAMPLE
+    | TBLPROPERTIES
+    | TEMPORARY
+    | TERMINATED
+    | TOUCH
+    | TRANSACTION
+    | TRANSACTIONS
+    | TRANSFORM
+    | TRIM
+    | TRUE
+    | TRUNCATE
+    | UNARCHIVE
+    | UNBOUNDED
+    | UNCACHE
+    | UNLOCK
+    | UNSET
+    | USE
+    | VALUES
+    | VIEW
+    | WEEK
+    | WEEKS
+    | WINDOW
+    | YEARS
     ;
 
-SELECT: 'SELECT';
-FROM: 'FROM';
+// When `spark.sql.parser.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
+// - Non-reserved keywords:
+//     Same definition as the one when `spark.sql.parser.ansi.enabled=true`.
+// - Strict-non-reserved keywords:
+//     A strict version of non-reserved keywords, which can not be used as table alias.
+// You can find the full keywords list by searching "Start of the keywords list" in this file.
+// The strict-non-reserved keywords are listed in `strictNonReserved`.
+// The non-reserved keywords are listed in `nonReserved`.
+// These 2 together contain all the keywords.
+strictNonReserved
+    : ANTI
+    | CROSS
+    | EXCEPT
+    | FULL
+    | INNER
+    | INTERSECT
+    | JOIN
+    | LEFT
+    | NATURAL
+    | ON
+    | RIGHT
+    | SEMI
+    | SETMINUS
+    | UNION
+    | USING
+    ;
+
+nonReserved
+    : ADD
+    | AFTER
+    | ALL
+    | ALTER
+    | ANALYZE
+    | AND
+    | ANY
+    | ARCHIVE
+    | ARRAY
+    | AS
+    | ASC
+    | AT
+    | AUTHORIZATION
+    | BETWEEN
+    | BOTH
+    | BUCKET
+    | BUCKETS
+    | BY
+    | CACHE
+    | CASCADE
+    | CASE
+    | CAST
+    | CHANGE
+    | CHECK
+    | CLEAR
+    | CLUSTER
+    | CLUSTERED
+    | CODEGEN
+    | COLLATE
+    | COLLECTION
+    | COLUMN
+    | COLUMNS
+    | COMMENT
+    | COMMIT
+    | COMPACT
+    | COMPACTIONS
+    | COMPUTE
+    | CONCATENATE
+    | CONSTRAINT
+    | COST
+    | CREATE
+    | CUBE
+    | CURRENT
+    | CURRENT_DATE
+    | CURRENT_TIME
+    | CURRENT_TIMESTAMP
+    | CURRENT_USER
+    | DATA
+    | DATABASE
+    | DATABASES
+    | DAY
+    | DAYS
+    | DBPROPERTIES
+    | DEFINED
+    | DELETE
+    | DELIMITED
+    | DESC
+    | DESCRIBE
+    | DFS
+    | DIRECTORIES
+    | DIRECTORY
+    | DISTINCT
+    | DISTRIBUTE
+    | DIV
+    | DROP
+    | ELSE
+    | END
+    | ESCAPED
+    | EXCHANGE
+    | EXISTS
+    | EXPLAIN
+    | EXPORT
+    | EXTENDED
+    | EXTERNAL
+    | EXTRACT
+    | FALSE
+    | FETCH
+    | FIELDS
+    | FILEFORMAT
+    | FIRST
+    | FOLLOWING
+    | FOR
+    | FOREIGN
+    | FORMAT
+    | FORMATTED
+    | FROM
+    | FUNCTION
+    | FUNCTIONS
+    | GLOBAL
+    | GRANT
+    | GROUP
+    | GROUPING
+    | HAVING
+    | HOUR
+    | HOURS
+    | IF
+    | IGNORE
+    | IMPORT
+    | IN
+    | INDEX
+    | INDEXES
+    | INPATH
+    | INPUTFORMAT
+    | INSERT
+    | INTERVAL
+    | INTO
+    | IS
+    | ITEMS
+    | KEYS
+    | LAST
+    | LATERAL
+    | LAZY
+    | LEADING
+    | LIKE
+    | LIMIT
+    | LINES
+    | LIST
+    | LOAD
+    | LOCAL
+    | LOCATION
+    | LOCK
+    | LOCKS
+    | LOGICAL
+    | MACRO
+    | MAP
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTE
+    | MINUTES
+    | MONTH
+    | MONTHS
+    | MSCK
+    | NO
+    | NOT
+    | NULL
+    | NULLS
+    | OF
+    | ONLY
+    | OPTION
+    | OPTIONS
+    | OR
+    | ORDER
+    | OUT
+    | OUTER
+    | OUTPUTFORMAT
+    | OVER
+    | OVERLAPS
+    | OVERWRITE
+    | PARTITION
+    | PARTITIONED
+    | PARTITIONS
+    | PERCENTLIT
+    | PIVOT
+    | POSITION
+    | PRECEDING
+    | PRIMARY
+    | PRINCIPALS
+    | PURGE
+    | QUERY
+    | RANGE
+    | RECORDREADER
+    | RECORDWRITER
+    | RECOVER
+    | REDUCE
+    | REFERENCES
+    | REFRESH
+    | RENAME
+    | REPAIR
+    | REPLACE
+    | RESET
+    | RESTRICT
+    | REVOKE
+    | RLIKE
+    | ROLE
+    | ROLES
+    | ROLLBACK
+    | ROLLUP
+    | ROW
+    | ROWS
+    | SCHEMA
+    | SECOND
+    | SECONDS
+    | SELECT
+    | SEPARATED
+    | SERDE
+    | SERDEPROPERTIES
+    | SESSION_USER
+    | SET
+    | SETS
+    | SHOW
+    | SKEWED
+    | SOME
+    | SORT
+    | SORTED
+    | START
+    | STATISTICS
+    | STORED
+    | STRATIFY
+    | STRUCT
+    | SUBSTR
+    | SUBSTRING
+    | TABLE
+    | TABLES
+    | TABLESAMPLE
+    | TBLPROPERTIES
+    | TEMPORARY
+    | TERMINATED
+    | THEN
+    | TO
+    | TOUCH
+    | TRAILING
+    | TRANSACTION
+    | TRANSACTIONS
+    | TRANSFORM
+    | TRIM
+    | TRUE
+    | TRUNCATE
+    | TYPE
+    | UNARCHIVE
+    | UNBOUNDED
+    | UNCACHE
+    | UNIQUE
+    | UNLOCK
+    | UNSET
+    | USE
+    | USER
+    | VALUES
+    | VIEW
+    | WEEK
+    | WEEKS
+    | WHEN
+    | WHERE
+    | WINDOW
+    | WITH
+    | YEAR
+    | YEARS
+    ;
+
+// NOTE: If you add a new token in the list below, you should update the list of keywords
+// in `docs/sql-keywords.md`. If the token is a non-reserved keyword,
+// please update `ansiNonReserved` and `nonReserved` as well.
+
+//============================
+// Start of the keywords list
+//============================
 ADD: 'ADD';
-AS: 'AS';
+AFTER: 'AFTER';
 ALL: 'ALL';
-ANY: 'ANY';
-DISTINCT: 'DISTINCT';
-WHERE: 'WHERE';
-GROUP: 'GROUP';
-BY: 'BY';
-GROUPING: 'GROUPING';
-SETS: 'SETS';
-CUBE: 'CUBE';
-ROLLUP: 'ROLLUP';
-ORDER: 'ORDER';
-HAVING: 'HAVING';
-LIMIT: 'LIMIT';
-AT: 'AT';
-OR: 'OR';
+ALTER: 'ALTER';
+ANALYZE: 'ANALYZE';
 AND: 'AND';
-IN: 'IN';
-NOT: 'NOT' | '!';
-NO: 'NO';
-EXISTS: 'EXISTS';
-BETWEEN: 'BETWEEN';
-LIKE: 'LIKE';
-RLIKE: 'RLIKE' | 'REGEXP';
-IS: 'IS';
-NULL: 'NULL';
-TRUE: 'TRUE';
-FALSE: 'FALSE';
-NULLS: 'NULLS';
+ANTI: 'ANTI';
+ANY: 'ANY';
+ARCHIVE: 'ARCHIVE';
+ARRAY: 'ARRAY';
+AS: 'AS';
 ASC: 'ASC';
-DESC: 'DESC';
-FOR: 'FOR';
-INTERVAL: 'INTERVAL';
+AT: 'AT';
+AUTHORIZATION: 'AUTHORIZATION';
+BETWEEN: 'BETWEEN';
+BOTH: 'BOTH';
+BUCKET: 'BUCKET';
+BUCKETS: 'BUCKETS';
+BY: 'BY';
+CACHE: 'CACHE';
+CASCADE: 'CASCADE';
 CASE: 'CASE';
-WHEN: 'WHEN';
-THEN: 'THEN';
+CAST: 'CAST';
+CHANGE: 'CHANGE';
+CHECK: 'CHECK';
+CLEAR: 'CLEAR';
+CLUSTER: 'CLUSTER';
+CLUSTERED: 'CLUSTERED';
+CODEGEN: 'CODEGEN';
+COLLATE: 'COLLATE';
+COLLECTION: 'COLLECTION';
+COLUMN: 'COLUMN';
+COLUMNS: 'COLUMNS';
+COMMENT: 'COMMENT';
+COMMIT: 'COMMIT';
+COMPACT: 'COMPACT';
+COMPACTIONS: 'COMPACTIONS';
+COMPUTE: 'COMPUTE';
+CONCATENATE: 'CONCATENATE';
+CONSTRAINT: 'CONSTRAINT';
+COST: 'COST';
+CREATE: 'CREATE';
+CROSS: 'CROSS';
+CUBE: 'CUBE';
+CURRENT: 'CURRENT';
+CURRENT_DATE: 'CURRENT_DATE';
+CURRENT_TIME: 'CURRENT_TIME';
+CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
+CURRENT_USER: 'CURRENT_USER';
+DATA: 'DATA';
+DATABASE: 'DATABASE';
+DATABASES: 'DATABASES' | 'SCHEMAS';
+DAY: 'DAY';
+DAYS: 'DAYS';
+DBPROPERTIES: 'DBPROPERTIES';
+DEFINED: 'DEFINED';
+DELETE: 'DELETE';
+DELIMITED: 'DELIMITED';
+DESC: 'DESC';
+DESCRIBE: 'DESCRIBE';
+DFS: 'DFS';
+DIRECTORIES: 'DIRECTORIES';
+DIRECTORY: 'DIRECTORY';
+DISTINCT: 'DISTINCT';
+DISTRIBUTE: 'DISTRIBUTE';
+DROP: 'DROP';
 ELSE: 'ELSE';
 END: 'END';
-JOIN: 'JOIN';
-CROSS: 'CROSS';
-OUTER: 'OUTER';
-INNER: 'INNER';
-LEFT: 'LEFT';
-SEMI: 'SEMI';
-RIGHT: 'RIGHT';
-FULL: 'FULL';
-NATURAL: 'NATURAL';
-ON: 'ON';
-PIVOT: 'PIVOT';
-LATERAL: 'LATERAL';
-WINDOW: 'WINDOW';
-OVER: 'OVER';
-PARTITION: 'PARTITION';
-RANGE: 'RANGE';
-ROWS: 'ROWS';
-UNBOUNDED: 'UNBOUNDED';
-PRECEDING: 'PRECEDING';
-FOLLOWING: 'FOLLOWING';
-CURRENT: 'CURRENT';
-FIRST: 'FIRST';
-AFTER: 'AFTER';
-LAST: 'LAST';
-ROW: 'ROW';
-WITH: 'WITH';
-VALUES: 'VALUES';
-CREATE: 'CREATE';
-TABLE: 'TABLE';
-DIRECTORY: 'DIRECTORY';
-VIEW: 'VIEW';
-REPLACE: 'REPLACE';
-INSERT: 'INSERT';
-DELETE: 'DELETE';
-INTO: 'INTO';
-DESCRIBE: 'DESCRIBE';
-EXPLAIN: 'EXPLAIN';
-FORMAT: 'FORMAT';
-LOGICAL: 'LOGICAL';
-CODEGEN: 'CODEGEN';
-COST: 'COST';
-CAST: 'CAST';
-SHOW: 'SHOW';
-TABLES: 'TABLES';
-COLUMNS: 'COLUMNS';
-COLUMN: 'COLUMN';
-USE: 'USE';
-PARTITIONS: 'PARTITIONS';
-FUNCTIONS: 'FUNCTIONS';
-DROP: 'DROP';
-UNION: 'UNION';
+ESCAPED: 'ESCAPED';
 EXCEPT: 'EXCEPT';
-SETMINUS: 'MINUS';
-INTERSECT: 'INTERSECT';
-TO: 'TO';
-TABLESAMPLE: 'TABLESAMPLE';
-STRATIFY: 'STRATIFY';
-ALTER: 'ALTER';
-RENAME: 'RENAME';
-ARRAY: 'ARRAY';
-MAP: 'MAP';
-STRUCT: 'STRUCT';
-COMMENT: 'COMMENT';
-SET: 'SET';
-RESET: 'RESET';
-DATA: 'DATA';
-START: 'START';
-TRANSACTION: 'TRANSACTION';
-COMMIT: 'COMMIT';
-ROLLBACK: 'ROLLBACK';
-MACRO: 'MACRO';
-IGNORE: 'IGNORE';
-BOTH: 'BOTH';
-LEADING: 'LEADING';
-TRAILING: 'TRAILING';
-
-IF: 'IF';
-POSITION: 'POSITION';
+EXCHANGE: 'EXCHANGE';
+EXISTS: 'EXISTS';
+EXPLAIN: 'EXPLAIN';
+EXPORT: 'EXPORT';
+EXTENDED: 'EXTENDED';
+EXTERNAL: 'EXTERNAL';
 EXTRACT: 'EXTRACT';
+FALSE: 'FALSE';
+FETCH: 'FETCH';
+FIELDS: 'FIELDS';
+FILEFORMAT: 'FILEFORMAT';
+FIRST: 'FIRST';
+FOLLOWING: 'FOLLOWING';
+FOR: 'FOR';
+FOREIGN: 'FOREIGN';
+FORMAT: 'FORMAT';
+FORMATTED: 'FORMATTED';
+FROM: 'FROM';
+FULL: 'FULL';
+FUNCTION: 'FUNCTION';
+FUNCTIONS: 'FUNCTIONS';
+GLOBAL: 'GLOBAL';
+GRANT: 'GRANT';
+GROUP: 'GROUP';
+GROUPING: 'GROUPING';
+HAVING: 'HAVING';
+HOUR: 'HOUR';
+HOURS: 'HOURS';
+IF: 'IF';
+IGNORE: 'IGNORE';
+IMPORT: 'IMPORT';
+IN: 'IN';
+INDEX: 'INDEX';
+INDEXES: 'INDEXES';
+INNER: 'INNER';
+INPATH: 'INPATH';
+INPUTFORMAT: 'INPUTFORMAT';
+INSERT: 'INSERT';
+INTERSECT: 'INTERSECT';
+INTERVAL: 'INTERVAL';
+INTO: 'INTO';
+IS: 'IS';
+ITEMS: 'ITEMS';
+JOIN: 'JOIN';
+KEYS: 'KEYS';
+LAST: 'LAST';
+LATERAL: 'LATERAL';
+LAZY: 'LAZY';
+LEADING: 'LEADING';
+LEFT: 'LEFT';
+LIKE: 'LIKE';
+LIMIT: 'LIMIT';
+LINES: 'LINES';
+LIST: 'LIST';
+LOAD: 'LOAD';
+LOCAL: 'LOCAL';
+LOCATION: 'LOCATION';
+LOCK: 'LOCK';
+LOCKS: 'LOCKS';
+LOGICAL: 'LOGICAL';
+MACRO: 'MACRO';
+MAP: 'MAP';
+MICROSECOND: 'MICROSECOND';
+MICROSECONDS: 'MICROSECONDS';
+MILLISECOND: 'MILLISECOND';
+MILLISECONDS: 'MILLISECONDS';
+MINUTE: 'MINUTE';
+MINUTES: 'MINUTES';
+MONTH: 'MONTH';
+MONTHS: 'MONTHS';
+MSCK: 'MSCK';
+NATURAL: 'NATURAL';
+NO: 'NO';
+NOT: 'NOT' | '!';
+NULL: 'NULL';
+NULLS: 'NULLS';
+OF: 'OF';
+ON: 'ON';
+ONLY: 'ONLY';
+OPTION: 'OPTION';
+OPTIONS: 'OPTIONS';
+OR: 'OR';
+ORDER: 'ORDER';
+OUT: 'OUT';
+OUTER: 'OUTER';
+OUTPUTFORMAT: 'OUTPUTFORMAT';
+OVER: 'OVER';
+OVERLAPS: 'OVERLAPS';
+OVERWRITE: 'OVERWRITE';
+PARTITION: 'PARTITION';
+PARTITIONED: 'PARTITIONED';
+PARTITIONS: 'PARTITIONS';
+PERCENTLIT: 'PERCENT';
+PIVOT: 'PIVOT';
+POSITION: 'POSITION';
+PRECEDING: 'PRECEDING';
+PRIMARY: 'PRIMARY';
+PRINCIPALS: 'PRINCIPALS';
+PURGE: 'PURGE';
+QUERY: 'QUERY';
+RANGE: 'RANGE';
+RECORDREADER: 'RECORDREADER';
+RECORDWRITER: 'RECORDWRITER';
+RECOVER: 'RECOVER';
+REDUCE: 'REDUCE';
+REFERENCES: 'REFERENCES';
+REFRESH: 'REFRESH';
+RENAME: 'RENAME';
+REPAIR: 'REPAIR';
+REPLACE: 'REPLACE';
+RESET: 'RESET';
+RESTRICT: 'RESTRICT';
+REVOKE: 'REVOKE';
+RIGHT: 'RIGHT';
+RLIKE: 'RLIKE' | 'REGEXP';
+ROLE: 'ROLE';
+ROLES: 'ROLES';
+ROLLBACK: 'ROLLBACK';
+ROLLUP: 'ROLLUP';
+ROW: 'ROW';
+ROWS: 'ROWS';
+SCHEMA: 'SCHEMA';
+SECOND: 'SECOND';
+SECONDS: 'SECONDS';
+SELECT: 'SELECT';
+SEMI: 'SEMI';
+SEPARATED: 'SEPARATED';
+SERDE: 'SERDE';
+SERDEPROPERTIES: 'SERDEPROPERTIES';
+SESSION_USER: 'SESSION_USER';
+SET: 'SET';
+SETMINUS: 'MINUS';
+SETS: 'SETS';
+SHOW: 'SHOW';
+SKEWED: 'SKEWED';
+SOME: 'SOME';
+SORT: 'SORT';
+SORTED: 'SORTED';
+START: 'START';
+STATISTICS: 'STATISTICS';
+STORED: 'STORED';
+STRATIFY: 'STRATIFY';
+STRUCT: 'STRUCT';
+SUBSTR: 'SUBSTR';
+SUBSTRING: 'SUBSTRING';
+TABLE: 'TABLE';
+TABLES: 'TABLES';
+TABLESAMPLE: 'TABLESAMPLE';
+TBLPROPERTIES: 'TBLPROPERTIES';
+TEMPORARY: 'TEMPORARY' | 'TEMP';
+TERMINATED: 'TERMINATED';
+THEN: 'THEN';
+TO: 'TO';
+TOUCH: 'TOUCH';
+TRAILING: 'TRAILING';
+TRANSACTION: 'TRANSACTION';
+TRANSACTIONS: 'TRANSACTIONS';
+TRANSFORM: 'TRANSFORM';
+TRIM: 'TRIM';
+TRUE: 'TRUE';
+TRUNCATE: 'TRUNCATE';
+TYPE: 'TYPE';
+UNARCHIVE: 'UNARCHIVE';
+UNBOUNDED: 'UNBOUNDED';
+UNCACHE: 'UNCACHE';
+UNION: 'UNION';
+UNIQUE: 'UNIQUE';
+UNLOCK: 'UNLOCK';
+UNSET: 'UNSET';
+USE: 'USE';
+USER: 'USER';
+USING: 'USING';
+VALUES: 'VALUES';
+VIEW: 'VIEW';
+WEEK: 'WEEK';
+WEEKS: 'WEEKS';
+WHEN: 'WHEN';
+WHERE: 'WHERE';
+WINDOW: 'WINDOW';
+WITH: 'WITH';
+YEAR: 'YEAR';
+YEARS: 'YEARS';
+//============================
+// End of the keywords list
+//============================
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
@@ -902,99 +1627,6 @@ AMPERSAND: '&';
 PIPE: '|';
 CONCAT_PIPE: '||';
 HAT: '^';
-
-PERCENTLIT: 'PERCENT';
-BUCKET: 'BUCKET';
-OUT: 'OUT';
-OF: 'OF';
-
-SORT: 'SORT';
-CLUSTER: 'CLUSTER';
-DISTRIBUTE: 'DISTRIBUTE';
-OVERWRITE: 'OVERWRITE';
-TRANSFORM: 'TRANSFORM';
-REDUCE: 'REDUCE';
-USING: 'USING';
-SERDE: 'SERDE';
-SERDEPROPERTIES: 'SERDEPROPERTIES';
-RECORDREADER: 'RECORDREADER';
-RECORDWRITER: 'RECORDWRITER';
-DELIMITED: 'DELIMITED';
-FIELDS: 'FIELDS';
-TERMINATED: 'TERMINATED';
-COLLECTION: 'COLLECTION';
-ITEMS: 'ITEMS';
-KEYS: 'KEYS';
-ESCAPED: 'ESCAPED';
-LINES: 'LINES';
-SEPARATED: 'SEPARATED';
-FUNCTION: 'FUNCTION';
-EXTENDED: 'EXTENDED';
-REFRESH: 'REFRESH';
-CLEAR: 'CLEAR';
-CACHE: 'CACHE';
-UNCACHE: 'UNCACHE';
-LAZY: 'LAZY';
-FORMATTED: 'FORMATTED';
-GLOBAL: 'GLOBAL';
-TEMPORARY: 'TEMPORARY' | 'TEMP';
-OPTIONS: 'OPTIONS';
-UNSET: 'UNSET';
-TBLPROPERTIES: 'TBLPROPERTIES';
-DBPROPERTIES: 'DBPROPERTIES';
-BUCKETS: 'BUCKETS';
-SKEWED: 'SKEWED';
-STORED: 'STORED';
-DIRECTORIES: 'DIRECTORIES';
-LOCATION: 'LOCATION';
-EXCHANGE: 'EXCHANGE';
-ARCHIVE: 'ARCHIVE';
-UNARCHIVE: 'UNARCHIVE';
-FILEFORMAT: 'FILEFORMAT';
-TOUCH: 'TOUCH';
-COMPACT: 'COMPACT';
-CONCATENATE: 'CONCATENATE';
-CHANGE: 'CHANGE';
-CASCADE: 'CASCADE';
-RESTRICT: 'RESTRICT';
-CLUSTERED: 'CLUSTERED';
-SORTED: 'SORTED';
-PURGE: 'PURGE';
-INPUTFORMAT: 'INPUTFORMAT';
-OUTPUTFORMAT: 'OUTPUTFORMAT';
-DATABASE: 'DATABASE' | 'SCHEMA';
-DATABASES: 'DATABASES' | 'SCHEMAS';
-DFS: 'DFS';
-TRUNCATE: 'TRUNCATE';
-ANALYZE: 'ANALYZE';
-COMPUTE: 'COMPUTE';
-LIST: 'LIST';
-STATISTICS: 'STATISTICS';
-PARTITIONED: 'PARTITIONED';
-EXTERNAL: 'EXTERNAL';
-DEFINED: 'DEFINED';
-REVOKE: 'REVOKE';
-GRANT: 'GRANT';
-LOCK: 'LOCK';
-UNLOCK: 'UNLOCK';
-MSCK: 'MSCK';
-REPAIR: 'REPAIR';
-RECOVER: 'RECOVER';
-EXPORT: 'EXPORT';
-IMPORT: 'IMPORT';
-LOAD: 'LOAD';
-ROLE: 'ROLE';
-ROLES: 'ROLES';
-COMPACTIONS: 'COMPACTIONS';
-PRINCIPALS: 'PRINCIPALS';
-TRANSACTIONS: 'TRANSACTIONS';
-INDEX: 'INDEX';
-INDEXES: 'INDEXES';
-LOCKS: 'LOCKS';
-OPTION: 'OPTION';
-ANTI: 'ANTI';
-LOCAL: 'LOCAL';
-INPATH: 'INPATH';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

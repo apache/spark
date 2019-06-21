@@ -31,7 +31,8 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
       testStream(input.toDF().agg(max('value)), OutputMode.Complete)()
     }
 
-    assert(ex.getMessage.contains("Continuous processing does not support Aggregate operations"))
+    assert(ex.getMessage.contains(
+      "In continuous processing mode, coalesce(1) must be called before aggregate operation"))
   }
 
   test("basic") {
@@ -48,6 +49,66 @@ class ContinuousAggregationSuite extends ContinuousSuiteBase {
         AddData(input, -1, -2, -3),
         CheckAnswer(5))
     }
+  }
+
+  test("multiple partitions with coalesce") {
+    val input = ContinuousMemoryStream[Int]
+
+    val df = input.toDF().coalesce(1).agg(max('value))
+
+    testStream(df, OutputMode.Complete)(
+      AddData(input, 0, 1, 2),
+      CheckAnswer(2),
+      StopStream,
+      AddData(input, 3, 4, 5),
+      StartStream(),
+      CheckAnswer(5),
+      AddData(input, -1, -2, -3),
+      CheckAnswer(5))
+  }
+
+  test("multiple partitions with coalesce - multiple transformations") {
+    val input = ContinuousMemoryStream[Int]
+
+    // We use a barrier to make sure predicates both before and after coalesce work
+    val df = input.toDF()
+      .select('value as 'copy, 'value)
+      .where('copy =!= 1)
+      .logicalPlan
+      .coalesce(1)
+      .where('copy =!= 2)
+      .agg(max('value))
+
+    testStream(df, OutputMode.Complete)(
+      AddData(input, 0, 1, 2),
+      CheckAnswer(0),
+      StopStream,
+      AddData(input, 3, 4, 5),
+      StartStream(),
+      CheckAnswer(5),
+      AddData(input, -1, -2, -3),
+      CheckAnswer(5))
+  }
+
+  test("multiple partitions with multiple coalesce") {
+    val input = ContinuousMemoryStream[Int]
+
+    val df = input.toDF()
+      .coalesce(1)
+      .logicalPlan
+      .coalesce(1)
+      .select('value as 'copy, 'value)
+      .agg(max('value))
+
+    testStream(df, OutputMode.Complete)(
+      AddData(input, 0, 1, 2),
+      CheckAnswer(2),
+      StopStream,
+      AddData(input, 3, 4, 5),
+      StartStream(),
+      CheckAnswer(5),
+      AddData(input, -1, -2, -3),
+      CheckAnswer(5))
   }
 
   test("repeated restart") {

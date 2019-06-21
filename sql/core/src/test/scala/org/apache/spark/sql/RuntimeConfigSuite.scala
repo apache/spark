@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config
 
 class RuntimeConfigSuite extends SparkFunSuite {
 
@@ -53,5 +54,28 @@ class RuntimeConfigSuite extends SparkFunSuite {
     intercept[NoSuchElementException] {
       conf.get("k1")
     }
+  }
+
+  test("SPARK-24761: is a config parameter modifiable") {
+    val conf = newConf()
+
+    // SQL configs
+    assert(!conf.isModifiable("spark.sql.sources.schemaStringLengthThreshold"))
+    assert(conf.isModifiable("spark.sql.streaming.checkpointLocation"))
+    // Core configs
+    assert(!conf.isModifiable(config.CPUS_PER_TASK.key))
+    assert(!conf.isModifiable("spark.executor.cores"))
+    // Invalid config parameters
+    assert(!conf.isModifiable(""))
+    assert(!conf.isModifiable("invalid config parameter"))
+  }
+
+  test("reject SparkConf entries") {
+    val conf = newConf()
+
+    val ex = intercept[AnalysisException] {
+      conf.set(config.CPUS_PER_TASK.key, 4)
+    }
+    assert(ex.getMessage.contains("Spark config"))
   }
 }

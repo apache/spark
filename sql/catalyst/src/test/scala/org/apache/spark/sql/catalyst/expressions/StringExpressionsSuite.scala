@@ -231,15 +231,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val s_notNull = 'a.string.notNull.at(0)
 
-    assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable
-      === true)
+    assert(Substring(s, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable)
     assert(
       Substring(s_notNull, Literal.create(0, IntegerType), Literal.create(2, IntegerType)).nullable
         === false)
     assert(Substring(s_notNull,
-      Literal.create(null, IntegerType), Literal.create(2, IntegerType)).nullable === true)
+      Literal.create(null, IntegerType), Literal.create(2, IntegerType)).nullable)
     assert(Substring(s_notNull,
-      Literal.create(0, IntegerType), Literal.create(null, IntegerType)).nullable === true)
+      Literal.create(0, IntegerType), Literal.create(null, IntegerType)).nullable)
 
     checkEvaluation(s.substr(0, 2), "ex", row)
     checkEvaluation(s.substr(0), "example", row)
@@ -466,6 +465,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrim(Literal("a"), Literal.create(null, StringType)), null)
     checkEvaluation(StringTrim(Literal.create(null, StringType), Literal("a")), null)
+
+    checkEvaluation(StringTrim(Literal("yxTomxx"), Literal("xyz")), "Tom")
+    checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
   }
 
   test("LTRIM") {
@@ -490,6 +492,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrimLeft(Literal.create(null, StringType), Literal("a")), null)
     checkEvaluation(StringTrimLeft(Literal("a"), Literal.create(null, StringType)), null)
+
+    checkEvaluation(StringTrimLeft(Literal("zzzytest"), Literal("xyz")), "test")
+    checkEvaluation(StringTrimLeft(Literal("zzzytestxyz"), Literal("xyz")), "testxyz")
+    checkEvaluation(StringTrimLeft(Literal("xyxXxyLAST WORD"), Literal("xy")), "XxyLAST WORD")
   }
 
   test("RTRIM") {
@@ -515,6 +521,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrimRight(Literal("a"), Literal.create(null, StringType)), null)
     checkEvaluation(StringTrimRight(Literal.create(null, StringType), Literal("a")), null)
+
+    checkEvaluation(StringTrimRight(Literal("testxxzx"), Literal("xyz")), "test")
+    checkEvaluation(StringTrimRight(Literal("xyztestxxzx"), Literal("xyz")), "xyztest")
+    checkEvaluation(StringTrimRight(Literal("TURNERyxXxy"), Literal("xy")), "TURNERyxX")
   }
 
   test("FORMAT") {
@@ -604,6 +614,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringLPad(s1, s2, s3), null, row3)
     checkEvaluation(StringLPad(s1, s2, s3), null, row4)
     checkEvaluation(StringLPad(s1, s2, s3), null, row5)
+    checkEvaluation(StringLPad(Literal("hi"), Literal(5)), "   hi")
+    checkEvaluation(StringLPad(Literal("hi"), Literal(1)), "h")
 
     checkEvaluation(StringRPad(Literal("hi"), Literal(5), Literal("??")), "hi???", row1)
     checkEvaluation(StringRPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
@@ -612,6 +624,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringRPad(s1, s2, s3), null, row3)
     checkEvaluation(StringRPad(s1, s2, s3), null, row4)
     checkEvaluation(StringRPad(s1, s2, s3), null, row5)
+    checkEvaluation(StringRPad(Literal("hi"), Literal(5)), "hi   ")
+    checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
   }
 
   test("REPEAT") {
@@ -744,16 +758,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ParseUrl") {
     def checkParseUrl(expected: String, urlStr: String, partToExtract: String): Unit = {
-      checkEvaluation(
-        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract))), expected)
+      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract)), expected)
     }
     def checkParseUrlWithKey(
         expected: String,
         urlStr: String,
         partToExtract: String,
         key: String): Unit = {
-      checkEvaluation(
-        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract), Literal(key))), expected)
+      checkEvaluation(ParseUrl(Seq(urlStr, partToExtract, key)), expected)
     }
 
     checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
@@ -798,7 +810,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sentences(nullString, nullString, nullString), null)
     checkEvaluation(Sentences(nullString, nullString), null)
     checkEvaluation(Sentences(nullString), null)
-    checkEvaluation(Sentences(Literal.create(null, NullType)), null)
     checkEvaluation(Sentences("", nullString, nullString), Seq.empty)
     checkEvaluation(Sentences("", nullString), Seq.empty)
     checkEvaluation(Sentences(""), Seq.empty)
