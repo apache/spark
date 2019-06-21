@@ -59,8 +59,10 @@ private[hive] class SparkGetColumnsOperation(
   private var statementId: String = _
 
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
-    logInfo(s"Getting columns with $statementId")
+    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName" +
+      s", columnName : $columnName"
+    logInfo(s"GetColumnsOperation: $cmdStr")
+
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
