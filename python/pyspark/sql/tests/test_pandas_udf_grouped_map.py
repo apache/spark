@@ -504,6 +504,18 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         self.assertEquals(result.collect()[0]['sum'], 165)
 
+    def test_grouped_with_empty_partition(self):
+        data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
+        expected = [Row(id=1, x=5), Row(id=1, x=5), Row(id=2, x=4)]
+        num_parts = len(data) + 1
+        df = self.spark.createDataFrame(self.sc.parallelize(data, numSlices=num_parts))
+
+        f = pandas_udf(lambda pdf: pdf.assign(x=pdf['x'].sum()),
+                       'id long, x int', PandasUDFType.GROUPED_MAP)
+
+        result = df.groupBy('id').apply(f).collect()
+        self.assertEqual(result, expected)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_udf_grouped_map import *
