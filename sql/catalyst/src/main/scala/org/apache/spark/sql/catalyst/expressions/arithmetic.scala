@@ -267,15 +267,21 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val result = numeric.times(input1, input2)
-    if (numeric.signum(result) != numeric.signum(input1) * numeric.signum(input2)) {
+    if (numeric.signum(result) != numeric.signum(input1) * numeric.signum(input2) &&
+        !(result.isInstanceOf[Double] && !result.asInstanceOf[Double].isNaN) &&
+        !(result.isInstanceOf[Float] && !result.asInstanceOf[Float].isNaN)) {
       throw new ArithmeticException(s"$input1 * $input2 caused overflow.")
     }
     result
   }
 
   override def checkOverflowCode(result: String, op1: String, op2: String): String = {
+    val isNaNCheck = dataType match {
+      case DoubleType | FloatType => s" && !java.lang.Double.isNaN($result)"
+      case _ => ""
+    }
     s"""
-       |if (Math.signum($result) != Math.signum($op1) * Math.signum($op2)) {
+       |if (Math.signum($result) != Math.signum($op1) * Math.signum($op2)$isNaNCheck) {
        |  throw new ArithmeticException($op1 + " * " + $op2 + " caused overflow.");
        |}
      """.stripMargin
