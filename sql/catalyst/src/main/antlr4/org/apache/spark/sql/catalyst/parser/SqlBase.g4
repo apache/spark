@@ -582,12 +582,12 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
-      FROM argument+=expression ')'                                                            #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
+    | TRIM '(' trimOption=(BOTH | LEADING | TRAILING) (trimStr=valueExpression)?
+       FROM srcStr=valueExpression ')'                                                         #trim
     ;
 
 constant
@@ -735,6 +735,7 @@ nonReserved
     | VIEW | REPLACE
     | IF
     | POSITION
+    | TRIM
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
@@ -872,6 +873,7 @@ TRAILING: 'TRAILING';
 
 IF: 'IF';
 POSITION: 'POSITION';
+TRIM: 'TRIM';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
