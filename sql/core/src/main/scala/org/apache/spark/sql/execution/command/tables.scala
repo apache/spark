@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
 import java.net.{URI, URISyntaxException}
-import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -29,7 +27,7 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -44,7 +42,7 @@ import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -942,7 +940,95 @@ case class ShowPartitionsCommand(
   }
 }
 
-case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableCommand {
+/**
+ * Provides common utilities between `ShowCreateTableCommand` and `ShowCreateTableAsSparkCommand`.
+ */
+trait ShowCreateTableCommandBase {
+
+  protected val table: TableIdentifier
+
+  protected def showTableLocation(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (metadata.tableType == EXTERNAL) {
+      metadata.storage.locationUri.foreach { location =>
+        builder ++= s"LOCATION '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'\n"
+      }
+    }
+  }
+
+  protected def showTableComment(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    metadata
+      .comment
+      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
+      .foreach(builder.append)
+  }
+
+  protected def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (metadata.properties.nonEmpty) {
+      val props = metadata.properties.map { case (key, value) =>
+        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+      }
+
+      builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
+    }
+  }
+
+  protected def showDataSourceTableDataColumns(
+      metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val columns = metadata.schema.fields.map(_.toDDL)
+    builder ++= columns.mkString("(", ", ", ")\n")
+  }
+
+  protected def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    builder ++= s"USING ${metadata.provider.get}\n"
+
+    val dataSourceOptions = metadata.storage.properties.map {
+      case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
+    }
+
+    if (dataSourceOptions.nonEmpty) {
+      builder ++= "OPTIONS (\n"
+      builder ++= dataSourceOptions.mkString("  ", ",\n  ", "\n")
+      builder ++= ")\n"
+    }
+  }
+
+  protected def showDataSourceTableNonDataColumns(
+      metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val partCols = metadata.partitionColumnNames
+    if (partCols.nonEmpty) {
+      builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"
+    }
+
+    metadata.bucketSpec.foreach { spec =>
+      if (spec.bucketColumnNames.nonEmpty) {
+        builder ++= s"CLUSTERED BY ${spec.bucketColumnNames.mkString("(", ", ", ")")}\n"
+
+        if (spec.sortColumnNames.nonEmpty) {
+          builder ++= s"SORTED BY ${spec.sortColumnNames.mkString("(", ", ", ")")}\n"
+        }
+
+        builder ++= s"INTO ${spec.numBuckets} BUCKETS\n"
+      }
+    }
+  }
+
+  protected def showCreateDataSourceTable(metadata: CatalogTable): String = {
+    val builder = StringBuilder.newBuilder
+
+    builder ++= s"CREATE TABLE ${table.quotedString} "
+    showDataSourceTableDataColumns(metadata, builder)
+    showDataSourceTableOptions(metadata, builder)
+    showDataSourceTableNonDataColumns(metadata, builder)
+    showTableComment(metadata, builder)
+    showTableLocation(metadata, builder)
+    showTableProperties(metadata, builder)
+
+    builder.toString()
+  }
+}
+
+case class ShowCreateTableCommand(table: TableIdentifier)
+    extends RunnableCommand with ShowCreateTableCommandBase {
   override val output: Seq[Attribute] = Seq(
     AttributeReference("createtab_stmt", StringType, nullable = false)()
   )
@@ -1057,83 +1143,79 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       }
     }
   }
+}
 
-  private def showTableLocation(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    if (metadata.tableType == EXTERNAL) {
-      metadata.storage.locationUri.foreach { location =>
-        builder ++= s"LOCATION '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'\n"
+/**
+ * This commands generates Spark DDL for Hive table.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW CREATE TABLE table_identifier AS SPARK;
+ * }}}
+ */
+case class ShowCreateTableAsSparkCommand(table: TableIdentifier)
+    extends RunnableCommand with ShowCreateTableCommandBase {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("sparktab_stmt", StringType, nullable = false)()
+  )
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val tableMetadata = catalog.getTableMetadata(table)
+
+    val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
+      throw new AnalysisException(
+        s"$table is already a Spark data source table. Using `SHOW CREATE TABLE` instead.")
+    } else {
+      if (tableMetadata.unsupportedFeatures.nonEmpty) {
+        throw new AnalysisException(
+          "Failed to execute SHOW CREATE TABLE AS SPARK against table " +
+            s"${tableMetadata.identifier}, which is created by Hive and uses the " +
+            "following unsupported feature(s)\n" +
+            tableMetadata.unsupportedFeatures.map(" - " + _).mkString("\n")
+        )
       }
-    }
-  }
 
-  private def showTableComment(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    metadata
-      .comment
-      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
-      .foreach(builder.append)
-  }
-
-  private def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    if (metadata.properties.nonEmpty) {
-      val props = metadata.properties.map { case (key, value) =>
-        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+      if (tableMetadata.tableType == VIEW) {
+        throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE AS SPARK")
       }
 
-      builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
-    }
-  }
-
-  private def showCreateDataSourceTable(metadata: CatalogTable): String = {
-    val builder = StringBuilder.newBuilder
-
-    builder ++= s"CREATE TABLE ${table.quotedString} "
-    showDataSourceTableDataColumns(metadata, builder)
-    showDataSourceTableOptions(metadata, builder)
-    showDataSourceTableNonDataColumns(metadata, builder)
-    showTableComment(metadata, builder)
-    showTableLocation(metadata, builder)
-    showTableProperties(metadata, builder)
-
-    builder.toString()
-  }
-
-  private def showDataSourceTableDataColumns(
-      metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val columns = metadata.schema.fields.map(_.toDDL)
-    builder ++= columns.mkString("(", ", ", ")\n")
-  }
-
-  private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    builder ++= s"USING ${metadata.provider.get}\n"
-
-    val dataSourceOptions = metadata.storage.properties.map {
-      case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
+      showCreateDataSourceTable(convertTableMetadata(tableMetadata))
     }
 
-    if (dataSourceOptions.nonEmpty) {
-      builder ++= "OPTIONS (\n"
-      builder ++= dataSourceOptions.mkString("  ", ",\n  ", "\n")
-      builder ++= ")\n"
-    }
+    Seq(Row(stmt))
   }
 
-  private def showDataSourceTableNonDataColumns(
-      metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val partCols = metadata.partitionColumnNames
-    if (partCols.nonEmpty) {
-      builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"
-    }
+  private def convertTableMetadata(tableMetadata: CatalogTable): CatalogTable = {
+    val hiveSerde = HiveSerDe(
+      serde = tableMetadata.storage.serde,
+      inputFormat = tableMetadata.storage.inputFormat,
+      outputFormat = tableMetadata.storage.outputFormat)
 
-    metadata.bucketSpec.foreach { spec =>
-      if (spec.bucketColumnNames.nonEmpty) {
-        builder ++= s"CLUSTERED BY ${spec.bucketColumnNames.mkString("(", ", ", ")")}\n"
-
-        if (spec.sortColumnNames.nonEmpty) {
-          builder ++= s"SORTED BY ${spec.sortColumnNames.mkString("(", ", ", ")")}\n"
-        }
-
-        builder ++= s"INTO ${spec.numBuckets} BUCKETS\n"
+    // Looking for Spark data source that maps to to the Hive serde.
+    // TODO: some Hive fileformat + row serde might be mapped to Spark data source, e.g. CSV.
+    val source = HiveSerDe.serdeToSource(hiveSerde)
+    if (source.isEmpty) {
+      val builder = StringBuilder.newBuilder
+      hiveSerde.serde.foreach { serde =>
+        builder ++= s" SERDE: $serde"
       }
+      hiveSerde.inputFormat.foreach { format =>
+        builder ++= s" INPUTFORMAT: $format"
+      }
+      hiveSerde.outputFormat.foreach { format =>
+        builder ++= s" OUTPUTFORMAT: $format"
+      }
+      throw new AnalysisException(
+        "Failed to execute SHOW CREATE TABLE AS SPARK against table " +
+          s"${tableMetadata.identifier}, which is created by Hive and uses the " +
+          "following unsupported serde configuration\n" +
+          builder.toString()
+      )
+    } else {
+      // TODO: should we keep Hive serde properties?
+      val newStorage = tableMetadata.storage.copy(properties = Map.empty)
+      tableMetadata.copy(provider = source, storage = newStorage)
     }
   }
 }

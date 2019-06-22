@@ -183,7 +183,7 @@ statement
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
-    | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
+    | SHOW CREATE TABLE tableIdentifier (AS SPARK)?                    #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
@@ -1027,6 +1027,7 @@ ansiNonReserved
     | SKEWED
     | SORT
     | SORTED
+    | SPARK
     | START
     | STATISTICS
     | STORED
@@ -1283,6 +1284,7 @@ nonReserved
     | SOME
     | SORT
     | SORTED
+    | SPARK
     | START
     | STATISTICS
     | STORED
@@ -1541,6 +1543,7 @@ SKEWED: 'SKEWED';
 SOME: 'SOME';
 SORT: 'SORT';
 SORTED: 'SORTED';
+SPARK: 'SPARK';
 START: 'START';
 STATISTICS: 'STATISTICS';
 STORED: 'STORED';

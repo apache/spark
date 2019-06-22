@@ -235,11 +235,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Creates a [[ShowCreateTableCommand]]
+   * Creates a [[ShowCreateTableCommand]] or [[ShowCreateTableAsSparkCommand]]
    */
   override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
     val table = visitTableIdentifier(ctx.tableIdentifier())
-    ShowCreateTableCommand(table)
+    if (ctx.SPARK != null) {
+      ShowCreateTableAsSparkCommand(table)
+    } else {
+      ShowCreateTableCommand(table)
+    }
   }
 
   /**
