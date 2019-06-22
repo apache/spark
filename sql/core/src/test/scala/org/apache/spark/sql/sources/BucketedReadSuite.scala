@@ -744,7 +744,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     val nCount = 20000
     // reshuffle data so that many small files are created
     val nShufflePartitions = 10000
-    // and with one table partition, should result in 6000 files in one partition
+    // and with one table partition, should result in 10000 files in one partition
     val nPartitions = 1
     val nBuckets = 2
     val dfPartitioned = (0 until nCount)
