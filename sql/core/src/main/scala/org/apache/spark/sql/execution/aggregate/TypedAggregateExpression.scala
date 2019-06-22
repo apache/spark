@@ -51,9 +51,8 @@ object TypedAggregateExpression {
     // If the buffer object is simple, use `SimpleTypedAggregateExpression`, which supports whole
     // stage codegen.
     if (isSimpleBuffer) {
-      val bufferDeserializer = UnresolvedDeserializer(
-        bufferEncoder.deserializer,
-        bufferSerializer.map(_.toAttribute))
+      val bufferAttrs = bufferSerializer.map(_.toAttribute)
+      val bufferDeserializer = UnresolvedDeserializer(bufferEncoder.deserializer, bufferAttrs)
 
       SimpleTypedAggregateExpression(
         aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
@@ -61,7 +60,7 @@ object TypedAggregateExpression {
         None,
         None,
         bufferSerializer,
-        bufferSerializer.map(_.toAttribute.asInstanceOf[AttributeReference]),
+        bufferAttrs.map(_.asInstanceOf[AttributeReference]),
         bufferDeserializer,
         outputEncoder.serializer,
         outputEncoder.deserializer.dataType,
@@ -118,7 +117,7 @@ case class SimpleTypedAggregateExpression(
     inputClass: Option[Class[_]],
     inputSchema: Option[StructType],
     bufferSerializer: Seq[Expression],
-    override val aggBufferAttributes: Seq[AttributeReference],
+    aggBufferAttributes: Seq[AttributeReference],
     bufferDeserializer: Expression,
     outputSerializer: Seq[Expression],
     outputExternalType: DataType,
@@ -129,7 +128,8 @@ case class SimpleTypedAggregateExpression(
   override lazy val deterministic: Boolean = true
 
   override def children: Seq[Expression] = {
-    inputDeserializer.toSeq ++ bufferSerializer ++ Seq(bufferDeserializer) ++ outputSerializer
+    inputDeserializer.toSeq ++ bufferSerializer ++ aggBufferAttributes ++
+      Seq(bufferDeserializer) ++ outputSerializer
   }
 
   override lazy val resolved: Boolean = inputDeserializer.isDefined && childrenResolved
