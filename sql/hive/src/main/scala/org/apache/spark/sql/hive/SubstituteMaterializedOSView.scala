@@ -53,7 +53,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
   }
 
   def transformToMV(projects: Seq[NamedExpression], filters: Seq[Expression],
-                    relation: LogicalPlan, catalogTable: CatalogTable): Option[LogicalPlan] = {
+      relation: LogicalPlan, catalogTable: CatalogTable): Option[LogicalPlan] = {
 
     // 1. Not checking for project list right now, only filters
     //    project of mv should be super-set of project of table. Also need to map each
@@ -89,31 +89,30 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
       val commonAttrs = attrs.intersect(sortAttrs)
       CatalogTableInfo(table, commonAttrs.size)
     })
-      .filter(_.commonAttrsCount != 0)
-      .reduceLeftOption((item1, item2) => {
-        if (item1.commonAttrsCount > item2.commonAttrsCount) item1 else item2
-      })
+    .filter(_.commonAttrsCount != 0)
+    .reduceLeftOption((item1, item2) => {
+      if (item1.commonAttrsCount > item2.commonAttrsCount) item1 else item2
+    })
     table match {
       case Some(tableInfo) =>
         val plan = getTableRelationFromIdentifier(tableInfo.table)
-        constructLogicalPlan(filters, projects, plan)
+        constructLogicalPlan(filters, projects, plan, relation)
       case _ =>
         None
     }
   }
 
-  private def constructLogicalPlan(filters: Seq[Expression],
-       projects: Seq[NamedExpression],
-       relationOption: Option[LogicalPlan]): Option[LogicalPlan] = {
+  private def constructLogicalPlan(filters: Seq[Expression], projects: Seq[NamedExpression],
+     relationOption: Option[LogicalPlan], originalLogicalPlan: LogicalPlan) = {
     val filterExpr = filters.reduceLeft(And)
     def getReplacedPlan(plan: LogicalPlan): LogicalPlan = {
       plan match {
         case relation: LogicalRelation =>
           val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-          val replaced = filterExpr.references.map (
+          val replaced = originalLogicalPlan.output.map (
             x =>
               nameToAttr(x.name).withExprId(x.exprId)
-          ).toSeq
+          )
           relation.copy(output = replaced)
         case relation: HiveTableRelation =>
           val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
@@ -170,7 +169,6 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
 
   private def isMvOsEnabled: Boolean = {
     spark.sqlContext.conf.mvOSEnabled
-    true
   }
 
   case class CatalogTableInfo(table: CatalogTable, commonAttrsCount: Int)

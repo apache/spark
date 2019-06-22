@@ -1217,9 +1217,6 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
     "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
 
   private lazy val getMaterializedViewsMethod = {
-    classOf[Hive].getMethods.map(_.toString)
-      .filter(_.contains("ateriali"))
-      .foreach(println)
     findMethod(
       classOf[Hive],
       "getAllMaterializedViewObjects",
