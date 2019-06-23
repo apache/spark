@@ -198,4 +198,19 @@ class RFormulaParserSuite extends SparkFunSuite {
         "Petal.Length:Petal.Width"),
       schema)
   }
+
+  test("parse functions") {
+    checkParse("y ~ I(a+b) + c", "y", Seq("a+b", "c"))
+    checkParse("y ~ I(a+b)*c", "y", Seq("a+b", "c", "a+b:c"))
+    checkParse("y ~ (I((a+b)) + c)^2", "y", Seq("(a+b)", "c", "(a+b):c"))
+    checkParse("y ~ I(log(a)*(log(a)*2)) + b", "y", Seq("log(a)*(log(a)*2)", "b"))
+    checkParse("y ~ exp(a) + (b + c)", "y", Seq("exp(a)", "b", "c"))
+    checkParse("log(y) ~ a + log(b)", "log(y)", Seq("a", "log(b)"))
+    checkParse("I(c+d) ~ a + log(b)", "c+d", Seq("a", "log(b)"))
+  }
+
+  test("parse balanced parenthesis") {
+    checkParse(" ~ I(e(a)( ( (( ))f))a()) + (a)", "", Seq("e(a)( ( (( ))f))a()", "a"))
+    checkParse(" ~ func(func(func(a), func(a)))", "", Seq("func(func(func(a), func(a)))"))
+  }
 }

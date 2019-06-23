@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import scala.collection.mutable
+import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.ml.linalg.VectorUDT
@@ -26,7 +27,7 @@ import org.apache.spark.sql.types._
 /**
  * Represents a parsed R formula.
  */
-private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
+private[ml] case class ParsedRFormula(label: Label, terms: Seq[Term]) {
   /**
    * Resolves formula terms into column names. A schema is necessary for inferring the meaning
    * of the special '.' term. Duplicate terms will be removed during resolution.
@@ -34,10 +35,20 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
   def resolve(schema: StructType): ResolvedRFormula = {
     val dotTerms = expandDot(schema)
     var includedTerms = Seq[Seq[String]]()
+    var evalExprs = Seq[String]()
     val seen = mutable.Set[Set[String]]()
+
+    label match {
+      case EvalExpr(expr) => evalExprs :+= expr
+      case _ =>
+    }
+
     terms.foreach {
       case col: ColumnRef =>
         includedTerms :+= Seq(col.value)
+      case EvalExpr(expr) =>
+        includedTerms :+= Seq(expr)
+        evalExprs :+= expr
       case ColumnInteraction(cols) =>
         expandInteraction(schema, cols) foreach { t =>
           // add equivalent interaction terms only once
@@ -52,6 +63,9 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
         term match {
           case inner: ColumnRef =>
             includedTerms = includedTerms.filter(_ != Seq(inner.value))
+          case EvalExpr(expr) =>
+            evalExprs = evalExprs.filter(_ != expr)
+            includedTerms = includedTerms.filter(_ != Seq(expr))
           case ColumnInteraction(cols) =>
             val fromInteraction = expandInteraction(schema, cols).map(_.toSet)
             includedTerms = includedTerms.filter(t => !fromInteraction.contains(t.toSet))
@@ -71,7 +85,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
       case _: Terms =>
       case EmptyTerm =>
     }
-    ResolvedRFormula(label.value, includedTerms.distinct, hasIntercept)
+    ResolvedRFormula(label.value, includedTerms.distinct, hasIntercept, evalExprs.distinct)
   }
 
   /** Whether this formula specifies fitting with response variable. */
@@ -107,6 +121,8 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
         }
       case ColumnRef(value) =>
         rest.map(Seq(value) ++ _)
+      case EvalExpr(value) =>
+        rest.map(Seq(value) ++ _)
     }).map(_.distinct)
 
     // Deduplicates feature interactions, for example, a:b is the same as b:a.
@@ -135,9 +151,10 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
  * @param terms the simplified terms of the R formula. Interactions terms are represented as Seqs
  *              of column names; non-interaction terms as length 1 Seqs.
  * @param hasIntercept whether the formula specifies fitting with an intercept.
+ * @param evalExprs expressions inside the formula to be evaluated with expr spark function
  */
 private[ml] case class ResolvedRFormula(
-  label: String, terms: Seq[Seq[String]], hasIntercept: Boolean) {
+  label: String, terms: Seq[Seq[String]], hasIntercept: Boolean, evalExprs: Seq[String]) {
 
   override def toString: String = {
     val ts = terms.map {
@@ -147,7 +164,8 @@ private[ml] case class ResolvedRFormula(
         t.mkString
     }
     val termStr = ts.mkString("[", ",", "]")
-    s"ResolvedRFormula(label=$label, terms=$termStr, hasIntercept=$hasIntercept)"
+    val exprs = evalExprs.mkString("[", ",", "]")
+    s"ResolvedRFormula(label=$label, terms=$termStr, hasIntercept=$hasIntercept, evalExprs=$exprs)"
   }
 }
 
@@ -203,8 +221,16 @@ private[ml] sealed trait InteractableTerm extends Term {
 /* R formula reference to all available columns, e.g. "." in a formula */
 private[ml] case object Dot extends InteractableTerm
 
+/* R formula base trait for terms that might be on LHS of the formula */
+private[ml] sealed trait Label extends InteractableTerm {
+  val value: String
+}
+
 /* R formula reference to a column, e.g. "+ Species" in a formula */
-private[ml] case class ColumnRef(value: String) extends InteractableTerm
+private[ml] case class ColumnRef(value: String) extends Label
+
+/* R formula reference to an expression to be evaluated as is, e.g. `log(y)` in a formula */
+private[ml] case class EvalExpr(value: String) extends Label
 
 /* R formula interaction of several columns, e.g. "Sepal_Length:Species" in a formula */
 private[ml] case class ColumnInteraction(terms: Seq[InteractableTerm]) extends Term {
@@ -247,9 +273,24 @@ private[ml] case class Terms(terms: Seq[Term]) extends Term {
 
 /**
  * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.', ':',
- * '*', '^'.
+ * '*', '^', 'I()'.
  */
-private[ml] object RFormulaParser extends RegexParsers {
+private[ml] object RFormulaParser extends RegexParsers with EvalExprParser {
+
+  /**
+   * Whether to skip whitespace in literals and regex is currently only achived with
+   * a global switch, and by default it's skipped. We'd like it to be skipped for most parsers,
+   * except for evaluated expressions as whitespace could be valid part of the expression,
+   * like `I(concat(a, ' ', b))`.
+   */
+  override def skipWhitespace: Boolean = false
+
+  private val space = "[ \\n]*".r
+
+  /* Utility function for skipping whitespace around a regex. */
+  private implicit class RegexParserUtils(val r: Regex) {
+    def n: Parser[String] = (space ~> r <~ space)
+  }
 
   private def add(left: Term, right: Term) = left.add(right)
 
@@ -269,40 +310,78 @@ private[ml] object RFormulaParser extends RegexParsers {
   }
 
   private val intercept: Parser[Term] =
-    "([01])".r ^^ { case a => Intercept(a == "1") }
+    "([01])".r.n ^^ { case a => Intercept(a == "1") }
 
   private val columnRef: Parser[ColumnRef] =
-    "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r ^^ { case a => ColumnRef(a) }
+    "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r.n ^^ { case a => ColumnRef(a) }
 
-  private val empty: Parser[ColumnRef] = "" ^^ { case a => ColumnRef("") }
+  private val empty: Parser[ColumnRef] = "".r.n ^^ { case a => ColumnRef("") }
 
-  private val label: Parser[ColumnRef] = columnRef | empty
+  private val label: Parser[Label] = evalExpr | columnRef | empty
 
-  private val dot: Parser[Term] = "\\.".r ^^ { case _ => Dot }
+  private val dot: Parser[Term] = "\\.".r.n ^^ { case _ => Dot }
 
   private val parens: Parser[Term] = "(" ~> expr <~ ")"
 
-  private val term: Parser[Term] = parens | intercept | columnRef | dot
+  private val term: Parser[Term] = evalExpr | parens | intercept | columnRef | dot
 
-  private val pow: Parser[Term] = term ~ "^" ~ "^[1-9]\\d*".r ^^ {
+  private val pow: Parser[Term] = term ~ "^" ~ "^[1-9]\\d*".r.n ^^ {
     case base ~ "^" ~ degree => power(base, degree.toInt)
   } | term
 
-  private val interaction: Parser[Term] = pow * (":" ^^^ { interact _ })
+  private val interaction: Parser[Term] = pow * ("\\:".r.n ^^^ { interact _ })
 
-  private val factor = interaction * ("*" ^^^ { cross _ })
+  private val factor = interaction * ("\\*".r.n ^^^ { cross _ })
 
-  private val sum = factor * ("+" ^^^ { add _ } |
-    "-" ^^^ { subtract _ })
+  private val sum = factor * ("\\+".r.n ^^^ { add _ } |
+    "\\-".r.n ^^^ { subtract _ })
 
   private val expr = (sum | term)
 
   private val formula: Parser[ParsedRFormula] =
-    (label ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.asTerms.terms) }
+    (label ~ "\\~".r.n ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.asTerms.terms) }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result
     case failure: NoSuccess => throw new IllegalArgumentException(
       "Could not parse formula: " + value)
   }
+}
+
+/**
+ * Parser for evaluated expressions in a formula. An evaluated expression is
+ * any alphanumeric identifiers followed by (), e.g. `func123(a+b, func())`,
+ * or anything inside `I()`. A valid expression is any string-parentheses product,
+ * such that if there are any parentheses ('(' or ')') they're all balanced.
+ */
+private[ml] trait EvalExprParser extends RegexParsers {
+
+  /* Any char except `(` or `)`. */
+  private def char: Parser[Char] = """[^\(\)]""".r ^^ { _.head }
+
+  /* Characters followed by any number of numeric characters. */
+  private def functionIdentifier: Parser[String] = """[a-zA-Z_]\w*""".r
+
+  private def string: Parser[String] = rep(char) ^^ {_.mkString}
+
+  private def nonEmptyString: Parser[String] = rep1(char) ^^ {_.mkString}
+
+  private def stringParenProduct: Parser[String] = ((string) ~ paren ~ (string)) ^^ {
+    case l ~ m ~ r => l + m  + r }
+
+  private def products: Parser[String] = rep(stringParenProduct) ^^ {_.mkString}
+
+  private def nonEmptyProducts: Parser[String] = rep1(stringParenProduct) ^^ {_.mkString}
+
+  private def paren: Parser[String] = ("(" ~
+    (nonEmptyProducts | nonEmptyString | products) ~ ")") ^^ {
+    case l ~ m ~ r => l + m + r }
+
+  private def balancedParenProduct: Parser[String] = (products ||| string)
+
+  private def parsedExpr: Parser[String] = "I(" ~> balancedParenProduct <~ ")" | (
+    functionIdentifier ~ "(" ~ balancedParenProduct ~ ")") ^^ {
+    case f ~ l ~ m ~ r => f + l + m + r}
+
+  def evalExpr: Parser[Label] = parsedExpr ^^ {case expr => EvalExpr(expr)}
 }

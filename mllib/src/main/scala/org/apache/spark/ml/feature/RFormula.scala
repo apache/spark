@@ -29,8 +29,8 @@ import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasHandleInvalid, HasLabelCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.functions.{col, expr}
 import org.apache.spark.sql.types._
 
 /**
@@ -126,7 +126,13 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
 
 /**
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*' and '^'.
+ * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*', '^'
+ * and 'I()'. Arithmetic expressions which use spark functions or registered udf's are
+ * also supported. For example, `log2(a)` can be used for taking the base 2 logarithm
+ * of column `a`, or `concat(a, ' ', b)` can be used for creating a combined string input column
+ * from `a` and `b`. To avoid resolution confusions, 'I()' operator can be used so that inside
+ * of 'I()' will be always interpreted as an arithmetic expression.
+ *
  * Also see the R formula docs here:
  * http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  *
@@ -149,6 +155,9 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  *  intercept and `w1, w2, w3` are coefficients
  *  - `y ~ (a + b)^2` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
  *  intercept and `w1, w2, w3` are coefficients
+ *  - `log(y) ~ I(a + b) + log(b)` means model `log(y) ~ w0 + w1 * (a + b) + w2 * log(b)` where
+ *  `w0` is the intercept and `w1, w2` are coefficients.
+ *
  *
  * RFormula produces a vector column of features and a double or string column of label.
  * Like when formulas are used in R for linear regression, string input columns will be one-hot
@@ -215,12 +224,17 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       col
     }
 
-    val terms = resolvedFormula.terms.flatten.distinct.sorted
-    lazy val firstRow = dataset.select(terms.map(col): _*).first()
+    // Add evaluated expressions to the dataset
+    val selectedCols = resolvedFormula.evalExprs
+      .map(col => expr(col).alias(col)) ++ dataset.columns.map(col(_))
+    val datasetWithExprs = dataset.select(selectedCols: _*)
 
-    // First we index each string column referenced by the input terms.
+    val terms = resolvedFormula.terms.flatten.distinct.sorted
+    lazy val firstRow = datasetWithExprs.select(terms.map(col): _*).first()
+
+    // Index each string column referenced by the input terms.
     val indexed = terms.zipWithIndex.map { case (term, i) =>
-      dataset.schema(term).dataType match {
+      datasetWithExprs.schema(term).dataType match {
         case _: StringType =>
           val indexCol = tmpColumn("stridx")
           encoderStages += new StringIndexer()
@@ -231,7 +245,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
         case _: VectorUDT =>
-          val group = AttributeGroup.fromStructField(dataset.schema(term))
+          val group = AttributeGroup.fromStructField(datasetWithExprs.schema(term))
           val size = if (group.size < 0) {
             firstRow.getAs[Vector](i).size
           } else {
@@ -250,7 +264,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     // Then we handle one-hot encoding and interactions between terms.
     var keepReferenceCategory = false
     val encodedTerms = resolvedFormula.terms.map {
-      case Seq(term) if dataset.schema(term).dataType == StringType =>
+      case Seq(term) if datasetWithExprs.schema(term).dataType == StringType =>
         val encodedCol = tmpColumn("onehot")
         // Formula w/o intercept, one of the categories in the first category feature is
         // being used as reference category, we will not drop any category for that feature.
@@ -291,13 +305,16 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     encoderStages += new VectorAttributeRewriter($(featuresCol), prefixesToRewrite.toMap)
     encoderStages += new ColumnPruner(tempColumns.toSet)
 
-    if ((dataset.schema.fieldNames.contains(resolvedFormula.label) &&
-      dataset.schema(resolvedFormula.label).dataType == StringType) || $(forceIndexLabel)) {
+    if ((datasetWithExprs.schema.fieldNames.contains(resolvedFormula.label) &&
+      datasetWithExprs.schema(resolvedFormula.label).dataType == StringType) ||
+      $(forceIndexLabel)) {
       encoderStages += new StringIndexer()
         .setInputCol(resolvedFormula.label)
         .setOutputCol($(labelCol))
         .setHandleInvalid($(handleInvalid))
     }
+
+    encoderStages += new ColumnPruner(resolvedFormula.evalExprs.toSet)
 
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
@@ -365,6 +382,16 @@ class RFormulaModel private[feature](
         case _ => true
       }
       StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
+    } else if (resolvedFormula.evalExprs.contains(resolvedFormula.label)) {
+      val spark = SparkSession.builder().getOrCreate()
+      val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
+      val dummyDF = spark.createDataFrame(dummyRDD, schema)
+        .withColumn(resolvedFormula.label, expr(resolvedFormula.label))
+      val nullable = dummyDF.schema(resolvedFormula.label).dataType match {
+        case _: NumericType | BooleanType => false
+        case _ => true
+      }
+      StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
     } else {
       // Ignore the label field. This is a hack so that this transformer can also work on test
       // datasets in a Pipeline.
@@ -391,6 +418,13 @@ class RFormulaModel private[feature](
       dataset.schema(labelName).dataType match {
         case _: NumericType | BooleanType =>
           dataset.withColumn($(labelCol), dataset(labelName).cast(DoubleType))
+        case other =>
+          throw new IllegalArgumentException("Unsupported type for label: " + other)
+      }
+    } else if (resolvedFormula.evalExprs.contains(labelName)) {
+      dataset.withColumn(labelName, expr(labelName)).schema(labelName).dataType match {
+        case _: NumericType | BooleanType =>
+          dataset.withColumn($(labelCol), expr(labelName).cast(DoubleType))
         case other =>
           throw new IllegalArgumentException("Unsupported type for label: " + other)
       }
@@ -447,11 +481,13 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("label", "terms", "hasIntercept").head()
+      val data = sparkSession.read.parquet(dataPath)
+        .select("label", "terms", "hasIntercept", "evalExprs").head()
       val label = data.getString(0)
       val terms = data.getAs[Seq[Seq[String]]](1)
       val hasIntercept = data.getBoolean(2)
-      val resolvedRFormula = ResolvedRFormula(label, terms, hasIntercept)
+      val evalExprs = data.getAs[Seq[String]](3)
+      val resolvedRFormula = ResolvedRFormula(label, terms, hasIntercept, evalExprs)
 
       val pmPath = new Path(path, "pipelineModel").toString
       val pipelineModel = PipelineModel.load(pmPath)
@@ -476,7 +512,7 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
-    dataset.select(columnsToKeep.map(dataset.col): _*)
+    dataset.select(columnsToKeep.map(col => dataset.col(s"`$col`")): _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -562,7 +598,7 @@ private class VectorAttributeRewriter(
       }
       new AttributeGroup(vectorCol, attrs).toMetadata()
     }
-    val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
+    val otherCols = dataset.columns.filter(_ != vectorCol).map(col => dataset.col(s"`$col`"))
     val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
     dataset.select(otherCols :+ rewrittenCol : _*)
   }
@@ -616,6 +652,83 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
 
       metadata.getAndSetParams(rewriter)
       rewriter
+    }
+  }
+}
+
+/**
+ * Utility transformer for adding expressions to dataframe using `expr` spark function
+ *
+ * @param exprsToSelect set of string expressions to be added as a column to the dataframe.
+ *                      The name of the columns will be identical to the expression
+ */
+private class ExprSelector(
+    override val uid: String,
+    val exprsToSelect: Set[String])
+  extends Transformer with MLWritable {
+
+  def this(exprsToSelect: Set[String]) =
+    this(Identifiable.randomUID("exprSelector"), exprsToSelect)
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    selectExprs(dataset.toDF)
+  }
+
+  private def selectExprs(dataframe: DataFrame): DataFrame = {
+    exprsToSelect.foldLeft(dataframe) { case (ds, col) =>
+        ds.withColumn(col, expr(col))
+    }
+  }
+
+  override def transformSchema(schema: StructType): StructType = {
+    val spark = SparkSession.builder().getOrCreate()
+    val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
+    val dummyDF = spark.createDataFrame(dummyRDD, schema)
+    selectExprs(dummyDF).schema
+  }
+
+  override def copy(extra: ParamMap): ExprSelector = defaultCopy(extra)
+
+  override def write: MLWriter = new ExprSelector.ExprSelectorWriter(this)
+}
+
+private object ExprSelector extends MLReadable[ExprSelector] {
+
+  override def read: MLReader[ExprSelector] = new ExprSelectorReader
+
+  override def load(path: String): ExprSelector = super.load(path)
+
+  /** [[MLWriter]] instance for [[ExprSelector]] */
+  private[ExprSelector] class ExprSelectorWriter(instance: ExprSelector) extends MLWriter {
+
+    private case class Data(exprsToSelect: Seq[String])
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: exprsToSelect
+      val data = Data(instance.exprsToSelect.toSeq)
+      val dataPath = new Path(path, "data").toString
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class ExprSelectorReader extends MLReader[ExprSelector] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[ExprSelector].getName
+
+    override def load(path: String): ExprSelector = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sparkSession.read.parquet(dataPath).select("exprsToSelect").head()
+      val exprsToSelect = data.getAs[Seq[String]](0).toSet
+      val selector = new ExprSelector(metadata.uid, exprsToSelect)
+
+      metadata.getAndSetParams(selector)
+      selector
     }
   }
 }

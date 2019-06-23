@@ -4891,7 +4891,7 @@ class RFormula(JavaEstimator, _RFormulaParams, JavaMLReadable, JavaMLWritable):
     """
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
-    operators, including '~', '.', ':', '+', '-', '*', and '^'.
+    operators, including '~', '.', ':', '+', '-', '*', '^' and 'I()'.
     Also see the `R formula docs
     <http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html>`_.
 

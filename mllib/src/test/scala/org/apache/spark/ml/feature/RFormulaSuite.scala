@@ -66,6 +66,32 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     testRFormulaTransform[(Int, Double, Double)](original, model, expected)
   }
 
+  test("transform numeric data with arithmetic") {
+    val formula = new RFormula().setFormula("ifnull(log2(id), 0.0) ~ I(v1*2 + 5) + log2(v2)")
+    val original = Seq((2.0, 1.0, 4.0), (4.0, 2.0, 8.0)).toDF("id", "v1", "v2")
+    val model = formula.fit(original)
+    MLTestingUtils.checkCopyAndUids(formula, model)
+    val expected = Seq(
+      (2.0, 1.0, 4.0, Vectors.dense(7.0, 2.0), 1.0),
+      (4.0, 2.0, 8.0, Vectors.dense(9.0, 3.0), 2.0)
+    ).toDF("id", "v1", "v2", "features", "label")
+    testRFormulaTransform[(Double, Double, Double)](original, model, expected)
+  }
+
+  test("transform numeric data with registered udf") {
+    val registeredUdf = spark.udf.register("multiplyTimesTwo", (x: Int, y: Int) => (x*y*2))
+    val formula = new RFormula()
+      .setFormula("ifnull(multiplyTimesTwo(id, v1), 0.0)~ v1 + multiplyTimesTwo(v1, v2)")
+    val original = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
+    val model = formula.fit(original)
+    MLTestingUtils.checkCopyAndUids(formula, model)
+    val expected = Seq(
+      (0, 1.0, 3.0, Vectors.dense(1.0, 6.0), 0.0),
+      (2, 2.0, 5.0, Vectors.dense(2.0, 20.0), 8.0)
+    ).toDF("id", "v1", "v2", "features", "label")
+    testRFormulaTransform[(Int, Double, Double)](original, model, expected)
+  }
+
   test("features column already exists") {
     val formula = new RFormula().setFormula("y ~ x").setFeaturesCol("x")
     val original = Seq((0, 1.0), (2, 2.0)).toDF("x", "y")
@@ -150,6 +176,21 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
         (6, "foo", 6, Vectors.dense(0.0, 1.0, 6.0), 6.0)
       ).toDF("id", "a", "b", "features", "label")
     testRFormulaTransform[(Int, String, Int)](original, model, expected)
+  }
+
+  test("encodes string terms with arithmetic") {
+    val formula = new RFormula().setFormula("id ~ concat(a, ' ', b)")
+    val original = Seq((1, "foo", "foo"), (2, "bar", "foo"),
+      (3, "bar", "bar"), (4, "baz", "bar"))
+      .toDF("id", "a", "b")
+    val model = formula.fit(original)
+    val expected = Seq(
+        (1, "foo", "foo", Vectors.dense(0.0, 0.0, 0.0), 1.0),
+        (2, "bar", "foo", Vectors.dense(0.0, 1.0, 0.0), 2.0),
+        (3, "bar", "bar", Vectors.dense(1.0, 0.0, 0.0), 3.0),
+        (4, "baz", "bar", Vectors.dense(0.0, 0.0, 1.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label")
+    testRFormulaTransform[(Int, String, String)](original, model, expected)
   }
 
   test("encodes string terms with string indexer order type") {
@@ -485,6 +526,7 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       assert(model.resolvedFormula.label === model2.resolvedFormula.label)
       assert(model.resolvedFormula.terms === model2.resolvedFormula.terms)
       assert(model.resolvedFormula.hasIntercept === model2.resolvedFormula.hasIntercept)
+      assert(model.resolvedFormula.evalExprs === model2.resolvedFormula.evalExprs)
 
       assert(model.pipelineModel.uid === model2.pipelineModel.uid)
 
@@ -497,7 +539,7 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
 
     val dataset = Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz")).toDF("id", "a", "b")
 
-    val rFormula = new RFormula().setFormula("id ~ a:b")
+    val rFormula = new RFormula().setFormula("id ~ a:b + I(a+b)")
 
     val model = rFormula.fit(dataset)
     val newModel = testDefaultReadWrite(model)
