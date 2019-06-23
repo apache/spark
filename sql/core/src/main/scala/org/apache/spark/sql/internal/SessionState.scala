@@ -22,6 +22,7 @@ import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql._
@@ -190,8 +191,9 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
       val scheme = new URI(schemeCorrectedPath).getScheme
       if (!Array("http", "https", "ftp").contains(scheme)) {
         val fs = hadoopPath.getFileSystem(session.sparkContext.hadoopConfiguration)
-        if (!fs.exists(hadoopPath))
+        if (!fs.exists(hadoopPath)) {
           throw new FileNotFoundException(s"Jar ${schemeCorrectedPath} not found")
+        }
       } else {
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
