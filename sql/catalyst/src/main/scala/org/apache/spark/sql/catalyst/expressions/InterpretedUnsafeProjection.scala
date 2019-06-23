@@ -73,6 +73,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
     // Put the expression results in the intermediate row.
     var i = 0
     while (i < numFields) {
+      println(row)
       values(i) = expressions(i).eval(row)
       i += 1
     }

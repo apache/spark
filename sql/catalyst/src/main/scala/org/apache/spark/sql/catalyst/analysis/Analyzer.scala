@@ -182,6 +182,7 @@ class Analyzer(
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
+        ResolveAsofJoin ::
       ResolveOutputRelation ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
@@ -2268,6 +2269,18 @@ class Analyzer(
     }
   }
 
+  object ResolveAsofJoin extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+      case j @ MergeAsOf(left, right, on, leftBy, rightBy)
+        if left.resolved && right.resolved =>
+      {
+        val output = left.output ++ right.output.drop(2)
+          Project(output, plan)
+      }
+      case _ => plan
+    }
+  }
+
   /**
    * Resolves columns of an output table from the data in a logical plan. This rule will:
    *
@@ -2495,9 +2508,16 @@ class Analyzer(
      */
     private def validateTopLevelTupleFields(
         deserializer: Expression, inputs: Seq[Attribute]): Unit = {
+      println(deserializer)
       val ordinals = deserializer.collect {
-        case GetColumnByOrdinal(ordinal, _) => ordinal
+        case p @ GetColumnByOrdinal(ordinal, _) => {
+          println(p)
+          ordinal
+        }
       }.distinct.sorted
+
+      println(ordinals)
+      println(inputs)
 
       if (ordinals.nonEmpty && ordinals != inputs.indices) {
         fail(inputs.toStructType, ordinals.last)
