@@ -23,6 +23,7 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters => DatasourceOrcFilters}
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters.buildTree
@@ -73,14 +74,14 @@ private[orc] object OrcFilters extends Logging {
       DatasourceOrcFilters.createFilter(schema, filters).asInstanceOf[Option[SearchArgument]]
     } else {
       val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
-      for {
-        // Combines all convertible filters using `And` to produce a single conjunction
-        conjunction <- buildTree(convertibleFilters(schema, dataTypeMap, filters))
+      // Combines all convertible filters using `And` to produce a single conjunction
+      val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, filters))
+      conjunctionOptional.map { conjunction =>
         // Then tries to build a single ORC `SearchArgument` for the conjunction predicate.
         // The input predicate is fully convertible. There should not be any empty result in the
         // following recursive method call `buildSearchArgument`.
-        builder <- buildSearchArgument(dataTypeMap, conjunction, newBuilder)
-      } yield builder.build()
+        buildSearchArgument(dataTypeMap, conjunction, newBuilder).build()
+      }
     }
   }
 
@@ -145,33 +146,33 @@ private[orc] object OrcFilters extends Logging {
    * Build a SearchArgument and return the builder so far.
    *
    * @param dataTypeMap a map from the attribute name to its data type.
-   * @param expression the input filter predicates.
+   * @param expression the input predicates, which should be fully convertible to SearchArgument.
    * @param builder the input SearchArgument.Builder.
    * @return the builder so far.
    */
   private def buildSearchArgument(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
-      builder: Builder): Option[Builder] = {
+      builder: Builder): Builder = {
     expression match {
       case And(left, right) =>
-        for {
-          lhs <- buildSearchArgument(dataTypeMap, left, builder.startAnd())
-          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
-        } yield rhs.end()
+        val lhs = buildSearchArgument(dataTypeMap, left, builder.startAnd())
+        val rhs = buildSearchArgument(dataTypeMap, right, lhs)
+        rhs.end()
 
       case Or(left, right) =>
-        for {
-          lhs <- buildSearchArgument(dataTypeMap, left, builder.startOr())
-          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
-        } yield rhs.end()
+        val lhs = buildSearchArgument(dataTypeMap, left, builder.startOr())
+        val rhs = buildSearchArgument(dataTypeMap, right, lhs)
+        rhs.end()
 
       case Not(child) =>
-        for {
-          negate <- buildSearchArgument(dataTypeMap, child, builder.startNot())
-        } yield negate.end()
+        buildSearchArgument(dataTypeMap, child, builder.startNot()).end()
 
-      case other => buildLeafSearchArgument(dataTypeMap, other, builder)
+      case other =>
+        buildLeafSearchArgument(dataTypeMap, other, builder).getOrElse {
+          throw new SparkException(
+            "The input filter of OrcFilters.buildSearchArgument should be fully convertible.")
+        }
     }
   }
 
