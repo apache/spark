@@ -18,20 +18,22 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, HiveTableRelation, UnresolvedCatalogRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, EqualTo, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{FindDataSourceTable, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
   extends Rule[LogicalPlan] {
 
+  val supportedHiveVersion = Seq("3.1.1")
   val spark: SparkSession = SparkSession.getActiveSession.get
   val conf: SQLConf = spark.sqlContext.conf
 
-  def apply(plan: LogicalPlan): LogicalPlan = if (isMvOsEnabled) {
+  def apply(plan: LogicalPlan): LogicalPlan = if (isHiveVersionSupported && isMvOsEnabled) {
     plan transformDown {
       case op@PhysicalOperation(projects, filters, leafPlan) if filters.nonEmpty =>
         val rel = getRelation(leafPlan)
@@ -48,11 +50,11 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
     plan
   }
 
-  def getRelation(plan: LogicalPlan): Option[LogicalPlan] = {
+  private def getRelation(plan: LogicalPlan): Option[LogicalPlan] = {
     plan.find(x => x.isInstanceOf[HiveTableRelation] || x.isInstanceOf[LogicalRelation])
   }
 
-  def transformToMV(projects: Seq[NamedExpression], filters: Seq[Expression],
+  private def transformToMV(projects: Seq[NamedExpression], filters: Seq[Expression],
       relation: LogicalPlan, catalogTable: CatalogTable): Option[LogicalPlan] = {
 
     // 1. Not checking for project list right now, only filters
@@ -64,7 +66,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
     // 5. The original filter is transformed to have mv's attribute using name,
 
     val ident = catalogTable.identifier
-    val mv = spark.sessionState.catalog.externalCatalog.
+    val mv = mvCatalog.
       getMaterializedViewForTable(ident.database.get, ident.table)
 
     val attrs = filters.flatMap {
@@ -78,7 +80,8 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
             Seq.empty
         }
     }
-    val mvs = mvCatalog.getMaterializedViewsOfTable(mv)
+
+    val mvs = mvCatalog.getMaterializedViewsOfTable(mv.mvDetails)
 
     val table = mvs.map(table => {
       val mvPlan = mvCatalog.getMaterializedViewPlan(table).get
@@ -102,6 +105,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
     }
   }
 
+
   private def constructLogicalPlan(filters: Seq[Expression], projects: Seq[NamedExpression],
      relationOption: Option[LogicalPlan], originalLogicalPlan: LogicalPlan) = {
     val filterExpr = filters.reduceLeft(And)
@@ -111,23 +115,42 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
           val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
           val replaced = originalLogicalPlan.output.map (
             x =>
-              nameToAttr(x.name).withExprId(x.exprId)
+              nameToAttr(x.name).withExprId(x.exprId).withQualifier(x.qualifier)
           )
           relation.copy(output = replaced)
         case relation: HiveTableRelation =>
-          val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-          val replaceAttrs = filterExpr.references.map (
-            x =>
-              nameToAttr(x.name).withExprId(x.exprId)
-          ).toSeq
-          relation.copy(dataCols = replaceAttrs)
+          val hiveRelation = originalLogicalPlan.asInstanceOf[HiveTableRelation]
+          val nameToAttrData = relation.dataCols.map(_.name).zip(relation.output).toMap
+          val nameToAttrPart = relation.partitionCols.map(_.name).zip(relation.output).toMap
+          val newDataCols = hiveRelation.dataCols.map {
+            col =>
+              nameToAttrData(col.name).withExprId(col.exprId)
+                .withQualifier(Seq("db", "mv"))
+          }
+
+          val newPartCols = hiveRelation.partitionCols.map {
+            col =>
+              nameToAttrPart(col.name).withExprId(col.exprId)
+                .withQualifier(Seq("db", "mv"))
+          }
+          relation.copy(dataCols = newDataCols, partitionCols = newPartCols)
         case _ =>
           null
       }
     }
     relationOption match {
       case Some(relation: LogicalPlan) =>
-        Some(Project(projects, Filter(filterExpr, getReplacedPlan(relation))))
+        val newRelation = getReplacedPlan(relation)
+        val projectSmap = newRelation.output.map(x => (x.name -> x)).toMap
+        val newProjects = projects.map {
+          x => projectSmap(x.name)
+        }
+
+        val newFilterExpr = filterExpr.transform {
+          case a: Attribute =>
+            projectSmap(a.name)
+        }
+        Some(Project(newProjects, Filter(newFilterExpr, getReplacedPlan(relation))))
       case _ =>
         None
     }
@@ -164,12 +187,31 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
 
 
   private def isMVTable(table: Option[CatalogTable]): Boolean = {
-    table.isDefined && table.get.tableType == CatalogTableType.MV
+    table.isDefined &&
+      (table.get.tableType == CatalogTableType.MV ||
+        (Utils.isTesting && table.get.viewOriginalText.isDefined))
   }
 
   private def isMvOsEnabled: Boolean = {
     spark.sqlContext.conf.mvOSEnabled
   }
+
+  /**
+    * Returns true if the Hive version is from
+    * org.apache.spark.sql.hive.SubstituteMaterializedOSView#supportedHiveVersion()
+    */
+  private def isHiveVersionSupported: Boolean = {
+    val catalog = spark.sharedState.externalCatalog
+    Utils.isTesting || {
+      if (catalog.isInstanceOf[HiveExternalCatalog] ) {
+        val version = catalog.asInstanceOf[HiveExternalCatalog].client.version.fullVersion
+        supportedHiveVersion.contains(version)
+      } else {
+        false
+      }
+    }
+  }
+
 
   case class CatalogTableInfo(table: CatalogTable, commonAttrsCount: Int)
 

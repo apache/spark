@@ -77,6 +77,11 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
 <!--
     <dependency>
       <groupId>com.google.guava</groupId>
@@ -252,7 +257,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-Xdebug -Xrunjdwp:transport=dt_socket,address=8998,server=y,suspend=n -da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
         </configuration>
       </plugin>
       <plugin>

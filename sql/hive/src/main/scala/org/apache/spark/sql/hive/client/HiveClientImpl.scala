@@ -1011,24 +1011,9 @@ private[hive] object HiveClientImpl {
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
-    hiveTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL =>
-        hiveTable.setProperty("EXTERNAL", "TRUE")
-        HiveTableType.EXTERNAL_TABLE
-      case CatalogTableType.MANAGED =>
-        HiveTableType.MANAGED_TABLE
-      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
-      case t =>
-        throw new IllegalArgumentException(
-          s"Unknown table type is found at toHiveTable: $t")
-    })
-
     if (table.tableType == CatalogTableType.MV) {
-      val hiveTableClass = classOf[HiveTable]
-      val field = hiveTableClass.getDeclaredField("tTable")
-      field.setAccessible(true)
-      val tTable = field.get(hiveTable).asInstanceOf[HiveTable]
-      tTable.setTableType(HiveTableType.VIRTUAL_VIEW)
+      hiveTable.setTableType(HiveTableType.MANAGED_TABLE)
+      // hiveTable.getTTable.setTableType("MATERIALIZED_VIEW")
     } else {
       hiveTable.setTableType(table.tableType match {
         case CatalogTableType.EXTERNAL =>
@@ -1037,6 +1022,9 @@ private[hive] object HiveClientImpl {
         case CatalogTableType.MANAGED =>
           HiveTableType.MANAGED_TABLE
         case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+        case t =>
+          throw new IllegalArgumentException(
+            s"Unknown table type is found at toHiveTable: $t")
       })
     }
 

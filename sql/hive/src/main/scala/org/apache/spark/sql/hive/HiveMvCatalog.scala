@@ -29,10 +29,18 @@ class HiveMvCatalog extends MvCatalog {
     this.sparkSession = sparkSession
   }
 
-  override def getMaterializedViewsOfTable(metaInfos: CatalogCreationData): Seq[CatalogTable] = {
-    val db = metaInfos.mvDetails(0)._1
-    val tbls = metaInfos.mvDetails(0)._2
-    Seq(sparkSession.sessionState.catalog.externalCatalog.getTable(db, tbls))
+  override def getMaterializedViewsOfTable(mvInfos: Seq[(String, String)]): Seq[CatalogTable] = {
+    mvInfos.map {
+      info =>
+        val db = info._1
+        val tbl = info._2
+        sparkSession.sessionState.catalog.externalCatalog.getTable(db, tbl)
+    }
+  }
+
+
+  override def getMaterializedViewForTable(db: String, tblName: String): CatalogCreationData = {
+    sparkSession.sessionState.catalog.externalCatalog.getMaterializedViewForTable(db, tblName)
   }
 
   override def getMaterializedViewPlan(catalogTable: CatalogTable): Option[LogicalPlan] = {
@@ -47,7 +55,7 @@ class HiveMvCatalog extends MvCatalog {
    * does not need to get all materialized views again and again
    */
   private def getAllMaterializedViewsFromMetastore(db: String,
-                                                   sessionCatalog: SessionCatalog): Seq[CatalogTable] = {
+       sessionCatalog: SessionCatalog): Seq[CatalogTable] = {
     val hiveSessionCatalog = sessionCatalog.asInstanceOf[HiveSessionCatalog]
     hiveSessionCatalog.listTables(db)
       .map(table => {
