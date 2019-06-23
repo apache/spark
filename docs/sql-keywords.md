@@ -263,6 +263,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>TRANSACTION</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>TRANSACTIONS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>TRANSFORM</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>TRIM</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>TRUE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>TRUNCATE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>UNARCHIVE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>

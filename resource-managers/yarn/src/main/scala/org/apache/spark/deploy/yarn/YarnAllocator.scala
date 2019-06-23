@@ -143,7 +143,7 @@ private[yarn] class YarnAllocator(
 
   private val executorResourceRequests =
     sparkConf.getAllWithPrefix(config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX).toMap ++
-      getYarnResourcesFromSparkResources(SPARK_EXECUTOR_RESOURCE_PREFIX, sparkConf)
+      getYarnResourcesFromSparkResources(SPARK_EXECUTOR_PREFIX, sparkConf)
 
   // Resource capability requested for each executor
   private[yarn] val resource: Resource = {

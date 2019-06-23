@@ -47,7 +47,8 @@ trait BaseEvalPython extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
-  override def references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
+  @transient
+  override lazy val references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
 }
 
 /**
@@ -64,4 +65,5 @@ case class BatchEvalPython(
 case class ArrowEvalPython(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
-    child: LogicalPlan) extends BaseEvalPython
+    child: LogicalPlan,
+    evalType: Int) extends BaseEvalPython
