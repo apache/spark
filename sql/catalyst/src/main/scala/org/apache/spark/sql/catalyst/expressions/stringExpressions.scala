@@ -611,11 +611,15 @@ object StringTrim {
 
     _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`
+    _FUNC_(trimStr, str) - Remove the leading and trailing `trimStr` characters from `str`.
 
-    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`
+    _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
 
-    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`
+    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
+
+    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`.
+
+    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`.
   """,
   arguments = """
     Arguments:
@@ -639,6 +643,8 @@ object StringTrim {
       > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
            SparkSQL
       > SELECT _FUNC_('SL', 'SSparkSQLS');
+       parkSQ
+      > SELECT _FUNC_('SL' FROM '    SparkSQL   ');
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
        parkSQ

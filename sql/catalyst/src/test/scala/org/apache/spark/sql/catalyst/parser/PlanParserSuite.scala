@@ -737,6 +737,11 @@ class PlanParserSuite extends AnalysisTest {
       "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
       StringTrimRight(Literal("  bunch o blanks  "), None)
     )
+
+    assertTrimPlans(
+      "SELECT TRIM('xyz' FROM 'yxTomxx')",
+      StringTrim(Literal("yxTomxx"), Some(Literal("xyz")))
+    )
   }
 
   test("precedence of set operations") {
