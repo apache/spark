@@ -297,7 +297,7 @@ object CommandUtils extends Logging {
         struct(
           ndv, nullLit, nullLit, numNulls,
           // Set avg/max size to default size if all the values are null or there is no value.
-          Coalesce(Seq(Ceil(Average(Length(col))), defaultSize)),
+          Coalesce(Seq(Cast(Ceil(Average(Length(col))), LongType), defaultSize)),
           Coalesce(Seq(Cast(Max(Length(col)), LongType), defaultSize)),
           nullArray)
       case _ =>

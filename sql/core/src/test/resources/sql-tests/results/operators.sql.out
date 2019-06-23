@@ -229,17 +229,17 @@ struct<COT(CAST(-1 AS DOUBLE)):double>
 -- !query 28
 select ceiling(0)
 -- !query 28 schema
-struct<CEIL(CAST(0 AS DOUBLE)):bigint>
+struct<CEIL(CAST(0 AS DOUBLE)):double>
 -- !query 28 output
-0
+0.0
 
 
 -- !query 29
 select ceiling(1)
 -- !query 29 schema
-struct<CEIL(CAST(1 AS DOUBLE)):bigint>
+struct<CEIL(CAST(1 AS DOUBLE)):double>
 -- !query 29 output
-1
+1.0
 
 
 -- !query 30
@@ -277,17 +277,17 @@ struct<CEIL(-0.10):decimal(1,0)>
 -- !query 34
 select floor(0)
 -- !query 34 schema
-struct<FLOOR(CAST(0 AS DOUBLE)):bigint>
+struct<FLOOR(CAST(0 AS DOUBLE)):double>
 -- !query 34 output
-0
+0.0
 
 
 -- !query 35
 select floor(1)
 -- !query 35 schema
-struct<FLOOR(CAST(1 AS DOUBLE)):bigint>
+struct<FLOOR(CAST(1 AS DOUBLE)):double>
 -- !query 35 output
-1
+1.0
 
 
 -- !query 36

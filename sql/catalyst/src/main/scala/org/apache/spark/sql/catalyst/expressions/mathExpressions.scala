@@ -232,7 +232,8 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision - scale + 1, 0)
-    case _ => LongType
+    case LongType => LongType
+    case _ => DoubleType
   }
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -240,7 +241,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
-    case DoubleType => f(input.asInstanceOf[Double]).toLong
+    case DoubleType => f(input.asInstanceOf[Double])
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
   }
 
@@ -250,7 +251,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
-      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+      case _ => defineCodeGen(ctx, ev, c => s"(double)(java.lang.Math.${funcName}($c))")
     }
   }
 }
@@ -363,7 +364,8 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision - scale + 1, 0)
-    case _ => LongType
+    case LongType => LongType
+    case _ => DoubleType
   }
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -371,7 +373,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
-    case DoubleType => f(input.asInstanceOf[Double]).toLong
+    case DoubleType => f(input.asInstanceOf[Double])
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
 
@@ -381,7 +383,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
-      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+      case _ => defineCodeGen(ctx, ev, c => s"(double)(java.lang.Math.${funcName}($c))")
     }
   }
 }

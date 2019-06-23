@@ -265,7 +265,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ceil") {
-    testUnary(Ceil, (d: Double) => math.ceil(d).toLong)
+    testUnary(Ceil, math.ceil)
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DoubleType)
 
     testUnary(Ceil, (d: Decimal) => d.ceil, (-20 to 20).map(x => Decimal(x * 0.1)))
@@ -278,24 +278,28 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val longLit: Long = 12345678901234567L
     val nullLit = Literal.create(null, NullType)
     val floatNullLit = Literal.create(null, FloatType)
-    checkEvaluation(checkDataTypeAndCast(Ceil(doublePi)), 4L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Ceil(floatPi)), 4L, EmptyRow)
+    val largeDouble: Double = 1.2345678901234e+200
+
+    checkEvaluation(checkDataTypeAndCast(Ceil(doublePi)), 4.0, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(floatPi)), 4.0, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Ceil(longLit)), longLit, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Ceil(-doublePi)), -3L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Ceil(-floatPi)), -3L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(largeDouble)), largeDouble, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(-doublePi)), -3.0, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(-floatPi)), -3.0, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Ceil(-longLit)), -longLit, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(-largeDouble)), -largeDouble, EmptyRow)
 
     checkEvaluation(checkDataTypeAndCast(Ceil(nullLit)), null, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Ceil(floatNullLit)), null, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Ceil(0)), 0L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Ceil(1)), 1L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(0L)), 0L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(1L)), 1L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Ceil(1234567890123456L)), 1234567890123456L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Ceil(0.01)), 1L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Ceil(-0.10)), 0L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(0.01)), 1.0, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(-0.10)), -0.0, EmptyRow)
   }
 
   test("floor") {
-    testUnary(Floor, (d: Double) => math.floor(d).toLong)
+    testUnary(Floor, math.floor)
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DoubleType)
 
     testUnary(Floor, (d: Decimal) => d.floor, (-20 to 20).map(x => Decimal(x * 0.1)))
@@ -308,20 +312,24 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val longLit: Long = 12345678901234567L
     val nullLit = Literal.create(null, NullType)
     val floatNullLit = Literal.create(null, FloatType)
-    checkEvaluation(checkDataTypeAndCast(Floor(doublePi)), 3L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Floor(floatPi)), 3L, EmptyRow)
+    val largeDouble: Double = 1.2345678901234e+200
+
+    checkEvaluation(checkDataTypeAndCast(Floor(doublePi)), 3.0, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(floatPi)), 3.0, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(longLit)), longLit, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Floor(-doublePi)), -4L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Floor(-floatPi)), -4L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(largeDouble)), largeDouble, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(-doublePi)), -4.0, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(-floatPi)), -4.0, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(-longLit)), -longLit, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(-largeDouble)), -largeDouble, EmptyRow)
 
     checkEvaluation(checkDataTypeAndCast(Floor(nullLit)), null, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(floatNullLit)), null, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Floor(0)), 0L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Floor(1)), 1L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(0L)), 0L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(1L)), 1L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(1234567890123456L)), 1234567890123456L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Floor(0.01)), 0L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(Floor(-0.10)), -1L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(0.01)), 0.0, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(-0.10)), -1.0, EmptyRow)
   }
 
   test("factorial") {
