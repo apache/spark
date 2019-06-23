@@ -173,11 +173,9 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
   }
 
   /**
-    * [SPARK-29106]
-    * Check Jar File exits before add to SparkContext
-    *
-    * @param path
-    */
+   *  [SPARK-29106]
+   *  Check Jar File exits before add to SparkContext
+   */
   def checkJarPath(path: String): Unit = {
     //    for Windows path, it will be checked when RPC 's fileServer.addJar
     if (!path.contains("\\")) {
