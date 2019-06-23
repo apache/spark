@@ -664,6 +664,7 @@ predicate
     | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
+// Note: check the operator precedence when adding the new operator.
 valueExpression
     : primaryExpression                                                                      #valueExpressionDefault
     | operator=(MINUS | PLUS | TILDE) valueExpression                                        #arithmeticUnary
