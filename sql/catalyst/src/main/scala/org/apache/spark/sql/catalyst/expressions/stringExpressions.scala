@@ -503,7 +503,7 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     nullSafeCodeGen(ctx, ev, (input, place, pos, len) => {
       val isMax = s"$len.equals(${Int.MaxValue})"
       s"""if ($isMax) {
-        $length = $replace.toString.size;
+        $length = $replace.toString().size;
       } else {
         $length = $len;
       }
