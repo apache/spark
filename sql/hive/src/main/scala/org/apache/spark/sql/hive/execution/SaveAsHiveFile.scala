@@ -83,6 +83,16 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
+    // SPARK-28054: Hive metastore is not case preserving and keeps partition columns
+    // with lower cased names, Hive will validate the column names in partition spec and
+    // the partition paths. Besides lowercasing the column names in the partition spec,
+    // we also need to lowercase the column names in written partition paths.
+    // scalastyle:off caselocale
+    val hiveCompatiblePartitionColumns = partitionAttributes.map { attr =>
+     attr.withName(attr.name.toLowerCase)
+    }
+    // scalastyle:on caselocale
+
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
@@ -91,7 +101,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       outputSpec =
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
-      partitionColumns = partitionAttributes,
+      partitionColumns = hiveCompatiblePartitionColumns,
       bucketSpec = None,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = Map.empty)
