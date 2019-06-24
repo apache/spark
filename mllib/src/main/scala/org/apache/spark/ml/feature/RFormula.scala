@@ -127,7 +127,7 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
 /**
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
  * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*', '^'
- * and 'I()'. Arithmetic expressions which use spark functions or registered udf's are
+ * and 'I()'. Arithmetic expressions which use spark functions or registered UDFs are
  * also supported. For example, `log2(a)` can be used for taking the base 2 logarithm
  * of column `a`, or `concat(a, ' ', b)` can be used for creating a combined string input column
  * from `a` and `b`. To avoid resolution confusions, 'I()' operator can be used so that inside
