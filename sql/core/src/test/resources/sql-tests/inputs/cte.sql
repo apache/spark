@@ -35,11 +35,15 @@ SELECT * FROM t WHERE x = 1;
 WITH t(x, y) AS (SELECT 1, 2)
 SELECT * FROM t WHERE x = 1 AND y = 2;
 
+-- CTE with duplicate column aliases
+WITH t(x, x) AS (SELECT 1, 2)
+SELECT * FROM t;
+
 -- CTE with empty column alias list is not allowed
 WITH t() AS (SELECT 1)
 SELECT * FROM t;
 
--- CTE with duplicate name is not allowed
+-- CTE with duplicate names is not allowed
 WITH
   t(x) AS (SELECT 1),
   t(x) AS (SELECT 2)
