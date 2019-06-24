@@ -31,13 +31,9 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_
 
 package object config {
 
-  private[spark] val SPARK_DRIVER_RESOURCE_PREFIX = "spark.driver.resource."
-  private[spark] val SPARK_EXECUTOR_RESOURCE_PREFIX = "spark.executor.resource."
-  private[spark] val SPARK_TASK_RESOURCE_PREFIX = "spark.task.resource."
-
-  private[spark] val SPARK_RESOURCE_COUNT_SUFFIX = ".count"
-  private[spark] val SPARK_RESOURCE_DISCOVERY_SCRIPT_SUFFIX = ".discoveryScript"
-  private[spark] val SPARK_RESOURCE_VENDOR_SUFFIX = ".vendor"
+  private[spark] val SPARK_DRIVER_PREFIX = "spark.driver"
+  private[spark] val SPARK_EXECUTOR_PREFIX = "spark.executor"
+  private[spark] val SPARK_TASK_PREFIX = "spark.task"
 
   private[spark] val DRIVER_RESOURCES_FILE =
     ConfigBuilder("spark.driver.resourcesFile")
@@ -1195,9 +1191,17 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val EVENT_LOG_COMPRESSION_CODEC =
+    ConfigBuilder("spark.eventLog.compression.codec")
+      .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
+        "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
+        "the codec. If this is not given, spark.io.compression.codec will be used.")
+      .fallbackConf(IO_COMPRESSION_CODEC)
+
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
       .intConf
+      .checkValue(_ >= 0, "The buffer size must not be negative")
       .createWithDefault(65536)
 
   private[spark] val LOCALITY_WAIT_PROCESS = ConfigBuilder("spark.locality.wait.process")

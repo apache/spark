@@ -28,7 +28,7 @@ import org.apache.spark.sql.sources.v2.reader.InputPartition
  * A collection of file blocks that should be read as a single task
  * (possibly from multiple partitioned directories).
  */
-case class FilePartition(index: Int, files: Seq[PartitionedFile])
+case class FilePartition(index: Int, files: Array[PartitionedFile])
   extends Partition with InputPartition {
   override def preferredLocations(): Array[String] = {
     // Computes total number of bytes can be retrieved from each host.
@@ -62,7 +62,7 @@ object FilePartition extends Logging {
     def closePartition(): Unit = {
       if (currentFiles.nonEmpty) {
         // Copy to a new Array.
-        val newPartition = FilePartition(partitions.size, currentFiles.toArray.toSeq)
+        val newPartition = FilePartition(partitions.size, currentFiles.toArray)
         partitions += newPartition
       }
       currentFiles.clear()

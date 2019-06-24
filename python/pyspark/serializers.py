@@ -296,10 +296,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             mask = s.isnull()
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
-                s = _check_series_convert_timestamps_internal(s.fillna(0), self._timezone)
-                # TODO: need cast after Arrow conversion, ns values cause error with pandas 0.19.2
-                return pa.Array.from_pandas(s, mask=mask).cast(t, safe=False)
-
+                s = _check_series_convert_timestamps_internal(s, self._timezone)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except pa.ArrowException as e:

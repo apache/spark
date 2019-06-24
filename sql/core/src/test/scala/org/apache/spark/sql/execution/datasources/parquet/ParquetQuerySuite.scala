@@ -23,13 +23,15 @@ import java.util.concurrent.TimeUnit
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
-import org.apache.spark.{DebugFilesystem, SparkException}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -38,7 +40,7 @@ import org.apache.spark.util.Utils
 /**
  * A test suite that tests various Parquet queries.
  */
-class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext {
+abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext {
   import testImplicits._
 
   test("simple select queries") {
@@ -767,29 +769,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
-  test("returning batch for wide table") {
-    withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
-        df.write.mode(SaveMode.Overwrite).parquet(path)
-
-        // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
-        val df2 = spark.read.parquet(path)
-        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
-        assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
-        checkAnswer(df2, df)
-
-        // return batch
-        val columns = Seq.tabulate(9) {i => s"c$i"}
-        val df3 = df2.selectExpr(columns : _*)
-        val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
-        assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsBatch)
-        checkAnswer(df3, df.selectExpr(columns : _*))
-      }
-    }
-  }
-
   test("SPARK-15719: disable writing summary files by default") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -923,6 +902,76 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
     testMigration(fromTsType = "INT96", toTsType = "TIMESTAMP_MICROS")
     testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
+  }
+}
+
+class ParquetV1QuerySuite extends ParquetQuerySuite {
+  import testImplicits._
+
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "parquet")
+      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "parquet")
+
+  test("returning batch for wide table") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
+        df.write.mode(SaveMode.Overwrite).parquet(path)
+
+        // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
+        val df2 = spark.read.parquet(path)
+        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+        assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
+        checkAnswer(df2, df)
+
+        // return batch
+        val columns = Seq.tabulate(9) {i => s"c$i"}
+        val df3 = df2.selectExpr(columns : _*)
+        val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+        assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsBatch)
+        checkAnswer(df3, df.selectExpr(columns : _*))
+      }
+    }
+  }
+}
+
+class ParquetV2QuerySuite extends ParquetQuerySuite {
+  import testImplicits._
+
+  // TODO: enable Parquet V2 write path after file source V2 writers are workable.
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+
+  test("returning batch for wide table") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
+        df.write.mode(SaveMode.Overwrite).parquet(path)
+
+        // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
+        val df2 = spark.read.parquet(path)
+        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+        val parquetScan2 = fileScan2.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
+        // The method `supportColumnarReads` in Parquet doesn't depends on the input partition.
+        // Here we can pass null input partition to the method for testing propose.
+        assert(!parquetScan2.createReaderFactory().supportColumnarReads(null))
+        checkAnswer(df2, df)
+
+        // return batch
+        val columns = Seq.tabulate(9) {i => s"c$i"}
+        val df3 = df2.selectExpr(columns : _*)
+        val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+        val parquetScan3 = fileScan3.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
+        assert(parquetScan3.createReaderFactory().supportColumnarReads(null))
+        checkAnswer(df3, df.selectExpr(columns : _*))
+      }
+    }
   }
 }
 

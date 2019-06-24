@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1695,7 +1696,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
     assert(e.message.contains("Table or view not found: " +
-      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`"))
+      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.file_path"))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `Jdbc`.`file_path`")
@@ -2980,62 +2981,82 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-27699 Validate pushed down filters") {
-    def checkPushedFilters(df: DataFrame, filters: Array[sources.Filter]): Unit = {
+    def checkPushedFilters(format: String, df: DataFrame, filters: Array[sources.Filter]): Unit = {
       val scan = df.queryExecution.sparkPlan
         .find(_.isInstanceOf[BatchScanExec]).get.asInstanceOf[BatchScanExec]
         .scan
-      assert(scan.isInstanceOf[OrcScan])
-      assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
+      format match {
+        case "orc" =>
+          assert(scan.isInstanceOf[OrcScan])
+          assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
+        case "parquet" =>
+          assert(scan.isInstanceOf[ParquetScan])
+          assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
+        case _ =>
+          fail(s"unknow format $format")
+      }
     }
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
-      withTempPath { dir =>
-        spark.range(10).map(i => (i, i.toString)).toDF("id", "s").write.orc(dir.getCanonicalPath)
-        val df = spark.read.orc(dir.getCanonicalPath)
-        checkPushedFilters(
-          df.where(('id < 2 and 's.contains("foo")) or ('id > 10 and 's.contains("bar"))),
-          Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
-        checkPushedFilters(
-          df.where('s.contains("foo") or ('id > 10 and 's.contains("bar"))),
-          Array.empty)
-        checkPushedFilters(
-          df.where('id < 2 and not('id > 10 and 's.contains("bar"))),
-          Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
+
+    Seq("orc", "parquet").foreach { format =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+        withTempPath { dir =>
+          spark.range(10).map(i => (i, i.toString)).toDF("id", "s")
+            .write
+            .format(format)
+            .save(dir.getCanonicalPath)
+          val df = spark.read.format(format).load(dir.getCanonicalPath)
+          checkPushedFilters(
+            format,
+            df.where(('id < 2 and 's.contains("foo")) or ('id > 10 and 's.contains("bar"))),
+            Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
+          checkPushedFilters(
+            format,
+            df.where('s.contains("foo") or ('id > 10 and 's.contains("bar"))),
+            Array.empty)
+          checkPushedFilters(
+            format,
+            df.where('id < 2 and not('id > 10 and 's.contains("bar"))),
+            Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
+        }
       }
     }
   }
 
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
-    Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
-      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
-        withTable("t") {
-          sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
-          sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
-          if (enableOptimizeMetadataOnlyQuery) {
-            // The result is wrong if we enable the configuration.
-            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(5))
-          } else {
-            checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+      Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
+        withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key ->
+          enableOptimizeMetadataOnlyQuery.toString) {
+          withTable("t") {
+            sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
+            sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
+            if (enableOptimizeMetadataOnlyQuery) {
+              // The result is wrong if we enable the configuration.
+              checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(5))
+            } else {
+              checkAnswer(sql("SELECT MAX(p1) FROM t"), Row(null))
+            }
+            checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
           }
-          checkAnswer(sql("SELECT MAX(col1) FROM t"), Row(null))
-        }
 
-        withTempPath { path =>
-          val tabLocation = path.getCanonicalPath
-          val partLocation1 = tabLocation + "/p=3"
-          val partLocation2 = tabLocation + "/p=1"
-          // SPARK-23271 empty RDD when saved should write a metadata only file
-          val df = spark.emptyDataFrame.select(lit(1).as("col"))
-          df.write.parquet(partLocation1)
-          val df2 = spark.range(10).toDF("col")
-          df2.write.parquet(partLocation2)
-          val readDF = spark.read.parquet(tabLocation)
-          if (enableOptimizeMetadataOnlyQuery) {
-            // The result is wrong if we enable the configuration.
-            checkAnswer(readDF.selectExpr("max(p)"), Row(3))
-          } else {
-            checkAnswer(readDF.selectExpr("max(p)"), Row(1))
+          withTempPath { path =>
+            val tabLocation = path.getCanonicalPath
+            val partLocation1 = tabLocation + "/p=3"
+            val partLocation2 = tabLocation + "/p=1"
+            // SPARK-23271 empty RDD when saved should write a metadata only file
+            val df = spark.emptyDataFrame.select(lit(1).as("col"))
+            df.write.parquet(partLocation1)
+            val df2 = spark.range(10).toDF("col")
+            df2.write.parquet(partLocation2)
+            val readDF = spark.read.parquet(tabLocation)
+            if (enableOptimizeMetadataOnlyQuery) {
+              // The result is wrong if we enable the configuration.
+              checkAnswer(readDF.selectExpr("max(p)"), Row(3))
+            } else {
+              checkAnswer(readDF.selectExpr("max(p)"), Row(1))
+            }
+            checkAnswer(readDF.selectExpr("max(col)"), Row(9))
           }
-          checkAnswer(readDF.selectExpr("max(col)"), Row(9))
         }
       }
     }

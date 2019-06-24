@@ -758,6 +758,18 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+
+  test("insert overwrite to dir from non-existent table") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE notexists")
+      }.getMessage
+      assert(e.contains("Table or view not found"))
+    }
+  }
+
   test("SPARK-21165: FileFormatWriter should only rely on attributes from analyzed plan") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
       withTable("tab1", "tab2") {

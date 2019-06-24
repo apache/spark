@@ -1000,8 +1000,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
       assertMigrationError(e.getMessage, sparkMetadataDir, legacySparkMetadataDir)
 
-      // Restarting the streaming query should detect the legacy _spark_metadata directory and throw
-      // an error
+      // Restarting the streaming query should detect the legacy _spark_metadata directory and
+      // throw an error
       val inputData = MemoryStream[Int]
       val e2 = intercept[SparkException] {
         inputData.toDF()
@@ -1015,7 +1015,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       // Move "_spark_metadata" to fix the file sink and test the checkpoint path.
       FileUtils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
 
-      // Restarting the streaming query should detect the legacy checkpoint path and throw an error
+      // Restarting the streaming query should detect the legacy
+      // checkpoint path and throw an error.
       val e3 = intercept[SparkException] {
         inputData.toDF()
           .writeStream

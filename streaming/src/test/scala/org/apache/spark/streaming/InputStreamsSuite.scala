@@ -293,8 +293,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val textPath = new Path(generatedSubDir, "renamed.txt")
         write(textPath, "renamed\n")
         val now = clock.getTimeMillis()
-        val modTime = now + durationMs / 2
-        fs.setTimes(textPath, modTime, modTime)
+        fs.setTimes(textPath, now, now)
         val textFilestatus = fs.getFileStatus(existingFile)
         assert(textFilestatus.getModificationTime < now + durationMs)
 

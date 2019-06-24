@@ -194,10 +194,10 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
- <td><code>spark.driver.resource.{resourceName}.count</code></td>
+ <td><code>spark.driver.resource.{resourceName}.amount</code></td>
   <td>0</td>
   <td>
-    The number of a particular resource type to use on the driver.
+    Amount of a particular resource type to use on the driver.
     If this is used, you must also specify the
     <code>spark.driver.resource.{resourceName}.discoveryScript</code>
     for the driver to find the resource on startup.
@@ -264,10 +264,10 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
- <td><code>spark.executor.resource.{resourceName}.count</code></td>
+ <td><code>spark.executor.resource.{resourceName}.amount</code></td>
   <td>0</td>
   <td>
-    The number of a particular resource type to use per executor process.
+    Amount of a particular resource type to use per executor process.
     If this is used, you must also specify the
     <code>spark.executor.resource.{resourceName}.discoveryScript</code>
     for the executor to find the resource on startup.
@@ -880,7 +880,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
-    Compression will use <code>spark.io.compression.codec</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.compression.codec</code></td>
+  <td></td>
+  <td>
+    The codec to compress logged events. If this is not given,
+    <code>spark.io.compression.codec</code> will be used.
   </td>
 </tr>
 <tr>
@@ -1106,6 +1113,14 @@ Apart from these, the following properties are also available, and may be useful
     Whether to compress broadcast variables before sending them. Generally a good idea.
     Compression will use <code>spark.io.compression.codec</code>.
   </td>
+</tr>
+<tr>
+  <td><code>spark.checkpoint.compress</code></td>
+  <td>false</td>
+  <td>
+    Whether to compress RDD checkpoints. Generally a good idea.
+    Compression will use <code>spark.io.compression.codec</code>.
+   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
@@ -1888,11 +1903,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.task.resource.{resourceName}.count</code></td>
+  <td><code>spark.task.resource.{resourceName}.amount</code></td>
   <td>1</td>
   <td>
-    Number of a particular resource type to allocate for each task. If this is specified
-    you must also provide the executor config <code>spark.executor.resource.{resourceName}.count</code>
+    Amount of a particular resource type to allocate for each task. If this is specified
+    you must also provide the executor config <code>spark.executor.resource.{resourceName}.amount</code>
     and any corresponding discovery configs so that your executors are created with that resource type.
   </td>
 </tr>
