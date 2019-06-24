@@ -755,7 +755,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf(SparkHadoopConf.get().get)
+      conf: JobConf = new JobConf(SparkHadoopConf.get.conf)
     ): Unit = ssc.withScope {
     // Wrap conf in SerializableWritable so that ForeachDStream can be serialized for checkpoints
     val serializableConf = new SerializableJobConf(conf)
@@ -789,7 +789,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      conf: Configuration = SparkHadoopConf.get().get
+      conf: Configuration = SparkHadoopConf.get.conf
     ): Unit = ssc.withScope {
     // Wrap conf in SerializableWritable so that ForeachDStream can be serialized for checkpoints
     val serializableConf = new SerializableConfiguration(conf)

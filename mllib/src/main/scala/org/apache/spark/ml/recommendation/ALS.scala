@@ -959,7 +959,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       previousCheckpointFile.foreach { file =>
         try {
           val checkpointFile = new Path(file)
-          checkpointFile.getFileSystem(SparkHadoopConf.get().get).delete(checkpointFile, true)
+          checkpointFile.getFileSystem(SparkHadoopConf.get.conf).delete(checkpointFile, true)
         } catch {
           case e: IOException =>
             logWarning(s"Cannot delete checkpoint file $file:", e)

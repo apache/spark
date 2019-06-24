@@ -609,7 +609,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * A global Hadoop Conf used to set, track hadoop related configurations.
    */
   def hadoopConf(): SparkHadoopConf = {
-    SparkHadoopConf.get()
+    SparkHadoopConf.get
   }
 
   /**

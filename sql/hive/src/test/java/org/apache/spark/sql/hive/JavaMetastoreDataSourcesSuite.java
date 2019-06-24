@@ -73,7 +73,7 @@ public class JavaMetastoreDataSourcesSuite {
     }
     HiveSessionCatalog catalog = (HiveSessionCatalog) sqlContext.sessionState().catalog();
     hiveManagedPath = new Path(catalog.defaultTablePath(new TableIdentifier("javaSavedTable")));
-    fs = hiveManagedPath.getFileSystem(sc.hadoopConf().get());
+    fs = hiveManagedPath.getFileSystem(sc.hadoopConf().conf());
     fs.delete(hiveManagedPath, true);
 
     List<String> jsonObjects = new ArrayList<>(10);

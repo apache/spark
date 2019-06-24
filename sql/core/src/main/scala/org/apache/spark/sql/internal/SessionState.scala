@@ -83,7 +83,7 @@ private[sql] class SessionState(
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
-    SparkHadoopConf.get().get,
+    SparkHadoopConf.get.conf,
     conf)
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {

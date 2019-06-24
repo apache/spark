@@ -27,23 +27,17 @@ import org.apache.spark.deploy.SparkHadoopUtil
  * Hadoop Configuration for the Hadoop code (e.g. file systems).
  */
 
-class SparkHadoopConf(conf: Configuration) {
-
-  def get: Configuration = conf
+class SparkHadoopConf(var conf: Configuration) {
 
   def get(name: String): String = conf.get(name)
 
-  def set(conf: Configuration, entries: (String, String)*): Unit = {
+  def set(entries: (String, String)*): Unit = {
     entries.foreach { case (name, value) =>
       conf.set(name, value)
     }
   }
 
-  def set(entries: (String, String)*): Unit = {
-    set(conf, entries: _*)
-  }
-
-  def set(name: String, value: String): Unit = set(conf, name -> value)
+  def set(name: String, value: String): Unit = set(name -> value)
 
   def unset(name: String): Unit = conf.unset(name)
 
@@ -56,7 +50,7 @@ object SparkHadoopConf {
   def init(conf: SparkConf): Unit = {
     hadoopConf = new ThreadLocal[SparkHadoopConf]() {
       override def initialValue: SparkHadoopConf = {
-        val hconf = SparkHadoopUtil.get.newConfiguration(conf)
+        val _hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
         // Performance optimization: this dummy call to .size() triggers eager evaluation of
         // Configuration's internal  `properties` field, guaranteeing that it will be computed and
         // cached before SessionState.newHadoopConf() uses `sc.hadoopConfiguration` to create
@@ -65,16 +59,11 @@ object SparkHadoopConf {
         // parsing to load configuration defaults and populate its own properties. By ensuring
         // that we've pre-computed the parent's properties, the child Configuration will simply
         // clone the parent's properties.
-        hconf.size()
-        new SparkHadoopConf(hconf)
+        _hadoopConf.size()
+        new SparkHadoopConf(_hadoopConf)
       }
     }
   }
 
-  def get(): SparkHadoopConf = hadoopConf.get()
-
-  def set(conf: SparkHadoopConf): Unit = hadoopConf.set(conf)
-
-
-
+  def get: SparkHadoopConf = hadoopConf.get
 }

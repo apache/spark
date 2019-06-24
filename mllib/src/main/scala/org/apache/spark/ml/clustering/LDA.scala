@@ -743,7 +743,7 @@ class DistributedLDAModel private[ml] (
   @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
-    val hadoopConf = SparkHadoopConf.get().get
+    val hadoopConf = SparkHadoopConf.get.conf
     _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, hadoopConf))
     _checkpointFiles = Array.empty[String]
   }

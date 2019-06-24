@@ -220,7 +220,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       // Confirm the checkpoint directory exists
       assert(ReliableRDDCheckpointData.checkpointPath(sc, rddId).isDefined)
       val path = ReliableRDDCheckpointData.checkpointPath(sc, rddId).get
-      val fs = path.getFileSystem(SparkHadoopConf.get().get)
+      val fs = path.getFileSystem(SparkHadoopConf.get.conf)
       assert(fs.exists(path))
 
       // the checkpoint is not cleaned by default (without the configuration set)

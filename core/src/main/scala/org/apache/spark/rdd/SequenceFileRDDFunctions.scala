@@ -65,7 +65,7 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
     logInfo("Saving as sequence file of type " +
       s"(${_keyWritableClass.getSimpleName},${_valueWritableClass.getSimpleName})" )
     val format = classOf[SequenceFileOutputFormat[Writable, Writable]]
-    val jobConf = new JobConf(SparkHadoopConf.get().get)
+    val jobConf = new JobConf(SparkHadoopConf.get.conf)
     if (!convertKey && !convertValue) {
       self.saveAsHadoopFile(path, _keyWritableClass, _valueWritableClass, format, jobConf, codec)
     } else if (!convertKey && convertValue) {

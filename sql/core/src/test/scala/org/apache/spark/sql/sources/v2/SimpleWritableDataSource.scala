@@ -85,7 +85,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
     override def buildForBatch(): BatchWrite = {
       val hadoopPath = new Path(path)
-      val hadoopConf = SparkHadoopConf.get().get
+      val hadoopConf = SparkHadoopConf.get.conf
       val fs = hadoopPath.getFileSystem(hadoopConf)
 
       if (needTruncate) {
@@ -134,7 +134,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     extends SimpleBatchTable with SupportsWrite {
 
     private val path = options.get("path")
-    private val conf = SparkHadoopConf.get().get
+    private val conf = SparkHadoopConf.get.conf
 
     override def schema(): StructType = tableSchema
 

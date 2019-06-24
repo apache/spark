@@ -327,9 +327,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val testOutput = Array[Byte](1, 2, 3, 4, 5)
     val outFile = writeBinaryData(testOutput, 1)
-    SparkHadoopConf.get().get.setLong(
+    SparkHadoopConf.get.conf.setLong(
       "mapreduce.input.fileinputformat.split.minsize.per.node", 5123456)
-    SparkHadoopConf.get().get.setLong(
+    SparkHadoopConf.get.conf.setLong(
       "mapreduce.input.fileinputformat.split.minsize.per.rack", 5123456)
 
     val (_, data) = sc.binaryFiles(outFile.getAbsolutePath).collect().head
@@ -451,7 +451,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
       Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
-    val job = Job.getInstance(SparkHadoopConf.get().get)
+    val job = Job.getInstance(SparkHadoopConf.get.conf)
     job.setOutputKeyClass(classOf[String])
     job.setOutputValueClass(classOf[String])
     job.setOutputFormatClass(classOf[NewTextOutputFormat[String, String]])

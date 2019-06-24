@@ -145,7 +145,7 @@ private object PeriodicGraphCheckpointerSuite {
     //       Instead, we check for the presence of the checkpoint files.
     //       This test should continue to work even after this graph.isCheckpointed issue
     //       is fixed (though it can then be simplified and not look for the files).
-    val hadoopConf = SparkHadoopConf.get().get
+    val hadoopConf = SparkHadoopConf.get.conf
     graph.getCheckpointFiles.foreach { checkpointFile =>
       val path = new Path(checkpointFile)
       val fs = path.getFileSystem(hadoopConf)

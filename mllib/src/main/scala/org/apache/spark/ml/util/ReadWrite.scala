@@ -674,7 +674,7 @@ private[ml] object MetaAlgorithmReadWrite {
 private[ml] class FileSystemOverwrite extends Logging {
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean, sc: SparkContext): Unit = {
-    val hadoopConf = SparkHadoopConf.get().get
+    val hadoopConf = SparkHadoopConf.get.conf
     val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

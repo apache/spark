@@ -989,7 +989,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      conf: Configuration = SparkHadoopConf.get().get): Unit = self.withScope {
+      conf: Configuration = SparkHadoopConf.get.conf): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
     val job = NewAPIHadoopJob.getInstance(hadoopConf)
@@ -1012,7 +1012,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       codec: Class[_ <: CompressionCodec]): Unit = self.withScope {
     saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass,
-      new JobConf(SparkHadoopConf.get().get), Option(codec))
+      new JobConf(SparkHadoopConf.get.conf), Option(codec))
   }
 
   /**
@@ -1029,7 +1029,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf(SparkHadoopConf.get().get),
+      conf: JobConf = new JobConf(SparkHadoopConf.get.conf),
       codec: Option[Class[_ <: CompressionCodec]] = None): Unit = self.withScope {
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf

@@ -53,10 +53,10 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
     sc = new SparkContext("local", "test", conf)
 
     // Set the block size of local file system to test whether files are split right or not.
-    SparkHadoopConf.get().get.setLong("fs.local.block.size", 32)
-    SparkHadoopConf.get().get.set("io.compression.codecs",
+    SparkHadoopConf.get.conf.setLong("fs.local.block.size", 32)
+    SparkHadoopConf.get.conf.set("io.compression.codecs",
       "org.apache.hadoop.io.compress.GzipCodec,org.apache.hadoop.io.compress.DefaultCodec")
-    factory = new CompressionCodecFactory(SparkHadoopConf.get().get)
+    factory = new CompressionCodecFactory(SparkHadoopConf.get.conf)
   }
 
   override def afterAll() {

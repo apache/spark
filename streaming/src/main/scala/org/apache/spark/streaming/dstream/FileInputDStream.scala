@@ -303,7 +303,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   private def fs: FileSystem = {
-    if (_fs == null) _fs = directoryPath.getFileSystem(SparkHadoopConf.get().get)
+    if (_fs == null) _fs = directoryPath.getFileSystem(SparkHadoopConf.get.conf)
     _fs
   }
 

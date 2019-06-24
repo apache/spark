@@ -286,13 +286,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
-  @deprecated("please use SparkHadoopConf.get().get or hadoopConf.get.", "3.0.0")
-  def hadoopConfiguration: Configuration = SparkHadoopConf.get().get
+  @deprecated("please use SparkHadoopConf.get.conf or hadoopConf.get.", "3.0.0")
+  def hadoopConfiguration: Configuration = SparkHadoopConf.get.conf
 
   /**
    * A global Hadoop Conf used to set, track hadoop related configurations.
    */
-  def hadoopConf: SparkHadoopConf = SparkHadoopConf.get()
+  def hadoopConf: SparkHadoopConf = SparkHadoopConf.get
 
   private[spark] def executorMemory: Int = _executorMemory
 
@@ -541,7 +541,7 @@ class SparkContext(config: SparkConf) extends Logging {
       if (isEventLogEnabled) {
         val logger =
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
-            _conf, SparkHadoopConf.get().get)
+            _conf, SparkHadoopConf.get.conf)
         logger.start()
         listenerBus.addToEventLogQueue(logger)
         Some(logger)
@@ -894,7 +894,7 @@ class SparkContext(config: SparkConf) extends Logging {
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[(String, String)] = withScope {
     assertNotStopped()
-    val job = NewHadoopJob.getInstance(SparkHadoopConf.get().get)
+    val job = NewHadoopJob.getInstance(SparkHadoopConf.get.conf)
     // Use setInputPaths so that wholeTextFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
@@ -946,7 +946,7 @@ class SparkContext(config: SparkConf) extends Logging {
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[(String, PortableDataStream)] = withScope {
     assertNotStopped()
-    val job = NewHadoopJob.getInstance(SparkHadoopConf.get().get)
+    val job = NewHadoopJob.getInstance(SparkHadoopConf.get.conf)
     // Use setInputPaths so that binaryFiles aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
     NewFileInputFormat.setInputPaths(job, path)
@@ -976,7 +976,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def binaryRecords(
       path: String,
       recordLength: Int,
-      conf: Configuration = SparkHadoopConf.get().get): RDD[Array[Byte]] = withScope {
+      conf: Configuration = SparkHadoopConf.get.conf): RDD[Array[Byte]] = withScope {
     assertNotStopped()
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = newAPIHadoopFile[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](path,
@@ -1054,10 +1054,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.getLocal(SparkHadoopConf.get().get)
+    FileSystem.getLocal(SparkHadoopConf.get.conf)
 
     // A Hadoop configuration can be about 10 KiB, which is pretty big, so broadcast it.
-    val confBroadcast = broadcast(new SerializableConfiguration(SparkHadoopConf.get().get))
+    val confBroadcast = broadcast(new SerializableConfiguration(SparkHadoopConf.get.conf))
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
     new HadoopRDD(
       this,
@@ -1168,12 +1168,12 @@ class SparkContext(config: SparkConf) extends Logging {
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration = SparkHadoopConf.get().get): RDD[(K, V)] = withScope {
+      conf: Configuration = SparkHadoopConf.get.conf): RDD[(K, V)] = withScope {
     assertNotStopped()
 
     // This is a hack to enforce loading hdfs-site.xml.
     // See SPARK-11227 for details.
-    FileSystem.getLocal(SparkHadoopConf.get().get)
+    FileSystem.getLocal(SparkHadoopConf.get.conf)
 
     // The call to NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
@@ -1204,7 +1204,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * copy them using a `map` function.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
-      conf: Configuration = SparkHadoopConf.get().get,
+      conf: Configuration = SparkHadoopConf.get.conf,
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V]): RDD[(K, V)] = withScope {
@@ -1495,7 +1495,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val hadoopPath = new Path(schemeCorrectedPath)
     val scheme = new URI(schemeCorrectedPath).getScheme
     if (!Array("http", "https", "ftp").contains(scheme)) {
-      val fs = hadoopPath.getFileSystem(SparkHadoopConf.get().get)
+      val fs = hadoopPath.getFileSystem(SparkHadoopConf.get.conf)
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
         throw new SparkException(s"addFile does not support local directories when not running " +
@@ -1521,7 +1521,7 @@ class SparkContext(config: SparkConf) extends Logging {
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
       Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
-        env.securityManager, SparkHadoopConf.get().get, timestamp, useCache = false)
+        env.securityManager, SparkHadoopConf.get.conf, timestamp, useCache = false)
       postEnvironmentUpdate()
     } else {
       logWarning(s"The path $path has been added already. Overwriting of added paths " +
@@ -2310,7 +2310,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     checkpointDir = Option(directory).map { dir =>
       val path = new Path(dir, UUID.randomUUID().toString)
-      val fs = path.getFileSystem(SparkHadoopConf.get().get)
+      val fs = path.getFileSystem(SparkHadoopConf.get.conf)
       fs.mkdirs(path)
       fs.getFileStatus(path).getPath.toString
     }
@@ -2374,7 +2374,7 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
       startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls,
       schedulerBackend.getDriverAttributes))
-    _driverLogger.foreach(_.startSync(SparkHadoopConf.get().get))
+    _driverLogger.foreach(_.startSync(SparkHadoopConf.get.conf))
   }
 
   /** Post the application end event */
@@ -2388,7 +2388,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
-      val environmentDetails = SparkEnv.environmentDetails(conf, SparkHadoopConf.get().get,
+      val environmentDetails = SparkEnv.environmentDetails(conf, SparkHadoopConf.get.conf,
         schedulingMode, addedJarPaths, addedFilePaths)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
@@ -2510,7 +2510,7 @@ object SparkContext extends Logging {
   }
 
   def withHadoopConf[T](entries: (String, String)*)(body: => T): T = {
-    val conf = SparkHadoopConf.get()
+    val conf = SparkHadoopConf.get
     val originalEntries = entries.map{ e => (e._1, conf.get(e._1)) }
     conf.set(entries: _*)
     try {

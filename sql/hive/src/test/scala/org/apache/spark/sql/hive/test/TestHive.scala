@@ -102,7 +102,7 @@ private[hive] class TestHiveSharedState(
   override lazy val externalCatalog: ExternalCatalogWithListener = {
     new ExternalCatalogWithListener(new TestHiveExternalCatalog(
       sc.conf,
-      SparkHadoopConf.get().get,
+      SparkHadoopConf.get.conf,
       hiveClient))
   }
 }
@@ -203,12 +203,12 @@ private[hive] class TestHiveSparkSession(
       // After session cloning, the JDBC connect string for a JDBC metastore should not be changed.
       existingSharedState.map { state =>
         val connKey =
-          SparkHadoopConf.get().get(ConfVars.METASTORECONNECTURLKEY.varname)
+          SparkHadoopConf.get.get(ConfVars.METASTORECONNECTURLKEY.varname)
         ConfVars.METASTORECONNECTURLKEY.varname -> connKey
       }
 
     metastoreTempConf.foreach { case (k, v) =>
-      SparkHadoopConf.get().set(k, v)
+      SparkHadoopConf.get.set(k, v)
     }
   }
 

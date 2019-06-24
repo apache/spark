@@ -81,7 +81,7 @@ private[spark] object ReliableRDDCheckpointData extends Logging {
   /** Clean up the files associated with the checkpoint data for this RDD. */
   def cleanCheckpoint(sc: SparkContext, rddId: Int): Unit = {
     checkpointPath(sc, rddId).foreach { path =>
-      path.getFileSystem(SparkHadoopConf.get().get).delete(path, true)
+      path.getFileSystem(SparkHadoopConf.get.conf).delete(path, true)
     }
   }
 }

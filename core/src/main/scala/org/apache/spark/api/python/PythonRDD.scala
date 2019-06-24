@@ -282,7 +282,7 @@ private[spark] object PythonRDD extends Logging {
     val kc = Utils.classForName[K](keyClass)
     val vc = Utils.classForName[V](valueClass)
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
-    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(SparkHadoopConf.get().get))
+    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(SparkHadoopConf.get.conf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -304,7 +304,7 @@ private[spark] object PythonRDD extends Logging {
       valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String],
       batchSize: Int): JavaRDD[Array[Byte]] = {
-    val mergedConf = getMergedConf(confAsMap, SparkHadoopConf.get().get)
+    val mergedConf = getMergedConf(confAsMap, SparkHadoopConf.get.conf)
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
@@ -373,7 +373,7 @@ private[spark] object PythonRDD extends Logging {
       valueConverterClass: String,
       confAsMap: java.util.HashMap[String, String],
       batchSize: Int): JavaRDD[Array[Byte]] = {
-    val mergedConf = getMergedConf(confAsMap, SparkHadoopConf.get().get)
+    val mergedConf = getMergedConf(confAsMap, SparkHadoopConf.get.conf)
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
@@ -558,7 +558,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
     val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
       inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
-    val mergedConf = getMergedConf(confAsMap, SparkHadoopConf.get().get)
+    val mergedConf = getMergedConf(confAsMap, SparkHadoopConf.get.conf)
     val codec = Option(compressionCodecClass).map(Utils.classForName(_).asInstanceOf[Class[C]])
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new JavaToWritableConverter)
@@ -588,7 +588,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd = SerDeUtil.pythonToPairRDD(pyRDD, batchSerialized)
     val (kc, vc) = getKeyValueTypes(keyClass, valueClass).getOrElse(
       inferKeyValueTypes(rdd, keyConverterClass, valueConverterClass))
-    val mergedConf = getMergedConf(confAsMap, SparkHadoopConf.get().get)
+    val mergedConf = getMergedConf(confAsMap, SparkHadoopConf.get.conf)
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new JavaToWritableConverter)
     val fc = Utils.classForName(outputFormatClass).asInstanceOf[Class[F]]
