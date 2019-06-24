@@ -161,7 +161,7 @@ private[spark] class ExecutorMonitor(
     }
 
     var updateExecutors = false
-    shuffleStages.foreach { case (sid, shuffle) =>
+    shuffleStages.foreach { case (stageId, shuffle) =>
       val jobIDs = shuffleToActiveJobs.get(shuffle) match {
         case Some(jobs) =>
           // If a shuffle is being re-used, we need to re-scan the executors and update their
@@ -171,7 +171,7 @@ private[spark] class ExecutorMonitor(
           jobs
 
         case _ =>
-          logDebug(s"Registered new shuffle $shuffle (from stage $sid).")
+          logDebug(s"Registered new shuffle $shuffle (from stage $stageId).")
           val jobs = new mutable.ArrayBuffer[Int]()
           shuffleToActiveJobs(shuffle) = jobs
           jobs
@@ -180,11 +180,11 @@ private[spark] class ExecutorMonitor(
     }
 
     if (updateExecutors) {
-      val active = shuffleStages.map(_._2).toSeq
+      val activeShuffleIds = shuffleStages.map(_._2).toSeq
       var needTimeoutUpdate = false
       executors.asScala.foreach { case (id, exec) =>
         if (!exec.hasActiveShuffle) {
-          exec.updateActiveShuffles(active)
+          exec.updateActiveShuffles(activeShuffleIds)
           if (exec.hasActiveShuffle) {
             logDebug(s"Executor $id has data needed by new active job.")
             needTimeoutUpdate = true
@@ -456,9 +456,6 @@ private[spark] class ExecutorMonitor(
     def addShuffle(id: Int): Unit = {
       if (shuffleIds.add(id)) {
         hasActiveShuffle = true
-        if (!isIdle) {
-          updateTimeout()
-        }
       }
     }
 
