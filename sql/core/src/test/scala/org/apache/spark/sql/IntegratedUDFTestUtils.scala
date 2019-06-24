@@ -46,13 +46,13 @@ import org.apache.spark.sql.types.StringType
  *
  * To register Python UDF in SQL:
  * {{{
- *   val pythonTestUDF = TestScalaUDF(name = "udf_name")
+ *   val pythonTestUDF = TestPythonUDF(name = "udf_name")
  *   registerTestUDF(pythonTestUDF, spark)
  * }}}
  *
  * To register Scalar Pandas UDF in SQL:
  * {{{
- *   val pandasTestUDF = TestScalaUDF(name = "udf_name")
+ *   val pandasTestUDF = TestScalarPandasUDF(name = "udf_name")
  *   registerTestUDF(pandasTestUDF, spark)
  * }}}
  *
