@@ -428,6 +428,25 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("overlay") {
+    checkEvaluation(Overlay(Literal("Spark SQL"),
+        Literal("_"), Literal(6), Literal(Int.MaxValue)), "Spark_SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"),
+        Literal("CORE"), Literal(7), Literal(Int.MaxValue)), "Spark CORE")
+    checkEvaluation(Overlay(Literal("Spark SQL"),
+        Literal("ANSI "), Literal(7), Literal(0)), "Spark ANSI SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"),
+        Literal("tructured"), Literal(2), Literal(4)), "Structured SQL")
+    checkEvaluation(Overlay(Literal.create(null, StringType),
+        Literal("_"), Literal(6), Literal(Int.MaxValue)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType),
+        Literal("CORE"), Literal(7), Literal(Int.MaxValue)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType),
+        Literal("ANSI "), Literal(7), Literal(0)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType),
+        Literal("tructured"), Literal(2), Literal(4)), null)
+  }
+
   test("translate") {
     checkEvaluation(
       StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")
