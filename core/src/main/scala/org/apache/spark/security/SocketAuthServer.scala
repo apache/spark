@@ -32,6 +32,9 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * Creates a server in the JVM to communicate with external processes (e.g., Python and R) for
  * handling one batch of data, with authentication and error handling.
+ *
+ * The socket server can only accept one connection, or close if no connection
+ * in 15 seconds.
  */
 private[spark] abstract class SocketAuthServer[T](
     authHelper: SocketAuthHelper,
@@ -88,9 +91,9 @@ private[spark] abstract class SocketAuthServer[T](
 }
 
 /**
- * Create a socket server class and run user function on the socket in a background thread.
- * This is the same as calling SocketAuthServer.setupOneConnectionServer except it creates
- * a server object that can then be synced from Python.
+ * Create a socket server class and run user function on the socket in a background thread
+ * that can read and write to the socket input/output streams. The function is passed in a
+ * socket that has been connected and authenticated.
  */
 private[spark] class SocketFuncServer(
     authHelper: SocketAuthHelper,
@@ -108,10 +111,15 @@ private[spark] object SocketAuthServer {
    * Convenience function to create a socket server and run a user function in a background
    * thread to write to an output stream.
    *
+   * The socket server can only accept one connection, or close if no connection
+   * in 15 seconds.
+   *
    * @param threadName Name for the background serving thread.
    * @param authHelper SocketAuthHelper for authentication
    * @param writeFunc User function to write to a given OutputStream
-   * @return
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def serveToStream(
       threadName: String,

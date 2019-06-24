@@ -138,8 +138,8 @@ private[spark] object PythonRDD extends Logging {
    * or to enable local execution.
    *
    * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, the secret for authentication, and a server object
-   *         that can be used to sync the JVM serving thread in Python.
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def runJob(
       sc: SparkContext,
@@ -158,8 +158,8 @@ private[spark] object PythonRDD extends Logging {
    * A helper function to collect an RDD as an iterator, then serve it via socket.
    *
    * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, the secret for authentication, and a server object
-   *         that can be used to sync the JVM serving thread in Python.
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def collectAndServe[T](rdd: RDD[T]): Array[Any] = {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
@@ -170,12 +170,12 @@ private[spark] object PythonRDD extends Logging {
    * are collected as separate jobs, by order of index. Partition data is first requested by a
    * non-zero integer to start a collection job. The response is prefaced by an integer with 1
    * meaning partition data will be served, 0 meaning the local iterator has been consumed,
-   * and -1 meaining an error occurred during collection. This function is used by
+   * and -1 meaning an error occurred during collection. This function is used by
    * pyspark.rdd._local_iterator_from_socket().
    *
    * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, the secret for authentication, and a server object
-   *         that can be used to sync the JVM serving thread in Python.
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
     val handleFunc = (sock: Socket) => {
@@ -447,8 +447,8 @@ private[spark] object PythonRDD extends Logging {
    * The thread will terminate after all the data are sent or any exceptions happen.
    *
    * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, the secret for authentication, and a server object
-   *         that can be used to sync the JVM serving thread in Python.
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
     serveToStream(threadName) { out =>
@@ -470,8 +470,8 @@ private[spark] object PythonRDD extends Logging {
    * exceptions happen.
    *
    * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, the secret for authentication, and a server object
-   *         that can be used to sync the JVM serving thread in Python.
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   private[spark] def serveToStream(
       threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {

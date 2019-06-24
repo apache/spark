@@ -174,7 +174,7 @@ def _local_iterator_from_socket(sock_info, serializer):
         """ Create a synchronous local iterable over a socket """
 
         def __init__(self, _sock_info, _serializer):
-            port, auth_secret, self.jserver_obj = _sock_info
+            port, auth_secret, self.jsocket_auth_server = _sock_info
             self._sockfile = _create_local_socket((port, auth_secret))
             self._serializer = _serializer
             self._read_iter = iter([])  # Initialize as empty iterator
@@ -197,7 +197,7 @@ def _local_iterator_from_socket(sock_info, serializer):
 
                 # An error occurred, join serving thread and raise any exceptions from the JVM
                 elif self._read_status == -1:
-                    self.jserver_obj.getResult()
+                    self.jsocket_auth_server.getResult()
 
         def __del__(self):
             # If local iterator is not fully consumed,
