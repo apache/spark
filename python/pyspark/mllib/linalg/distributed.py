@@ -58,7 +58,8 @@ class RowMatrix(DistributedMatrix):
     Represents a row-oriented distributed Matrix with no meaningful
     row indices.
 
-    :param rows: An RDD or DataFrame of vectors.
+    :param rows: An RDD or DataFrame of vectors. If a DataFrame is provided, it must have a single
+                 vector typed column.
     :param numRows: Number of rows in the matrix. A non-positive
                     value means unknown, at which point the number
                     of rows will be determined by the number of
@@ -464,7 +465,8 @@ class IndexedRowMatrix(DistributedMatrix):
     """
     Represents a row-oriented distributed Matrix with indexed rows.
 
-    :param rows: An RDD or DataFrame of IndexedRows or (long, vector) tuples.
+    :param rows: An RDD of IndexedRows or (long, vector) tuples or a DataFrame consisting of a
+                 long typed column of indices and a vector typed column.
     :param numRows: Number of rows in the matrix. A non-positive
                     value means unknown, at which point the number
                     of rows will be determined by the max row
