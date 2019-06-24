@@ -520,6 +520,7 @@ private[spark] class ExecutorAllocationManager(
     // to better place the executors.
     private val stageAttemptToExecutorPlacementHints =
       new mutable.HashMap[StageAttempt, (Int, Map[String, Int])]
+
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
