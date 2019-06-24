@@ -511,7 +511,7 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
       $tail = $input.substringSQL($pos + $length, ${Int.MaxValue});
       ${ev.value} = $head + $replace + $tail;
       """
-    }
+    })
   }
 }
 
