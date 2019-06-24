@@ -415,7 +415,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
-
   /**
    * Get a parameter as an integer, falling back to a default if not set
    * @throws NumberFormatException If the value cannot be interpreted as an integer
@@ -499,6 +498,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
     }
   }
+
 
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
@@ -595,7 +595,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
       s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be no less than the value of " +
-      s"spark.executor.heartbeatInterval=${executorHeartbeatIntervalMs}ms.")
+      s"${EXECUTOR_HEARTBEAT_INTERVAL.key}=${executorHeartbeatIntervalMs}ms.")
   }
 
   /**
@@ -667,12 +667,12 @@ private[spark] object SparkConf extends Logging {
         translation = s => s"${s.toLong * 10}s")),
     REDUCER_MAX_SIZE_IN_FLIGHT.key -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
-    "spark.kryoserializer.buffer" -> Seq(
+    KRYO_SERIALIZER_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
         translation = s => s"${(s.toDouble * 1000).toInt}k")),
-    "spark.kryoserializer.buffer.max" -> Seq(
+    KRYO_SERIALIZER_MAX_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
-    "spark.shuffle.file.buffer" -> Seq(
+    SHUFFLE_FILE_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
     EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),

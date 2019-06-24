@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 @Experimental
 trait LookupCatalog {
 
-  def lookupCatalog: Option[(String) => CatalogPlugin] = None
+  protected def lookupCatalog(name: String): CatalogPlugin
 
   type CatalogObjectIdentifier = (Option[CatalogPlugin], Identifier)
 
@@ -34,27 +34,23 @@ trait LookupCatalog {
    * Extract catalog plugin and identifier from a multi-part identifier.
    */
   object CatalogObjectIdentifier {
-    def unapply(parts: Seq[String]): Option[CatalogObjectIdentifier] = lookupCatalog.map { lookup =>
-      parts match {
-        case Seq(name) =>
-          (None, Identifier.of(Array.empty, name))
-        case Seq(catalogName, tail @ _*) =>
-          try {
-            val catalog = lookup(catalogName)
-            (Some(catalog), Identifier.of(tail.init.toArray, tail.last))
-          } catch {
-            case _: CatalogNotFoundException =>
-              (None, Identifier.of(parts.init.toArray, parts.last))
-          }
-      }
+    def unapply(parts: Seq[String]): Some[CatalogObjectIdentifier] = parts match {
+      case Seq(name) =>
+        Some((None, Identifier.of(Array.empty, name)))
+      case Seq(catalogName, tail @ _*) =>
+        try {
+          Some((Some(lookupCatalog(catalogName)), Identifier.of(tail.init.toArray, tail.last)))
+        } catch {
+          case _: CatalogNotFoundException =>
+            Some((None, Identifier.of(parts.init.toArray, parts.last)))
+        }
     }
   }
 
   /**
    * Extract legacy table identifier from a multi-part identifier.
    *
-   * For legacy support only. Please use
-   * [[org.apache.spark.sql.catalog.v2.LookupCatalog.CatalogObjectIdentifier]] in DSv2 code paths.
+   * For legacy support only. Please use [[CatalogObjectIdentifier]] instead on DSv2 code paths.
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {

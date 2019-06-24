@@ -352,8 +352,7 @@ class ContinuousExecution(
     // number of batches that must be retained and made recoverable, so we should keep the
     // specified number of metadata that have been committed.
     if (minLogEntriesToMaintain <= epoch) {
-      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
-      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
+      purge(epoch + 1 - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()

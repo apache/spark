@@ -90,7 +90,7 @@ trait CheckAnalysis extends PredicateHelper {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -109,7 +109,7 @@ trait CheckAnalysis extends PredicateHelper {
 
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            val from = operator.inputSet.map(_.qualifiedName).mkString(", ")
+            val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>

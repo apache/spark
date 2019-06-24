@@ -426,8 +426,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 2, 3).toDS().as("a")
     val ds2 = Seq(1, 2).toDS().as("b")
 
+    val joined = ds1.joinWith(ds2, $"a.value" === $"b.value", "inner")
+
+    val expectedSchema = StructType(Seq(
+      StructField("_1", IntegerType, nullable = false),
+      StructField("_2", IntegerType, nullable = false)
+    ))
+
+    assert(joined.schema === expectedSchema)
+
     checkDataset(
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "inner"),
+      joined,
       (1, 1), (2, 2))
   }
 
@@ -435,8 +444,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 1, 2).toDS()
     val ds2 = Seq(("a", 1), ("b", 2)).toDS()
 
+    val joined = ds1.joinWith(ds2, $"value" === $"_2")
+
+    // This is an inner join, so both outputs fields are non-nullable
+    val expectedSchema = StructType(Seq(
+      StructField("_1", IntegerType, nullable = false),
+      StructField("_2",
+        StructType(Seq(
+          StructField("_1", StringType),
+          StructField("_2", IntegerType, nullable = false)
+        )), nullable = false)
+    ))
+    assert(joined.schema === expectedSchema)
+
     checkDataset(
-      ds1.joinWith(ds2, $"value" === $"_2"),
+      joined,
       (1, ("a", 1)), (1, ("a", 1)), (2, ("b", 2)))
   }
 
@@ -1105,6 +1127,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
     val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
     val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+
+    val expectedSchema = StructType(Seq(
+      StructField("_1",
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", IntegerType, nullable = false)
+        )),
+        nullable = false),
+      // This is a left join, so the right output is nullable:
+      StructField("_2",
+        StructType(Seq(
+          StructField("a", StringType),
+          StructField("b", IntegerType, nullable = false)
+        )))
+    ))
+    assert(joined.schema === expectedSchema)
+
     val result = joined.collect().toSet
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }

@@ -33,15 +33,18 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTagName
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
-  // a TreeNode tag in SparkPlan, to carry its original logical plan. The planner will add this tag
-  // when converting a logical plan to a physical plan.
-  val LOGICAL_PLAN_TAG_NAME = TreeNodeTagName("logical_plan")
+  /** The original [[LogicalPlan]] from which this [[SparkPlan]] is converted. */
+  val LOGICAL_PLAN_TAG = TreeNodeTag[LogicalPlan]("logical_plan")
+
+  /** The [[LogicalPlan]] inherited from its ancestor. */
+  val LOGICAL_PLAN_INHERITED_TAG = TreeNodeTag[LogicalPlan]("logical_plan_inherited")
 }
 
 /**
@@ -76,6 +79,35 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       SparkSession.setActiveSession(sqlContext.sparkSession)
     }
     super.makeCopy(newArgs)
+  }
+
+  /**
+   * @return The logical plan this plan is linked to.
+   */
+  def logicalLink: Option[LogicalPlan] =
+    getTagValue(SparkPlan.LOGICAL_PLAN_TAG)
+      .orElse(getTagValue(SparkPlan.LOGICAL_PLAN_INHERITED_TAG))
+
+  /**
+   * Set logical plan link recursively if unset.
+   */
+  def setLogicalLink(logicalPlan: LogicalPlan): Unit = {
+    setLogicalLink(logicalPlan, false)
+  }
+
+  private def setLogicalLink(logicalPlan: LogicalPlan, inherited: Boolean = false): Unit = {
+    // Stop at a descendant which is the root of a sub-tree transformed from another logical node.
+    if (inherited && getTagValue(SparkPlan.LOGICAL_PLAN_TAG).isDefined) {
+      return
+    }
+
+    val tag = if (inherited) {
+      SparkPlan.LOGICAL_PLAN_INHERITED_TAG
+    } else {
+      SparkPlan.LOGICAL_PLAN_TAG
+    }
+    setTagValue(tag, logicalPlan)
+    children.foreach(_.setLogicalLink(logicalPlan, true))
   }
 
   /**

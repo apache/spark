@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin, SQLHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -80,6 +80,11 @@ case class SelfReferenceUDF(
     var config: Map[String, Any] = Map.empty[String, Any]) extends Function1[String, Boolean] {
   config += "self" -> this
   def apply(key: String): Boolean = config.contains(key)
+}
+
+case class FakeLeafPlan(child: LogicalPlan)
+  extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+  override def output: Seq[Attribute] = child.output
 }
 
 class TreeNodeSuite extends SparkFunSuite with SQLHelper {
@@ -622,31 +627,33 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("tags will be carried over after copy & transform") {
+    val tag = TreeNodeTag[String]("test")
+
     withClue("makeCopy") {
       val node = Dummy(None)
-      node.tags += TreeNodeTagName("test") -> "a"
+      node.setTagValue(tag, "a")
       val copied = node.makeCopy(Array(Some(Literal(1))))
-      assert(copied.tags(TreeNodeTagName("test")) == "a")
+      assert(copied.getTagValue(tag) == Some("a"))
     }
 
     def checkTransform(
         sameTypeTransform: Expression => Expression,
         differentTypeTransform: Expression => Expression): Unit = {
       val child = Dummy(None)
-      child.tags += TreeNodeTagName("test") -> "child"
+      child.setTagValue(tag, "child")
       val node = Dummy(Some(child))
-      node.tags += TreeNodeTagName("test") -> "parent"
+      node.setTagValue(tag, "parent")
 
       val transformed = sameTypeTransform(node)
       // Both the child and parent keep the tags
-      assert(transformed.tags(TreeNodeTagName("test")) == "parent")
-      assert(transformed.children.head.tags(TreeNodeTagName("test")) == "child")
+      assert(transformed.getTagValue(tag) == Some("parent"))
+      assert(transformed.children.head.getTagValue(tag) == Some("child"))
 
       val transformed2 = differentTypeTransform(node)
       // Both the child and parent keep the tags, even if we transform the node to a new one of
       // different type.
-      assert(transformed2.tags(TreeNodeTagName("test")) == "parent")
-      assert(transformed2.children.head.tags.contains(TreeNodeTagName("test")))
+      assert(transformed2.getTagValue(tag) == Some("parent"))
+      assert(transformed2.children.head.getTagValue(tag) == Some("child"))
     }
 
     withClue("transformDown") {
@@ -670,5 +677,35 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
         })
     }
+  }
+
+  test("clone") {
+    def assertDifferentInstance(before: AnyRef, after: AnyRef): Unit = {
+      assert(before.ne(after) && before == after)
+      before.asInstanceOf[TreeNode[_]].children.zip(
+          after.asInstanceOf[TreeNode[_]].children).foreach {
+        case (beforeChild: AnyRef, afterChild: AnyRef) =>
+          assertDifferentInstance(beforeChild, afterChild)
+      }
+    }
+
+    // Empty constructor
+    val rowNumber = RowNumber()
+    assertDifferentInstance(rowNumber, rowNumber.clone())
+
+    // Overridden `makeCopy`
+    val oneRowRelation = OneRowRelation()
+    assertDifferentInstance(oneRowRelation, oneRowRelation.clone())
+
+    // Multi-way operators
+    val intersect =
+      Intersect(oneRowRelation, Union(Seq(oneRowRelation, oneRowRelation)), isAll = false)
+    assertDifferentInstance(intersect, intersect.clone())
+
+    // Leaf node with an inner child
+    val leaf = FakeLeafPlan(intersect)
+    val leafCloned = leaf.clone()
+    assertDifferentInstance(leaf, leafCloned)
+    assert(leaf.child.eq(leafCloned.asInstanceOf[FakeLeafPlan].child))
   }
 }
