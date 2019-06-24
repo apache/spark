@@ -497,24 +497,21 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val isMax = ctx.freshName("isMax")
-    val length = ctx.freshName("length")
-    val integer = classOf[java.lang.Integer].getName
-    val head = ctx.freshName("head")
-    val tail = ctx.freshName("tail")
-    defineCodeGen(ctx, ev, (input, replace, pos, len) => {
-      s"""
-        boolean $isMax = $len.equals($integer.MAX_VALUE);
-        int $length = $len;
-        if ($isMax) {
-          $length = $replace.toString.size;
-        }
-        UTF8String $head = $input.substringSQL(1, $pos - 1);
-        UTF8String $tail = $input.substringSQL($pos + $length, $integer.MAX_VALUE);
-        $head + $replace + $tail;
+    val length = ctx.addMutableState(CodeGenerator.JAVA_INT, "length")
+    val head = ctx.addMutableState("UTF8String", "head")
+    val tail = ctx.addMutableState("UTF8String", "tail")
+    nullSafeCodeGen(ctx, ev, (input, place, pos, len) => {
+      val isMax = s"$len.equals(${Int.MaxValue})"
+      s"""if ($isMax) {
+        $length = $replace.toString.size;
+      } else {
+        $length = $len;
       }
+      $head = $input.substringSQL(1, $pos - 1);
+      $tail = $input.substringSQL($pos + $length, ${Int.MaxValue});
+      ${ev.value} = $head + $replace + $tail;
       """
-    })
+    }
   }
 }
 
