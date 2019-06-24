@@ -445,6 +445,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal("ANSI "), Literal(7), Literal(0)), null)
     checkEvaluation(Overlay(Literal.create(null, StringType),
         Literal("tructured"), Literal(2), Literal(4)), null)
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(Overlay(Literal("Spark的SQL"),
+        Literal("_"), Literal(6), Literal(Int.MaxValue)), "Spark_SQL")
+    // scalastyle:on
   }
 
   test("translate") {
