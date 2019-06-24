@@ -82,7 +82,7 @@ private[spark] class ExecutorMonitor(
   // If executors hold shuffle data that is related to an active job, then the executor is
   // considered to be in "shuffle busy" state; meaning that the executor is not allowed to be
   // removed. If the executor has shuffle data but it doesn't relate to any active job, then it
-  // may be removed when idle, following the same timeout configuration used for cache blocks.
+  // may be removed when idle, following the shuffle-specific timeout configuration.
   //
   // The following fields are not thread-safe and should be only used from the event thread.
   private val shuffleToActiveJobs = new mutable.HashMap[Int, mutable.ArrayBuffer[Int]]()
