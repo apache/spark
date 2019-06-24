@@ -526,7 +526,9 @@
       <dependency>
         <groupId>org.fusesource.leveldbjni</groupId>
         <artifactId>leveldbjni-all</artifactId>
-        <version>1.8</version>
+        <version>99-master-SNAPSHOT</version>
+        <scope>system</scope>
+        <systemPath>${env.SPARK_HOME}/leveldbjni-all-99-master-SNAPSHOT.jar</systemPath>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
