@@ -383,6 +383,15 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(pdf, df_from_python.toPandas())
         assert_frame_equal(pdf, df_from_pandas.toPandas())
 
+    # Regression test for SPARK-28003
+    def test_timestamp_nat(self):
+        dt = [pd.NaT, pd.Timestamp('2019-06-11'), None] * 100
+        pdf = pd.DataFrame({'time': dt})
+        df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf)
+
+        assert_frame_equal(pdf, df_no_arrow.toPandas())
+        assert_frame_equal(pdf, df_arrow.toPandas())
+
     def test_toPandas_batch_order(self):
 
         def delay_first_part(partition_index, iterator):
