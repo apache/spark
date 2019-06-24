@@ -172,10 +172,11 @@ public class TransportClientFactory implements Closeable {
     final long preResolveHost = System.nanoTime();
     final InetSocketAddress resolvedAddress = new InetSocketAddress(remoteHost, remotePort);
     final long hostResolveTimeMs = (System.nanoTime() - preResolveHost) / 1000000;
+    final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
     if (hostResolveTimeMs > 2000) {
-      logger.warn("DNS resolution for {} took {} ms", resolvedAddress, hostResolveTimeMs);
+      logger.warn("DNS resolution {} for {} took {} ms", resolvMsg, resolvedAddress, hostResolveTimeMs);
     } else {
-      logger.trace("DNS resolution for {} took {} ms", resolvedAddress, hostResolveTimeMs);
+      logger.trace("DNS resolution {} for {} took {} ms", resolvMsg, resolvedAddress, hostResolveTimeMs);
     }
 
     synchronized (clientPool.locks[clientIndex]) {
