@@ -581,7 +581,6 @@ object FunctionRegistry {
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
           val validParametersCount = constructors
-            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           val expectedNumberOfParameters = if (validParametersCount.length == 1) {
             validParametersCount.head.toString

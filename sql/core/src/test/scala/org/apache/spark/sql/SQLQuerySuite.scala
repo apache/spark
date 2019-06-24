@@ -106,6 +106,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
   }
 
+  test("SPARK-28143: IN expression missing attribute should throw analysis exception") {
+    val query = "select 1 from where in ()"
+    val e = intercept[AnalysisException](sql(query))
+    assert(e.getMessage.startsWith("Invalid number of arguments for function in."))
+  }
+
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
