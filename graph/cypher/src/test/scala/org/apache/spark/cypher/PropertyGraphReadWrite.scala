@@ -20,13 +20,12 @@ package org.apache.spark.cypher
 
 import java.nio.file.Paths
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.graph.api.{NodeFrame, RelationshipFrame}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.junit.rules.TemporaryFolder
 import org.scalatest.BeforeAndAfterEach
 
-class PropertyGraphReadWrite extends SparkFunSuite with SharedCypherContext with BeforeAndAfterEach {
+class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with BeforeAndAfterEach {
 
   private var tempDir: TemporaryFolder = _
 
@@ -66,4 +65,24 @@ class PropertyGraphReadWrite extends SparkFunSuite with SharedCypherContext with
     ).df.show()
   }
 
+  test("save and loads a property graph") {
+    val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
+    val nodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
+
+    val relationshipData = spark
+      .createDataFrame(Seq((0L, 0L, 1L, 1984)))
+      .toDF("id", "source", "target", "since")
+    val relationshipFrame =
+      RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
+
+    val writeGraph = cypherSession.createGraph(Seq(nodeFrame), Seq(relationshipFrame))
+
+    withTempDir(file => {
+      cypherSession.save(writeGraph, file.getAbsolutePath, SaveMode.Overwrite)
+      val readGraph = cypherSession.load(file.getAbsolutePath)
+
+      checkAnswer(readGraph.nodes, writeGraph.nodes)
+      checkAnswer(readGraph.relationships, writeGraph.relationships)
+    })
+  }
 }
