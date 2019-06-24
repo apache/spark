@@ -26,7 +26,7 @@ private[spark] object Worker {
     ConfigBuilder("spark.worker.resourcesFile")
     .internal()
     .doc("Path to a file containing the resources allocated to the worker. " +
-      "The file should be formatted as a JSON array of ResourceInformation objects. " +
+      "The file should be formatted as a JSON array of ResourceAllocation objects. " +
       "Only used internally in standalone mode.")
     .stringConf
     .createOptional
