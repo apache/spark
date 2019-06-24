@@ -641,7 +641,6 @@ class SciPyTests(MLlibTestCase):
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
 
-
 if __name__ == "__main__":
     from pyspark.mllib.tests.test_linalg import *
 
