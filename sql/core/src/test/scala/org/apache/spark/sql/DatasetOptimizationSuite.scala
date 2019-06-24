@@ -172,9 +172,9 @@ class DatasetOptimizationSuite extends QueryTest with SharedSQLContext {
       val count1 = getCodegenCount()
       // trigger codegen for Dataset
       createDataset().collect()
-      // Codegen happens 3 times: encoder serializer, encoder deserializer and LocalTableScanExec.
       val count2 = getCodegenCount()
-      assert(count2 == (count1 + 3))
+      // codegen happens
+      assert(count2 > count1)
 
       // trigger codegen for another Dataset of same type
       createDataset().collect()
