@@ -239,7 +239,6 @@ object WALUtils {
     var output: BufferedOutputStream = null
     try {
       in = fm.open(sourceFile)
-      // in = decompressStream(fm.open(sourceFile), sparkConf)
       output = new BufferedOutputStream(new FileOutputStream(targetFile.toString))
       val buffer = new Array[Byte](1024)
       var eof = false
