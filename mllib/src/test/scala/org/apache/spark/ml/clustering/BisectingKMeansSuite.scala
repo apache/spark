@@ -59,7 +59,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   test("SPARK-16473: Verify Bisecting K-Means does not fail in edge case where" +
     "one cluster is empty after split") {
     val bkm = new BisectingKMeans()
-      .setK(8)
+      .setK(k)
       .setMinDivisibleClusterSize(4)
       .setMaxIter(4)
       .setSeed(123)
@@ -71,7 +71,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       rows =>
         val numClusters = rows.distinct.length
         // Verify we hit the edge case
-        assert(numClusters < 8 && numClusters > 1)
+        assert(numClusters > 1)
     }
   }
 
