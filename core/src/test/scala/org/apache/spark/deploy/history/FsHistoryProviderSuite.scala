@@ -1122,10 +1122,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     writeFile(accessGranted, true, None,
       SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
       SparkListenerApplicationEnd(5L))
+    var isReadable = false
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
       argThat((path: Path) => path.getName.toLowerCase(Locale.ROOT) == "accessdenied" &&
-        clock.getTimeMillis() < 1533132471 + 24 * 60 * 60 * 1000))
+        !isReadable))
     val mockedProvider = spy(provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
     updateAndCheck(mockedProvider) { list =>
@@ -1138,6 +1139,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     val accessDeniedPath = new Path(accessDenied.getPath)
     assert(mockedProvider.isBlacklisted(accessDeniedPath))
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
+    isReadable = true
     mockedProvider.cleanLogs()
     updateAndCheck(mockedProvider) { list =>
       assert(!mockedProvider.isBlacklisted(accessDeniedPath))
