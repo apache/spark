@@ -177,17 +177,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
     val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
-    blacklist.asScala.retain { (fileName, creationTime) =>
-      val isCleared = creationTime >= expiredThreshold
-      if (isCleared) {
-        // For the permission-only changes, the file size will be the same.
-        // Without clearing the entry, `shouldReloadLog` returns false at file size comparison.
-        val key = fs.getFileStatus(new Path(logDir + "/" + fileName)).getPath.toString
-        logInfo(s"Clear the existing log info for $key")
-        listing.delete(classOf[LogInfo], key)
-      }
-      isCleared
-    }
+    blacklist.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
@@ -546,6 +536,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // We don't have read permissions on the log file
             logWarning(s"Unable to read log $path", e.getCause)
             blacklist(path)
+            // SPARK-28157 We should remove this blacklisted entry from the KVStore
+            // to handle permission-only changes with the same file sizes later.
+            listing.delete(classOf[LogInfo], path.toString)
           case e: Exception =>
             logError("Exception while merging application listings", e)
         } finally {
