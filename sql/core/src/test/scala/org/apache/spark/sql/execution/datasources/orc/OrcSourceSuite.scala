@@ -424,6 +424,55 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       testSchemaMerging(2)
     }
   }
+
+  test("SPARK-11412 test enabling/disabling schema merging with data type conflicts") {
+    def testSchemaMergingWithDataTypeConflicts(expectedColumnNumber: Int): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+        spark.range(0, 10).map(s => s"value_$s").toDF("a")
+          .write.orc(new Path(basePath, "foo=2").toString)
+        assert(spark.read.orc(basePath).columns.length === expectedColumnNumber)
+      }
+    }
+
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+      val exception = intercept[SparkException] {
+        testSchemaMergingWithDataTypeConflicts(3)
+      }.getCause
+      assert(exception.getMessage.contains(
+        "Failed to merge incompatible data types bigint and string"))
+    }
+
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
+      testSchemaMergingWithDataTypeConflicts(2)
+    }
+  }
+
+  test("SPARK-11412 test schema merging with corrupt files") {
+    def testSchemaMerging(ignoreCorruptFiles: Boolean, expectedColumnNumber: Int): Unit = {
+      withSQLConf(
+        SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true",
+        SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles.toString) {
+        withTempDir { dir =>
+          val basePath = dir.getCanonicalPath
+          spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+          spark.range(0, 10).toDF("b").write.orc(new Path(basePath, "foo=2").toString)
+          spark.range(0, 10).toDF("c").write.json(new Path(basePath, "foo=3").toString)
+          assert(spark.read.orc(basePath).columns.length === expectedColumnNumber)
+        }
+      }
+    }
+
+    // ignore corrupt files
+    testSchemaMerging(true, 3)
+
+    // don't ignore corrupt files
+    val exception = intercept[SparkException] {
+      testSchemaMerging(false, 3)
+    }.getCause
+    assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSQLContext {
