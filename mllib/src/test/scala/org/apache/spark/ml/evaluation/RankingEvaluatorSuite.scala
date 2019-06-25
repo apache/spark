@@ -20,21 +20,18 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-
 
 class RankingEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
 
-
   test("params") {
     ParamsSuite.checkParams(new RankingEvaluator)
   }
-
 
   test("read/write") {
     val evaluator = new RankingEvaluator()
@@ -44,7 +41,6 @@ class RankingEvaluatorSuite
       .setK(10)
     testDefaultReadWrite(evaluator)
   }
-
 
   test("evaluation metrics") {
     val scoreAndLabels = Seq(
@@ -63,5 +59,4 @@ class RankingEvaluatorSuite
       .setK(2)
     assert(evaluator.evaluate(scoreAndLabels) ~== 1.0 / 3 absTol 1e-5)
   }
-
 }
