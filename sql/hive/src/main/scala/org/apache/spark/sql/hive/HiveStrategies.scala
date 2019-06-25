@@ -118,16 +118,8 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
       val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-        try {
-          val hadoopConf = session.sessionState.newHadoopConf()
-          val tablePath = new Path(table.location)
-          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-          fs.getContentSummary(tablePath).getLength
-        } catch {
-          case e: IOException =>
-            logWarning("Failed to get table size from hdfs.", e)
-            session.sessionState.conf.defaultSizeInBytes
-        }
+        DDLUtils.sizeInBytesFallBackToHdfs(session, new Path(table.location),
+          session.sessionState.conf.defaultSizeInBytes)
       } else {
         session.sessionState.conf.defaultSizeInBytes
       }

@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import org.apache.hadoop.fs.Path
 import scala.collection.mutable
 
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -70,8 +72,16 @@ case class HadoopFsRelation(
   }
 
   override def sizeInBytes: Long = {
+    val isCatalogFileIndex = location.isInstanceOf[CatalogFileIndex]
     val compressionFactor = sqlContext.conf.fileCompressionFactor
-    (location.sizeInBytes * compressionFactor).toLong
+    val defaultSize = (location.sizeInBytes * compressionFactor).toLong
+
+    if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled && isCatalogFileIndex) {
+      DDLUtils.sizeInBytesFallBackToHdfs(sparkSession,
+        new Path(location.asInstanceOf[CatalogFileIndex].table.location), defaultSize)
+    } else {
+      defaultSize
+    }
   }
 
 
