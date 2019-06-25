@@ -29,6 +29,7 @@ import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySe
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
@@ -399,22 +400,21 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
 
     override def toBatch(): Batch = {
-      val parameters = options.asScala.toMap
-      validateBatchOptions(parameters)
-      val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-      val specifiedKafkaParams = convertToSpecifiedParams(parameters)
+      val caseInsensitiveOptions = CaseInsensitiveMap(options.asScala.toMap)
+      validateBatchOptions(caseInsensitiveOptions)
+      val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveOptions)
 
       val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-        caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
+        caseInsensitiveOptions, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
 
       val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-        caseInsensitiveParams, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+        caseInsensitiveOptions, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
       new KafkaBatch(
-        strategy(caseInsensitiveParams),
-        parameters,
+        strategy(caseInsensitiveOptions),
+        caseInsensitiveOptions,
         specifiedKafkaParams,
-        failOnDataLoss(caseInsensitiveParams),
+        failOnDataLoss(caseInsensitiveOptions),
         startingRelationOffsets,
         endingRelationOffsets)
     }
