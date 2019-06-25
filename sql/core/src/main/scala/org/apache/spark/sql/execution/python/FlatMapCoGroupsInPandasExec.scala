@@ -67,8 +67,6 @@ case class FlatMapCoGroupsInPandasExec(
       val cogroup = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
         .map{case (k, l, r) => (l, r)}
       val context = TaskContext.get()
-      println("in zipPartitions: left schema is " + left.schema)
-      println("in zipPartitions: right schema is " +  right.schema)
 
       val columnarBatchIter = new InterleavedArrowPythonRunner(
         chainedFunc,
@@ -83,7 +81,7 @@ case class FlatMapCoGroupsInPandasExec(
         val unsafeProj = UnsafeProjection.create(output, output)
 
         columnarBatchIter.flatMap { batch =>
-          // Grouped Map UDF returns a StructType column in ColumnarBatch, select the children here
+          //  UDF returns a StructType column in ColumnarBatch, select the children here
           val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
           val outputVectors = output.indices.map(structVector.getChild)
           val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
