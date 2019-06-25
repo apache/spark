@@ -45,23 +45,6 @@ import org.apache.spark.util.Utils
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
-  test("SPARK-25474: test sizeInBytes for CatalogFileIndex dataSourceTable") {
-    val table1 = "table1"
-    val table2 = "table2"
-    withSQLConf(
-      "spark.sql.statistics.fallBackToHdfs" -> "true") {
-      withTable(table1, table2) {
-        sql(s"create table $table1 (id int, name string) STORED AS parquet partitioned by (name)")
-        sql(s"insert into $table1 values (1, 'a')")
-        checkKeywordsExist(sql(s"explain cost select * from $table1"), "sizeInBytes=387.0 B")
-        sql(s"create table $table2 (id int, name string) using parquet partitioned by (name)")
-        sql(s"insert into $table2 values (1, 'a')")
-        checkKeywordsExist(sql(s"explain select * from $table1 join $table2 on $table1.id=" +
-          s"$table2.id"), "BroadcastHashJoin")
-      }
-    }
-  }
-
   test("size estimation for relations is based on row size * number of rows") {
     val dsTbl = "rel_est_ds_table"
     val hiveTbl = "rel_est_hive_table"
@@ -1467,6 +1450,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             }
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-25474: test sizeInBytes for CatalogFileIndex dataSourceTable") {
+    val table1 = "table1"
+    val table2 = "table2"
+    withSQLConf(
+      "spark.sql.statistics.fallBackToHdfs" -> "true") {
+      withTable(table1, table2) {
+        sql(s"create table $table1 (id int, name string) using parquet partitioned by (name)")
+        sql(s"insert into $table1 values (1, 'a')")
+        checkKeywordsNotExist(sql(s"explain cost select * from $table1"), "sizeInBytes=8.0 EB")
+        sql(s"create table $table2 (id int, name string) using parquet partitioned by (name)")
+        sql(s"insert into $table2 values (1, 'a')")
+        checkKeywordsExist(sql(s"explain select * from $table1 join $table2 on $table1.id=" +
+          s"$table2.id"), "BroadcastHashJoin")
       }
     }
   }
