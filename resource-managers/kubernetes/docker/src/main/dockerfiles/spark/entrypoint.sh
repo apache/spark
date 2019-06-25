@@ -78,7 +78,18 @@ case "$1" in
       -Xms$SPARK_EXECUTOR_MEMORY
       -Xmx$SPARK_EXECUTOR_MEMORY
       -cp "$SPARK_CLASSPATH"
-      org.apache.spark.executor.CoarseGrainedExecutorBackend
+    )
+
+    #Disable negative dns reslolution https://docs.oracle.com/javase/8/docs/technotes/guides/net/properties.html
+    if ! [ -z ${DISABLE_DNS_NEGATIVE_CACHING+x} ]; then
+      MOD_OPTS_PATH=/tmp/jvm.java.security
+      sed -e 's/networkaddress.cache.negative.ttl=10/networkaddress.cache.negative.ttl=0/g' \
+        /usr/lib/jvm/java-1.8-openjdk/jre/lib/security/java.security > ${MOD_OPTS_PATH}
+      CMD+=(-Djava.security.properties=${MOD_OPTS_PATH})
+    fi
+
+
+    CMD+=( org.apache.spark.executor.CoarseGrainedExecutorBackend
       --driver-url $SPARK_DRIVER_URL
       --executor-id $SPARK_EXECUTOR_ID
       --cores $SPARK_EXECUTOR_CORES
