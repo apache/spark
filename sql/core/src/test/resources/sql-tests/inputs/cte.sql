@@ -43,7 +43,7 @@ SELECT * FROM t;
 WITH t() AS (SELECT 1)
 SELECT * FROM t;
 
--- CTE with duplicate names is not allowed
+-- CTEs with duplicate names are not allowed
 WITH
   t(x) AS (SELECT 1),
   t(x) AS (SELECT 2)
