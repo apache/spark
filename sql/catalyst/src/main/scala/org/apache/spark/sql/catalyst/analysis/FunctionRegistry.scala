@@ -581,11 +581,11 @@ object FunctionRegistry {
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
           val validParametersCount = constructors
-            .filter(_.getParameterTypes.forall { t =>
-              t == classOf[Expression] || t == classOf[Seq[Expression]]
-            })
+            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+          val expectedNumberOfParameters = if (validParametersCount.length == 0) {
+            throw new AnalysisException(s"$name is an invalid function.")
+          } else if (validParametersCount.length == 1) {
             validParametersCount.head.toString
           } else {
             validParametersCount.init.mkString("one of ", ", ", " and ") +
