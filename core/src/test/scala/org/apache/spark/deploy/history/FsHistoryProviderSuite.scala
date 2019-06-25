@@ -1141,6 +1141,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     mockedProvider.cleanLogs()
     updateAndCheck(mockedProvider) { list =>
       assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+      list.exists(_.name == "accessDenied")
+      list.exists(_.name == "accessGranted")
       list.size should be(2)
     }
   }
