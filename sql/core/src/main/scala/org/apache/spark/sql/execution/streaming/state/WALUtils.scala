@@ -89,7 +89,6 @@ object WALUtils {
       }
     }
     val storeFiles = versionToFiles.values.toSeq.sortBy(_.version)
-    // logDebug(s"Current set of files for $this: ${storeFiles.mkString(", ")}")
     storeFiles
   }
 

@@ -92,7 +92,8 @@ public class FileUtility {
                 tarOs.finish();
                 tarOs.close();
             } catch (IOException e) {
-                e.printStackTrace();
+                throw new IllegalStateException(String.format(
+                        "createTarFile failed with exception %s.", e.getMessage()));
             }
         }
     }
