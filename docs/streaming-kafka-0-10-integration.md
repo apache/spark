@@ -301,12 +301,12 @@ The new Kafka consumer [supports SSL](http://kafka.apache.org/documentation.html
 {% highlight scala %}
 val kafkaParams = Map[String, Object](
   // the usual params, make sure to change the port in bootstrap.servers if 9092 is not TLS
-  "security.protocol" -> "SSL",
-  "ssl.truststore.location" -> "/some-directory/kafka.client.truststore.jks",
-  "ssl.truststore.password" -> "test1234",
-  "ssl.keystore.location" -> "/some-directory/kafka.client.keystore.jks",
-  "ssl.keystore.password" -> "test1234",
-  "ssl.key.password" -> "test1234"
+  "kafka.security.protocol" -> "SSL",
+  "kafka.ssl.truststore.location" -> "/some-directory/kafka.client.truststore.jks",
+  "kafka.ssl.truststore.password" -> "test1234",
+  "kafka.ssl.keystore.location" -> "/some-directory/kafka.client.keystore.jks",
+  "kafka.ssl.keystore.password" -> "test1234",
+  "kafka.ssl.key.password" -> "test1234"
 )
 {% endhighlight %}
 </div>
@@ -314,15 +314,17 @@ val kafkaParams = Map[String, Object](
 {% highlight java %}
 Map<String, Object> kafkaParams = new HashMap<String, Object>();
 // the usual params, make sure to change the port in bootstrap.servers if 9092 is not TLS
-kafkaParams.put("security.protocol", "SSL");
-kafkaParams.put("ssl.truststore.location", "/some-directory/kafka.client.truststore.jks");
-kafkaParams.put("ssl.truststore.password", "test1234");
-kafkaParams.put("ssl.keystore.location", "/some-directory/kafka.client.keystore.jks");
-kafkaParams.put("ssl.keystore.password", "test1234");
-kafkaParams.put("ssl.key.password", "test1234");
+kafkaParams.put("kafka.security.protocol", "SSL");
+kafkaParams.put("kafka.ssl.truststore.location", "/some-directory/kafka.client.truststore.jks");
+kafkaParams.put("kafka.ssl.truststore.password", "test1234");
+kafkaParams.put("kafka.ssl.keystore.location", "/some-directory/kafka.client.keystore.jks");
+kafkaParams.put("kafka.ssl.keystore.password", "test1234");
+kafkaParams.put("kafka.ssl.key.password", "test1234");
 {% endhighlight %}
 </div>
 </div>
+	
+Note: having a key without password is not the same as setting `kafka.ssl.key.password` to the empty string. Don't set that setting in that case.
 
 ### Deploying
 
