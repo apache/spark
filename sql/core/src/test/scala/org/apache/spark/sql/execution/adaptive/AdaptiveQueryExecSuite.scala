@@ -34,7 +34,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
     val planBefore = dfAdaptive.queryExecution.executedPlan
     assert(planBefore.toString.startsWith("AdaptiveSparkPlan(isFinalPlan=false)"))
     val result = dfAdaptive.collect()
-    withSQLConf(SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(query)
       QueryTest.sameRows(result.toSeq, df.collect().toSeq)
     }
@@ -81,7 +81,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Change merge join to broadcast join") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = '1'")
@@ -94,7 +94,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Scalar subquery") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a " +
@@ -108,7 +108,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Scalar subquery in later stages") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a " +
@@ -122,7 +122,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("multiple joins") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
@@ -143,7 +143,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("multiple joins with aggregate") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
@@ -166,7 +166,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("multiple joins with aggregate 2") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "500") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
@@ -189,7 +189,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Exchange reuse") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT value FROM testData join testData2 ON key = a " +
@@ -205,7 +205,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Exchange reuse with subqueries") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT a FROM testData join testData2 ON key = a " +
@@ -221,7 +221,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Exchange reuse across subqueries") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
         SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
@@ -241,7 +241,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Subquery reuse") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT a FROM testData join testData2 ON key = a " +
@@ -260,7 +260,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Broadcast exchange reuse across subqueries") {
     withSQLConf(
-        SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "20000000",
         SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
@@ -282,7 +282,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Union/Except/Intersect queries") {
-    withSQLConf(SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       runAdaptiveAndVerifyResult(
         """
           |SELECT * FROM testData
@@ -297,7 +297,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Subquery de-correlation in Union queries") {
-    withSQLConf(SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("a", "b") {
         Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("a")
         Seq("a" -> 2, "b" -> 1).toDF("id", "num").createTempView("b")
