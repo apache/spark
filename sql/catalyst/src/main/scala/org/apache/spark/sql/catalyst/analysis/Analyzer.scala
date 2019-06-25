@@ -793,9 +793,20 @@ class Analyzer(
         s"between $left and $right")
 
       right.collect {
+        // Because `AliasViewChild` could add extra project to make sure a view's child plan
+        // produces the view's output attributes. If we change a view's output as
+        // `MultiInstanceRelation`, extra project by `AliasViewChild` might break caching.
+        // If a view has same output as its child plan, fixing duplicates on the view's child plan.
+        case oldVersion @ View(desc, output, child)
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty &&
+              child.resolved && !oldVersion.sameOutput(child) =>
+          val newVersion = oldVersion.newInstance()
+          (oldVersion, newVersion)
+
         // Handle base relations that might appear more than once.
         case oldVersion: MultiInstanceRelation
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty &&
+              !oldVersion.isInstanceOf[View] =>
           val newVersion = oldVersion.newInstance()
           (oldVersion, newVersion)
 
