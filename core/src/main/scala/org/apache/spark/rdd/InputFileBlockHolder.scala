@@ -42,6 +42,12 @@ private[spark] object InputFileBlockHolder {
   /**
    * The thread variable for the name of the current file being read. This is used by
    * the InputFileName function in Spark SQL.
+   *
+   * @note `inputBlock` works somewhat complicatedly. It guarantees that `initialValue`
+   * is called at the start of a task. Therefore, one atomic reference is created in the task
+   * thread. After that, read and write happen to the same atomic reference across the parent and
+   * children threads. This is in order to support a case where write happens in a child thread
+   * but read happens at its parent thread, for instance, Python UDF execution. See SPARK-28153.
    */
   private[this] val inputBlock: InheritableThreadLocal[AtomicReference[FileBlock]] =
     new InheritableThreadLocal[AtomicReference[FileBlock]] {
