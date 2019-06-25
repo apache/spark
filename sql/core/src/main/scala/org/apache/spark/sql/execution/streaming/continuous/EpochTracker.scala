@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.commons.lang3.SerializationUtils
+
 /**
  * Tracks the current continuous processing epoch within a task. Call
  * EpochTracker.getCurrentEpoch to get the current epoch.
@@ -26,8 +28,15 @@ import java.util.concurrent.atomic.AtomicLong
 object EpochTracker {
   // The current epoch. Note that this is a shared reference; ContinuousWriteRDD.compute() will
   // update the underlying AtomicLong as it finishes epochs. Other code should only read the value.
-  private val currentEpoch: ThreadLocal[AtomicLong] = new ThreadLocal[AtomicLong] {
-    override def initialValue() = new AtomicLong(-1)
+  private val currentEpoch: InheritableThreadLocal[AtomicLong] = {
+    new InheritableThreadLocal[AtomicLong] {
+      override protected def childValue(parent: AtomicLong): AtomicLong = {
+        // Note: make a clone such that changes in the parent epoch aren't reflected in
+        // those in the children threads. This is required at `ContinuousCoalesceRDD`.
+        SerializationUtils.clone(parent)
+      }
+      override def initialValue() = new AtomicLong(-1)
+    }
   }
 
   /**
