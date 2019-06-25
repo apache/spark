@@ -1920,7 +1920,7 @@ class SQLConf extends Serializable with Logging {
   def runtimeReoptimizationEnabled: Boolean = getConf(RUNTIME_REOPTIMIZATION_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean =
-    getConf(ADAPTIVE_EXECUTION_ENABLED) && !getConf(RUNTIME_REOPTIMIZATION_ENABLED)
+    getConf(ADAPTIVE_EXECUTION_ENABLED) && getConf(RUNTIME_REOPTIMIZATION_ENABLED)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)

@@ -276,6 +276,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         .set(UI_ENABLED, false)
         .set(SQLConf.SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS.key, "5")
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
+        .set(SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
         .set(
           SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key,
@@ -523,24 +524,25 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
   }
 
   test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
-    val test = { spark: SparkSession =>
+    val test: SparkSession => Unit = { spark: SparkSession =>
       spark.sql("SET spark.sql.exchange.reuse=true")
       val df = spark.range(1).selectExpr("id AS key", "id AS value")
 
       // test case 1: a query stage has 3 child stages but they are the same stage.
-      // ResultQueryStage 1
+      // Final Stage 1
       //   ShuffleQueryStage 0
       //   ReusedQueryStage 0
       //   ReusedQueryStage 0
       val resultDf = df.join(df, "key").join(df, "key")
+      checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(finalPlan.collect { case p: ReusedQueryStageExec => p }.length == 2)
       assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 3)
-      checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
+
 
       // test case 2: a query stage has 2 parent stages.
-      // ResultQueryStage 3
+      // Final Stage 3
       //   ShuffleQueryStage 1
       //     ShuffleQueryStage 0
       //   ShuffleQueryStage 2
@@ -548,6 +550,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       val grouped = df.groupBy("key").agg(max("value").as("value"))
       val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
         .union(grouped.groupBy(col("key") + 2).max("value"))
+      checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Nil)
 
       val finalPlan2 = resultDf2.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
@@ -568,8 +571,6 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
         stage.plan.collect { case r: ReusedQueryStageExec => r }
       }
       assert(reusedStages.length == 1)
-
-      checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Nil)
     }
     withSparkSession(test, 4, None)
   }

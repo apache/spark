@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.{QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{QueryStageExec, ReusedQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -59,6 +59,10 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
         val metricsFuture = stage.mapOutputStatisticsFuture
         assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
         ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
+      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+        val metricsFuture = stage.mapOutputStatisticsFuture
+        assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
+        ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
     }
 
     if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])) {
@@ -79,6 +83,8 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
           // number of output partitions.
           case stage: ShuffleQueryStageExec =>
             CoalescedShuffleReaderExec(stage, partitionStartIndices)
+          case reused: ReusedQueryStageExec if reused.plan.isInstanceOf[ShuffleQueryStageExec] =>
+            CoalescedShuffleReaderExec(reused, partitionStartIndices)
         }
       } else {
         plan
@@ -162,10 +168,12 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 }
 
 case class CoalescedShuffleReaderExec(
-    child: ShuffleQueryStageExec,
+    child: QueryStageExec,
     partitionStartIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
+
+  override def doCanonicalize(): SparkPlan = child.canonicalized
 
   override def outputPartitioning: Partitioning = {
     UnknownPartitioning(partitionStartIndices.length)
@@ -175,7 +183,12 @@ case class CoalescedShuffleReaderExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = child.plan.createShuffledRDD(Some(partitionStartIndices))
+      cachedShuffleRDD = child match {
+        case stage: ShuffleQueryStageExec =>
+          stage.plan.createShuffledRDD(Some(partitionStartIndices))
+        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+          stage.plan.createShuffledRDD(Some(partitionStartIndices))
+      }
     }
     cachedShuffleRDD
   }
