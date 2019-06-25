@@ -177,7 +177,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
     val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
-    blacklist.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
     blacklist.asScala.retain { (fileName, creationTime) =>
       val isCleared = creationTime >= expiredThreshold
       if (isCleared) {
