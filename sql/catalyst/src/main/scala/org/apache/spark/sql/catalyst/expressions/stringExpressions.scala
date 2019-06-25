@@ -508,8 +508,9 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     val result = ctx.addMutableState("UTF8String", "result")
     nullSafeCodeGen(ctx, ev, (input, replace, pos, len) => {
       s"""
-      $result = org.apache.spark.sql.catalyst.expressions.Overlay.calcuate($input, $replace, $pos, $len);
-      ${ev.value} = $result;
+         |$result = org.apache.spark.sql.catalyst.expressions.Overlay
+         |  .calcuate($input, $replace, $pos, $len);
+         |${ev.value} = $result;
       """.stripMargin
     })
   }
