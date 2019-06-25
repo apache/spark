@@ -260,6 +260,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
+        // vol used by boolean.sql
+        localSparkSession.udf.register("vol", (s: String) => s)
       case _ => // Don't add UDFs in Regular tests.
     }
 
@@ -381,24 +383,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
       if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
-        Seq(
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFTestCase(
-            s"$testCaseName - Scala UDF",
+            s"$testCaseName - ${udf.prettyName}",
             absPath,
             resultFile,
-            TestScalaUDF(name = "udf")),
-
-          UDFTestCase(
-            s"$testCaseName - Python UDF",
-            absPath,
-            resultFile,
-            TestPythonUDF(name = "udf")),
-
-          UDFTestCase(
-            s"$testCaseName - Scalar Pandas UDF",
-            absPath,
-            resultFile,
-            TestScalarPandasUDF(name = "udf")))
+            udf)
+        }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {

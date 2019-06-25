@@ -18,8 +18,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.{FileNotFoundException, IOException}
 
+import org.apache.parquet.io.ParquetDecodingException
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
+import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.PartitionReader
 
@@ -65,6 +69,19 @@ class FilePartitionReader[T](readers: Iterator[PartitionedFileReader[T]])
     val hasNext = try {
       currentReader.next()
     } catch {
+      case e: SchemaColumnConvertNotSupportedException =>
+        val message = "Parquet column cannot be converted in " +
+          s"file ${currentReader.file.filePath}. Column: ${e.getColumn}, " +
+          s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
+        throw new QueryExecutionException(message, e)
+      case e: ParquetDecodingException =>
+        if (e.getMessage.contains("Can not read value at")) {
+          val message = "Encounter error while reading parquet files. " +
+            "One possible cause: Parquet column cannot be converted in the " +
+            "corresponding files. Details: "
+          throw new QueryExecutionException(message, e)
+        }
+        throw e
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)

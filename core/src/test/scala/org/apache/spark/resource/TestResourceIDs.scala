@@ -15,10 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.resource
 
-private[spark] object ResourceName {
-  // known types of resources
-  final val GPU: String = "gpu"
-  final val FPGA: String = "fpga"
+import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX, SPARK_TASK_PREFIX}
+import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
+
+object TestResourceIDs {
+  val DRIVER_GPU_ID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
+  val EXECUTOR_GPU_ID = ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
+  val TASK_GPU_ID = ResourceID(SPARK_TASK_PREFIX, GPU)
+
+  val DRIVER_FPGA_ID = ResourceID(SPARK_DRIVER_PREFIX, FPGA)
+  val EXECUTOR_FPGA_ID = ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
+  val TASK_FPGA_ID = ResourceID(SPARK_TASK_PREFIX, FPGA)
 }
