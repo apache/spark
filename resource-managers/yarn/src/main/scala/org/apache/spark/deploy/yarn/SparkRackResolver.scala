@@ -67,6 +67,9 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
   }
 
   private def coreResolve(hostNames: Seq[String]): Seq[Node] = {
+    if (hostNames.isEmpty) {
+      return Seq.empty
+    }
     val nodes = new ArrayBuffer[Node]
     // dnsToSwitchMapping is thread-safe
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
@@ -75,15 +78,13 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
       logInfo(s"Got an error when resolving hostNames. " +
         s"Falling back to ${NetworkTopology.DEFAULT_RACK} for all")
     } else {
-      if (rNameList.nonEmpty) {
-        for ((hostName, rName) <- hostNames.zip(rNameList)) {
-          if (Strings.isNullOrEmpty(rName)) {
-            nodes += new NodeBase(hostName, NetworkTopology.DEFAULT_RACK)
-            logDebug(s"Could not resolve $hostName. " +
-              s"Falling back to ${NetworkTopology.DEFAULT_RACK}")
-          } else {
-            nodes += new NodeBase(hostName, rName)
-          }
+      for ((hostName, rName) <- hostNames.zip(rNameList)) {
+        if (Strings.isNullOrEmpty(rName)) {
+          nodes += new NodeBase(hostName, NetworkTopology.DEFAULT_RACK)
+          logDebug(s"Could not resolve $hostName. " +
+            s"Falling back to ${NetworkTopology.DEFAULT_RACK}")
+        } else {
+          nodes += new NodeBase(hostName, rName)
         }
       }
     }
