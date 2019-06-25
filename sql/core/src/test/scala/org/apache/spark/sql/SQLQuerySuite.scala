@@ -110,7 +110,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     // missing attribute, which actually might be `select 1 where a in ()`
     val query = "select 1 where in ()"
     val e = intercept[AnalysisException](sql(query))
-    assert(e.getMessage.startsWith("in"))
+    assert(e.getMessage.startsWith("Invalid number of arguments for function in"))
   }
 
   test("SPARK-14415: All functions should have own descriptions") {

@@ -583,8 +583,8 @@ object FunctionRegistry {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          val expectedNumberOfParameters = if (validParametersCount.length == 0) {
-            throw new AnalysisException(s"$name is an invalid function.")
+          val expectedNumberOfParameters = if (validParametersCount.isEmpty) {
+            constructors.headOption.map(_.getParameterCount).getOrElse(0).toString
           } else if (validParametersCount.length == 1) {
             validParametersCount.head.toString
           } else {
