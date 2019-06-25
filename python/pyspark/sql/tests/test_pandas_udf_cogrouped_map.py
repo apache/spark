@@ -78,9 +78,8 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
         def merge_pandas(left, right):
             return pd.merge(left, right, how='outer', on=['k', 'id'])
 
-        # TODO: Grouping by a string fails to resolve here as analyzer cannot determine side
         result = l\
-            .groupby(l.id)\
+            .groupby('id')\
             .cogroup(r.groupby(r.id))\
             .apply(merge_pandas)\
             .sort(['id', 'k'])\

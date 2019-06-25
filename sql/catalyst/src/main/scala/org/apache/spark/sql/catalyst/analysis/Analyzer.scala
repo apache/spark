@@ -970,6 +970,10 @@ class Analyzer(
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
+      case f @ FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, _, _, left, right) =>
+        val leftAttributes2 = leftAttributes.map(x => resolveExpressionBottomUp(x, left).asInstanceOf[Attribute])
+        val rightAttributes2 = rightAttributes.map(x => resolveExpressionBottomUp(x, right).asInstanceOf[Attribute])
+        f.copy(leftAttributes=leftAttributes2, rightAttributes=rightAttributes2)
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
       case e @ Except(left, right, _) if !e.duplicateResolved =>
@@ -2268,6 +2272,7 @@ class Analyzer(
         WindowExpression(rank.withOrder(order), spec)
     }
   }
+
 
   /**
    * Removes natural or using joins by calculating output columns based on output from two sides,
