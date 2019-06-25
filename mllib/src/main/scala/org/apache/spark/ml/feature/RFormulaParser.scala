@@ -288,8 +288,8 @@ private[ml] object RFormulaParser extends RegexParsers with EvalExprParser {
   private val space = "[ \\n]*".r
 
   /* Utility function for skipping whitespace around a regex. */
-  private implicit class RegexParserUtils(val r: Regex) {
-    def n: Parser[String] = (space ~> r <~ space)
+  private def skipSpace(r: Regex): Parser[String] = {
+    space ~> r <~ space
   }
 
   private def add(left: Term, right: Term) = left.add(right)
@@ -310,36 +310,36 @@ private[ml] object RFormulaParser extends RegexParsers with EvalExprParser {
   }
 
   private val intercept: Parser[Term] =
-    "([01])".r.n ^^ { case a => Intercept(a == "1") }
+    skipSpace("([01])".r) ^^ { case a => Intercept(a == "1") }
 
   private val columnRef: Parser[ColumnRef] =
-    "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r.n ^^ { case a => ColumnRef(a) }
+    skipSpace("([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r) ^^ { case a => ColumnRef(a) }
 
-  private val empty: Parser[ColumnRef] = "".r.n ^^ { case a => ColumnRef("") }
+  private val empty: Parser[ColumnRef] = skipSpace("".r) ^^ { case a => ColumnRef("") }
 
   private val label: Parser[Label] = evalExpr | columnRef | empty
 
-  private val dot: Parser[Term] = "\\.".r.n ^^ { case _ => Dot }
+  private val dot: Parser[Term] = skipSpace("\\.".r) ^^ { case _ => Dot }
 
   private val parens: Parser[Term] = "(" ~> expr <~ ")"
 
   private val term: Parser[Term] = evalExpr | parens | intercept | columnRef | dot
 
-  private val pow: Parser[Term] = term ~ "^" ~ "^[1-9]\\d*".r.n ^^ {
+  private val pow: Parser[Term] = term ~ "^" ~ skipSpace("^[1-9]\\d*".r) ^^ {
     case base ~ "^" ~ degree => power(base, degree.toInt)
   } | term
 
-  private val interaction: Parser[Term] = pow * ("\\:".r.n ^^^ { interact _ })
+  private val interaction: Parser[Term] = pow * (skipSpace("\\:".r) ^^^ { interact _ })
 
-  private val factor = interaction * ("\\*".r.n ^^^ { cross _ })
+  private val factor = interaction * (skipSpace("\\*".r) ^^^ { cross _ })
 
-  private val sum = factor * ("\\+".r.n ^^^ { add _ } |
-    "\\-".r.n ^^^ { subtract _ })
+  private val sum = factor * (skipSpace("\\+".r) ^^^ { add _ } |
+    skipSpace("\\-".r) ^^^ { subtract _ })
 
   private val expr = (sum | term)
 
-  private val formula: Parser[ParsedRFormula] =
-    (label ~ "\\~".r.n ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.asTerms.terms) }
+  private val formula: Parser[ParsedRFormula] = (label ~ skipSpace("\\~".r) ~ expr) ^^ {
+    case r ~ "~" ~ t => ParsedRFormula(r, t.asTerms.terms) }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result
