@@ -77,7 +77,6 @@ case class CreateTableAsSelectExec(
       }
 
       throw new TableAlreadyExistsException(ident)
-
     }
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       catalog.createTable(
@@ -117,7 +116,7 @@ case class AtomicCreateTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    ifNotExists: Boolean) extends StagedTableWriteExec {
+    ifNotExists: Boolean) extends AtomicTableWriteExec {
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -149,7 +148,7 @@ case class ReplaceTableAsSelectExec(
     partitioning: Seq[Transform],
     query: SparkPlan,
     properties: Map[String, String],
-    writeOptions: CaseInsensitiveStringMap) extends StagedTableWriteExec {
+    writeOptions: CaseInsensitiveStringMap) extends AtomicTableWriteExec {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
@@ -200,13 +199,13 @@ case class ReplaceTableAsSelectExec(
  * write fails, the table is instructed to roll back staged changes and any previously written table
  * is left untouched.
  */
-case class ReplaceTableAsSelectStagingExec(
+case class AtomicReplaceTableAsSelectExec(
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
     query: SparkPlan,
     properties: Map[String, String],
-    writeOptions: CaseInsensitiveStringMap) extends StagedTableWriteExec {
+    writeOptions: CaseInsensitiveStringMap) extends AtomicTableWriteExec {
 
   override protected def doExecute(): RDD[InternalRow] = {
     val stagedTable = catalog.stageReplace(
@@ -447,7 +446,7 @@ object DataWritingSparkTask extends Logging {
   }
 }
 
-trait StagedTableWriteExec extends V2TableWriteExec {
+private[v2] trait AtomicTableWriteExec extends V2TableWriteExec {
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
   protected def writeToStagedTable(

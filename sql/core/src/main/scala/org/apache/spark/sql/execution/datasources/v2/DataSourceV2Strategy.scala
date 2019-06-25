@@ -187,7 +187,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
-          ReplaceTableAsSelectStagingExec(
+          AtomicReplaceTableAsSelectExec(
             staging, ident, parts, planLater(query), props, writeOptions) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
