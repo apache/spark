@@ -458,10 +458,10 @@ object Overlay {
 
   def calcuate(input: UTF8String, replace: UTF8String, pos: Integer, len: Integer): UTF8String = {
     val header = input.substringSQL(1, pos - 1)
-    val replaceLength = replace.toString().length()
-    val tail = input.substringSQL(pos, Int.MaxValue)
-    val tailLength = tail.toString().length()
-    val length = Math.min(len, Math.min(tailLength, replaceLength))
+    var length = len
+    if (len < 0) {
+      length = replace.toString().length()
+    }
     val tailer = input.substringSQL(pos + length, Int.MaxValue)
     UTF8String.fromString(header.toString + replace.toString + tailer.toString)
   }
@@ -486,7 +486,7 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(str: Expression, replace: Expression, pos: Expression) = {
-    this(str, replace, pos, Literal.create(Int.MaxValue, IntegerType))
+    this(str, replace, pos, Literal.create(-1, IntegerType))
   }
 
   override def dataType: DataType = StringType

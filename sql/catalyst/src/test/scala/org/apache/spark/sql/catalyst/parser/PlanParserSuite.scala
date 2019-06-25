@@ -749,12 +749,12 @@ class PlanParserSuite extends AnalysisTest {
 
     assertOverlayPlans(
       "SELECT OVERLAY('Spark SQL' PLACING '_' FROM 6)",
-      Overlay(Literal("Spark SQL"), Literal("_"), Literal(6), Literal(Int.MaxValue))
+      new Overlay(Literal("Spark SQL"), Literal("_"), Literal(6))
     )
 
     assertOverlayPlans(
       "SELECT OVERLAY('Spark SQL' PLACING 'CORE' FROM 7)",
-      Overlay(Literal("Spark SQL"), Literal("CORE"), Literal(7), Literal(Int.MaxValue))
+      new Overlay(Literal("Spark SQL"), Literal("CORE"), Literal(7))
     )
 
     assertOverlayPlans(
