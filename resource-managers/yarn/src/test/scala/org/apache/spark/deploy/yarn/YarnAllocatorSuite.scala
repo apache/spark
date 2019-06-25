@@ -21,7 +21,6 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -31,15 +30,18 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.config._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
 
-class MockResolver extends SparkRackResolver {
+class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
-  override def resolve(conf: Configuration, hostName: String): String = {
+  override def resolve(hostName: String): String = {
     if (hostName == "host3") "/rack2" else "/rack1"
   }
 
@@ -48,8 +50,8 @@ class MockResolver extends SparkRackResolver {
 class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   val conf = new YarnConfiguration()
   val sparkConf = new SparkConf()
-  sparkConf.set("spark.driver.host", "localhost")
-  sparkConf.set("spark.driver.port", "4040")
+  sparkConf.set(DRIVER_HOST_ADDRESS, "localhost")
+  sparkConf.set(DRIVER_PORT, 4040)
   sparkConf.set(SPARK_JARS, Seq("notarealjar.jar"))
   sparkConf.set("spark.yarn.launchContainers", "false")
 
@@ -95,9 +97,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       "--class", "SomeClass")
     val sparkConfClone = sparkConf.clone()
     sparkConfClone
-      .set("spark.executor.instances", maxExecutors.toString)
-      .set("spark.executor.cores", "5")
-      .set("spark.executor.memory", "2048")
+      .set(EXECUTOR_INSTANCES, maxExecutors)
+      .set(EXECUTOR_CORES, 5)
+      .set(EXECUTOR_MEMORY, 2048L)
 
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
@@ -178,6 +180,29 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     verify(mockAmClient).addContainerRequest(captor.capture())
     val containerRequest: ContainerRequest = captor.getValue
     assert(containerRequest.getCapability === expectedResources)
+  }
+
+  test("custom spark resource mapped to yarn resource configs") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    val yarnMadeupResource = "yarn.io/madeup"
+    val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG, yarnMadeupResource)
+    ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val sparkResources =
+      Map(EXECUTOR_GPU_ID.amountConf -> "3",
+        EXECUTOR_FPGA_ID.amountConf -> "2",
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}" -> "5")
+    val handler = createAllocator(1, mockAmClient, sparkResources)
+
+    handler.updateResourceRequests()
+    val yarnRInfo = ResourceRequestTestHelper.getResources(handler.resource)
+    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
+    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
+    assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
+    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).nonEmpty)
+    assert(allResourceInfo.get(YARN_FPGA_RESOURCE_CONFIG).get === 2)
+    assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
+    assert(allResourceInfo.get(yarnMadeupResource).get === 5)
   }
 
   test("container should not be created if requested number if met") {
@@ -394,7 +419,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("window based failure executor counting") {
-    sparkConf.set("spark.yarn.executor.failuresValidityInterval", "100s")
+    sparkConf.set(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS, 100 * 1000L)
     val handler = createAllocator(4)
 
     handler.updateResourceRequests()
@@ -444,8 +469,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       maxExecutors,
       rmClientSpy,
       Map(
-        "spark.yarn.blacklist.executor.launch.blacklisting.enabled" -> "true",
-        "spark.blacklist.application.maxFailedExecutorsPerNode" -> "0"))
+        YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED.key -> "true",
+        MAX_FAILED_EXEC_PER_NODE.key -> "0"))
     handler.updateResourceRequests()
 
     val hosts = (0 until maxExecutors).map(i => s"host$i")

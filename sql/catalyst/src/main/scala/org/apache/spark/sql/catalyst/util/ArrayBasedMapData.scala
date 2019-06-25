@@ -48,11 +48,10 @@ object ArrayBasedMapData {
    * @param valueConverter This function is applied over all the values of the input map to
    *                       obtain the output map's values
    */
-  def apply(
-      javaMap: JavaMap[_, _],
+  def apply[K, V](
+      javaMap: JavaMap[K, V],
       keyConverter: (Any) => Any,
       valueConverter: (Any) => Any): ArrayBasedMapData = {
-    import scala.language.existentials
 
     val keys: Array[Any] = new Array[Any](javaMap.size())
     val values: Array[Any] = new Array[Any](javaMap.size())

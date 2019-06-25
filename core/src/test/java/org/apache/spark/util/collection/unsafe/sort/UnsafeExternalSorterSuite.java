@@ -88,7 +88,8 @@ public class UnsafeExternalSorterSuite {
 
   protected boolean shouldUseRadixSort() { return false; }
 
-  private final long pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "4m");
+  private final long pageSizeBytes = conf.getSizeAsBytes(
+          package$.MODULE$.BUFFER_PAGESIZE().key(), "4m");
 
   private final int spillThreshold =
     (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());

@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, LookupCatalog}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -96,11 +98,14 @@ class Analyzer(
     catalog: SessionCatalog,
     conf: SQLConf,
     maxIterations: Int)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
+
+  override protected def lookupCatalog(name: String): CatalogPlugin =
+    throw new CatalogNotFoundException("No catalog lookup function")
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
@@ -146,9 +151,9 @@ class Analyzer(
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Hints", fixedPoint,
-      new ResolveHints.ResolveBroadcastHints(conf),
+      new ResolveHints.ResolveJoinStrategyHints(conf),
       ResolveHints.ResolveCoalesceHints,
-      ResolveHints.RemoveAllHints),
+      new ResolveHints.RemoveAllHints(conf)),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Substitution", fixedPoint,
@@ -158,6 +163,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
+      ResolveTables ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
@@ -211,23 +217,26 @@ class Analyzer(
   object CTESubstitution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case With(child, relations) =>
-        substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
-          case (resolved, (name, relation)) =>
-            resolved :+ name -> executeSameContext(substituteCTE(relation, resolved))
-        })
+        // substitute CTE expressions right-to-left to resolve references to previous CTEs:
+        // with a as (select * from t), b as (select * from a) select * from b
+        relations.foldRight(child) {
+          case ((cteName, ctePlan), currentPlan) =>
+            substituteCTE(currentPlan, cteName, ctePlan)
+        }
       case other => other
     }
 
-    def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
-      plan resolveOperatorsDown {
+    def substituteCTE(plan: LogicalPlan, cteName: String, ctePlan: LogicalPlan): LogicalPlan = {
+      plan resolveOperatorsUp {
+        case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
+          ctePlan
         case u: UnresolvedRelation =>
-          cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
-            .map(_._2).getOrElse(u)
+          u
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.plan, cteRelations))
+              e.withNewPlan(substituteCTE(e.plan, cteName, ctePlan))
           }
       }
     }
@@ -651,6 +660,20 @@ class Analyzer(
   }
 
   /**
+   * Resolve table relations with concrete relations from v2 catalog.
+   *
+   * [[ResolveRelations]] still resolves v1 tables.
+   */
+  object ResolveTables extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
+        loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
+    }
+  }
+
+  /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
@@ -682,10 +705,15 @@ class Analyzer(
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
-      case u: UnresolvedRelation if !isRunningDirectlyOnFiles(u.tableIdentifier) =>
+      case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
-        val foundRelation = lookupTableFromCatalog(u, defaultDatabase)
-        resolveRelation(foundRelation)
+        val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)
+        if (foundRelation != u) {
+          resolveRelation(foundRelation)
+        } else {
+          u
+        }
+
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
@@ -708,8 +736,9 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        EliminateSubqueryAliases(lookupTableFromCatalog(u)) match {
+      case i @ InsertIntoTable(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
+          if child.resolved =>
+        EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
           case v: View =>
             u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
           case other => i.copy(table = other)
@@ -724,20 +753,16 @@ class Analyzer(
     //    and the default database is only used to look up a view);
     // 3. Use the currentDb of the SessionCatalog.
     private def lookupTableFromCatalog(
+        tableIdentifier: TableIdentifier,
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
-      val tableIdentWithDb = u.tableIdentifier.copy(
-        database = u.tableIdentifier.database.orElse(defaultDatabase))
+      val tableIdentWithDb = tableIdentifier.copy(
+        database = tableIdentifier.database.orElse(defaultDatabase))
       try {
         catalog.lookupRelation(tableIdentWithDb)
       } catch {
-        case e: NoSuchTableException =>
-          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}", e)
-        // If the database is defined and that database is not found, throw an AnalysisException.
-        // Note that if the database is not defined, it is possible we are looking up a temp view.
-        case e: NoSuchDatabaseException =>
-          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
-            s"database ${e.db} doesn't exist.", e)
+        case _: NoSuchTableException | _: NoSuchDatabaseException =>
+          u
       }
     }
 
@@ -949,6 +974,22 @@ class Analyzer(
         i.copy(right = dedupRight(left, right))
       case e @ Except(left, right, _) if !e.duplicateResolved =>
         e.copy(right = dedupRight(left, right))
+      case u @ Union(children) if !u.duplicateResolved =>
+        // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
+        // feature in streaming.
+        val newChildren = children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
+          head +: tail.map {
+            case child if head.outputSet.intersect(child.outputSet).isEmpty =>
+              child
+            case child =>
+              val projectList = child.output.map { attr =>
+                Alias(attr, attr.name)()
+              }
+              Project(projectList, child)
+          }
+        }
+        u.copy(children = newChildren)
+
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
@@ -977,6 +1018,11 @@ class Analyzer(
       // names leading to ambiguous references exception.
       case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
         a.mapExpressions(resolveExpressionTopDown(_, appendColumns))
+
+      case o: OverwriteByExpression if !o.outputResolved =>
+        // do not resolve expression attributes until the query attributes are resolved against the
+        // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
+        o
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
@@ -1038,6 +1084,11 @@ class Analyzer(
             case o => o :: Nil
           })
         case p: Murmur3Hash if containsStar(p.children) =>
+          p.copy(children = p.children.flatMap {
+            case s: Star => s.expand(child, resolver)
+            case o => o :: Nil
+          })
+        case p: XxHash64 if containsStar(p.children) =>
           p.copy(children = p.children.flatMap {
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
@@ -2147,27 +2198,36 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(_, _, inputs, inputsNullSafe, _, _, _, _)
-            if inputsNullSafe.contains(false) =>
+        case udf @ ScalaUDF(_, _, inputs, inputPrimitives, _, _, _, _)
+            if inputPrimitives.contains(true) =>
           // Otherwise, add special handling of null for fields that can't accept null.
           // The result of operations like this, when passed null, is generally to return null.
-          assert(inputsNullSafe.length == inputs.length)
+          assert(inputPrimitives.length == inputs.length)
 
-          // TODO: skip null handling for not-nullable primitive inputs after we can completely
-          // trust the `nullable` information.
-          val inputsNullCheck = inputsNullSafe.zip(inputs)
-            .filter { case (nullSafe, _) => !nullSafe }
-            .map { case (_, expr) => IsNull(expr) }
-            .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
-          // Once we add an `If` check above the udf, it is safe to mark those checked inputs
-          // as null-safe (i.e., set `inputsNullSafe` all `true`), because the null-returning
-          // branch of `If` will be called if any of these checked inputs is null. Thus we can
-          // prevent this rule from being applied repeatedly.
-          val newInputsNullSafe = inputsNullSafe.map(_ => true)
-          inputsNullCheck
-            .map(If(_, Literal.create(null, udf.dataType),
-              udf.copy(inputsNullSafe = newInputsNullSafe)))
-            .getOrElse(udf)
+          val inputPrimitivesPair = inputPrimitives.zip(inputs)
+          val inputNullCheck = inputPrimitivesPair.collect {
+            case (isPrimitive, input) if isPrimitive && input.nullable =>
+              IsNull(input)
+          }.reduceLeftOption[Expression](Or)
+
+          if (inputNullCheck.isDefined) {
+            // Once we add an `If` check above the udf, it is safe to mark those checked inputs
+            // as null-safe (i.e., wrap with `KnownNotNull`), because the null-returning
+            // branch of `If` will be called if any of these checked inputs is null. Thus we can
+            // prevent this rule from being applied repeatedly.
+            val newInputs = inputPrimitivesPair.map {
+              case (isPrimitive, input) =>
+                if (isPrimitive && input.nullable) {
+                  KnownNotNull(input)
+                } else {
+                  input
+                }
+            }
+            val newUDF = udf.copy(children = newInputs)
+            If(inputNullCheck.get, Literal.create(null, udf.dataType), newUDF)
+          } else {
+            udf
+          }
       }
     }
   }
@@ -2237,13 +2297,33 @@ class Analyzer(
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case append @ AppendData(table, query, isByName)
-          if table.resolved && query.resolved && !append.resolved =>
+          if table.resolved && query.resolved && !append.outputResolved =>
         val projection = resolveOutputColumns(table.name, table.output, query, isByName)
 
         if (projection != query) {
           append.copy(query = projection)
         } else {
           append
+        }
+
+      case overwrite @ OverwriteByExpression(table, _, query, isByName)
+          if table.resolved && query.resolved && !overwrite.outputResolved =>
+        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+
+        if (projection != query) {
+          overwrite.copy(query = projection)
+        } else {
+          overwrite
+        }
+
+      case overwrite @ OverwritePartitionsDynamic(table, query, isByName)
+          if table.resolved && query.resolved && !overwrite.outputResolved =>
+        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+
+        if (projection != query) {
+          overwrite.copy(query = projection)
+        } else {
+          overwrite
         }
     }
 
@@ -2265,7 +2345,7 @@ class Analyzer(
         expected.flatMap { tableAttr =>
           query.resolveQuoted(tableAttr.name, resolver) match {
             case Some(queryExpr) =>
-              checkField(tableAttr, queryExpr, err => errors += err)
+              checkField(tableAttr, queryExpr, byName, err => errors += err)
             case None =>
               errors += s"Cannot find data for output column '${tableAttr.name}'"
               None
@@ -2283,7 +2363,7 @@ class Analyzer(
 
         query.output.zip(expected).flatMap {
           case (queryExpr, tableAttr) =>
-            checkField(tableAttr, queryExpr, err => errors += err)
+            checkField(tableAttr, queryExpr, byName, err => errors += err)
         }
       }
 
@@ -2298,11 +2378,12 @@ class Analyzer(
     private def checkField(
         tableAttr: Attribute,
         queryExpr: NamedExpression,
+        byName: Boolean,
         addError: String => Unit): Option[NamedExpression] = {
 
       // run the type check first to ensure type errors are present
       val canWrite = DataType.canWrite(
-        queryExpr.dataType, tableAttr.dataType, resolver, tableAttr.name, addError)
+        queryExpr.dataType, tableAttr.dataType, byName, resolver, tableAttr.name, addError)
 
       if (queryExpr.nullable && !tableAttr.nullable) {
         addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
@@ -2314,7 +2395,7 @@ class Analyzer(
       } else {
         // always add an UpCast. it will be removed in the optimizer if it is unnecessary.
         Some(Alias(
-          UpCast(queryExpr, tableAttr.dataType, Seq()), tableAttr.name
+          UpCast(queryExpr, tableAttr.dataType), tableAttr.name
         )(
           explicitMetadata = Option(tableAttr.metadata)
         ))
@@ -2500,7 +2581,7 @@ class Analyzer(
         case e => e.sql
       }
       throw new AnalysisException(s"Cannot up cast $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString} as it may truncate\n" +
+        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
         "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
         "type of the field in the target object")
@@ -2513,11 +2594,15 @@ class Analyzer(
       case p => p transformExpressions {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
-        case UpCast(child, dataType, walkedTypePath)
-          if Cast.mayTruncate(child.dataType, dataType) =>
+        case UpCast(child, dt: AtomicType, _)
+            if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
+              child.dataType == StringType =>
+          Cast(child, dt.asNullable)
+
+        case UpCast(child, dataType, walkedTypePath) if !Cast.canUpCast(child.dataType, dataType) =>
           fail(child, dataType, walkedTypePath)
 
-        case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
+        case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
     }
   }

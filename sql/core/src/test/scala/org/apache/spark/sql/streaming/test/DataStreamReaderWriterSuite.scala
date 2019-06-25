@@ -33,7 +33,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
-import org.apache.spark.sql.streaming.{ProcessingTime => DeprecatedProcessingTime, _}
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -104,9 +104,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     LastOptions.parameters = parameters
     LastOptions.partitionColumns = partitionColumns
     LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns, outputMode)
-    new Sink {
-      override def addBatch(batchId: Long, data: DataFrame): Unit = {}
-    }
+    (_: Long, _: DataFrame) => {}
   }
 }
 
@@ -359,7 +357,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("source metadataPath") {
     LastOptions.clear()
 
-    val checkpointLocationURI = new Path(newMetadataDir).toUri
+    val checkpointLocation = new Path(newMetadataDir)
 
     val df1 = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
@@ -371,7 +369,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     val q = df1.union(df2).writeStream
       .format("org.apache.spark.sql.streaming.test")
-      .option("checkpointLocation", checkpointLocationURI.toString)
+      .option("checkpointLocation", checkpointLocation.toString)
       .trigger(ProcessingTime(10.seconds))
       .start()
     q.processAllAvailable()
@@ -379,14 +377,14 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
       any(),
-      meq(s"${makeQualifiedPath(checkpointLocationURI.toString)}/sources/0"),
+      meq(s"${new Path(makeQualifiedPath(checkpointLocation.toString)).toString}/sources/0"),
       meq(None),
       meq("org.apache.spark.sql.streaming.test"),
       meq(Map.empty))
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
       any(),
-      meq(s"${makeQualifiedPath(checkpointLocationURI.toString)}/sources/1"),
+      meq(s"${new Path(makeQualifiedPath(checkpointLocation.toString)).toString}/sources/1"),
       meq(None),
       meq("org.apache.spark.sql.streaming.test"),
       meq(Map.empty))
@@ -614,6 +612,21 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("configured checkpoint dir should not be deleted if a query is stopped without errors and" +
+    " force temp checkpoint deletion enabled") {
+    import testImplicits._
+    withTempDir { checkpointPath =>
+      withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointPath.getAbsolutePath,
+        SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key -> "true") {
+        val ds = MemoryStream[Int].toDS
+        val query = ds.writeStream.format("console").start()
+        assert(checkpointPath.exists())
+        query.stop()
+        assert(checkpointPath.exists())
+      }
+    }
+  }
+
   test("temp checkpoint dir should be deleted if a query is stopped without errors") {
     import testImplicits._
     val query = MemoryStream[Int].toDS.writeStream.format("console").start()
@@ -627,6 +640,17 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   testQuietly("temp checkpoint dir should not be deleted if a query is stopped with an error") {
+    testTempCheckpointWithFailedQuery(false)
+  }
+
+  testQuietly("temp checkpoint should be deleted if a query is stopped with an error and force" +
+    " temp checkpoint deletion enabled") {
+    withSQLConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key -> "true") {
+      testTempCheckpointWithFailedQuery(true)
+    }
+  }
+
+  private def testTempCheckpointWithFailedQuery(checkpointMustBeDeleted: Boolean): Unit = {
     import testImplicits._
     val input = MemoryStream[Int]
     val query = input.toDS.map(_ / 0).writeStream.format("console").start()
@@ -638,7 +662,11 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     intercept[StreamingQueryException] {
       query.awaitTermination()
     }
-    assert(fs.exists(checkpointDir))
+    if (!checkpointMustBeDeleted) {
+      assert(fs.exists(checkpointDir))
+    } else {
+      assert(!fs.exists(checkpointDir))
+    }
   }
 
   test("SPARK-20431: Specify a schema by using a DDL-formatted string") {

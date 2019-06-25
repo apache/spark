@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import java.util.concurrent.TimeUnit._
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -132,7 +134,7 @@ case class ObjectHashAggregateExec(
           aggregationIterator
         }
       }
-      aggTime += (System.nanoTime() - beforeAgg) / 1000000
+      aggTime += NANOSECONDS.toMillis(System.nanoTime() - beforeAgg)
       res
     }
   }

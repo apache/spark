@@ -22,6 +22,8 @@ import java.io.PrintWriter
 import scala.reflect.ClassTag
 import scala.xml.Utility
 
+import org.apache.spark.util.Utils
+
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
  * {{{
@@ -103,9 +105,9 @@ private[shared] object SharedParamsCodeGen {
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
-    val writer = new PrintWriter(file)
-    writer.write(code)
-    writer.close()
+    Utils.tryWithResource(new PrintWriter(file)) { writer =>
+      writer.write(code)
+    }
   }
 
   /** Description of a param. */

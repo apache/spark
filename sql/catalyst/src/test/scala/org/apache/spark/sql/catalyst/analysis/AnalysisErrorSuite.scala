@@ -216,11 +216,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
 
   errorTest(
-    "bad casts",
-    testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
-  "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
-
-  errorTest(
     "sorting by unsupported column types",
     mapRelation.orderBy('map.asc),
     "sort" :: "type" :: "map<int,int>" :: Nil)
@@ -228,7 +223,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy('a, 'c)('a, 'c, count('a).as("a3")).orderBy('b.asc),
-    "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, c, a3]" :: Nil)
+    "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, a3, c]" :: Nil)
 
   errorTest(
     "non-boolean filters",
@@ -603,5 +598,13 @@ class AnalysisErrorSuite extends AnalysisTest {
       LocalRelation(a))
     assertAnalysisError(plan5,
                         "Accessing outer query column is not allowed in" :: Nil)
+  }
+
+  test("Error on filter condition containing aggregate expressions") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val plan = Filter('a === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    assertAnalysisError(plan,
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
   }
 }

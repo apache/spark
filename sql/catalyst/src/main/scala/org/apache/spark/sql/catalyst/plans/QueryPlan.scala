@@ -37,13 +37,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: AttributeSet = AttributeSet(output)
+  @transient
+  lazy val outputSet: AttributeSet = AttributeSet(output)
 
   /**
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def references: AttributeSet = AttributeSet.fromAttributeSets(expressions.map(_.references))
+  @transient
+  lazy val references: AttributeSet =
+    AttributeSet.fromAttributeSets(expressions.map(_.references))
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -119,7 +122,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case stream: Stream[_] => stream.map(recursiveTransform).force
-      case seq: Traversable[_] => seq.map(recursiveTransform)
+      case seq: Iterable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
     }
@@ -142,16 +145,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /** Returns all of the expressions present in this query plan operator. */
   final def expressions: Seq[Expression] = {
     // Recursively find all expressions from a traversable.
-    def seqToExpressions(seq: Traversable[Any]): Traversable[Expression] = seq.flatMap {
+    def seqToExpressions(seq: Iterable[Any]): Iterable[Expression] = seq.flatMap {
       case e: Expression => e :: Nil
-      case s: Traversable[_] => seqToExpressions(s)
+      case s: Iterable[_] => seqToExpressions(s)
       case other => Nil
     }
 
     productIterator.flatMap {
       case e: Expression => e :: Nil
       case s: Some[_] => seqToExpressions(s.toSeq)
-      case seq: Traversable[_] => seqToExpressions(seq)
+      case seq: Iterable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
   }
@@ -279,7 +282,7 @@ object QueryPlan extends PredicateHelper {
    */
   def normalizeExprId[T <: Expression](e: T, input: AttributeSeq): T = {
     e.transformUp {
-      case s: SubqueryExpression => s.canonicalize(input)
+      case s: PlanExpression[_] => s.canonicalize(input)
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {

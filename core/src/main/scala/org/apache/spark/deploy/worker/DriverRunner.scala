@@ -193,8 +193,9 @@ private[deploy] class DriverRunner(
       CommandUtils.redirectStream(process.getInputStream, stdout)
 
       val stderr = new File(baseDir, "stderr")
-      val formattedCommand = builder.command.asScala.mkString("\"", "\" \"", "\"")
-      val header = "Launch Command: %s\n%s\n\n".format(formattedCommand, "=" * 40)
+      val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala)
+        .mkString("\"", "\" \"", "\"")
+      val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=" * 40)
       Files.append(header, stderr, StandardCharsets.UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
@@ -210,8 +211,10 @@ private[deploy] class DriverRunner(
     val successfulRunDuration = 5
     var keepTrying = !killed
 
+    val redactedCommand = Utils.redactCommandLineArgs(conf, command.command)
+      .mkString("\"", "\" \"", "\"")
     while (keepTrying) {
-      logInfo("Launch Command: " + command.command.mkString("\"", "\" \"", "\""))
+      logInfo("Launch Command: " + redactedCommand)
 
       synchronized {
         if (killed) { return exitCode }

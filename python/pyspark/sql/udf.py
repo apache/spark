@@ -40,6 +40,7 @@ def _wrap_function(sc, func, returnType):
 def _create_udf(f, returnType, evalType):
 
     if evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
 
@@ -48,7 +49,9 @@ def _create_udf(f, returnType, evalType):
 
         argspec = _get_argspec(f)
 
-        if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
+        if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
+                evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) and \
+                len(argspec.args) == 0 and \
                 argspec.varargs is None:
             raise ValueError(
                 "Invalid function: 0-arg pandas_udfs are not supported. "
@@ -113,7 +116,8 @@ class UserDefinedFunction(object):
             else:
                 self._returnType_placeholder = _parse_datatype_string(self._returnType)
 
-        if self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+        if self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or \
+                self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
             try:
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
@@ -123,7 +127,7 @@ class UserDefinedFunction(object):
         elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
-                    to_arrow_schema(self._returnType_placeholder)
+                    to_arrow_type(self._returnType_placeholder)
                 except TypeError:
                     raise NotImplementedError(
                         "Invalid returnType with grouped map Pandas UDFs: "
@@ -133,6 +137,9 @@ class UserDefinedFunction(object):
                                 "UDFs: returnType must be a StructType.")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
+                # StructType is not yet allowed as a return type, explicitly check here to fail fast
+                if isinstance(self._returnType_placeholder, StructType):
+                    raise TypeError
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
                 raise NotImplementedError(
@@ -320,10 +327,11 @@ class UDFRegistration(object):
                     "a user-defined function, but got %s." % returnType)
             if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
                                   PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                                  PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                                   PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
                 raise ValueError(
-                    "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF or "
-                    "SQL_GROUPED_AGG_PANDAS_UDF")
+                    "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
+                    "SQL_SCALAR_PANDAS_ITER_UDF, or SQL_GROUPED_AGG_PANDAS_UDF")
             register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
                                                evalType=f.evalType,
                                                deterministic=f.deterministic)

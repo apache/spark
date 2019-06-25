@@ -109,12 +109,13 @@ private[regression] trait LinearRegressionParams extends PredictorParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if ($(loss) == Huber) {
-      require($(solver)!= Normal, "LinearRegression with huber loss doesn't support " +
-        "normal solver, please change solver to auto or l-bfgs.")
-      require($(elasticNetParam) == 0.0, "LinearRegression with huber loss only supports " +
-        s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
-
+    if (fitting) {
+      if ($(loss) == Huber) {
+        require($(solver)!= Normal, "LinearRegression with huber loss doesn't support " +
+          "normal solver, please change solver to auto or l-bfgs.")
+        require($(elasticNetParam) == 0.0, "LinearRegression with huber loss only supports " +
+          s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
+      }
     }
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
@@ -531,8 +532,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         throw new SparkException(msg)
       }
 
-      bcFeaturesMean.destroy(blocking = false)
-      bcFeaturesStd.destroy(blocking = false)
+      bcFeaturesMean.destroy()
+      bcFeaturesStd.destroy()
 
       val parameters = state.x.toArray.clone()
 

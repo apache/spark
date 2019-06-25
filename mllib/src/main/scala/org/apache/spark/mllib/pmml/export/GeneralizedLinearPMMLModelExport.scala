@@ -19,7 +19,9 @@ package org.apache.spark.mllib.pmml.export
 
 import scala.{Array => SArray}
 
-import org.dmg.pmml._
+import org.dmg.pmml.{DataDictionary, DataField, DataType, FieldName, MiningField,
+  MiningFunction, MiningSchema, OpType}
+import org.dmg.pmml.regression.{NumericPredictor, RegressionModel, RegressionTable}
 
 import org.apache.spark.mllib.regression.GeneralizedLinearModel
 
@@ -45,7 +47,7 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
       val miningSchema = new MiningSchema
       val regressionTable = new RegressionTable(model.intercept)
       val regressionModel = new RegressionModel()
-        .setFunctionName(MiningFunctionType.REGRESSION)
+        .setMiningFunction(MiningFunction.REGRESSION)
         .setMiningSchema(miningSchema)
         .setModelName(description)
         .addRegressionTables(regressionTable)
@@ -55,7 +57,7 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
         dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
         miningSchema
           .addMiningFields(new MiningField(fields(i))
-          .setUsageType(FieldUsageType.ACTIVE))
+          .setUsageType(MiningField.UsageType.ACTIVE))
         regressionTable.addNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
       }
 
@@ -64,7 +66,7 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
       dataDictionary.addDataFields(new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE))
       miningSchema
         .addMiningFields(new MiningField(targetField)
-        .setUsageType(FieldUsageType.TARGET))
+        .setUsageType(MiningField.UsageType.TARGET))
 
       dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)
 

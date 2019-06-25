@@ -2,12 +2,27 @@
 layout: global
 title: PySpark Usage Guide for Pandas with Apache Arrow
 displayTitle: PySpark Usage Guide for Pandas with Apache Arrow
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
 {:toc}
 
-## Apache Arrow in Spark
+## Apache Arrow in PySpark
 
 Apache Arrow is an in-memory columnar data format that is used in Spark to efficiently transfer
 data between JVM and Python processes. This currently is most beneficial to Python users that
@@ -20,7 +35,7 @@ working with Arrow-enabled data.
 
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
 SQL module with the command `pip install pyspark[sql]`. Otherwise, you must ensure that PyArrow
-is installed and available on all cluster nodes. The current supported version is 0.8.0.
+is installed and available on all cluster nodes. The current supported version is 0.12.1.
 You can install using pip or conda from the conda-forge channel. See PyArrow
 [installation](https://arrow.apache.org/docs/python/install.html) for details.
 
@@ -29,11 +44,11 @@ You can install using pip or conda from the conda-forge channel. See PyArrow
 Arrow is available as an optimization when converting a Spark DataFrame to a Pandas DataFrame
 using the call `toPandas()` and when creating a Spark DataFrame from a Pandas DataFrame with
 `createDataFrame(pandas_df)`. To use Arrow when executing these calls, users need to first set
-the Spark configuration 'spark.sql.execution.arrow.enabled' to 'true'. This is disabled by default.
+the Spark configuration 'spark.sql.execution.arrow.pyspark.enabled' to 'true'. This is disabled by default.
 
-In addition, optimizations enabled by 'spark.sql.execution.arrow.enabled' could fallback automatically
+In addition, optimizations enabled by 'spark.sql.execution.arrow.pyspark.enabled' could fallback automatically
 to non-Arrow optimization implementation if an error occurs before the actual computation within Spark.
-This can be controlled by 'spark.sql.execution.arrow.fallback.enabled'.
+This can be controlled by 'spark.sql.execution.arrow.pyspark.fallback.enabled'.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
@@ -68,6 +83,23 @@ The following example shows how to create a scalar Pandas UDF that computes the 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
 {% include_example scalar_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+### Scalar Iterator
+
+Scalar iterator (`SCALAR_ITER`) Pandas UDF is the same as scalar Pandas UDF above except that the
+underlying Python function takes an iterator of batches as input instead of a single batch and,
+instead of returning a single output batch, it yields output batches or returns an iterator of
+output batches.
+It is useful when the UDF execution requires initializing some states, e.g., loading an machine
+learning model file to apply inference to every input batch.
+
+The following example shows how to create scalar iterator Pandas UDFs:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example scalar_iter_pandas_udf python/sql/arrow.py %}
 </div>
 </div>
 
@@ -128,8 +160,7 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 ### Supported SQL Types
 
 Currently, all Spark SQL data types are supported by Arrow-based conversion except `MapType`,
-`ArrayType` of `TimestampType`, and nested `StructType`. `BinaryType` is supported only when
-installed PyArrow is equal to or higher than 0.10.0.
+`ArrayType` of `TimestampType`, and nested `StructType`.
 
 ### Setting Arrow Batch Size
 

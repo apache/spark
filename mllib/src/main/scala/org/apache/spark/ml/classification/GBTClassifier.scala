@@ -341,11 +341,12 @@ class GBTClassificationModel private[ml](
    * The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
    * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
    * and follows the implementation from scikit-learn.
-
+   *
    * See `DecisionTreeClassificationModel.featureImportances`
    */
   @Since("2.0.0")
-  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
+  lazy val featureImportances: Vector =
+    TreeEnsembleModel.featureImportances(trees, numFeatures, perTreeNormalization = false)
 
   /** Raw prediction for the positive class. */
   private def margin(features: Vector): Double = {

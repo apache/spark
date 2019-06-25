@@ -31,14 +31,12 @@ import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
@@ -75,10 +73,6 @@ private[spark] abstract class YarnSchedulerBackend(
   /** Attempt ID. This is unset for client-mode schedulers */
   private var attemptId: Option[ApplicationAttemptId] = None
 
-  /** Scheduler extension services. */
-  private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
-
-
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
    *
@@ -90,11 +84,8 @@ private[spark] abstract class YarnSchedulerBackend(
     this.attemptId = attemptId
   }
 
-  override def start() {
+  protected def startBindings(): Unit = {
     require(appId.isDefined, "application ID unset")
-    val binding = SchedulerExtensionServiceBinding(sc, appId.get, attemptId)
-    services.start(binding)
-    super.start()
   }
 
   override def stop(): Unit = {
@@ -105,7 +96,6 @@ private[spark] abstract class YarnSchedulerBackend(
       super.stop()
     } finally {
       stopped.set(true)
-      services.stop()
     }
   }
 
@@ -190,27 +180,17 @@ private[spark] abstract class YarnSchedulerBackend(
           }
           conf.set(UI_FILTERS, allFilters)
 
-          ui.getHandlers.map(_.getServletHandler()).foreach { h =>
-            val holder = new FilterHolder()
-            holder.setName(filterName)
-            holder.setClassName(filterName)
-            filterParams.foreach { case (k, v) => holder.setInitParameter(k, v) }
-            h.addFilter(holder)
-
-            val mapping = new FilterMapping()
-            mapping.setFilterName(filterName)
-            mapping.setPathSpec("/*")
-            mapping.setDispatcherTypes(EnumSet.allOf(classOf[DispatcherType]))
-
-            h.prependFilterMapping(mapping)
+          ui.getDelegatingHandlers.foreach { h =>
+            h.addFilter(filterName, filterName, filterParams)
+            h.prependFilterMapping(filterName, "/*", EnumSet.allOf(classOf[DispatcherType]))
           }
         }
       }
     }
   }
 
-  override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new YarnDriverEndpoint(rpcEnv, properties)
+  override def createDriverEndpoint(): DriverEndpoint = {
+    new YarnDriverEndpoint()
   }
 
   /**
@@ -223,9 +203,8 @@ private[spark] abstract class YarnSchedulerBackend(
     sc.executorAllocationManager.foreach(_.reset())
   }
 
-  override protected def createTokenManager(
-      schedulerRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = {
-    Some(new YARNHadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration, schedulerRef))
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   /**
@@ -233,8 +212,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * This endpoint communicates with the executors and queries the AM for an executor's exit
    * status when the executor is disconnected.
    */
-  private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
-      extends DriverEndpoint(rpcEnv, sparkProperties) {
+  private class YarnDriverEndpoint extends DriverEndpoint {
 
     /**
      * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint

@@ -18,14 +18,17 @@
 package org.apache.spark.rdd
 
 import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
+import java.lang.management.ManagementFactory
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.KryoException
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -33,7 +36,7 @@ import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class RDDSuite extends SparkFunSuite with SharedSparkContext {
+class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   var tempDir: File = _
 
   override def beforeAll(): Unit = {
@@ -142,7 +145,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val actual = parallelUnion.collect().toList
     sc.conf.remove(RDD_PARALLEL_LISTING_THRESHOLD.key)
 
-    assert(parallelUnion.asInstanceOf[UnionRDD[Int]].isPartitionListingParallel === true)
+    assert(parallelUnion.asInstanceOf[UnionRDD[Int]].isPartitionListingParallel)
     assert(expected === actual)
   }
 
@@ -445,7 +448,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val splits = coalesced1.glom().collect().map(_.toList).toList
     assert(splits.length === 3, "Supposed to coalesce to 3 but got " + splits.length)
 
-    assert(splits.forall(_.length >= 1) === true, "Some partitions were empty")
+    assert(splits.forall(_.length >= 1), "Some partitions were empty")
 
     // If we try to coalesce into more partitions than the original RDD, it should just
     // keep the original number of partitions.
@@ -472,7 +475,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val splits = coalesced1.glom().collect().map(_.toList).toList
     assert(splits.length === 3, "Supposed to coalesce to 3 but got " + splits.length)
 
-    assert(splits.forall(_.length >= 1) === true, "Some partitions were empty")
+    assert(splits.forall(_.length >= 1), "Some partitions were empty")
 
     // If we try to coalesce into more partitions than the original RDD, it should just
     // keep the original number of partitions.
@@ -1174,6 +1177,31 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
         iter
       }
     }.collect()
+  }
+
+  test("SPARK-27666: Do not release lock while TaskContext already completed") {
+    val rdd = sc.parallelize(Range(0, 10), 1).cache()
+    val tid = sc.longAccumulator("threadId")
+    // validate cache
+    rdd.collect()
+    rdd.mapPartitions { iter =>
+      val t = new Thread(() => {
+        while (iter.hasNext) {
+          iter.next()
+          Thread.sleep(100)
+        }
+      })
+      t.setDaemon(false)
+      t.start()
+      tid.add(t.getId)
+      Iterator(0)
+    }.collect()
+    val tmx = ManagementFactory.getThreadMXBean
+    eventually(timeout(10.seconds))  {
+      // getThreadInfo() will return null after child thread `t` died
+      val t = tmx.getThreadInfo(tid.value)
+      assert(t == null || t.getThreadState == Thread.State.TERMINATED)
+    }
   }
 
   test("SPARK-23496: order of input partitions can result in severe skew in coalesce") {

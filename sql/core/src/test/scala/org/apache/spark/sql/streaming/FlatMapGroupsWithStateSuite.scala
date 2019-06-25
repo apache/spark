@@ -267,7 +267,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
         val state2 = GroupStateImpl.createForStreaming(
           initState, 1000, 1000, timeoutConf, hasTimedOut = true, watermarkPresent = false)
-        assert(state2.hasTimedOut === true)
+        assert(state2.hasTimedOut)
       }
 
       // for batch queries
@@ -1162,7 +1162,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
     test(s"InputProcessor - process timed out state - $testName") {
       val mapGroupsFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
-        assert(state.hasTimedOut === true, "hasTimedOut not true")
+        assert(state.hasTimedOut, "hasTimedOut not true")
         assert(values.isEmpty, "values not empty")
         stateUpdates(state)
         Iterator.empty

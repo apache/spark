@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -816,7 +816,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").toURI
+    val testJar = HiveTestUtils.getHiveHcatalogCoreJar.toURI
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     sql(s"ADD JAR $testJar")
     sql(
@@ -826,9 +826,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
     assert(sql("list jars").
-      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+      filter(_.getString(0).contains(HiveTestUtils.getHiveHcatalogCoreJar.getName)).count() > 0)
     assert(sql("list jar").
-      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+      filter(_.getString(0).contains(HiveTestUtils.getHiveHcatalogCoreJar.getName)).count() > 0)
     val testJar2 = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
     sql(s"ADD JAR $testJar2")
     assert(sql(s"list jar $testJar").count() == 1)
@@ -1185,6 +1185,24 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         assert(spark.table("with_parts").filter($"p" === 4).collect().head == Row(3, 4))
       } finally {
         hadoopConf.set(modeConfKey, originalValue)
+      }
+    }
+  }
+
+  test("SPARK-28054: Unable to insert partitioned table when partition name is upper case") {
+    withTable("spark_28054_test") {
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      sql("CREATE TABLE spark_28054_test (KEY STRING, VALUE STRING) PARTITIONED BY (DS STRING)")
+
+      sql("INSERT INTO TABLE spark_28054_test PARTITION(DS) SELECT 'k' KEY, 'v' VALUE, '1' DS")
+
+      assertResult(Array(Row("k", "v", "1"))) {
+        sql("SELECT * from spark_28054_test").collect()
+      }
+
+      sql("INSERT INTO TABLE spark_28054_test PARTITION(ds) SELECT 'k' key, 'v' value, '2' ds")
+      assertResult(Array(Row("k", "v", "1"), Row("k", "v", "2"))) {
+        sql("SELECT * from spark_28054_test").collect()
       }
     }
   }

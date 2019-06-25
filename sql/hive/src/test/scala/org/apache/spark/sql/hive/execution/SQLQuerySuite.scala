@@ -26,7 +26,7 @@ import java.util.{Locale, Set}
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -1105,7 +1105,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
         sql(
-          s"ADD JAR ${hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+          s"ADD JAR ${HiveTestUtils.getHiveContribJar.getCanonicalPath}")
         try {
           sql(
             """
@@ -1183,6 +1183,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
       Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
         "32 seconds 99 milliseconds 899 microseconds")))
+    checkAnswer(sql("select interval '15:40:32.99899999' hour to second"),
+      Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 99 milliseconds " +
+        "899 microseconds")))
     checkAnswer(sql("select interval '30' year"),
       Row(CalendarInterval.fromString("interval 30 years")))
     checkAnswer(sql("select interval '25' month"),
@@ -2163,6 +2166,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           }.getMessage
           assert(m.contains(s"contains invalid character(s)"))
 
+          val m1 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
+          }.getMessage
+          assert(m1.contains(s"contains invalid character(s)"))
+
           val m2 = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
           }.getMessage
@@ -2332,7 +2340,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
     Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
-      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString) {
+      // This test case is only for file source V1. As the rule OptimizeMetadataOnlyQuery is
+      // disabled by default, we can skip testing file source v2 in current stage.
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString,
+        SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
         withTable("t") {
           sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
           sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")
@@ -2348,4 +2359,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-25158: " +
+    "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
+    withTempView("test") {
+      val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
+      try {
+        val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
+        Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
+
+        // Use a bad udf to generate failed inputs.
+        val badUDF = org.apache.spark.sql.functions.udf((x: Int) => {
+          if (x < 1) x
+          else throw new RuntimeException("Failed to produce data.")
+        })
+        spark
+          .range(5)
+          .select(badUDF('id).as("a"))
+          .createOrReplaceTempView("test")
+        val scriptFilePath = getTestResourcePath("data")
+        val e = intercept[SparkException] {
+          sql(
+            s"""FROM test SELECT TRANSFORM(a)
+               |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+             """.stripMargin).collect()
+        }
+        assert(e.getMessage.contains("Failed to produce data."))
+        assert(uncaughtExceptionHandler.exception.isEmpty)
+      } finally {
+        Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
+      }
+    }
+  }
 }

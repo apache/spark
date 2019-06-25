@@ -44,6 +44,7 @@ import org.apache.spark.network.util.TransportConf;
 
 public class RpcIntegrationSuite {
   static TransportConf conf;
+  static TransportContext context;
   static TransportServer server;
   static TransportClientFactory clientFactory;
   static RpcHandler rpcHandler;
@@ -90,7 +91,7 @@ public class RpcIntegrationSuite {
       @Override
       public StreamManager getStreamManager() { return new OneForOneStreamManager(); }
     };
-    TransportContext context = new TransportContext(conf, rpcHandler);
+    context = new TransportContext(conf, rpcHandler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
     oneWayMsgs = new ArrayList<>();
@@ -160,6 +161,7 @@ public class RpcIntegrationSuite {
   public static void tearDown() {
     server.close();
     clientFactory.close();
+    context.close();
     testData.cleanup();
   }
 

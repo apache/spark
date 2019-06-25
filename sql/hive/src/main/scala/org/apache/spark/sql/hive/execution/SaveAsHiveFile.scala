@@ -83,6 +83,16 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
+    // SPARK-28054: Hive metastore is not case preserving and keeps partition columns
+    // with lower cased names, Hive will validate the column names in partition spec and
+    // the partition paths. Besides lowercasing the column names in the partition spec,
+    // we also need to lowercase the column names in written partition paths.
+    // scalastyle:off caselocale
+    val hiveCompatiblePartitionColumns = partitionAttributes.map { attr =>
+     attr.withName(attr.name.toLowerCase)
+    }
+    // scalastyle:on caselocale
+
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
@@ -91,7 +101,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       outputSpec =
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
-      partitionColumns = partitionAttributes,
+      partitionColumns = hiveCompatiblePartitionColumns,
       bucketSpec = None,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = Map.empty)
@@ -114,7 +124,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // be removed by Hive when Hive is trying to empty the table directory.
     val hiveVersionsUsingOldExternalTempPath: Set[HiveVersion] = Set(v12, v13, v14, v1_0)
     val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] =
-      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3)
+      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
 
     // Ensure all the supported versions are considered here.
     assert(hiveVersionsUsingNewExternalTempPath ++ hiveVersionsUsingOldExternalTempPath ==
@@ -210,12 +220,11 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       stagingDir)
   }
 
-  private def getStagingDir(
+  private[hive] def getStagingDir(
       inputPath: Path,
       hadoopConf: Configuration,
       stagingDir: String): Path = {
-    val inputPathUri: URI = inputPath.toUri
-    val inputPathName: String = inputPathUri.getPath
+    val inputPathName: String = inputPath.toString
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
     var stagingPathName: String =
       if (inputPathName.indexOf(stagingDir) == -1) {
@@ -227,8 +236,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
     // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
     // under the table directory.
-    if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs) &&
-      !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
+    if (isSubDir(new Path(stagingPathName), inputPath, fs) &&
+      !stagingPathName.stripPrefix(inputPathName).stripPrefix("/").startsWith(".")) {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
         "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
         "directory.")
@@ -251,6 +260,13 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
           "Cannot create staging directory '" + dir.toString + "': " + e.getMessage, e)
     }
     dir
+  }
+
+  // HIVE-14259 removed FileUtils.isSubDir(). Adapted it from Hive 1.2's FileUtils.isSubDir().
+  private def isSubDir(p1: Path, p2: Path, fs: FileSystem): Boolean = {
+    val path1 = fs.makeQualified(p1).toString + Path.SEPARATOR
+    val path2 = fs.makeQualified(p2).toString + Path.SEPARATOR
+    path1.startsWith(path2)
   }
 
   private def executionId: String = {

@@ -209,7 +209,7 @@ class ExchangeCoordinator(
       var i = 0
       while (i < numExchanges) {
         val exchange = exchanges(i)
-        val shuffleDependency = exchange.prepareShuffleDependency()
+        val shuffleDependency = exchange.shuffleDependency
         shuffleDependencies += shuffleDependency
         if (shuffleDependency.rdd.partitions.length != 0) {
           // submitMapStage does not accept RDD with 0 partition.

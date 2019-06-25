@@ -404,6 +404,44 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void replace() {
+    assertEquals(
+      fromString("re123ace"),
+      fromString("replace").replace(fromString("pl"), fromString("123")));
+    assertEquals(
+      fromString("reace"),
+      fromString("replace").replace(fromString("pl"), fromString("")));
+    assertEquals(
+      fromString("replace"),
+      fromString("replace").replace(fromString(""), fromString("123")));
+    // tests for multiple replacements
+    assertEquals(
+      fromString("a12ca12c"),
+      fromString("abcabc").replace(fromString("b"), fromString("12")));
+    assertEquals(
+      fromString("adad"),
+      fromString("abcdabcd").replace(fromString("bc"), fromString("")));
+    // tests for single character search and replacement strings
+    assertEquals(
+      fromString("AbcAbc"),
+      fromString("abcabc").replace(fromString("a"), fromString("A")));
+    assertEquals(
+      fromString("abcabc"),
+      fromString("abcabc").replace(fromString("Z"), fromString("A")));
+    // Tests with non-ASCII characters
+    assertEquals(
+      fromString("花ab界"),
+      fromString("花花世界").replace(fromString("花世"), fromString("ab")));
+    assertEquals(
+      fromString("a水c"),
+      fromString("a火c").replace(fromString("火"), fromString("水")));
+    // Tests for a large number of replacements, triggering UTF8StringBuilder resize
+    assertEquals(
+      fromString("abcd").repeat(17),
+      fromString("a").repeat(17).replace(fromString("a"), fromString("abcd")));
+  }
+
+  @Test
   public void levenshteinDistance() {
     assertEquals(0, EMPTY_UTF8.levenshteinDistance(EMPTY_UTF8));
     assertEquals(1, EMPTY_UTF8.levenshteinDistance(fromString("a")));

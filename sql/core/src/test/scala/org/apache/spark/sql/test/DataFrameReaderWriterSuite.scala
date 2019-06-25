@@ -38,10 +38,15 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
 
@@ -219,16 +224,86 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.parameters("opt3") == "3")
   }
 
-  test("save mode") {
-    val df = spark.read
+  test("pass partitionBy as options") {
+    Seq(1).toDF.write
       .format("org.apache.spark.sql.test")
-      .load()
+      .partitionBy("col1", "col2")
+      .save()
 
-    df.write
+    val partColumns = LastOptions.parameters(DataSourceUtils.PARTITIONING_COLUMNS_KEY)
+    assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
+  }
+
+  test("save mode") {
+    spark.range(10).write
       .format("org.apache.spark.sql.test")
       .mode(SaveMode.ErrorIfExists)
       .save()
     assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
+
+    spark.range(10).write
+      .format("org.apache.spark.sql.test")
+      .mode(SaveMode.Append)
+      .save()
+    assert(LastOptions.saveMode === SaveMode.Append)
+
+    // By default the save mode is `ErrorIfExists` for data source v1.
+    spark.range(10).write
+      .format("org.apache.spark.sql.test")
+      .save()
+    assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
+
+    spark.range(10).write
+      .format("org.apache.spark.sql.test")
+      .mode("default")
+      .save()
+    assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
+  }
+
+  test("save mode for data source v2") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+
+    spark.listenerManager.register(listener)
+    try {
+      // append mode creates `AppendData`
+      spark.range(10).write
+        .format(classOf[NoopDataSource].getName)
+        .mode(SaveMode.Append)
+        .save()
+      sparkContext.listenerBus.waitUntilEmpty(1000)
+      assert(plan.isInstanceOf[AppendData])
+
+      // overwrite mode creates `OverwriteByExpression`
+      spark.range(10).write
+        .format(classOf[NoopDataSource].getName)
+        .mode(SaveMode.Overwrite)
+        .save()
+      sparkContext.listenerBus.waitUntilEmpty(1000)
+      assert(plan.isInstanceOf[OverwriteByExpression])
+
+      // By default the save mode is `ErrorIfExists` for data source v2.
+      spark.range(10).write
+        .format(classOf[NoopDataSource].getName)
+        .save()
+      sparkContext.listenerBus.waitUntilEmpty(1000)
+      assert(plan.isInstanceOf[AppendData])
+
+      spark.range(10).write
+        .format(classOf[NoopDataSource].getName)
+        .mode("default")
+        .save()
+      sparkContext.listenerBus.waitUntilEmpty(1000)
+      assert(plan.isInstanceOf[AppendData])
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
   }
 
   test("test path option in load") {
@@ -838,6 +913,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
           checkReadPartitionColumnDuplication("parquet", c0, c1, src)
+
+          // Check ORC format
+          checkWriteDataColumnDuplication("orc", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "orc", c0, c1, src)
+          checkReadPartitionColumnDuplication("orc", c0, c1, src)
         }
       }
     }

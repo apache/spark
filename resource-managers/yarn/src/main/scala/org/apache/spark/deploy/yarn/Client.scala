@@ -21,7 +21,6 @@ import java.io.{FileSystem => _, _}
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.security.PrivilegedExceptionAction
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -34,9 +33,9 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.io.{DataOutputBuffer, Text}
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.MRJobConfig
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -49,9 +48,11 @@ import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
@@ -178,7 +179,8 @@ private[spark] class Client(
 
       // The app staging dir based on the STAGING_DIR configuration if configured
       // otherwise based on the users home directory.
-      val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
+      val appStagingBaseDir = sparkConf.get(STAGING_DIR)
+        .map { new Path(_, UserGroupInformation.getCurrentUser.getShortUserName) }
         .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
       stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
 
@@ -238,12 +240,15 @@ private[spark] class Client(
   def createApplicationSubmissionContext(
       newApp: YarnClientApplication,
       containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
-    val amResources =
+
+    val yarnAMResources =
       if (isClusterMode) {
         sparkConf.getAllWithPrefix(config.YARN_DRIVER_RESOURCE_TYPES_PREFIX).toMap
       } else {
         sparkConf.getAllWithPrefix(config.YARN_AM_RESOURCE_TYPES_PREFIX).toMap
       }
+    val amResources = yarnAMResources ++
+      getYarnResourcesFromSparkResources(SPARK_DRIVER_PREFIX, sparkConf)
     logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))
@@ -306,26 +311,21 @@ private[spark] class Client(
   /**
    * Set up security tokens for launching our ApplicationMaster container.
    *
-   * This method will obtain delegation tokens from all the registered providers, and set them in
-   * the AM's launch context.
+   * In client mode, a set of credentials has been obtained by the scheduler, so they are copied
+   * and sent to the AM. In cluster mode, new credentials are obtained and then sent to the AM,
+   * along with whatever credentials the current user already has.
    */
   private def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = {
-    val credentials = UserGroupInformation.getCurrentUser().getCredentials()
-    val credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf, null)
-    credentialManager.obtainDelegationTokens(credentials)
-
-    // When using a proxy user, copy the delegation tokens to the user's credentials. Avoid
-    // that for regular users, since in those case the user already has access to the TGT,
-    // and adding delegation tokens could lead to expired or cancelled tokens being used
-    // later, as reported in SPARK-15754.
     val currentUser = UserGroupInformation.getCurrentUser()
-    if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
-      currentUser.addCredentials(credentials)
+    val credentials = currentUser.getCredentials()
+
+    if (isClusterMode) {
+      val credentialManager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
+      credentialManager.obtainDelegationTokens(credentials)
     }
 
-    val dob = new DataOutputBuffer
-    credentials.writeTokenStorageToStream(dob)
-    amContainer.setTokens(ByteBuffer.wrap(dob.getData))
+    val serializedCreds = SparkHadoopUtil.get.serialize(credentials)
+    amContainer.setTokens(ByteBuffer.wrap(serializedCreds))
   }
 
   /** Get the application report from the ResourceManager for an application we have submitted. */
@@ -1202,7 +1202,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.8.1-src.zip")
+        val py4jFile = new File(pyLibPath, PythonUtils.PY4J_ZIP_NAME)
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())

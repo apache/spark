@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{Semaphore, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import org.apache.spark.internal.Logging
@@ -126,8 +126,9 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
             val ans = nums.map(number => {
               val running = ThreadingSuiteState.runningThreads
               running.getAndIncrement()
-              val time = System.currentTimeMillis()
-              while (running.get() != 4 && System.currentTimeMillis() < time + 1000) {
+              val timeNs = System.nanoTime()
+              while (running.get() != 4 &&
+                (System.nanoTime() - timeNs < TimeUnit.SECONDS.toNanos(1))) {
                 Thread.sleep(100)
               }
               if (running.get() != 4) {

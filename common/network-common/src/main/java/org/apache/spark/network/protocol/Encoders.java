@@ -89,4 +89,27 @@ public class Encoders {
       return strings;
     }
   }
+
+  /** Integer arrays are encoded with their length followed by integers. */
+  public static class IntArrays {
+    public static int encodedLength(int[] ints) {
+      return 4 + 4 * ints.length;
+    }
+
+    public static void encode(ByteBuf buf, int[] ints) {
+      buf.writeInt(ints.length);
+      for (int i : ints) {
+        buf.writeInt(i);
+      }
+    }
+
+    public static int[] decode(ByteBuf buf) {
+      int numInts = buf.readInt();
+      int[] ints = new int[numInts];
+      for (int i = 0; i < ints.length; i ++) {
+        ints[i] = buf.readInt();
+      }
+      return ints;
+    }
+  }
 }

@@ -668,9 +668,17 @@ class Column(object):
         :return: a Column
 
         >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age").rowsBetween(-1, 1)
+        >>> window = Window.partitionBy("name").orderBy("age") \
+                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
-        >>> # df.select(rank().over(window), min('age').over(window))
+        >>> df.withColumn("rank", rank().over(window)) \
+                .withColumn("min", min('age').over(window)).show()
+        +---+-----+----+---+
+        |age| name|rank|min|
+        +---+-----+----+---+
+        |  5|  Bob|   1|  5|
+        |  2|Alice|   1|  2|
+        +---+-----+----+---+
         """
         from pyspark.sql.window import WindowSpec
         if not isinstance(window, WindowSpec):

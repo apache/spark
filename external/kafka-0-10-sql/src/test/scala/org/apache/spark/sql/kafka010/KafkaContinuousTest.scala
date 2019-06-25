@@ -30,7 +30,6 @@ import org.apache.spark.sql.test.TestSparkSession
 // Trait to configure StreamTest for kafka continuous execution tests.
 trait KafkaContinuousTest extends KafkaSourceTest {
   override val defaultTrigger = Trigger.Continuous(1000)
-  override val defaultUseV2Sink = true
 
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.
   override protected def createSparkSession = new TestSparkSession(
@@ -48,8 +47,8 @@ trait KafkaContinuousTest extends KafkaSourceTest {
       assert(
         query.lastExecution.executedPlan.collectFirst {
           case scan: ContinuousScanExec
-              if scan.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-            scan.scanConfig.asInstanceOf[KafkaContinuousScanConfig]
+              if scan.stream.isInstanceOf[KafkaContinuousStream] =>
+            scan.stream.asInstanceOf[KafkaContinuousStream]
         }.exists(_.knownPartitions.size == newCount),
         s"query never reconfigured to $newCount partitions")
     }

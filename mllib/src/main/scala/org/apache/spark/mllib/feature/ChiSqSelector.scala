@@ -113,8 +113,6 @@ class ChiSqSelectorModel @Since("1.3.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     ChiSqSelectorModel.SaveLoadV1_0.save(sc, this, path)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
