@@ -178,6 +178,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
     val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
     blacklist.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
+    blacklist.asScala.retain { (fileName, creationTime) =>
+      val isCleared = creationTime >= expiredThreshold
+      if (isCleared) {
+        // For the permission-only changes, the file size will be the same.
+        // Without clearing the entry, `shouldReloadLog` returns false at file size comparison.
+        val key = fs.getFileStatus(new Path(logDir + "/" + fileName)).getPath.toString
+        logInfo(s"Clear the existing log info for $key")
+        listing.delete(classOf[LogInfo], key)
+      }
+      isCleared
+    }
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
