@@ -30,10 +30,8 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-
-class RocksDbInstance(keySchema: StructType,
-                      valueSchema: StructType,
-                      identifier: String) extends Logging {
+class RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier: String)
+    extends Logging {
 
   import RocksDbInstance._
   RocksDB.loadLibrary()
@@ -54,15 +52,19 @@ class RocksDbInstance(keySchema: StructType,
     try {
       setOptions(conf)
       db = readOnly match {
-        case true => options.setCreateIfMissing(false)
+        case true =>
+          options.setCreateIfMissing(false)
           RocksDB.openReadOnly(options, path)
-        case false => options.setCreateIfMissing(true)
+        case false =>
+          options.setCreateIfMissing(true)
           RocksDB.open(options, path)
       }
       dbPath = path
     } catch {
       case e: Throwable =>
-        throw new IllegalStateException(s"Error while creating rocksDb instance ${e.getMessage}", e)
+        throw new IllegalStateException(
+          s"Error while creating rocksDb instance ${e.getMessage}",
+          e)
     }
   }
 
@@ -123,13 +125,13 @@ class RocksDbInstance(keySchema: StructType,
 
     itr.seekToFirst()
 
-    new Iterator[ UnsafeRowPair ] {
+    new Iterator[UnsafeRowPair] {
       override def hasNext: Boolean = {
-        if ( itr.isValid ) {
+        if (itr.isValid) {
           true
         } else {
           itrReadOptions.close()
-          if ( closeDbOnCompletion ) {
+          if (closeDbOnCompletion) {
             close()
           }
           logDebug(s"read from DB completed")
@@ -150,8 +152,7 @@ class RocksDbInstance(keySchema: StructType,
     }
   }
 
-
-    def printStats: Unit = {
+  def printStats: Unit = {
     verify(isOpen(), "Open rocksDb instance before any operation")
     try {
       val stats = db.getProperty("rocksdb.stats")
@@ -171,13 +172,17 @@ class RocksDbInstance(keySchema: StructType,
     writeOptions.setSync(false)
     writeOptions.setDisableWAL(true)
 
-    val dataBlockSize = conf.getOrElse(
-      "spark.sql.streaming.stateStore.rocksDb.blockSizeInKB".
-        toLowerCase(Locale.ROOT), "64").toInt
+    val dataBlockSize = conf
+      .getOrElse(
+        "spark.sql.streaming.stateStore.rocksDb.blockSizeInKB".toLowerCase(Locale.ROOT),
+        "64")
+      .toInt
 
-    val metadataBlockSize = conf.getOrElse(
-      "spark.sql.streaming.stateStore.rocksDb.metadataBlockSizeInKB".
-        toLowerCase(Locale.ROOT), "4").toInt
+    val metadataBlockSize = conf
+      .getOrElse(
+        "spark.sql.streaming.stateStore.rocksDb.metadataBlockSizeInKB".toLowerCase(Locale.ROOT),
+        "4")
+      .toInt
 
     // Table configs
     // https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters
@@ -196,18 +201,23 @@ class RocksDbInstance(keySchema: StructType,
       .setFormatVersion(4) // https://rocksdb.org/blog/2019/03/08/format-version-4.html
       .setIndexBlockRestartInterval(16)
 
-    var bufferNumber = conf.getOrElse(
-      "spark.sql.streaming.stateStore.rocksDb.bufferNumber".toLowerCase(Locale.ROOT), "5").toInt
+    var bufferNumber = conf
+      .getOrElse(
+        "spark.sql.streaming.stateStore.rocksDb.bufferNumber".toLowerCase(Locale.ROOT),
+        "5")
+      .toInt
 
     bufferNumber = Math.max(bufferNumber, 3)
 
     val bufferNumberToMaintain = Math.max(bufferNumber - 2, 3)
 
-    logInfo(s"Using Max Buffer Name = $bufferNumber & " +
-      s"max buffer number to maintain = $bufferNumberToMaintain")
-    
+    logInfo(
+      s"Using Max Buffer Name = $bufferNumber & " +
+        s"max buffer number to maintain = $bufferNumberToMaintain")
+
     // DB Options
-    options.setCreateIfMissing(true)
+    options
+      .setCreateIfMissing(true)
       .setMaxWriteBufferNumber(bufferNumber)
       .setMaxWriteBufferNumberToMaintain(bufferNumberToMaintain)
       .setMaxBackgroundCompactions(4)
@@ -256,9 +266,10 @@ class RocksDbInstance(keySchema: StructType,
 }
 
 class OptimisticTransactionDbInstance(
-    keySchema: StructType, valueSchema: StructType, identifier: String)
-  extends RocksDbInstance(
-    keySchema: StructType, valueSchema: StructType, identifier: String) {
+    keySchema: StructType,
+    valueSchema: StructType,
+    identifier: String)
+    extends RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier: String) {
 
   import RocksDbInstance._
   RocksDB.loadLibrary()
@@ -284,8 +295,10 @@ class OptimisticTransactionDbInstance(
       dbPath = path
     } catch {
       case e: Throwable =>
-        throw new IllegalStateException(s"Error while creating OptimisticTransactionDb instance" +
-          s" ${e.getMessage}", e)
+        throw new IllegalStateException(
+          s"Error while creating OptimisticTransactionDb instance" +
+            s" ${e.getMessage}",
+          e)
     }
   }
 
@@ -332,7 +345,7 @@ class OptimisticTransactionDbInstance(
       txn.commit()
       txn.close()
       txn = null
-      backupPath.foreach(f => createCheckpoint(otdb.asInstanceOf[ RocksDB ], f))
+      backupPath.foreach(f => createCheckpoint(otdb.asInstanceOf[RocksDB], f))
     } catch {
       case e: Exception =>
         log.error(s"Unable to commit the transactions. Error message = ${e.getMessage}")
@@ -342,15 +355,13 @@ class OptimisticTransactionDbInstance(
 
   def printTrxStats(): Unit = {
     verify(txn != null, "No open Transaction")
-    logInfo(
-      s"""
+    logInfo(s"""
          | deletes = ${txn.getNumDeletes}
          | numKeys = ${txn.getNumKeys}
          | puts =  ${txn.getNumPuts}
          | time =  ${txn.getElapsedTime}
        """.stripMargin)
   }
-
 
   override def abort(): Unit = {
     verify(txn != null, "No Transaction to abort")
@@ -370,7 +381,8 @@ class OptimisticTransactionDbInstance(
 
   override def iterator(closeDbOnCompletion: Boolean): Iterator[UnsafeRowPair] = {
     verify(txn != null, "Transaction is not set")
-    verify(closeDbOnCompletion == false,
+    verify(
+      closeDbOnCompletion == false,
       "Cannot close a DB without aborting/commiting the transactions")
     val readOptions = new ReadOptions()
     val itr: RocksIterator = txn.getIterator(readOptions)
@@ -391,8 +403,7 @@ object RocksDbInstance {
 
   private val destroyOptions: Options = new Options()
 
-  val lRUCache = new LRUCache(1024 * 1024 * 1024, 6,
-    false, 0.05)
+  val lRUCache = new LRUCache(1024 * 1024 * 1024, 6, false, 0.05)
 
   def destroyDB(path: String): Unit = {
     val f: File = new File(path)

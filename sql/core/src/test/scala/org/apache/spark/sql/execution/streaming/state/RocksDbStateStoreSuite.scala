@@ -41,8 +41,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvider]
-  with BeforeAndAfter with PrivateMethodTester {
+class RocksDbStateStoreSuite
+    extends StateStoreSuiteBase[RocksDbStateStoreProvider]
+    with BeforeAndAfter
+    with PrivateMethodTester {
   type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
   type ProviderMapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
@@ -63,9 +65,9 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
   }
 
   def updateVersionTo(
-                       provider: StateStoreProvider,
-                       currentVersion: Int,
-                       targetVersion: Int): Int = {
+      provider: StateStoreProvider,
+      currentVersion: Int,
+      targetVersion: Int): Int = {
     var newCurrentVersion = currentVersion
     for (i <- newCurrentVersion until targetVersion) {
       newCurrentVersion = incrementVersion(provider, i)
@@ -82,46 +84,51 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
   }
 
   def checkLoadedVersions(
-                           rocksDbWriteInstance: RocksDbInstance,
-                           count: Int,
-                           earliestKey: Long,
-                           latestKey: Long): Unit = {
+      rocksDbWriteInstance: RocksDbInstance,
+      count: Int,
+      earliestKey: Long,
+      latestKey: Long): Unit = {
     assert(rocksDbWriteInstance.iterator(false).length === count)
   }
 
   def checkVersion(
-                    rocksDbWriteInstance: RocksDbInstance,
-                    version: Long,
-                    expectedData: Map[String, Int]): Unit = {
+      rocksDbWriteInstance: RocksDbInstance,
+      version: Long,
+      expectedData: Map[String, Int]): Unit = {
 
-    val originValueMap = rocksDbWriteInstance.iterator(false).map { row =>
-      rowToString(row.key) -> rowToInt(row.value)
-    }.toMap[String, Int]
+    val originValueMap = rocksDbWriteInstance
+      .iterator(false)
+      .map { row =>
+        rowToString(row.key) -> rowToInt(row.value)
+      }
+      .toMap[String, Int]
 
     assert(originValueMap === expectedData)
   }
 
   test("snapshotting") {
-    val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
+    val provider =
+      newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
 
     var currentVersion = 0
 
     currentVersion = updateVersionTo(provider, currentVersion, 2)
     require(getData(provider) === Set("a" -> 2))
-    provider.doMaintenance()               // should not generate snapshot files
+    provider.doMaintenance() // should not generate snapshot files
     assert(getData(provider) === Set("a" -> 2))
 
     for (i <- 1 to currentVersion) {
-      assert(fileExists(provider, i, isSnapshot = false))  // all delta files present
-      assert(!fileExists(provider, i, isSnapshot = true))  // no snapshot files present
+      assert(fileExists(provider, i, isSnapshot = false)) // all delta files present
+      assert(!fileExists(provider, i, isSnapshot = true)) // no snapshot files present
     }
 
     // After version 6, snapshotting should generate one snapshot file
     currentVersion = updateVersionTo(provider, currentVersion, 6)
     require(getData(provider) === Set("a" -> 6), "store not updated correctly")
-    provider.doMaintenance()       // should generate snapshot files
+    provider.doMaintenance() // should generate snapshot files
 
-    val snapshotVersion = (0 to 6).find(version => fileExists(provider, version, isSnapshot = true))
+    val snapshotVersion =
+      (0 to 6).find(version => fileExists(provider, version, isSnapshot = true))
     assert(snapshotVersion.nonEmpty, "snapshot file not generated")
     deleteFilesEarlierThanVersion(provider, snapshotVersion.get)
     assert(
@@ -134,10 +141,10 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
     // After version 20, snapshotting should generate newer snapshot files
     currentVersion = updateVersionTo(provider, currentVersion, 20)
     require(getData(provider) === Set("a" -> 20), "store not updated correctly")
-    provider.doMaintenance()       // do snapshot
+    provider.doMaintenance() // do snapshot
 
-    val latestSnapshotVersion = (0 to 20).filter(version =>
-      fileExists(provider, version, isSnapshot = true)).lastOption
+    val latestSnapshotVersion =
+      (0 to 20).filter(version => fileExists(provider, version, isSnapshot = true)).lastOption
     assert(latestSnapshotVersion.nonEmpty, "no snapshot file found")
     assert(latestSnapshotVersion.get > snapshotVersion.get, "newer snapshot not generated")
 
@@ -146,7 +153,8 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
   }
 
   test("cleaning") {
-    val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
+    val provider =
+      newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
 
     for (i <- 1 to 20) {
       val store = provider.getStore(i - 1)
@@ -175,29 +183,33 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
     provider.getStore(0).commit()
 
     // Verify we don't leak temp files
-    val tempFiles = FileUtils.listFiles(new File(provider.stateStoreId.checkpointRootLocation),
-      null, true).asScala.filter(_.getName.startsWith("temp-"))
+    val tempFiles = FileUtils
+      .listFiles(new File(provider.stateStoreId.checkpointRootLocation), null, true)
+      .asScala
+      .filter(_.getName.startsWith("temp-"))
     assert(tempFiles.isEmpty)
   }
 
   test("corrupted file handling") {
-    val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
+    val provider =
+      newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
     for (i <- 1 to 6) {
       val store = provider.getStore(i - 1)
       put(store, "a", i)
       store.commit()
       provider.doMaintenance() // do cleanup
     }
-    val snapshotVersion = (0 to 10).find( version =>
-      fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
+    val snapshotVersion = (0 to 10)
+      .find(version => fileExists(provider, version, isSnapshot = true))
+      .getOrElse(fail("snapshot file not found"))
 
     // Corrupt snapshot file and verify that it throws error
-      provider.close()
+    provider.close()
     assert(getData(provider, snapshotVersion) === Set("a" -> snapshotVersion))
     RocksDbInstance.destroyDB(provider.rocksDbPath)
 
     corruptFile(provider, snapshotVersion, isSnapshot = true)
-     intercept[Exception] {
+    intercept[Exception] {
       provider.close()
       RocksDbInstance.destroyDB(provider.rocksDbPath)
       getData(provider, snapshotVersion)
@@ -229,41 +241,39 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
       val dir = newDir()
       val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
       val sqlConf = new SQLConf
-      sqlConf.setConfString("spark.sql.streaming.stateStore.providerClass",
+      sqlConf.setConfString(
+        "spark.sql.streaming.stateStore.providerClass",
         "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
       val storeConf = new StateStoreConf(sqlConf)
-      assert(storeConf.providerClass ===
-        "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
+      assert(
+        storeConf.providerClass ===
+          "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
       val hadoopConf = new Configuration()
 
       // Verify that trying to get incorrect versions throw errors
       intercept[IllegalArgumentException] {
-        StateStore.get(
-          storeId, keySchema, valueSchema, None, -1, storeConf, hadoopConf)
+        StateStore.get(storeId, keySchema, valueSchema, None, -1, storeConf, hadoopConf)
       }
       assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
 
       intercept[IllegalStateException] {
-        StateStore.get(
-          storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
+        StateStore.get(storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
       }
 
       // Increase version of the store and try to get again
-      val store0 = StateStore.get(
-        storeId, keySchema, valueSchema, None, 0, storeConf, hadoopConf)
+      val store0 = StateStore.get(storeId, keySchema, valueSchema, None, 0, storeConf, hadoopConf)
       assert(store0.version === 0)
       put(store0, "a", 1)
       store0.commit()
 
-      val store1 = StateStore.get(
-        storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
+      val store1 = StateStore.get(storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
       assert(StateStore.isLoaded(storeId))
       assert(store1.version === 1)
       assert(rowsToSet(store1.iterator()) === Set("a" -> 1))
 
       // Verify that you can also load older version
-      val store0reloaded = StateStore.get(
-        storeId, keySchema, valueSchema, None, 0, storeConf, hadoopConf)
+      val store0reloaded =
+        StateStore.get(storeId, keySchema, valueSchema, None, 0, storeConf, hadoopConf)
       assert(store0reloaded.version === 0)
       assert(rowsToSet(store0reloaded.iterator()) === Set.empty)
 
@@ -271,8 +281,8 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
       StateStore.unload(storeId)
       assert(!StateStore.isLoaded(storeId))
 
-      val store1reloaded = StateStore.get(
-        storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
+      val store1reloaded =
+        StateStore.get(storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
       assert(StateStore.isLoaded(storeId))
       assert(store1reloaded.version === 1)
       put(store1reloaded, "a", 2)
@@ -294,7 +304,8 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
     val dir = newDir()
     val storeProviderId = StateStoreProviderId(StateStoreId(dir, opId, 0), UUID.randomUUID)
     val sqlConf = new SQLConf()
-    sqlConf.setConfString("spark.sql.streaming.stateStore.providerClass",
+    sqlConf.setConfString(
+      "spark.sql.streaming.stateStore.providerClass",
       "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     val storeConf = StateStoreConf(sqlConf)
@@ -305,8 +316,14 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
 
     def generateStoreVersions() {
       for (i <- 1 to 20) {
-        val store = StateStore.get(storeProviderId, keySchema, valueSchema, None,
-          latestStoreVersion, storeConf, hadoopConf)
+        val store = StateStore.get(
+          storeProviderId,
+          keySchema,
+          valueSchema,
+          None,
+          latestStoreVersion,
+          storeConf,
+          hadoopConf)
         put(store, "a", i)
         store.commit()
         latestStoreVersion += 1
@@ -325,7 +342,8 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
 
           eventually(timeout(timeoutDuration)) {
             // Store should have been reported to the coordinator
-            assert(coordinatorRef.getLocation(storeProviderId).nonEmpty,
+            assert(
+              coordinatorRef.getLocation(storeProviderId).nonEmpty,
               "active instance was not reported")
 
             // Background maintenance should clean up and generate snapshots
@@ -355,8 +373,14 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
           }
 
           // Reload the store and verify
-          StateStore.get(storeProviderId, keySchema, valueSchema, indexOrdinal = None,
-            latestStoreVersion, storeConf, hadoopConf)
+          StateStore.get(
+            storeProviderId,
+            keySchema,
+            valueSchema,
+            indexOrdinal = None,
+            latestStoreVersion,
+            storeConf,
+            hadoopConf)
           assert(StateStore.isLoaded(storeProviderId))
 
           // If some other executor loads the store, then this instance should be unloaded
@@ -366,8 +390,14 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
           }
 
           // Reload the store and verify
-          StateStore.get(storeProviderId, keySchema, valueSchema, indexOrdinal = None,
-            latestStoreVersion, storeConf, hadoopConf)
+          StateStore.get(
+            storeProviderId,
+            keySchema,
+            valueSchema,
+            indexOrdinal = None,
+            latestStoreVersion,
+            storeConf,
+            hadoopConf)
           assert(StateStore.isLoaded(storeProviderId))
         }
       }
@@ -388,7 +418,8 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
       SparkSession.setActiveSession(spark)
       implicit val sqlContext = spark.sqlContext
       spark.conf.set("spark.sql.shuffle.partitions", "1")
-      spark.conf.set("spark.sql.streaming.stateStore.providerClass",
+      spark.conf.set(
+        "spark.sql.streaming.stateStore.providerClass",
         "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
       import spark.implicits._
       val inputData = MemoryStream[Int]
@@ -406,7 +437,8 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
         query.processAllAvailable()
         require(query.lastProgress != null) // at least one batch processed after start
         val loadedProvidersMethod =
-          PrivateMethod[mutable.HashMap[StateStoreProviderId, StateStoreProvider]]('loadedProviders)
+          PrivateMethod[mutable.HashMap[StateStoreProviderId, StateStoreProvider]](
+            'loadedProviders)
         val loadedProvidersMap = StateStore invokePrivate loadedProvidersMethod()
         val loadedProviders = loadedProvidersMap.synchronized { loadedProvidersMap.values.toSeq }
         query.stop()
@@ -417,10 +449,11 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
       require(loadedProvidersAfterRun1.length === 1)
 
       val loadedProvidersAfterRun2 = runQueryAndGetLoadedProviders()
-      assert(loadedProvidersAfterRun2.length === 2)   // two providers loaded for 2 runs
+      assert(loadedProvidersAfterRun2.length === 2) // two providers loaded for 2 runs
 
       // Both providers should have the same StateStoreId, but the should be different objects
-      assert(loadedProvidersAfterRun2(0).stateStoreId === loadedProvidersAfterRun2(1).stateStoreId)
+      assert(
+        loadedProvidersAfterRun2(0).stateStoreId === loadedProvidersAfterRun2(1).stateStoreId)
       assert(loadedProvidersAfterRun2(0) ne loadedProvidersAfterRun2(1))
 
     } finally {
@@ -436,7 +469,10 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
   }
 
   override def newStoreProvider(storeId: StateStoreId): RocksDbStateStoreProvider = {
-    newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
+    newStoreProvider(
+      storeId.operatorId,
+      storeId.partitionId,
+      dir = storeId.checkpointRootLocation)
   }
 
   override def getLatestData(storeProvider: RocksDbStateStoreProvider): Set[(String, Int)] = {
@@ -444,8 +480,8 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
   }
 
   override def getData(
-                        provider: RocksDbStateStoreProvider,
-                        version: Int = -1): Set[(String, Int)] = {
+      provider: RocksDbStateStoreProvider,
+      version: Int = -1): Set[(String, Int)] = {
     val reloadedProvider = newStoreProvider(provider.stateStoreId)
     if (version < 0) {
       // TODO find out last version from rocksDB
@@ -456,32 +492,31 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
   }
 
   def newStoreProvider(
-    opId: Long,
-    partition: Int,
-    dir: String = newDir(),
-    minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
-    numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
-    hadoopConf: Configuration = new Configuration): RocksDbStateStoreProvider = {
-      val sqlConf = new SQLConf()
-      sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
-      sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
-      sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
-      val provider = new RocksDbStateStoreProvider
-      provider.init(
-        StateStoreId(dir, opId, partition),
-        keySchema,
-        valueSchema,
-        keyIndexOrdinal = None,
-        new StateStoreConf(sqlConf),
-        hadoopConf)
-      provider
-    }
-
+      opId: Long,
+      partition: Int,
+      dir: String = newDir(),
+      minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
+      hadoopConf: Configuration = new Configuration): RocksDbStateStoreProvider = {
+    val sqlConf = new SQLConf()
+    sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
+    sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
+    sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    val provider = new RocksDbStateStoreProvider
+    provider.init(
+      StateStoreId(dir, opId, partition),
+      keySchema,
+      valueSchema,
+      keyIndexOrdinal = None,
+      new StateStoreConf(sqlConf),
+      hadoopConf)
+    provider
+  }
 
   def fileExists(
-                  provider: RocksDbStateStoreProvider,
-                  version: Long,
-                  isSnapshot: Boolean): Boolean = {
+      provider: RocksDbStateStoreProvider,
+      version: Long,
+      isSnapshot: Boolean): Boolean = {
     val method = PrivateMethod[Path]('baseDir)
     val basePath = provider invokePrivate method()
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
@@ -502,9 +537,9 @@ class RocksDbStateStoreSuite extends StateStoreSuiteBase[RocksDbStateStoreProvid
   }
 
   def corruptFile(
-                   provider: RocksDbStateStoreProvider,
-                   version: Long,
-                   isSnapshot: Boolean): Unit = {
+      provider: RocksDbStateStoreProvider,
+      version: Long,
+      isSnapshot: Boolean): Unit = {
     val method = PrivateMethod[Path]('baseDir)
     val basePath = provider invokePrivate method()
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"

@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
 
-
 object WALUtils {
 
   case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
@@ -48,14 +47,12 @@ object WALUtils {
       .lastOption
     val deltaBatchFiles = latestSnapshotFileBeforeVersion match {
       case Some(snapshotFile) =>
-
         val deltaFiles = allFiles.filter { file =>
           file.version > snapshotFile.version && file.version <= version
         }.toList
         verify(
           deltaFiles.size == version - snapshotFile.version,
-          s"Unexpected list of delta files for version $version for $this: $deltaFiles"
-        )
+          s"Unexpected list of delta files for version $version for $this: $deltaFiles")
         deltaFiles
 
       case None =>
@@ -87,7 +84,7 @@ object WALUtils {
           case "snapshot" =>
             versionToFiles.put(version, StoreFile(version, path, isSnapshot = true))
           case _ =>
-            // logWarning(s"Could not identify file $path for $this")
+          // logWarning(s"Could not identify file $path for $this")
         }
       }
     }
@@ -106,11 +103,7 @@ object WALUtils {
     new DataInputStream(compressed)
   }
 
-
-  def writeUpdateToDeltaFile(
-                                      output: DataOutputStream,
-                                      key: UnsafeRow,
-                                      value: UnsafeRow): Unit = {
+  def writeUpdateToDeltaFile(output: DataOutputStream, key: UnsafeRow, value: UnsafeRow): Unit = {
     val keyBytes = key.getBytes()
     val valueBytes = value.getBytes()
     output.writeInt(keyBytes.size)
@@ -127,29 +120,31 @@ object WALUtils {
   }
 
   def finalizeDeltaFile(output: DataOutputStream): Unit = {
-    output.writeInt(-1)  // Write this magic number to signify end of file
+    output.writeInt(-1) // Write this magic number to signify end of file
     output.close()
   }
 
-  def updateFromDeltaFile( fm: CheckpointFileManager,
-                           fileToRead: Path,
-                           keySchema: StructType,
-                           valueSchema: StructType,
-                           newRocksDb: OptimisticTransactionDbInstance,
-                           sparkConf: SparkConf): Unit = {
+  def updateFromDeltaFile(
+      fm: CheckpointFileManager,
+      fileToRead: Path,
+      keySchema: StructType,
+      valueSchema: StructType,
+      newRocksDb: OptimisticTransactionDbInstance,
+      sparkConf: SparkConf): Unit = {
     var input: DataInputStream = null
     val sourceStream = try {
       fm.open(fileToRead)
     } catch {
       case f: FileNotFoundException =>
         throw new IllegalStateException(
-          s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
+          s"Error reading delta file $fileToRead of $this: $fileToRead does not exist",
+          f)
     }
     try {
       input = decompressStream(sourceStream, sparkConf)
       var eof = false
 
-      while(!eof) {
+      while (!eof) {
         val keySize = input.readInt()
         if (keySize == -1) {
           eof = true
@@ -193,8 +188,8 @@ object WALUtils {
    * @param rawStream the underlying stream which needs to be cancelled.
    */
   def cancelDeltaFile(
-                               compressedStream: DataOutputStream,
-                               rawStream: CancellableFSDataOutputStream): Unit = {
+      compressedStream: DataOutputStream,
+      rawStream: CancellableFSDataOutputStream): Unit = {
     try {
       if (rawStream != null) rawStream.cancel()
       IOUtils.closeQuietly(compressedStream)
@@ -207,17 +202,17 @@ object WALUtils {
     }
   }
 
-  def uploadFile(fm: CheckpointFileManager,
-                 sourceFile: Path,
-                 targetFile: Path,
-                 sparkConf: SparkConf): Unit = {
+  def uploadFile(
+      fm: CheckpointFileManager,
+      sourceFile: Path,
+      targetFile: Path,
+      sparkConf: SparkConf): Unit = {
     var output: CancellableFSDataOutputStream = null
     var in: BufferedInputStream = null
     try {
       in = new BufferedInputStream(new FileInputStream(sourceFile.toString))
       output = fm.createAtomic(targetFile, overwriteIfPossible = true)
-      // output = compressStream(rawOutput, sparkConf)
-      val buffer = new Array[ Byte ](1024)
+      val buffer = new Array[Byte](1024)
       var len = in.read(buffer)
       while (len > 0) {
         output.write(buffer, 0, len)
@@ -229,23 +224,24 @@ object WALUtils {
         if (output != null) output.cancel()
         throw e
     } finally {
-      if ( in != null ) {
+      if (in != null) {
         in.close()
       }
     }
   }
 
-  def downloadFile(fm: CheckpointFileManager,
-                 sourceFile: Path,
-                 targetFile: Path,
-                 sparkConf: SparkConf): Boolean = {
+  def downloadFile(
+      fm: CheckpointFileManager,
+      sourceFile: Path,
+      targetFile: Path,
+      sparkConf: SparkConf): Boolean = {
     var in: FSDataInputStream = null
     var output: BufferedOutputStream = null
     try {
       in = fm.open(sourceFile)
       // in = decompressStream(fm.open(sourceFile), sparkConf)
       output = new BufferedOutputStream(new FileOutputStream(targetFile.toString))
-      val buffer = new Array[ Byte ](1024)
+      val buffer = new Array[Byte](1024)
       var eof = false
       while (!eof) {
         val len = in.read(buffer)
@@ -262,7 +258,7 @@ object WALUtils {
         throw e
     } finally {
       output.close()
-      if ( in != null ) {
+      if (in != null) {
         in.close()
       }
     }
