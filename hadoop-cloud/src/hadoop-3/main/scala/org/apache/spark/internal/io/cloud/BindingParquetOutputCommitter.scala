@@ -26,13 +26,12 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.internal.Logging
 
-
 /**
  * This Parquet Committer subclass dynamically binds to the factory-configured
  * output committer, and is intended to allow callers to use any [[PathOutputCommitter]],
  * even if not a subclass of [[ParquetOutputCommitter]].
  *
- * The Parquet "parquet.enable.summary-metadata" option will only be supported
+ * The Parquet `parquet.enable.summary-metadata` option will only be supported
  * if the instantiated committer itself supports it.
  */
 class BindingParquetOutputCommitter(

@@ -125,11 +125,12 @@ consult the relevant documentation.
 ### Recommended settings for writing to object stores
 
 For object stores whose consistency model means that rename-based commits are safe
-use the `FileOutputCommitter` v2 algorithm for performance:
+use the `FileOutputCommitter` v2 algorithm for performance, v1 for safety
 
 ```
 spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 2
 ```
+
 
 This does less renaming at the end of a job than the "version 1" algorithm.
 As it still uses `rename()` to commit files, it is unsafe to use
@@ -143,8 +144,34 @@ job failure:
 spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored true
 ```
 
+The original v1 commit algorithm renames the output of successful tasks
+to a job attempt directory, and then renames all the files in that directory
+into the final destination during the job commit phase
+
+```
+spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 1
+```
+
+The slow performance of mimicked renames on Amazon S3 makes this algorithm
+very, very slow. The recommended solution to this is switch to an S3 "Zero Rename"
+committer (see below).
+
+For reference, here are the performance and safety characteristics of
+different stores and connectors
+
+
+For the other object stores, their characteristics are
+
+| Store         | Connector | directory rename safety | rename performance |
+|---------------|-----------|-------------------------|--------------------|
+| Amazon S3     | S3A       | Unsafe                  | O(data) |
+| Azure Storage | wasb      | Safe                    | O(files) |
+| Azure Datalake Gen 2 | abfs | Safe                  | O(1) |
+| Google GCS    | gs        | Saf  e                  | O(1) |
+
+
 As storing temporary files can run up charges; delete
-directories called `"_temporary"` on a regular basis to avoid this.
+directories called `"_temporary"` on a regular basis.
 
 ### Parquet I/O Settings
 
@@ -189,6 +216,46 @@ while they are still being written. Applications can write straight to the monit
 1. Streams should only be checkpointed to a store implementing a fast and
 atomic `rename()` operation.
 Otherwise the checkpointing may be slow and potentially unreliable.
+
+## Committing work into cloud storage safely and fast.
+
+As covered earlier, commit-by-rename is dangerous on any object store which
+exhibits eventual consistency (example: S3), and often slower than classic
+filesystem renames.
+
+Some object store connectors provide custom committers to commit tasks and
+jobs without using rename. In versions of Spark built with Hadoop-3.2 or later,
+the S3A connector for AWS S3 is such a committer.
+
+Instead of writing data to a temporary directory on the store for renaming,
+these committers write the files to the final destination, but do not issue
+the final POST command to make a large "multi-part" upload visible. Those
+operations are postponed until the job commit itself. As a result, task and
+job commit are much faster, and task failures do not affect the result. 
+
+To switch to the S3A committers, use a version of Spark which includes the
+Hadoop-3.1+ binaries, and switch the committers through the following
+options.
+
+```
+spark.hadoop.fs.s3a.committer.name directory
+spark.sql.sources.commitProtocolClass org.apache.spark.internal.io.cloud.PathOutputCommitProtocol
+spark.sql.parquet.output.committer.class org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter
+```
+
+Normal dataframe write commands will then use this committer for any format
+which does not provide custom committers itself. Supported formats include
+orc, parquet, csv and avro.
+
+```python
+mydataframe.write.format("parquet").save("s3a://bucket/destination")
+```
+
+More details on these committers can be found in the latest Hadoop documentation.
+
+Amazon EMR's S3 connector also has a zero-rename committer. Consult
+Amazon's documentation for how to use this (independent of the ASF) feature. 
+
 
 ## Further Reading
 

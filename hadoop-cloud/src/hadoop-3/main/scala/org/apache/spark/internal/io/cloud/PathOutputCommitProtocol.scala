@@ -148,6 +148,7 @@ class PathOutputCommitProtocol(
 
   /**
    * Absolute files are still renamed into place with a warning.
+   *
    * The created file will be committed through the `rename()` operation
    * of the filesystem/filestore connector, which may be a slow `O(data)`
    * copy. Because directory listings are *not* used to determine which files

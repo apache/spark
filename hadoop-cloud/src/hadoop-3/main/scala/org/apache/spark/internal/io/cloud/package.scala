@@ -36,10 +36,11 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * == Prerequisites ==
  *
- * Apache Hadoop 3.0.2 or later for the factory APIs, for the S3A connectors, Hadoop 3.1+
+ * The new APIs are in Hadoop-3.0.2, but the S3A connectors only
+ * found in Hadoop 3.1+
  *
  * The Hadoop cluster needs to be configured for the binding from filesystem scheme
- * to factory. In Hadoop 3.1 this is done automatically for s3a in the file
+ * to factory. In Hadoop 3.1+ this is done automatically for s3a in the file
  * `mapred-default.xml`.
  * Other stores' committers may need to be explicitly declared.
  *
