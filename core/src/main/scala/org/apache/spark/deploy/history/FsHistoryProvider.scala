@@ -169,7 +169,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   private def blacklist(path: Path): Unit = {
-    blacklist.put(path.getName, clock.getTimeMillis())
+    blacklist.putIfAbsent(path.getName, clock.getTimeMillis())
   }
 
   /**
@@ -178,6 +178,23 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
     val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
     blacklist.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
+  }
+
+  /**
+   * Usually, UPDATE_INTERVAL_S (default: 10s) is shorter than CLEANER_INTERVAL_S (default: 1d).
+   * We give second chances at every 10 updates (e.g. 100s) for blacklisted logs automatically
+   * in order to check the permission recovery.
+   * Note that this feature cannot be inside `isBlacklisted` because `isBlacklisted` is used
+   * in `deleteLog` in order to prevent deletion failures, too.
+   */
+  private[history] def isSecondChance(path: Path): Boolean = {
+    if (CLEAN_INTERVAL_S >= UPDATE_INTERVAL_S) {
+      val now = clock.getTimeMillis()
+      val elapsedTimeSecond = (now - blacklist.getOrDefault(path.getName, now)) / 1000
+      elapsedTimeSecond > 0 && (elapsedTimeSecond / UPDATE_INTERVAL_S) % 10 == 0
+    } else {
+      false
+    }
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
@@ -441,7 +458,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // reading a garbage file is safe, but we would log an error which can be scary to
             // the end-user.
             !entry.getPath().getName().startsWith(".") &&
-            !isBlacklisted(entry.getPath)
+            (!isBlacklisted(entry.getPath) || isSecondChance(entry.getPath))
         }
         .filter { entry =>
           try {

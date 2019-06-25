@@ -1139,6 +1139,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
     val accessDeniedPath = new Path(accessDenied.getPath)
     assert(mockedProvider.isBlacklisted(accessDeniedPath))
+    (1 to 100).foreach { round =>
+      clock.advance(UPDATE_INTERVAL_S.defaultValue.get * 1000)
+      updateAndCheck(mockedProvider) { _ =>
+        assert(mockedProvider.isBlacklisted(accessDeniedPath))
+        assert(mockedProvider.isSecondChance(accessDeniedPath) == (round % 10 == 0))
+      }
+    }
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
     mockedProvider.cleanLogs()
     assert(!mockedProvider.isBlacklisted(accessDeniedPath))
