@@ -429,26 +429,26 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("overlay") {
-    checkEvaluation(Overlay(Literal("Spark SQL"),
-        Literal("_"), Literal(6), Literal(Int.MaxValue)), "Spark_SQL")
-    checkEvaluation(Overlay(Literal("Spark SQL"),
-        Literal("CORE"), Literal(7), Literal(Int.MaxValue)), "Spark CORE")
-    checkEvaluation(Overlay(Literal("Spark SQL"),
-        Literal("ANSI "), Literal(7), Literal(0)), "Spark ANSI SQL")
-    checkEvaluation(Overlay(Literal("Spark SQL"),
-        Literal("tructured"), Literal(2), Literal(4)), "Structured SQL")
-    checkEvaluation(Overlay(Literal.create(null, StringType),
-        Literal("_"), Literal(6), Literal(Int.MaxValue)), null)
-    checkEvaluation(Overlay(Literal.create(null, StringType),
-        Literal("CORE"), Literal(7), Literal(Int.MaxValue)), null)
-    checkEvaluation(Overlay(Literal.create(null, StringType),
-        Literal("ANSI "), Literal(7), Literal(0)), null)
-    checkEvaluation(Overlay(Literal.create(null, StringType),
-        Literal("tructured"), Literal(2), Literal(4)), null)
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+        Literal.create(6, IntegerType)), "Spark_SQL")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("CORE"),
+        Literal.create(7, IntegerType)), "Spark CORE")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("ANSI "),
+        Literal.create(7, IntegerType), Literal.create(0, IntegerType)), "Spark ANSI SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("tructured"),
+        Literal.create(2, IntegerType), Literal.create(4, IntegerType)), "Structured SQL")
+    checkEvaluation(new Overlay(Literal.create(null, StringType), Literal("_"),
+        Literal.create(6, IntegerType)), null)
+    checkEvaluation(new Overlay(Literal.create(null, StringType), Literal("CORE"),
+        Literal.create(7, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType), Literal("ANSI "),
+        Literal.create(7, IntegerType), Literal.create(0, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType), Literal("tructured"),
+        Literal.create(2, IntegerType), Literal.create(4, IntegerType)), null)
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(Overlay(Literal("Spark的SQL"),
-        Literal("_"), Literal(6), Literal(Int.MaxValue)), "Spark_SQL")
+    checkEvaluation(new Overlay(Literal("Spark的SQL"), Literal("_"),
+        Literal.create(6, IntegerType)), "Spark_SQL")
     // scalastyle:on
   }
 

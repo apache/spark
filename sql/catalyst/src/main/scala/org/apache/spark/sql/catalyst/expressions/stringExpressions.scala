@@ -454,6 +454,19 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   override def prettyName: String = "replace"
 }
 
+object Overlay {
+
+  def calcuate(input: UTF8String, replace: UTF8String, pos: Integer, len: Integer): UTF8String = {
+    val header = input.substringSQL(1, pos - 1)
+    val replaceLength = replace.toString().length()
+    val tail = input.substringSQL(pos, Int.MaxValue)
+    val tailLength = tail.toString().length()
+    val length = Math.min(len, Math.min(tailLength, replaceLength))
+    val tailer = input.substringSQL(pos + length, Int.MaxValue)
+    UTF8String.fromString(header.toString + replace.toString + tailer.toString)
+  }
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(input, replace, pos[, len]) - Replace `input` with `replace` that starts at `pos` and is of length `len`.",
@@ -473,7 +486,7 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(str: Expression, replace: Expression, pos: Expression) = {
-    this(str, replace, pos, Literal(Integer.MAX_VALUE))
+    this(str, replace, pos, Literal.create(Int.MaxValue, IntegerType))
   }
 
   override def dataType: DataType = StringType
@@ -485,32 +498,19 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
   override def nullSafeEval(inputEval: Any, replaceEval: Any, posEval: Any, lenEval: Any): Any = {
     val inputStr = inputEval.asInstanceOf[UTF8String]
-    val replaceStr = replaceEval.asInstanceOf[UTF8String].toString
+    val replaceStr = replaceEval.asInstanceOf[UTF8String]
     val position = posEval.asInstanceOf[Int]
-    var length = lenEval.asInstanceOf[Int]
-    if (length.equals(Int.MaxValue)) {
-      length = replaceStr.size
-    }
-    val headStr = inputStr.substringSQL(1, position - 1)
-    val tailStr = inputStr.substringSQL(position + length, Int.MaxValue)
-    UTF8String.fromString(headStr.toString + replaceStr + tailStr.toString)
+    val length = lenEval.asInstanceOf[Int]
+    Overlay.calcuate(inputStr, replaceStr, position, length)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val length = ctx.addMutableState(CodeGenerator.JAVA_INT, "length")
-    val head = ctx.addMutableState("UTF8String", "head")
-    val tail = ctx.addMutableState("UTF8String", "tail")
-    nullSafeCodeGen(ctx, ev, (input, place, pos, len) => {
-      val isMax = s"$len.equals(${Int.MaxValue})"
-      s"""if ($isMax) {
-        $length = $replace.toString().size;
-      } else {
-        $length = $len;
-      }
-      $head = $input.substringSQL(1, $pos - 1);
-      $tail = $input.substringSQL($pos + $length, ${Int.MaxValue});
-      ${ev.value} = $head + $replace + $tail;
-      """
+    val result = ctx.addMutableState("UTF8String", "result")
+    nullSafeCodeGen(ctx, ev, (input, replace, pos, len) => {
+      s"""
+      $result = org.apache.spark.sql.catalyst.expressions.Overlay.calcuate($input, $replace, $pos, $len);
+      ${ev.value} = $result;
+      """.stripMargin
     })
   }
 }
