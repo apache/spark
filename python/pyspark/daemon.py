@@ -54,8 +54,9 @@ def worker(sock, authenticated):
     # Read the socket using fdopen instead of socket.makefile() because the latter
     # seems to be very slow; note that we need to dup() the file descriptor because
     # otherwise writes also cause a seek that makes us miss data on the read side.
-    infile = os.fdopen(os.dup(sock.fileno()), "rb", 65536)
-    outfile = os.fdopen(os.dup(sock.fileno()), "wb", 65536)
+    buffer_size = int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
+    infile = os.fdopen(os.dup(sock.fileno()), "rb", buffer_size)
+    outfile = os.fdopen(os.dup(sock.fileno()), "wb", buffer_size)
 
     if not authenticated:
         client_secret = UTF8Deserializer().loads(infile)

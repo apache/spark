@@ -15,23 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions.ListQuery
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.{ExecSubqueryExpression, SparkPlan}
 
-/**
- * Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
- * The array of addresses are resource specific and its up to the user to interpret the address.
- *
- * One example is GPUs, where the addresses would be the indices of the GPUs
- *
- * @param name the name of the resource
- * @param addresses an array of strings describing the addresses of the resource
- */
-@Evolving
-class ResourceInformation(
-    val name: String,
-    val addresses: Array[String]) extends Serializable {
+case class PlanAdaptiveSubqueries(
+    subqueryMap: Map[Long, ExecSubqueryExpression]) extends Rule[SparkPlan] {
 
-  override def toString: String = s"[name: ${name}, addresses: ${addresses.mkString(",")}]"
+  def apply(plan: SparkPlan): SparkPlan = {
+    plan.transformAllExpressions {
+      case expressions.ScalarSubquery(_, _, exprId) =>
+        subqueryMap(exprId.id)
+      case expressions.InSubquery(_, ListQuery(_, _, exprId, _)) =>
+        subqueryMap(exprId.id)
+    }
+  }
 }

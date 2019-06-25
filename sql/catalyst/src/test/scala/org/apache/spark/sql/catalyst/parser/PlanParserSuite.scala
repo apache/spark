@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -42,10 +42,15 @@ class PlanParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)
 
-  private def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
+  private def cte(plan: LogicalPlan, namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
     val ctes = namedPlans.map {
-      case (name, cte) =>
-        name -> SubqueryAlias(name, cte)
+      case (name, (cte, columnAliases)) =>
+        val subquery = if (columnAliases.isEmpty) {
+          cte
+        } else {
+          UnresolvedSubqueryColumnAliases(columnAliases, cte)
+        }
+        name -> SubqueryAlias(name, subquery)
     }
     With(plan, ctes)
   }
@@ -84,15 +89,15 @@ class PlanParserSuite extends AnalysisTest {
   test("common table expressions") {
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> table("a").select(star())))
+      cte(table("cte1").select(star()), "cte1" -> ((table("a").select(star()), Seq.empty))))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> OneRowRelation().select(1)))
+      cte(table("cte1").select(star()), "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
       cte(table("cte2").select(star()),
-        "cte1" -> OneRowRelation().select(1),
-        "cte2" -> table("cte1").select(star())))
+        "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
+        "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
       "Found duplicate keys 'cte1'")
@@ -697,20 +702,45 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("TRIM function") {
-    intercept("select ltrim(both 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
-    intercept("select rtrim(trailing 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
+    def assertTrimPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
 
-    assertEqual(
+    intercept("select ltrim(both 'S' from 'SS abc S'", "mismatched input 'from' expecting {')'")
+    intercept("select rtrim(trailing 'S' from 'SS abc S'", "mismatched input 'from' expecting {')'")
+
+    assertTrimPlans(
       "SELECT TRIM(BOTH '@$%&( )abc' FROM '@ $ % & ()abc ' )",
-        OneRowRelation().select('TRIM.function("@$%&( )abc", "@ $ % & ()abc "))
+      StringTrim(Literal("@ $ % & ()abc "), Some(Literal("@$%&( )abc")))
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(LEADING 'c []' FROM '[ ccccbcc ')",
-        OneRowRelation().select('ltrim.function("c []", "[ ccccbcc "))
+      StringTrimLeft(Literal("[ ccccbcc "), Some(Literal("c []")))
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
-      OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
+      StringTrimRight(Literal("bc...,,,&&&ccc"), Some(Literal("c&^,.")))
+    )
+
+    assertTrimPlans(
+      "SELECT TRIM(BOTH FROM '  bunch o blanks  ')",
+      StringTrim(Literal("  bunch o blanks  "), None)
+    )
+    assertTrimPlans(
+      "SELECT TRIM(LEADING FROM '  bunch o blanks  ')",
+      StringTrimLeft(Literal("  bunch o blanks  "), None)
+    )
+    assertTrimPlans(
+      "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
+      StringTrimRight(Literal("  bunch o blanks  "), None)
+    )
+
+    assertTrimPlans(
+      "SELECT TRIM('xyz' FROM 'yxTomxx')",
+      StringTrim(Literal("yxTomxx"), Some(Literal("xyz")))
     )
   }
 
@@ -812,10 +842,17 @@ class PlanParserSuite extends AnalysisTest {
         |WITH cte1 AS (SELECT * FROM testcat.db.tab)
         |SELECT * FROM cte1
       """.stripMargin,
-      cte(table("cte1").select(star()), "cte1" -> table("testcat", "db", "tab").select(star())))
+      cte(table("cte1").select(star()),
+        "cte1" -> ((table("testcat", "db", "tab").select(star()), Seq.empty))))
 
     assertEqual(
       "SELECT /*+ BROADCAST(tab) */ * FROM testcat.db.tab",
       table("testcat", "db", "tab").select(star()).hint("BROADCAST", $"tab"))
+  }
+
+  test("CTE with column alias") {
+    assertEqual(
+      "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
+      cte(table("t").select(star()), "t" -> ((table("a").select('c), Seq("x")))))
   }
 }
