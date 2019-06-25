@@ -31,7 +31,9 @@ private object MsSqlServerDialect extends JdbcDialect {
       Option(StringType)
     } else {
       val answer = sqlType match {
-        case java.sql.Types.TINYINT => Option(ByteType)
+        case java.sql.Types.TINYINT  => Option(ByteType)
+        case java.sql.Types.SMALLINT => Option(ShortType)
+        case java.sql.Types.REAL     => Option(FloatType)
         case _ => None
       }
       answer
@@ -44,6 +46,7 @@ private object MsSqlServerDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
+    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case _ => None
   }
 

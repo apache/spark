@@ -897,6 +897,9 @@ class JDBCSuite extends QueryTest
       "VARBINARY(MAX)")
     assert(msSqlServerDialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get ==
       "TINYINT")
+
+    assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
+      "SMALLINT")
   }
 
   test("MsSqlServerDialect catalyst type mapping") {
@@ -905,6 +908,10 @@ class JDBCSuite extends QueryTest
 
     assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT,"TINYINT",1,metadata).get ==
           ByteType)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT,"SMALLINT",1,metadata).get ==
+      ShortType)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL,"REAL",1,metadata).get ==
+      FloatType)
 
   }
 
