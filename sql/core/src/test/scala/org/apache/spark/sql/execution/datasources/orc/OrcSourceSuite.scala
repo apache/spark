@@ -448,7 +448,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
       }
 
-      assert(innerMessage.contains("Failed to merge incompatible data types bigint and string"))
+      assert(innerMessage.contains("Failed to merge incompatible data types"))
     }
 
     withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
