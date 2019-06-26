@@ -22,6 +22,7 @@ import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A mutable implementation of BigDecimal that can hold a Long if values are small enough.
@@ -227,9 +228,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null)) {
       longVal / POW_10(_scale)
     } else {
-      // This will throw an exception if overflow occurs
-      if (decimalVal.compare(LONG_MIN_BIG_DEC) < 0 || decimalVal.compare(LONG_MAX_BIG_DEC) > 0) {
-        throw new ArithmeticException("Overflow")
+      if (SQLConf.get.getConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK)) {
+        // This will throw an exception if overflow occurs
+        if (decimalVal.compare(LONG_MIN_BIG_DEC) < 0 || decimalVal.compare(LONG_MAX_BIG_DEC) > 0) {
+          throw new ArithmeticException("Overflow")
+        }
       }
       decimalVal.longValue()
     }

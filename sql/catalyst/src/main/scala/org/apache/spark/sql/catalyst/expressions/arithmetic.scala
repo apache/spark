@@ -117,6 +117,8 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
+  protected val checkOverflow = SQLConf.get.getConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK)
+
   override def dataType: DataType = left.dataType
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
@@ -142,16 +144,26 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        val overflowCheck = if (overflowCheck) {
+          checkOverflowCode(ev.value, eval1, eval2)
+        } else {
+          ""
+        }
         s"""
            |${ev.value} = (${CodeGenerator.javaType(dataType)})($eval1 $symbol $eval2);
-           |${checkOverflowCode(ev.value, eval1, eval2)}
+           |$overflowCheck
          """.stripMargin
       })
     case _ =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        val overflowCheck = if (overflowCheck) {
+          checkOverflowCode(ev.value, eval1, eval2)
+        } else {
+          ""
+        }
         s"""
            |${ev.value} = $eval1 $symbol $eval2;
-           |${checkOverflowCode(ev.value, eval1, eval2)}
+           |$overflowCheck
          """.stripMargin
       })
   }
@@ -185,12 +197,14 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
       input1.asInstanceOf[CalendarInterval].add(input2.asInstanceOf[CalendarInterval])
     } else {
       val result = numeric.plus(input1, input2)
-      val resSignum = numeric.signum(result)
-      val input1Signum = numeric.signum(input1)
-      val input2Signum = numeric.signum(input2)
-      if (resSignum != -1 && input1Signum == -1 && input2Signum == -1
+      if (checkOverflow) {
+        val resSignum = numeric.signum(result)
+        val input1Signum = numeric.signum(input1)
+        val input2Signum = numeric.signum(input2)
+        if (resSignum != -1 && input1Signum == -1 && input2Signum == -1
           || resSignum != 1 && input1Signum == 1 && input2Signum == 1) {
-        throw new ArithmeticException(s"$input1 + $input2 caused overflow.")
+          throw new ArithmeticException(s"$input1 + $input2 caused overflow.")
+        }
       }
       result
     }
@@ -229,12 +243,14 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
       input1.asInstanceOf[CalendarInterval].subtract(input2.asInstanceOf[CalendarInterval])
     } else {
       val result = numeric.minus(input1, input2)
-      val resSignum = numeric.signum(result)
-      val input1Signum = numeric.signum(input1)
-      val input2Signum = numeric.signum(input2)
-      if (resSignum != 1 && input1Signum == 1 && input2Signum == -1
+      if (checkOverflow) {
+        val resSignum = numeric.signum(result)
+        val input1Signum = numeric.signum(input1)
+        val input2Signum = numeric.signum(input2)
+        if (resSignum != 1 && input1Signum == 1 && input2Signum == -1
           || resSignum != -1 && input1Signum == -1 && input2Signum == 1) {
-        throw new ArithmeticException(s"$input1 - $input2 caused overflow.")
+          throw new ArithmeticException(s"$input1 - $input2 caused overflow.")
+        }
       }
       result
     }
@@ -267,10 +283,12 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val result = numeric.times(input1, input2)
-    if (numeric.signum(result) != numeric.signum(input1) * numeric.signum(input2) &&
+    if (checkOverflow) {
+      if (numeric.signum(result) != numeric.signum(input1) * numeric.signum(input2) &&
         !(result.isInstanceOf[Double] && !result.asInstanceOf[Double].isNaN) &&
         !(result.isInstanceOf[Float] && !result.asInstanceOf[Float].isNaN)) {
-      throw new ArithmeticException(s"$input1 * $input2 caused overflow.")
+        throw new ArithmeticException(s"$input1 * $input2 caused overflow.")
+      }
     }
     result
   }
