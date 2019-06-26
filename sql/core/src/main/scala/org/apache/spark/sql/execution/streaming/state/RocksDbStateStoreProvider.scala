@@ -44,6 +44,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
   @volatile private var numberOfVersionsToRetain: Int = _
+  @volatile private var localDirectory: String = _
 
   /*
    * Additional configurations related to rocksDb. This will capture all configs in
@@ -194,8 +195,8 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
           rocksDbWriteInstance.iterator(closeDbOnCompletion = false)
 
         case LOADED | ABORTED =>
-          // use checkpointed db for previous version
-          logDebug(s"state = loaded/aborted using checkpointed DB with version $version")
+          // use check-pointed db for previous version
+          logDebug(s"state = loaded/aborted using check-pointed DB with version $version")
           if (version == 0) {
             Iterator.empty
           } else {
@@ -205,8 +206,8 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
             r.iterator(closeDbOnCompletion = true)
           }
         case COMMITTED =>
-          logDebug(s"state = committed using checkpointed DB with version $newVersion")
-          // use checkpointed db for current updated version
+          logDebug(s"state = committed using check-pointed DB with version $newVersion")
+          // use check-pointed db for current updated version
           val path = getBackupPath(newVersion)
           val r: RocksDbInstance =
             new RocksDbInstance(keySchema, valueSchema, newVersion.toString)
@@ -277,6 +278,10 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
       .map {
         case (k, v) => (k.toLowerCase(Locale.ROOT), v)
       }
+    this.localDirectory = this.rocksDbConf
+      .getOrElse(
+        "spark.sql.streaming.stateStore.rocksDb.localDirectory".toLowerCase(Locale.ROOT),
+        RocksDbStateStoreProvider.ROCKS_DB_BASE_PATH)
   }
 
   /*
@@ -359,7 +364,6 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
           found = true
           lastAvailableVersion = version - 1
         } else {
-          // TODO check for numberOfVersionsToRetain
           // Destroy DB so that we can recontruct it using snapshot and delta files
           RocksDbInstance.destroyDB(rocksDbPath)
         }
@@ -573,7 +577,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   lazy val rocksDbPath: String = {
     val checkpointRootLocationPath = new Path(stateStoreId.checkpointRootLocation)
     val basePath = new Path(
-      RocksDbStateStoreProvider.ROCKS_DB_BASE_PATH,
+      localDirectory,
       new Path(
         "db",
         checkpointRootLocationPath.getName + "_" + checkpointRootLocationPath.hashCode()))
@@ -595,7 +599,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     val checkpointRootLocationPath = new Path(stateStoreId.checkpointRootLocation)
 
     val basePath = new Path(
-      RocksDbStateStoreProvider.ROCKS_DB_BASE_PATH,
+      localDirectory,
       new Path(
         "backup",
         checkpointRootLocationPath.getName + "_" + checkpointRootLocationPath.hashCode()))
@@ -618,7 +622,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     val checkpointRootLocationPath = new Path(stateStoreId.checkpointRootLocation)
 
     val basePath = new Path(
-      RocksDbStateStoreProvider.ROCKS_DB_BASE_PATH,
+      localDirectory,
       new Path(
         "tmp",
         checkpointRootLocationPath.getName + "_" + checkpointRootLocationPath.hashCode()))
@@ -637,6 +641,8 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     dir + Path.SEPARATOR + version
   }
 
+  // making it public for unit tests
+  def getLocalDirectory: String = localDirectory
 }
 
 object RocksDbStateStoreProvider {

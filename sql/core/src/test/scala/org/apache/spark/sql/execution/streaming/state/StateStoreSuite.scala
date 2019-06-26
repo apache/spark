@@ -198,6 +198,58 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(loadedMaps.size() === 0)
   }
 
+  test("get, put, remove, commit, and all data iterator") {
+    val provider = newStoreProvider()
+
+    // Verify state before starting a new set of updates
+    assert(getLatestData(provider).isEmpty)
+
+    val store = provider.getStore(0)
+    assert(!store.hasCommitted)
+    assert(get(store, "a") === None)
+    assert(store.iterator().isEmpty)
+    assert(store.metrics.numKeys === 0)
+
+    // Verify state after updating
+    put(store, "a", 1)
+    assert(get(store, "a") === Some(1))
+    assert(store.metrics.numKeys === 1)
+
+    assert(store.iterator().nonEmpty)
+    assert(getLatestData(provider).isEmpty)
+
+    // Make updates, commit and then verify state
+    put(store, "b", 2)
+    put(store, "aa", 3)
+    assert(store.metrics.numKeys === 3)
+    remove(store, _.startsWith("a"))
+    assert(store.metrics.numKeys === 1)
+    assert(store.commit() === 1)
+
+    assert(store.hasCommitted)
+    assert(rowsToSet(store.iterator()) === Set("b" -> 2))
+    assert(getLatestData(provider) === Set("b" -> 2))
+
+    // Trying to get newer versions should fail
+    intercept[Exception] {
+      provider.getStore(2)
+    }
+    intercept[Exception] {
+      getData(provider, 2)
+    }
+
+    // New updates to the reloaded store with new version, and does not change old version
+    val reloadedProvider = newStoreProvider(store.id)
+    val reloadedStore = reloadedProvider.getStore(1)
+    assert(reloadedStore.metrics.numKeys === 1)
+    put(reloadedStore, "c", 4)
+    assert(reloadedStore.metrics.numKeys === 2)
+    assert(reloadedStore.commit() === 2)
+    assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
+    assert(getLatestData(provider) === Set("b" -> 2, "c" -> 4))
+    assert(getData(provider, version = 1) === Set("b" -> 2))
+  }
+
   test("snapshotting") {
     val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
 
@@ -816,58 +868,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   extends SparkFunSuite {
   import StateStoreTestsHelper._
-
-  test("get, put, remove, commit, and all data iterator") {
-    val provider = newStoreProvider()
-
-    // Verify state before starting a new set of updates
-    assert(getLatestData(provider).isEmpty)
-
-    val store = provider.getStore(0)
-    assert(!store.hasCommitted)
-    assert(get(store, "a") === None)
-    assert(store.iterator().isEmpty)
-    assert(store.metrics.numKeys === 0)
-
-    // Verify state after updating
-    put(store, "a", 1)
-    assert(get(store, "a") === Some(1))
-    assert(store.metrics.numKeys === 1)
-
-    assert(store.iterator().nonEmpty)
-    assert(getLatestData(provider).isEmpty)
-
-    // Make updates, commit and then verify state
-    put(store, "b", 2)
-    put(store, "aa", 3)
-    assert(store.metrics.numKeys === 3)
-    remove(store, _.startsWith("a"))
-    assert(store.metrics.numKeys === 1)
-    assert(store.commit() === 1)
-
-    assert(store.hasCommitted)
-    assert(rowsToSet(store.iterator()) === Set("b" -> 2))
-    assert(getLatestData(provider) === Set("b" -> 2))
-
-    // Trying to get newer versions should fail
-    intercept[Exception] {
-      provider.getStore(2)
-    }
-    intercept[Exception] {
-      getData(provider, 2)
-    }
-
-    // New updates to the reloaded store with new version, and does not change old version
-    val reloadedProvider = newStoreProvider(store.id)
-    val reloadedStore = reloadedProvider.getStore(1)
-    assert(reloadedStore.metrics.numKeys === 1)
-    put(reloadedStore, "c", 4)
-    assert(reloadedStore.metrics.numKeys === 2)
-    assert(reloadedStore.commit() === 2)
-    assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
-    assert(getLatestData(provider) === Set("b" -> 2, "c" -> 4))
-    assert(getData(provider, version = 1) === Set("b" -> 2))
-  }
 
   test("removing while iterating") {
     val provider = newStoreProvider()

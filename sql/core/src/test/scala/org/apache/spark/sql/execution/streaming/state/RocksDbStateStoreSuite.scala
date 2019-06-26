@@ -106,6 +106,52 @@ class RocksDbStateStoreSuite
     assert(originValueMap === expectedData)
   }
 
+  test("get, put, remove, commit, and all data iterator") {
+    val provider = newStoreProvider()
+
+    // Verify state before starting a new set of updates
+    assert(getLatestData(provider).isEmpty)
+
+    val store = provider.getStore(0)
+    assert(!store.hasCommitted)
+    assert(get(store, "a") === None)
+    assert(store.iterator().isEmpty)
+
+    // Verify state after updating
+    put(store, "a", 1)
+    assert(get(store, "a") === Some(1))
+
+    assert(store.iterator().nonEmpty)
+    assert(getLatestData(provider).isEmpty)
+
+    // Make updates, commit and then verify state
+    put(store, "b", 2)
+    put(store, "aa", 3)
+    remove(store, _.startsWith("a"))
+    assert(store.commit() === 1)
+
+    assert(store.hasCommitted)
+    assert(rowsToSet(store.iterator()) === Set("b" -> 2))
+    assert(getLatestData(provider) === Set("b" -> 2))
+
+    // Trying to get newer versions should fail
+    intercept[Exception] {
+      provider.getStore(2)
+    }
+    intercept[Exception] {
+      getData(provider, 2)
+    }
+
+    // New updates to the reloaded store with new version, and does not change old version
+    val reloadedProvider = newStoreProvider(store.id, provider.getLocalDirectory)
+    val reloadedStore = reloadedProvider.getStore(1)
+    put(reloadedStore, "c", 4)
+    assert(reloadedStore.commit() === 2)
+    assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
+    assert(getLatestData(provider) === Set("b" -> 2, "c" -> 4))
+    assert(getData(provider, version = 1) === Set("b" -> 2))
+  }
+
   test("snapshotting") {
     val provider =
       newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
@@ -244,6 +290,8 @@ class RocksDbStateStoreSuite
       sqlConf.setConfString(
         "spark.sql.streaming.stateStore.providerClass",
         "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
+      val localdir = Utils.createTempDir().getAbsoluteFile.toString
+      sqlConf.setConfString("spark.sql.streaming.stateStore.rocksDb.localDirectory", localdir)
       val storeConf = new StateStoreConf(sqlConf)
       assert(
         storeConf.providerClass ===
@@ -308,6 +356,9 @@ class RocksDbStateStoreSuite
       "spark.sql.streaming.stateStore.providerClass",
       "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    sqlConf.setConfString(
+      "spark.sql.streaming.stateStore.rocksDb.localDirectory",
+      Utils.createTempDir().getAbsoluteFile.toString)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
     val provider = newStoreProvider(storeProviderId.storeId)
@@ -421,6 +472,9 @@ class RocksDbStateStoreSuite
       spark.conf.set(
         "spark.sql.streaming.stateStore.providerClass",
         "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
+      spark.conf.set(
+        "spark.sql.streaming.stateStore.rocksDb.localDirectory",
+        Utils.createTempDir().getAbsoluteFile.toString)
       import spark.implicits._
       val inputData = MemoryStream[Int]
 
@@ -475,6 +529,14 @@ class RocksDbStateStoreSuite
       dir = storeId.checkpointRootLocation)
   }
 
+  def newStoreProvider(storeId: StateStoreId, localDir: String): RocksDbStateStoreProvider = {
+    newStoreProvider(
+      storeId.operatorId,
+      storeId.partitionId,
+      dir = storeId.checkpointRootLocation,
+      localDir = localDir)
+  }
+
   override def getLatestData(storeProvider: RocksDbStateStoreProvider): Set[(String, Int)] = {
     getData(storeProvider)
   }
@@ -482,7 +544,7 @@ class RocksDbStateStoreSuite
   override def getData(
       provider: RocksDbStateStoreProvider,
       version: Int = -1): Set[(String, Int)] = {
-    val reloadedProvider = newStoreProvider(provider.stateStoreId)
+    val reloadedProvider = newStoreProvider(provider.stateStoreId, provider.getLocalDirectory)
     if (version < 0) {
       // TODO find out last version from rocksDB
       reloadedProvider.latestIterator().map(rowsToStringInt).toSet
@@ -495,6 +557,7 @@ class RocksDbStateStoreSuite
       opId: Long,
       partition: Int,
       dir: String = newDir(),
+      localDir: String = newDir(),
       minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
       hadoopConf: Configuration = new Configuration): RocksDbStateStoreProvider = {
@@ -502,6 +565,7 @@ class RocksDbStateStoreSuite
     sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
     sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    sqlConf.setConfString("spark.sql.streaming.stateStore.rocksDb.localDirectory", localDir)
     val provider = new RocksDbStateStoreProvider
     provider.init(
       StateStoreId(dir, opId, partition),
