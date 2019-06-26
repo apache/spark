@@ -144,7 +144,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val overflowCheck = if (overflowCheck) {
+        val overflowCheck = if (checkOverflow) {
           checkOverflowCode(ev.value, eval1, eval2)
         } else {
           ""
@@ -156,7 +156,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
       })
     case _ =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val overflowCheck = if (overflowCheck) {
+        val overflowCheck = if (checkOverflow) {
           checkOverflowCode(ev.value, eval1, eval2)
         } else {
           ""
