@@ -72,15 +72,13 @@ case class HadoopFsRelation(
   }
 
   override def sizeInBytes: Long = {
-    val isCatalogFileIndex = location.isInstanceOf[CatalogFileIndex]
     val compressionFactor = sqlContext.conf.fileCompressionFactor
     val defaultSize = (location.sizeInBytes * compressionFactor).toLong
-
-    if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled && isCatalogFileIndex) {
-      DDLUtils.sizeInBytesFallBackToHdfs(sparkSession,
-        new Path(location.asInstanceOf[CatalogFileIndex].table.location), defaultSize)
-    } else {
-      defaultSize
+    location match {
+      case _: CatalogFileIndex if sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled =>
+        DDLUtils.sizeInBytesFallBackToHdfs(sparkSession,
+          new Path(location.asInstanceOf[CatalogFileIndex].table.location), defaultSize)
+      case _ => defaultSize
     }
   }
 

@@ -1462,7 +1462,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       withTable(table1, table2) {
         sql(s"create table $table1 (id int, name string) using parquet partitioned by (name)")
         sql(s"insert into $table1 values (1, 'a')")
-        checkKeywordsNotExist(sql(s"explain cost select * from $table1"), "sizeInBytes=8.0 EB")
+        checkKeywordsNotExist(sql(s"explain cost select * from $table1"), "sizeInBytes=8.0 EiB")
         sql(s"create table $table2 (id int, name string) using parquet partitioned by (name)")
         sql(s"insert into $table2 values (1, 'a')")
         checkKeywordsExist(sql(s"explain select * from $table1 join $table2 on $table1.id=" +
