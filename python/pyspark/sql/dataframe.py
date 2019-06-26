@@ -2200,10 +2200,16 @@ class DataFrame(object):
         .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
-            sock_info = self._jdf.collectAsArrowToPython()
+            port, auth_secret, jsocket_auth_server = self._jdf.collectAsArrowToPython()
 
         # Collect list of un-ordered batches where last element is a list of correct order indices
-        results = list(_load_from_socket(sock_info, ArrowCollectSerializer()))
+        try:
+            results = list(_load_from_socket((port, auth_secret), ArrowCollectSerializer()))
+        finally:
+            # Join serving thread and raise any exceptions from collectAsArrowToPython
+            jsocket_auth_server.getResult()
+
+        # Separate RecordBatches from batch order indices in results
         batches = results[:-1]
         batch_order = results[-1]
 
