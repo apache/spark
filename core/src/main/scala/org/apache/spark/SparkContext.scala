@@ -457,7 +457,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Add each JAR given through the constructor
     if (jars != null) {
-      jars.foreach(addJar(_, false))
+      jars.foreach(addJar)
     }
 
     if (files != null) {
@@ -1762,6 +1762,10 @@ class SparkContext(config: SparkConf) extends Logging {
     env.blockManager.master.removeRdd(rddId, blocking)
     persistentRdds.remove(rddId)
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
+  }
+
+  def addJar(path: String): Unit ={
+    addJar(path, false)
   }
 
   /**
