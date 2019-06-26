@@ -254,11 +254,11 @@ private[hive] trait HiveStrategies {
     }
 
     def resolveAndExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
-      if(expr.isInstanceOf[And]){
-        val and = expr.asInstanceOf[And]
-        constructBinaryOperators(resolvePredicatesExpression(and.left, partitionKeyIds), resolvePredicatesExpression(and.right, partitionKeyIds), "and")
-      }else{
-        resolvePredicatesExpression(expr, partitionKeyIds)
+      expr match {
+        case and: And =>
+          constructBinaryOperators(resolveAndExpression(and.left, partitionKeyIds), resolveAndExpression(and.right, partitionKeyIds), "and")
+        case _ =>
+          resolvePredicatesExpression(expr, partitionKeyIds)
       }
     }
 
@@ -279,14 +279,12 @@ private[hive] trait HiveStrategies {
     }
 
     def extractPushDownPredicate(predicates: Seq[Expression], partitionKeyIds: AttributeSet): Seq[Expression] ={
-      predicates.map(predicate => {
-        if(predicate.isInstanceOf[Or]){
-          val or = predicate.asInstanceOf[Or]
+      predicates.map {
+        case or: Or =>
           resolveOrExpression(or, partitionKeyIds)
-        }else{
-          resolvePredicatesExpression(predicate,partitionKeyIds)
-        }
-      })
+        case predicate =>
+          resolvePredicatesExpression(predicate, partitionKeyIds)
+      }
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
