@@ -237,21 +237,77 @@ private[hive] trait HiveStrategies {
    * applied.
    */
   object HiveTableScans extends Strategy {
+
+    def constructBinaryOperators(left:Expression, right: Expression, op_type: String): Expression ={
+      (left == null, right == null) match {
+        case (true, true) => null
+        case (true, false) => right
+        case (false, true) => left
+        case (false, false) =>
+          if(op_type == "or")
+            Or(left, right)
+          else if (op_type == "and")
+            And(left, right)
+          else
+            null
+      }
+    }
+
+    def resolveAndExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
+      if(expr.isInstanceOf[And]){
+        val and = expr.asInstanceOf[And]
+        constructBinaryOperators(resolvePredicatesExpression(and.left, partitionKeyIds), resolvePredicatesExpression(and.right, partitionKeyIds), "and")
+      }else{
+        resolvePredicatesExpression(expr, partitionKeyIds)
+      }
+    }
+
+    def resolveOrExpression(or: Or, partitionKeyIds: AttributeSet): Expression = {
+      (or.left.isInstanceOf[Or],or.right.isInstanceOf[Or]) match {
+        case (true, true) => constructBinaryOperators(resolveOrExpression(or.left.asInstanceOf[Or], partitionKeyIds) , resolveOrExpression(or.right.asInstanceOf[Or], partitionKeyIds), "or")
+        case (true, false) => constructBinaryOperators(resolveOrExpression(or.left.asInstanceOf[Or], partitionKeyIds) , resolveAndExpression(or.right, partitionKeyIds), "or")
+        case (false, true) => constructBinaryOperators(resolveAndExpression(or.left, partitionKeyIds) , resolveOrExpression(or.right.asInstanceOf[Or], partitionKeyIds), "or")
+        case (false, false) => constructBinaryOperators(resolveAndExpression(or.left, partitionKeyIds) , resolveAndExpression(or.right, partitionKeyIds), "or")
+      }
+    }
+
+    def resolvePredicatesExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression ={
+      if(!expr.references.isEmpty && expr.references.subsetOf(partitionKeyIds))
+        expr
+      else
+        null
+    }
+
+    def extractPushDownPredicate(predicates: Seq[Expression], partitionKeyIds: AttributeSet): Seq[Expression] ={
+      predicates.map(predicate => {
+        if(predicate.isInstanceOf[Or]){
+          val or = predicate.asInstanceOf[Or]
+          resolveOrExpression(or, partitionKeyIds)
+        }else{
+          resolvePredicatesExpression(predicate,partitionKeyIds)
+        }
+      })
+    }
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates, relation: HiveTableRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
         val partitionKeyIds = AttributeSet(relation.partitionCols)
-        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
+        val (_, otherPredicates) = predicates.partition { predicate => {
           !predicate.references.isEmpty &&
-          predicate.references.subsetOf(partitionKeyIds)
+            predicate.references.subsetOf(partitionKeyIds)
         }
+        }
+
+        val extractedPruningPredicates = extractPushDownPredicate(predicates, partitionKeyIds)
+          .filter(_ != null)
 
         pruneFilterProject(
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
+          HiveTableScanExec(_, relation, extractedPruningPredicates)(sparkSession)) :: Nil
       case _ =>
         Nil
     }
