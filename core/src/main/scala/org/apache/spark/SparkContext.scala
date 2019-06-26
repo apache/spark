@@ -1771,10 +1771,10 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
    * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
-   *
+   * @param check when true, check jar file exists
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String, check:Boolean = false) {
+  def addJar(path: String, check: Boolean = false) {
     def addJarFile(file: File): String = {
       try {
         if (!file.exists()) {
