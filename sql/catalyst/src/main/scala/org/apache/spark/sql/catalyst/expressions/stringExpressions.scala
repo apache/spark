@@ -505,12 +505,10 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val result = ctx.addMutableState("UTF8String", "result")
     nullSafeCodeGen(ctx, ev, (input, replace, pos, len) => {
       s"""
-         |$result = org.apache.spark.sql.catalyst.expressions.Overlay
+         |${ev.value} = org.apache.spark.sql.catalyst.expressions.Overlay
          |  .calcuate($input, $replace, $pos, $len);
-         |${ev.value} = $result;
       """.stripMargin
     })
   }
