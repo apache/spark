@@ -1803,9 +1803,9 @@ class SparkContext(config: SparkConf) extends Logging {
         // For local paths with backslashes on Windows, URI throws an exception
         addJarFile(new File(path))
       } else {
-        val uri = new Path(path).toUri
+        val uri = new URI(path)
         Utils.validateURL(uri)
-        val schemeCorrectedPath = uri.getScheme match {
+        uri.getScheme match {
             //  A JAR file which exists only on the driver node
           case null =>
             //  SPARK-22585 path without schema is not url encoded
@@ -1814,18 +1814,16 @@ class SparkContext(config: SparkConf) extends Logging {
           case "local" => "file:" + uri.getPath
           case _ => path
         }
-
-        val hadoopPath = new Path(schemeCorrectedPath)
-        val scheme = new URI(schemeCorrectedPath).getScheme
+      }
+      if (key != null) {
+        val hadoopPath = new Path(key)
+        val scheme = new URI(key).getScheme
         if (check && !Array("http", "https", "ftp", "spark").contains(scheme)) {
           val fs = hadoopPath.getFileSystem(hadoopConfiguration)
           if (!fs.exists(hadoopPath)) {
-            throw new FileNotFoundException(s"Jar ${schemeCorrectedPath} not found")
+            throw new FileNotFoundException(s"Jar ${key} not found")
           }
         }
-        schemeCorrectedPath
-      }
-      if (key != null) {
         val timestamp = System.currentTimeMillis
         if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
           logInfo(s"Added JAR $path at $key with timestamp $timestamp")
