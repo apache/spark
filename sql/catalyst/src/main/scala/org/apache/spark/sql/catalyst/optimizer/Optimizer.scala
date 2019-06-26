@@ -997,8 +997,8 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
 
 /**
  * The unified version for predicate pushdown of normal operators and joins.
- * This rule is made for performance of predicate pushdown for cascading joins such as:
- *  Filter-Join-Join-Join
+ * This rule improves performance of predicate pushdown for cascading joins such as:
+ *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
  */
 object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
