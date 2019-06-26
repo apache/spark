@@ -73,8 +73,6 @@ private[hive] class SparkGetTablesOperation(
       val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
       authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
     }
-    // scalastyle:off
-    System.out.println("matchingDbs: " + matchingDbs.mkString(","))
 
     // Tables and views
     matchingDbs.foreach { dbName =>
@@ -88,19 +86,12 @@ private[hive] class SparkGetTablesOperation(
     }
 
     // Temporary views and global temporary views
-    if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableTypeString(VIEW))) {
+    if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(VIEW.name)) {
       val globalTempViewDb = catalog.globalTempViewManager.database
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (databasePattern.matcher(globalTempViewDb).matches()) {
         catalog.listTempViews(globalTempViewDb, tablePattern).foreach { views =>
-          val viewName = views.table
-          catalog.getTempView(viewName).foreach { _ =>
-            // Set temporary view's database name to empty
-            addToRowSet("", viewName, tableTypeString(VIEW), None)
-          }
-          catalog.globalTempViewManager.get(viewName).foreach { plan =>
-            addToRowSet(globalTempViewDb, viewName, tableTypeString(VIEW), None)
-          }
+          addToRowSet(globalTempViewDb, views.identifier, VIEW.name, None)
         }
       }
     }
