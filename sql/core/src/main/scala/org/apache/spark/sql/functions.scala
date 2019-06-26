@@ -2521,7 +2521,7 @@ object functions {
    *  starting from byte position `pos` of `inputString` and proceeding for `len` bytes.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.0.0
    */
   def overlay(src: Column, replaceString: String, pos: Int, len: Int): Column = withExpr {
     Overlay(src.expr, lit(replaceString).expr, lit(pos).expr, lit(len).expr)
@@ -2532,7 +2532,7 @@ object functions {
    *  starting from byte position `pos` of `inputString`.
    *
    * @group string_funcs
-   * @since 1.5.0
+   * @since 3.0.0
    */
   def overlay(src: Column, replaceString: String, pos: Int): Column = withExpr {
     new Overlay(src.expr, lit(replaceString).expr, lit(pos).expr)
