@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
-
 /**
  * This test suite ensures that the [[PushDownPredicates]] actually does predicate pushdown in
  * an efficient manner. This is enforced by asserting that a single predicate pushdown can push
@@ -39,13 +38,12 @@ class FilterPushdownOnePassSuite extends PlanTest {
       // this batch must reach expected state in one pass
       Batch("Filter Pushdown One Pass", Once,
         ReorderJoin,
-        PushDownPredicates,
+        PushDownPredicates
       ) :: Nil
   }
 
   val testRelation1 = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation2 = LocalRelation('a.int, 'd.int, 'e.int)
-
 
   test("really simple predicate push down") {
     val x = testRelation1.subquery('x)
