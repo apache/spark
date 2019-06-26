@@ -70,8 +70,8 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: fallback") {
     val conf = new SparkConf()
-    val parentConf = ConfigBuilder(testKey("parent")).intConf.createWithDefault(1)
-    val confWithFallback = ConfigBuilder(testKey("fallback")).fallbackConf(parentConf)
+    val parentConf = ConfigBuilder(testKey("parent1")).intConf.createWithDefault(1)
+    val confWithFallback = ConfigBuilder(testKey("fallback1")).fallbackConf(parentConf)
     assert(conf.get(confWithFallback) === 1)
     conf.set(confWithFallback, 2)
     assert(conf.get(parentConf) === 1)
@@ -329,7 +329,7 @@ class ConfigEntrySuite extends SparkFunSuite {
       .withPrepended(prependedKey)
       .stringConf
       .createOptional
-    val confWithFallback = ConfigBuilder(testKey("fallback")).fallbackConf(derivedConf)
+    val confWithFallback = ConfigBuilder(testKey("fallback2")).fallbackConf(derivedConf)
 
     assert(conf.get(confWithFallback) === None)
 
