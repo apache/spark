@@ -1764,7 +1764,7 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
   }
 
-  def addJar(path: String): Unit ={
+  def addJar(path: String) {
     addJar(path, false)
   }
 
@@ -1778,7 +1778,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param check when true, check jar file exists
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String, check: Boolean = false) {
+  def addJar(path: String, check: Boolean) {
     def addJarFile(file: File): String = {
       try {
         if (!file.exists()) {
