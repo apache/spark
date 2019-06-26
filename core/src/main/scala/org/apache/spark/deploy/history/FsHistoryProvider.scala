@@ -532,6 +532,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // We don't have read permissions on the log file
             logWarning(s"Unable to read log $path", e.getCause)
             blacklist(path)
+            // SPARK-28157 We should remove this blacklisted entry from the KVStore
+            // to handle permission-only changes with the same file sizes later.
+            listing.delete(classOf[LogInfo], path.toString)
           case e: Exception =>
             logError("Exception while merging application listings", e)
         } finally {
