@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{List => JList}
+import java.util.{List => JList, UUID}
+import java.util.regex.Pattern
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
@@ -63,6 +64,7 @@ private[hive] class SparkGetTablesOperation(
 
     val catalog = sqlContext.sessionState.catalog
     val schemaPattern = convertSchemaPattern(schemaName)
+    val tablePattern = convertIdentifierPattern(tableName, true)
     val matchingDbs = catalog.listDatabases(schemaPattern)
 
     if (isAuthV2Enabled) {
@@ -71,28 +73,57 @@ private[hive] class SparkGetTablesOperation(
       val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
       authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
     }
+    // scalastyle:off
+    System.out.println("matchingDbs: " + matchingDbs.mkString(","))
 
-    val tablePattern = convertIdentifierPattern(tableName, true)
+    // Tables and views
     matchingDbs.foreach { dbName =>
       catalog.getTablesByName(catalog.listTables(dbName, tablePattern)).foreach { catalogTable =>
         val tableType = tableTypeString(catalogTable.tableType)
         if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableType)) {
-          val rowData = Array[AnyRef](
-            "",
-            catalogTable.database,
-            catalogTable.identifier.table,
-            tableType,
-            catalogTable.comment.getOrElse(""))
-          // Since HIVE-7575(Hive 2.0.0), adds 5 additional columns to the ResultSet of GetTables.
-          if (HiveUtils.isHive23) {
-            rowSet.addRow(rowData ++ Array(null, null, null, null, null))
-          } else {
-            rowSet.addRow(rowData)
+          addToRowSet(
+            catalogTable.database, catalogTable.identifier.table, tableType, catalogTable.comment)
+        }
+      }
+    }
+
+    // Temporary views and global temporary views
+    if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableTypeString(VIEW))) {
+      val globalTempViewDb = catalog.globalTempViewManager.database
+      val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
+      if (databasePattern.matcher(globalTempViewDb).matches()) {
+        catalog.listTempViews(globalTempViewDb, tablePattern).foreach { views =>
+          val viewName = views.table
+          catalog.getTempView(viewName).foreach { _ =>
+            // Set temporary view's database name to empty
+            addToRowSet("", viewName, tableTypeString(VIEW), None)
+          }
+          catalog.globalTempViewManager.get(viewName).foreach { plan =>
+            addToRowSet(globalTempViewDb, viewName, tableTypeString(VIEW), None)
           }
         }
       }
     }
     setState(OperationState.FINISHED)
+  }
+
+  private def addToRowSet(
+      dbName: String,
+      tableName: String,
+      tableType: String,
+      comment: Option[String]): Unit = {
+    val rowData = Array[AnyRef](
+      "",
+      dbName,
+      tableName,
+      tableType,
+      comment.getOrElse(""))
+    // Since HIVE-7575(Hive 2.0.0), adds 5 additional columns to the ResultSet of GetTables.
+    if (HiveUtils.isHive23) {
+      rowSet.addRow(rowData ++ Array(null, null, null, null, null))
+    } else {
+      rowSet.addRow(rowData)
+    }
   }
 
   private def tableTypeString(tableType: CatalogTableType): String = tableType match {

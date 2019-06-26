@@ -232,7 +232,7 @@ private[sql] object SQLUtils extends Logging {
       case _ =>
         sparkSession.catalog.currentDatabase
     }
-    sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
+    sparkSession.sessionState.catalog.listTablesAndTempViews(db).map(_.table).toArray
   }
 
   def createArrayType(column: Column): ArrayType = {

@@ -74,6 +74,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
           assert(rs.next())
           assert(rs.getString("TABLE_SCHEM") === dbNames(i))
         }
+        // Make sure do not have more elements
+        assert(!rs.next())
       } else {
         assert(!rs.next())
       }
@@ -83,7 +85,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       Seq("CREATE DATABASE db1", "CREATE DATABASE db2").foreach(statement.execute)
 
       testGetSchemasOperation(null, "%") { rs =>
-        checkResult(Seq("db1", "db2"), rs)
+        checkResult(Seq("db1", "db2", "default", "global_temp"), rs)
       }
       testGetSchemasOperation(null, "db1") { rs =>
         checkResult(Seq("db1"), rs)
@@ -141,6 +143,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
           assert(rs.next())
           assert(rs.getString("TABLE_NAME") === tableNames(i))
         }
+        // Make sure do not have more elements
+        assert(!rs.next())
       } else {
         assert(!rs.next())
       }
@@ -150,10 +154,13 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       Seq(
         "CREATE TABLE table1(key INT, val STRING)",
         "CREATE TABLE table2(key INT, val STRING)",
-        "CREATE VIEW view1 AS SELECT * FROM table2").foreach(statement.execute)
+        "CREATE VIEW view1 AS SELECT * FROM table2",
+        "CREATE OR REPLACE TEMPORARY VIEW view_temp_1 AS SELECT 1 as col1",
+        "CREATE OR REPLACE GLOBAL TEMPORARY VIEW view_global_temp_1 AS SELECT 1 AS col1"
+      ).foreach(statement.execute)
 
       testGetTablesOperation("%", "%", null) { rs =>
-        checkResult(Seq("table1", "table2", "view1"), rs)
+        checkResult(Seq("table1", "table2", "view1", "view_global_temp_1"), rs)
       }
 
       testGetTablesOperation("%", "table1", null) { rs =>
@@ -169,11 +176,11 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       }
 
       testGetTablesOperation("%", "%", JArrays.asList("VIEW")) { rs =>
-        checkResult(Seq("view1"), rs)
+        checkResult(Seq("view1", "view_global_temp_1"), rs)
       }
 
       testGetTablesOperation("%", "%", JArrays.asList("TABLE", "VIEW")) { rs =>
-        checkResult(Seq("table1", "table2", "view1"), rs)
+        checkResult(Seq("table1", "table2", "view1", "view_global_temp_1"), rs)
       }
     }
   }
@@ -229,6 +236,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
           assert(rs.getString("TYPE_NAME") === col._4)
           assert(rs.getString("REMARKS") === col._5)
         }
+        // Make sure do not have more elements
+        assert(!rs.next())
       } else {
         assert(!rs.next())
       }
@@ -238,7 +247,9 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       Seq(
         "CREATE TABLE table1(key INT comment 'Int column', val STRING comment 'String column')",
         "CREATE TABLE table2(key INT, val DECIMAL comment 'Decimal column')",
-        "CREATE VIEW view1 AS SELECT key FROM table1"
+        "CREATE VIEW view1 AS SELECT key FROM table1",
+        "CREATE OR REPLACE TEMPORARY VIEW view_temp_1 AS SELECT 1 as col2",
+        "CREATE OR REPLACE GLOBAL TEMPORARY VIEW view_global_temp_1 AS SELECT 1 AS col2"
       ).foreach(statement.execute)
 
       testGetColumnsOperation("%", "%", null) { rs =>
@@ -248,7 +259,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
             ("table1", "val", "12", "STRING", "String column"),
             ("table2", "key", "4", "INT", ""),
             ("table2", "val", "3", "DECIMAL(10,0)", "Decimal column"),
-            ("view1", "key", "4", "INT", "Int column")), rs)
+            ("view1", "key", "4", "INT", "Int column"),
+            ("view_global_temp_1", "col2", "4", "INT", "")), rs)
       }
 
       testGetColumnsOperation("%", "table1", null) { rs =>

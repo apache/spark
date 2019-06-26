@@ -96,7 +96,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
-    val tables = sessionCatalog.listTables(dbName).map(makeTable)
+    val tables = sessionCatalog.listTablesAndTempViews(dbName).map(makeTable)
     CatalogImpl.makeDataset(tables, sparkSession)
   }
 
