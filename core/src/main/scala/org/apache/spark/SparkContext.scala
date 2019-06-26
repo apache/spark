@@ -457,7 +457,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Add each JAR given through the constructor
     if (jars != null) {
-      jars.foreach(addJar)
+      jars.foreach(addJar(_, false))
     }
 
     if (files != null) {
