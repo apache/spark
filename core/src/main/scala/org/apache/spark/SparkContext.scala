@@ -1814,9 +1814,10 @@ class SparkContext(config: SparkConf) extends Logging {
           case "local" => "file:" + uri.getPath
           case _ => path
         }
+
         val hadoopPath = new Path(schemeCorrectedPath)
         val scheme = new URI(schemeCorrectedPath).getScheme
-        if (check && !Array("http", "https", "ftp").contains(scheme)) {
+        if (check && !Array("http", "https", "ftp", "spark").contains(scheme)) {
           val fs = hadoopPath.getFileSystem(hadoopConfiguration)
           if (!fs.exists(hadoopPath)) {
             throw new FileNotFoundException(s"Jar ${schemeCorrectedPath} not found")
