@@ -440,8 +440,15 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       val exception = intercept[SparkException] {
         testSchemaMergingWithDataTypeConflicts(3)
       }.getCause
-      assert(exception.getMessage.contains(
-        "Failed to merge incompatible data types bigint and string"))
+
+      val innerMessage = orcImp match {
+        case "native" => exception.getMessage
+        case "hive" => exception.getCause.getMessage
+        case impl =>
+          throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
+      }
+
+      assert(innerMessage.contains("Failed to merge incompatible data types bigint and string"))
     }
 
     withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
