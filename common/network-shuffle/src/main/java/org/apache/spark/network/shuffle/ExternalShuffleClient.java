@@ -163,9 +163,16 @@ public class ExternalShuffleClient extends ShuffleClient {
     client.sendRpc(removeBlocksMessage, new RpcResponseCallback() {
       @Override
       public void onSuccess(ByteBuffer response) {
-        BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
-        numRemovedBlocksFuture.complete(((BlocksRemoved)msgObj).numRemovedBlocks);
-        client.close();
+        try {
+          BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
+          numRemovedBlocksFuture.complete(((BlocksRemoved) msgObj).numRemovedBlocks);
+        } catch (Exception e) {
+          logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
+            " via external shuffle service from executor: " + execId, e);
+          numRemovedBlocksFuture.complete(0);
+        } finally {
+          client.close();
+        }
       }
 
       @Override
