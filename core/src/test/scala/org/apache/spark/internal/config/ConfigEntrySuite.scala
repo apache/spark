@@ -321,6 +321,28 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(derivedConf) === Some("2,1"))
   }
 
+  test("conf entry: prepend with fallback") {
+    val conf = new SparkConf()
+    val prependedKey = testKey("prepended3")
+    val prependedConf = ConfigBuilder(prependedKey).stringConf.createOptional
+    val derivedConf = ConfigBuilder(testKey("prepend3"))
+      .withPrepended(prependedKey)
+      .stringConf
+      .createOptional
+    val confWithFallback = ConfigBuilder(testKey("fallback")).fallbackConf(derivedConf)
+
+    assert(conf.get(confWithFallback) === None)
+
+    conf.set(derivedConf, "1")
+    assert(conf.get(confWithFallback) === Some("1"))
+
+    conf.set(prependedConf, "2")
+    assert(conf.get(confWithFallback) === Some("2 1"))
+
+    conf.set(confWithFallback, Some("3"))
+    assert(conf.get(confWithFallback) === Some("3"))
+  }
+
   test("conf entry: prepend should work only with string type") {
     var i = 0
     def testPrependFail(createConf: (String, String) => Unit): Unit = {
