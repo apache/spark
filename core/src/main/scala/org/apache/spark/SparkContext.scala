@@ -1774,7 +1774,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String) {
+  def addJar(path: String, check:Boolean = false) {
     def addJarFile(file: File): String = {
       try {
         if (!file.exists()) {
@@ -1799,20 +1799,26 @@ class SparkContext(config: SparkConf) extends Logging {
         // For local paths with backslashes on Windows, URI throws an exception
         addJarFile(new File(path))
       } else {
-        val uri = new URI(path)
-        // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
+        val uri = new Path(path).toUri
         Utils.validateURL(uri)
-        uri.getScheme match {
-          // A JAR file which exists only on the driver node
+        val schemeCorrectedPath = uri.getScheme match {
+            //  A JAR file which exists only on the driver node
           case null =>
-            // SPARK-22585 path without schema is not url encoded
+            //  SPARK-22585 path without schema is not url encoded
             addJarFile(new File(uri.getRawPath))
-          // A JAR file which exists only on the driver node
-          case "file" => addJarFile(new File(uri.getPath))
-          // A JAR file which exists locally on every worker node
+          case "file" => addJarFile(new File(uri.getRawPath))
           case "local" => "file:" + uri.getPath
           case _ => path
         }
+        val hadoopPath = new Path(schemeCorrectedPath)
+        val scheme = new URI(schemeCorrectedPath).getScheme
+        if (check && !Array("http", "https", "ftp").contains(scheme)) {
+          val fs = hadoopPath.getFileSystem(hadoopConfiguration)
+          if (!fs.exists(hadoopPath)) {
+            throw new FileNotFoundException(s"Jar ${schemeCorrectedPath} not found")
+          }
+        }
+        schemeCorrectedPath
       }
       if (key != null) {
         val timestamp = System.currentTimeMillis
