@@ -374,9 +374,26 @@ trait CheckAnalysis extends PredicateHelper {
                 }
               case update: UpdateColumnType =>
                 val field = findField("update", update.fieldNames)
+                val fieldName = update.fieldNames.quoted
+                update.newDataType match {
+                  case _: StructType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update a struct by adding, deleting, or updating its fields")
+                  case _: MapType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update a map by updating $fieldName.key or $fieldName.value")
+                  case _: ArrayType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update the element by updating $fieldName.element")
+                  case _: AtomicType =>
+                    // update is okay
+                }
                 if (!Cast.canUpCast(field.dataType, update.newDataType)) {
                   throw new AnalysisException(
-                    s"Cannot update ${table.name} field ${update.fieldNames}: " +
+                    s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
                         s"${update.newDataType.simpleString}")
                 }

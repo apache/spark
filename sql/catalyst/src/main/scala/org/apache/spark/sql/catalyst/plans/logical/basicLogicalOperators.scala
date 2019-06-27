@@ -519,7 +519,7 @@ case class AlterTable(
 
   override def children: Seq[LogicalPlan] = Seq(table)
 
-  override lazy val resolved: Boolean = {
+  override lazy val resolved: Boolean = childrenResolved && {
     changes.forall {
       case add: AddColumn =>
         add.fieldNames match {

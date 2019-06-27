@@ -498,6 +498,24 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     }
   }
 
+  test("AlterTable: add complex column") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN points array<struct<x: double, y: double>>")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType))))))
+    }
+  }
+
   test("AlterTable: add nested column with comment") {
     val t = "testcat.ns1.table_name"
     withTable(t) {
@@ -560,6 +578,104 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
           .add("point", StructType(Seq(
             StructField("x", DoubleType),
             StructField("y", DoubleType)))))
+    }
+  }
+
+  test("AlterTable: update column with struct type fails") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN point TYPE struct<x: double, y: double, z: double>")
+      }
+
+      assert(exc.getMessage.contains("point"))
+      assert(exc.getMessage.contains("update a struct by adding, deleting, or updating its fields"))
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType)))))
+    }
+  }
+
+  test("AlterTable: update column with array type fails") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<int>) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN points TYPE array<long>")
+      }
+
+      assert(exc.getMessage.contains("update the element by updating points.element"))
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(IntegerType)))
+    }
+  }
+
+  test("AlterTable: update column array element type") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<int>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN points.element TYPE long")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(LongType)))
+    }
+  }
+
+  test("AlterTable: update column with map type fails") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, m map<string, int>) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN m TYPE map<string, long>")
+      }
+
+      assert(exc.getMessage.contains("update a map by updating m.key or m.value"))
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("m", MapType(StringType, IntegerType)))
+    }
+  }
+
+  test("AlterTable: update column map value type") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, m map<string, int>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN m.value TYPE long")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("m", MapType(StringType, LongType)))
     }
   }
 
