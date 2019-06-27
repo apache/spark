@@ -264,14 +264,13 @@ final class ChiSqSelectorModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val transformedSchema = transformSchema(dataset.schema, logging = true)
-    val newField = transformedSchema.last
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => chiSqSelector.transform(OldVectors.fromML(v)).asML
+    val transformer: Vector => Vector = v => chiSqSelector.compress(v)
 
     val selector = udf(transformer)
-    dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
+    dataset.withColumn($(outputCol), selector(col($(featuresCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.6.0")
