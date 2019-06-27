@@ -359,19 +359,24 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 class InterleavedArrowReader(object):
 
     def __init__(self, stream):
-        import pyarrow as pa
-        self._schema1 = pa.read_schema(stream)
-        self._schema2 = pa.read_schema(stream)
-        self._reader = pa.MessageReader.open_stream(stream)
+        self._stream = stream
 
     def __iter__(self):
         return self
 
     def __next__(self):
+        stream_status = read_int(self._stream)
+        if stream_status == SpecialLengths.START_ARROW_STREAM:
+            return self._read_df(), self._read_df()
+        elif stream_status == SpecialLengths.END_OF_DATA_SECTION:
+            raise StopIteration
+        else:
+            raise ValueError('Received invalid stream status {0}'.format(stream_status))
+
+    def _read_df(self):
         import pyarrow as pa
-        batch1 = pa.read_record_batch(self._reader.read_next_message(),  self._schema1)
-        batch2 = pa.read_record_batch(self._reader.read_next_message(),  self._schema2)
-        return batch1, batch2
+        reader = pa.ipc.open_stream(self._stream)
+        return [b for b in reader]
 
 
 class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
@@ -428,11 +433,11 @@ class InterleavedArrowStreamPandasSerializer(ArrowStreamPandasUDFSerializer):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
-        import pyarrow as pa
-        reader = InterleavedArrowReader(pa.input_stream(stream))
+        reader = InterleavedArrowReader(stream)
         for batch1, batch2 in reader:
-            yield ( [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch1]).itercolumns()],
-                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch2]).itercolumns()])
+            import pyarrow as pa
+            yield ([self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
+                   [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()])
 
 
 class BatchedSerializer(Serializer):

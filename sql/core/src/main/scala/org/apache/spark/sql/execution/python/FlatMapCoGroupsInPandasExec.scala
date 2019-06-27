@@ -31,11 +31,9 @@ case class FlatMapCoGroupsInPandasExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends BinaryExecNode with AbstractPandasGroupExec {
+  extends BasePandasGroupExec(func, output) with BinaryExecNode{
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
-
-  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   override def requiredChildDistribution: Seq[Distribution] = {
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
@@ -48,16 +46,15 @@ case class FlatMapCoGroupsInPandasExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
 
-    val (schemaLeft, attrLeft, _) = createSchema(left, leftGroup)
-    val (schemaRight, attrRight, _) = createSchema(right, rightGroup)
+    val (schemaLeft, leftDedup, _) = createSchema(left, leftGroup)
+    val (schemaRight, rightDedup, _) = createSchema(right, rightGroup)
 
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
-      val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
-      val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
-      val projLeft = UnsafeProjection.create(attrLeft, left.output)
-      val projRight = UnsafeProjection.create(attrRight, right.output)
+
+      val leftGrouped = groupAndDedup(leftData, leftGroup, left.output, leftDedup)
+      val rightGrouped = groupAndDedup(rightData, rightGroup, right.output, rightDedup)
       val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
-        .map{case (k, l, r) => (l.map(projLeft), r.map(projRight))}
+        .map{case (k, l, r) => (l, r)}
 
       val runner = new InterleavedArrowPythonRunner(
         chainedFunc,

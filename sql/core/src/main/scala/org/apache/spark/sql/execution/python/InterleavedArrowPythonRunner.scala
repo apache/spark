@@ -21,7 +21,8 @@ import java.io._
 import java.net._
 
 import org.apache.arrow.vector.VectorSchemaRoot
-
+import org.apache.arrow.vector.dictionary.DictionaryProvider
+import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.spark._
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -64,55 +65,39 @@ class InterleavedArrowPythonRunner(
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        val leftArrowSchema = ArrowUtils.toArrowSchema(leftSchema, timeZoneId)
-        val rightArrowSchema = ArrowUtils.toArrowSchema(rightSchema, timeZoneId)
+        while (inputIterator.hasNext) {
+          dataOut.writeInt(SpecialLengths.START_ARROW_STREAM)
+          val (nextLeft, nextRight) = inputIterator.next()
+          writeGroup(nextLeft, leftSchema, dataOut)
+          writeGroup(nextRight, rightSchema, dataOut)
+        }
+        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+      }
+
+      def writeGroup(group: Iterator[InternalRow], schema: StructType, dataOut: DataOutputStream
+                    ) = {
+        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
-        val leftRoot = VectorSchemaRoot.create(leftArrowSchema, allocator)
-        val rightRoot = VectorSchemaRoot.create(rightArrowSchema, allocator)
+        val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {
-          val leftArrowWriter = ArrowWriter.create(leftRoot)
-          val rightArrowWriter = ArrowWriter.create(rightRoot)
-          val writer = InterleavedArrowWriter(leftRoot, rightRoot, dataOut)
+          val writer = new ArrowStreamWriter(root, null, dataOut)
+          val arrowWriter = ArrowWriter.create(root)
           writer.start()
 
-          while (inputIterator.hasNext) {
-
-            val (nextLeft, nextRight) = inputIterator.next()
-
-            while (nextLeft.hasNext) {
-              leftArrowWriter.write(nextLeft.next())
-            }
-            while (nextRight.hasNext) {
-              rightArrowWriter.write(nextRight.next())
-            }
-            leftArrowWriter.finish()
-            rightArrowWriter.finish()
-            writer.writeBatch()
-            leftArrowWriter.reset()
-            rightArrowWriter.reset()
+          while (group.hasNext) {
+            arrowWriter.write(group.next())
           }
-          // end writes footer to the output stream and doesn't clean any resources.
-          // It could throw exception if the output stream is closed, so it should be
-          // in the try block.
+          arrowWriter.finish()
+          writer.writeBatch()
           writer.end()
-        } {
-          // If we close root and allocator in TaskCompletionListener, there could be a race
-          // condition where the writer thread keeps writing to the VectorSchemaRoot while
-          // it's being closed by the TaskCompletion listener.
-          // Closing root and allocator here is cleaner because root and allocator is owned
-          // by the writer thread and is only visible to the writer thread.
-          //
-          // If the writer thread is interrupted by TaskCompletionListener, it should either
-          // (1) in the try block, in which case it will get an InterruptedException when
-          // performing io, and goes into the finally block or (2) in the finally block,
-          // in which case it will ignore the interruption and close the resources.
-          leftRoot.close()
-          rightRoot.close()
+        }{
+          root.close()
           allocator.close()
         }
       }
     }
   }
 }
+

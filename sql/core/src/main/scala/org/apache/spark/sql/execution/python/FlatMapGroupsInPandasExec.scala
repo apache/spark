@@ -53,11 +53,9 @@ case class FlatMapGroupsInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode with AbstractPandasGroupExec {
+  extends  BasePandasGroupExec(func, output) with UnaryExecNode {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (groupingAttributes.isEmpty) {
@@ -79,6 +77,7 @@ case class FlatMapGroupsInPandasExec(
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
 
       val data = groupAndDedup(iter, groupingAttributes, child.output, dedupAttributes)
+        .map{case(_, x) => x}
 
       val runner = new ArrowPythonRunner(
         chainedFunc,
