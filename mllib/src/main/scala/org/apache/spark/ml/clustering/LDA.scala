@@ -457,14 +457,14 @@ abstract class LDAModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    if ($(topicDistributionCol).nonEmpty) {
+    transformSchema(dataset.schema, logging = true)
 
-      // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    if ($(topicDistributionCol).nonEmpty) {
       val transformer = oldLocalModel.getTopicDistributionMethod
 
-      val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
+      val t = udf { v: Vector => transformer(v) }
       dataset.withColumn($(topicDistributionCol),
-        t(DatasetUtils.columnToVector(dataset, getFeaturesCol))).toDF()
+        t(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
         " such as topicDistributionCol to produce results.")

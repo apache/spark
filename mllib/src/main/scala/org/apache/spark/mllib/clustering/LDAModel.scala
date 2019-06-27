@@ -28,6 +28,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
+import org.apache.spark.ml.linalg.{Vector => NewVector, Vectors => NewVectors}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -389,14 +390,14 @@ class LocalLDAModel private[spark] (
   /**
    * Get a method usable as a UDF for `topicDistributions()`
    */
-  private[spark] def getTopicDistributionMethod: Vector => Vector = {
+  private[spark] def getTopicDistributionMethod: NewVector => NewVector = {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     val docConcentrationBrz = this.docConcentration.asBreeze
     val gammaShape = this.gammaShape
     val k = this.k
     val gammaSeed = this.seed
 
-    (termCounts: Vector) =>
+    (termCounts: NewVector) =>
       if (termCounts.numNonzeros == 0) {
         Vectors.zeros(k)
       } else {
@@ -407,7 +408,7 @@ class LocalLDAModel private[spark] (
           gammaShape,
           k,
           gammaSeed)
-        Vectors.dense(normalize(gamma, 1.0).toArray)
+        NewVectors.dense(normalize(gamma, 1.0).toArray)
       }
   }
 
