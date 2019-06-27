@@ -860,7 +860,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             try:
                 for batch in batch_iter:
                     yield batch
-                time.sleep(10.0) # avoid the function finish too fast.
+                time.sleep(10.0)  # avoid the function finish too fast.
             except GeneratorExit as ge:
                 generator_exit_caught = True
                 raise ge
