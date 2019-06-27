@@ -25,16 +25,12 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
   test("Spark's own GetSchemasOperation(SparkGetSchemasOperation)") {
     def checkResult(rs: ResultSet, dbNames: Seq[String]): Unit = {
-      if (dbNames.nonEmpty) {
-        for (i <- dbNames.indices) {
-          assert(rs.next())
-          assert(rs.getString("TABLE_SCHEM") === dbNames(i))
-        }
-        // Make sure there are no more elements
-        assert(!rs.next())
-      } else {
-        assert(!rs.next())
+      for (i <- dbNames.indices) {
+        assert(rs.next())
+        assert(rs.getString("TABLE_SCHEM") === dbNames(i))
       }
+      // Make sure there are no more elements
+      assert(!rs.next())
     }
 
     withDatabase("db1", "db2") { statement =>
@@ -52,16 +48,12 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
   test("Spark's own GetTablesOperation(SparkGetTablesOperation)") {
     def checkResult(rs: ResultSet, tableNames: Seq[String]): Unit = {
-      if (tableNames.nonEmpty) {
-        for (i <- tableNames.indices) {
-          assert(rs.next())
-          assert(rs.getString("TABLE_NAME") === tableNames(i))
-        }
-        // Make sure there are no more elements
-        assert(!rs.next())
-      } else {
-        assert(!rs.next())
+      for (i <- tableNames.indices) {
+        assert(rs.next())
+        assert(rs.getString("TABLE_NAME") === tableNames(i))
       }
+      // Make sure there are no more elements
+      assert(!rs.next())
     }
 
     withJdbcStatement("table1", "table2", "view1") { statement =>
@@ -97,21 +89,17 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
     def checkResult(
         rs: ResultSet,
         columns: Seq[(String, String, String, String, String)]) : Unit = {
-      if (columns.nonEmpty) {
-        for (i <- columns.indices) {
-          assert(rs.next())
-          val col = columns(i)
-          assert(rs.getString("TABLE_NAME") === col._1)
-          assert(rs.getString("COLUMN_NAME") === col._2)
-          assert(rs.getString("DATA_TYPE") === col._3)
-          assert(rs.getString("TYPE_NAME") === col._4)
-          assert(rs.getString("REMARKS") === col._5)
-        }
-        // Make sure there are no more elements
-        assert(!rs.next())
-      } else {
-        assert(!rs.next())
+      for (i <- columns.indices) {
+        assert(rs.next())
+        val col = columns(i)
+        assert(rs.getString("TABLE_NAME") === col._1)
+        assert(rs.getString("COLUMN_NAME") === col._2)
+        assert(rs.getString("DATA_TYPE") === col._3)
+        assert(rs.getString("TYPE_NAME") === col._4)
+        assert(rs.getString("REMARKS") === col._5)
       }
+      // Make sure there are no more elements
+      assert(!rs.next())
     }
 
     withJdbcStatement("table1", "table2", "view1") { statement =>
