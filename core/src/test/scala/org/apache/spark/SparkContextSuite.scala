@@ -216,12 +216,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("SPARK-28106 With check jar path, addJar can be called twice with same file ") {
+  test("SPARK-28106 addJar can be called twice with same file ") {
     for (
       schedulingMode <- Seq("local-mode", "non-local-mode");
       method <- Seq("addJar")
     ) {
-      val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
+      val jarPath = Thread.currentThread().getContextClassLoader
+        .getResource("TestUDTF.jar").toString
       val master = schedulingMode match {
         case "local-mode" => "local"
         case "non-local-mode" => "local-cluster[1,1,1024]"
