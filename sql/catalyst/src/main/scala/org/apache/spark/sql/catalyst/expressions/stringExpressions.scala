@@ -456,14 +456,16 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
 object Overlay {
 
-  def calcuate(input: UTF8String, replace: UTF8String, pos: Integer, len: Integer): UTF8String = {
-    val header = input.substringSQL(1, pos - 1)
+  def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
+    val builder = new UTF8StringBuilder
+    builder.append(input.substringSQL(1, pos - 1))
+    builder.append(replace)
     var length = len
     if (len < 0) {
       length = replace.toString().length()
     }
-    val tailer = input.substringSQL(pos + length, Int.MaxValue)
-    UTF8String.fromString(header.toString + replace.toString + tailer.toString)
+    builder.append(input.substringSQL(pos + length, Int.MaxValue))
+    builder.build()
   }
 }
 
@@ -501,14 +503,14 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     val replaceStr = replaceEval.asInstanceOf[UTF8String]
     val position = posEval.asInstanceOf[Int]
     val length = lenEval.asInstanceOf[Int]
-    Overlay.calcuate(inputStr, replaceStr, position, length)
+    Overlay.calculate(inputStr, replaceStr, position, length)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (input, replace, pos, len) => {
       s"""
          |${ev.value} = org.apache.spark.sql.catalyst.expressions.Overlay
-         |  .calcuate($input, $replace, $pos, $len);
+         |  .calculate($input, $replace, $pos, $len);
       """.stripMargin
     })
   }
