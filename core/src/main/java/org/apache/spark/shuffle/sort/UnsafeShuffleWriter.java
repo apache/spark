@@ -38,7 +38,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.*;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.api.java.Optional;
-import org.apache.spark.api.shuffle.MapShuffleLocations;
 import org.apache.spark.api.shuffle.TransferrableWritableByteChannel;
 import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
 import org.apache.spark.api.shuffle.ShufflePartitionWriter;
@@ -219,7 +218,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final ShuffleMapOutputWriter mapWriter = shuffleWriteSupport
       .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
     final long[] partitionLengths;
-    Optional<MapShuffleLocations> mapLocations;
     try {
       try {
         partitionLengths = mergeSpills(spills, mapWriter);
@@ -230,7 +228,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           }
         }
       }
-      mapLocations = mapWriter.commitAllPartitions();
+      mapWriter.commitAllPartitions();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);
@@ -241,7 +239,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     mapStatus = MapStatus$.MODULE$.apply(
         blockManager.shuffleServerId(),
-        mapLocations.orNull(),
         partitionLengths);
   }
 
@@ -434,18 +431,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         ShufflePartitionWriter writer = mapWriter.getPartitionWriter(partition);
         TransferrableWritableByteChannel partitionChannel = null;
         try {
-<<<<<<< HEAD
-          writer = mapWriter.getPartitionWriter(partition);
-          WritableByteChannel channel = writer.toChannel();
-||||||| parent of ca4448ec6d... [SPARK-25299] Propose a new NIO transfer API for partition writing. (#535)
-          writer = mapWriter.getNextPartitionWriter();
-          WritableByteChannel channel = writer.toChannel();
-=======
           partitionChannel = writer instanceof SupportsTransferTo ?
               ((SupportsTransferTo) writer).openTransferrableChannel()
               : new DefaultTransferrableWritableByteChannel(
                   Channels.newChannel(writer.openStream()));
->>>>>>> ca4448ec6d... [SPARK-25299] Propose a new NIO transfer API for partition writing. (#535)
           for (int i = 0; i < spills.length; i++) {
             long partitionLengthInSpill = 0L;
             partitionLengthInSpill += spills[i].partitionLengths[partition];

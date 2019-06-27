@@ -29,13 +29,11 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.Optional;
-import org.apache.spark.api.shuffle.MapShuffleLocations;
 import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
 import org.apache.spark.api.shuffle.ShufflePartitionWriter;
 import org.apache.spark.api.shuffle.SupportsTransferTo;
 import org.apache.spark.api.shuffle.TransferrableWritableByteChannel;
 import org.apache.spark.internal.config.package$;
-import org.apache.spark.shuffle.sort.DefaultMapShuffleLocations;
 import org.apache.spark.shuffle.sort.DefaultTransferrableWritableByteChannel;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.storage.BlockManagerId;
@@ -56,7 +54,6 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   private final int bufferSize;
   private int lastPartitionId = -1;
   private long currChannelPosition;
-  private final BlockManagerId shuffleServerId;
 
   private final File outputFile;
   private File outputTempFile;
@@ -69,13 +66,11 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
       int shuffleId,
       int mapId,
       int numPartitions,
-      BlockManagerId shuffleServerId,
       ShuffleWriteMetricsReporter metrics,
       IndexShuffleBlockResolver blockResolver,
       SparkConf sparkConf) {
     this.shuffleId = shuffleId;
     this.mapId = mapId;
-    this.shuffleServerId = shuffleServerId;
     this.metrics = metrics;
     this.blockResolver = blockResolver;
     this.bufferSize =
@@ -104,11 +99,10 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
-  public Optional<MapShuffleLocations> commitAllPartitions() throws IOException {
+  public void commitAllPartitions() throws IOException {
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
-    return Optional.of(DefaultMapShuffleLocations.get(shuffleServerId));
   }
 
   @Override

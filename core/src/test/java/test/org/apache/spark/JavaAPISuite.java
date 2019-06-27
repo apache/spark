@@ -94,7 +94,9 @@ public class JavaAPISuite implements Serializable {
 
   @After
   public void tearDown() {
-    sc.stop();
+    if (sc != null) {
+      sc.stop();
+    }
     sc = null;
   }
 

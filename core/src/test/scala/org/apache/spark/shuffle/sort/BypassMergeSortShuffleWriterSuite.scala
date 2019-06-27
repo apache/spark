@@ -129,8 +129,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       metricsSystem = null,
       taskMetrics = taskMetrics))
 
-    writeSupport = new DefaultShuffleWriteSupport(
-      conf, blockResolver, BlockManagerId("0", "localhost", 7090))
+    writeSupport = new DefaultShuffleWriteSupport(conf, blockResolver)
   }
 
   override def afterEach(): Unit = {

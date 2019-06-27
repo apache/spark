@@ -28,15 +28,12 @@ public class DefaultShuffleWriteSupport implements ShuffleWriteSupport {
 
   private final SparkConf sparkConf;
   private final IndexShuffleBlockResolver blockResolver;
-  private final BlockManagerId shuffleServerId;
 
   public DefaultShuffleWriteSupport(
       SparkConf sparkConf,
-      IndexShuffleBlockResolver blockResolver,
-      BlockManagerId shuffleServerId) {
+      IndexShuffleBlockResolver blockResolver) {
     this.sparkConf = sparkConf;
     this.blockResolver = blockResolver;
-    this.shuffleServerId = shuffleServerId;
   }
 
   @Override
@@ -45,7 +42,7 @@ public class DefaultShuffleWriteSupport implements ShuffleWriteSupport {
       int mapId,
       int numPartitions) {
     return new DefaultShuffleMapOutputWriter(
-      shuffleId, mapId, numPartitions, shuffleServerId,
-      TaskContext.get().taskMetrics().shuffleWriteMetrics(), blockResolver, sparkConf);
+      shuffleId, mapId, numPartitions,
+        TaskContext.get().taskMetrics().shuffleWriteMetrics(), blockResolver, sparkConf);
   }
 }

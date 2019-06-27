@@ -36,7 +36,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
-import org.apache.spark.shuffle.sort.DefaultMapShuffleLocations
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.ThreadUtils
 
@@ -354,7 +353,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val bmId = BlockManagerId("exec-1", "host", 1234)
     Seq(denseBlockSizes, sparseBlockSizes).foreach { blockSizes =>
       ser.serialize(HighlyCompressedMapStatus(
-        bmId, DefaultMapShuffleLocations.get(bmId), blockSizes))
+        bmId, blockSizes))
     }
   }
 

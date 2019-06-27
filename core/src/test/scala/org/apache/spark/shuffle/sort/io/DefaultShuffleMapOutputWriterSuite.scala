@@ -94,7 +94,6 @@ class DefaultShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAft
       0,
       0,
       NUM_PARTITIONS,
-      BlockManagerId("0", "localhost", 9099),
       shuffleWriteMetrics,
       blockResolver,
       conf)

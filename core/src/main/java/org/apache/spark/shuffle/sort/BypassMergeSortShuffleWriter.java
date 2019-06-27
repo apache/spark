@@ -40,7 +40,6 @@ import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.Optional;
-import org.apache.spark.api.shuffle.MapShuffleLocations;
 import org.apache.spark.api.shuffle.SupportsTransferTo;
 import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
 import org.apache.spark.api.shuffle.ShufflePartitionWriter;
@@ -134,10 +133,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       if (!records.hasNext()) {
         partitionLengths = new long[numPartitions];
-        Optional<MapShuffleLocations> blockLocs = mapOutputWriter.commitAllPartitions();
+        mapOutputWriter.commitAllPartitions();
         mapStatus = MapStatus$.MODULE$.apply(
             blockManager.shuffleServerId(),
-            blockLocs.orNull(),
             partitionLengths);
         return;
       }
@@ -171,10 +169,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
 
       partitionLengths = writePartitionedData(mapOutputWriter);
-      Optional<MapShuffleLocations> mapLocations = mapOutputWriter.commitAllPartitions();
+      mapOutputWriter.commitAllPartitions();
       mapStatus = MapStatus$.MODULE$.apply(
           blockManager.shuffleServerId(),
-          mapLocations.orNull(),
           partitionLengths);
     } catch (Exception e) {
       try {
