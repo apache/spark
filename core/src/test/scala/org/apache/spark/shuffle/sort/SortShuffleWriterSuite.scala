@@ -21,12 +21,10 @@ import org.mockito.Mockito._
 import org.mockito.MockitoAnnotations
 import org.scalatest.Matchers
 
-import org.apache.spark.{Partitioner, SharedSparkContext, ShuffleDependency, SparkFunSuite, TaskContext}
-import org.apache.spark.api.shuffle.ShuffleWriteSupport
+import org.apache.spark.{Partitioner, SharedSparkContext, ShuffleDependency, SparkFunSuite}
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver}
-import org.apache.spark.shuffle.sort.io.DefaultShuffleWriteSupport
 import org.apache.spark.util.Utils
 
 
@@ -37,11 +35,9 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
   private var shuffleHandle: BaseShuffleHandle[Int, Int, Int] = _
   private val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
   private val serializer = new JavaSerializer(conf)
-  private var writeSupport: ShuffleWriteSupport = _
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    writeSupport = new DefaultShuffleWriteSupport(conf, shuffleBlockResolver)
     MockitoAnnotations.initMocks(this)
     val partitioner = new Partitioner() {
       def numPartitions = numMaps
@@ -57,11 +53,6 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
     }
   }
 
-  override def afterEach(): Unit = {
-    super.afterEach()
-    TaskContext.unset()
-  }
-
   override def afterAll(): Unit = {
     try {
       shuffleBlockResolver.stop()
@@ -72,13 +63,11 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
 
   test("write empty iterator") {
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
-    TaskContext.setTaskContext(context)
     val writer = new SortShuffleWriter[Int, Int, Int](
       shuffleBlockResolver,
       shuffleHandle,
       mapId = 1,
-      context,
-      writeSupport)
+      context)
     writer.write(Iterator.empty)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 1)
@@ -90,14 +79,12 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
 
   test("write with some records") {
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
-    TaskContext.setTaskContext(context)
     val records = List[(Int, Int)]((1, 2), (2, 3), (4, 4), (6, 5))
     val writer = new SortShuffleWriter[Int, Int, Int](
       shuffleBlockResolver,
       shuffleHandle,
       mapId = 2,
-      context,
-      writeSupport)
+      context)
     writer.write(records.toIterator)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 2)
