@@ -24,7 +24,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.Utils
-import org.apache.spark.util.collection.PairsWriter
 
 /**
  * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
@@ -47,8 +46,7 @@ private[spark] class DiskBlockObjectWriter(
     writeMetrics: ShuffleWriteMetricsReporter,
     val blockId: BlockId = null)
   extends OutputStream
-  with Logging
-  with PairsWriter {
+  with Logging {
 
   /**
    * Guards against close calls, e.g. from a wrapping stream.
