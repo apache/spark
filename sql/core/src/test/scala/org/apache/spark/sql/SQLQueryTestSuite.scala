@@ -383,24 +383,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
       if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
-        Seq(
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFTestCase(
-            s"$testCaseName - Scala UDF",
+            s"$testCaseName - ${udf.prettyName}",
             absPath,
             resultFile,
-            TestScalaUDF(name = "udf")),
-
-          UDFTestCase(
-            s"$testCaseName - Python UDF",
-            absPath,
-            resultFile,
-            TestPythonUDF(name = "udf")),
-
-          UDFTestCase(
-            s"$testCaseName - Scalar Pandas UDF",
-            absPath,
-            resultFile,
-            TestScalarPandasUDF(name = "udf")))
+            udf)
+        }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {

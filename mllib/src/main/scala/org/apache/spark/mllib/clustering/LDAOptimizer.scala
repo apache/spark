@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
+
 
 /**
  * :: DeveloperApi ::
@@ -437,6 +437,10 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     this.randomGenerator = new Random(lda.getSeed)
 
     this.docs = docs
+    if (this.docs.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
 
     // Initialize the variational distribution q(beta|lambda)
     this.lambda = getGammaMatrix(k, vocabSize)

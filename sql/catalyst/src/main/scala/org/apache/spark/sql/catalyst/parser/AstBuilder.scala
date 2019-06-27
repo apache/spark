@@ -1408,7 +1408,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTrim(ctx: TrimContext): Expression = withOrigin(ctx) {
     val srcStr = expression(ctx.srcStr)
     val trimStr = Option(ctx.trimStr).map(expression)
-    ctx.trimOption.getType match {
+    Option(ctx.trimOption).map(_.getType).getOrElse(SqlBaseParser.BOTH) match {
       case SqlBaseParser.BOTH =>
         StringTrim(srcStr, trimStr)
       case SqlBaseParser.LEADING =>
