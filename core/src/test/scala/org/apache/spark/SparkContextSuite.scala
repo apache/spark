@@ -253,7 +253,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("SPARK-28106 addJar argument without scheme is interpreted literally without url decoding") {
+  test("SPARK-28106 with check jar exists," +
+    "addJar argument without scheme is interpreted literally without url decoding") {
     withTempDir { dir =>
       val tmpDir = new File(dir, "host%3A443")
       tmpDir.mkdirs()
