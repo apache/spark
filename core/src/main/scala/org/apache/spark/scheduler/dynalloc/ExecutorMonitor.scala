@@ -255,12 +255,12 @@ private[spark] class ExecutorMonitor(
     val exec = executors.get(executorId)
     if (exec != null) {
       // If the task succeeded and the stage generates shuffle data, record that this executor
-      // holds data for the shuffle. Note that this ignores speculation, since this code is not
-      // directly tied to the map output tracker that knows exactly which shuffle blocks are
-      // being used. This means that an executor may be marked as having shuffle data even though
-      // it may not - although that's probably unlikely since it would require a single task for
-      // a stage to be run on that executor, and that particular task's output to not being used
-      // (because of another task for the same partition that ran somewhere else "winning").
+      // holds data for the shuffle. This code will track all executors that generate shuffle
+      // for the stage, even if speculative tasks generate duplicate shuffle data and end up
+      // being ignored by the map output tracker.
+      //
+      // This means that an executor may be marked as having shuffle data, and thus prevented
+      // from being removed, even though the data may not be used.
       if (shuffleTrackingEnabled && event.reason == Success) {
         stageToShuffleID.get(event.stageId).foreach { shuffleId =>
           exec.addShuffle(shuffleId)
