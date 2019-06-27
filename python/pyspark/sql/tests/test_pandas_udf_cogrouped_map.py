@@ -69,24 +69,78 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
             .drop('ks')
 
     def test_simple(self):
-        import pandas as pd
+        self._test_merge(self.data1, self.data2)
 
-        l = self.data1
-        r = self.data2
+    def test_left_group_empty(self):
+        left = self.data1.where(col("id") % 2 == 0)
+        self._test_merge(left, self.data2)
 
-        @pandas_udf('id long, k int, v int, v2 int', PandasUDFType.COGROUPED_MAP)
-        def merge_pandas(left, right):
-            return pd.merge(left, right, how='outer', on=['k', 'id'])
+    def test_right_group_empty(self):
+        right = self.data2.where(col("id") % 2 == 0)
+        self._test_merge(self.data1, right)
 
-        result = l\
-            .groupby('id')\
-            .cogroup(r.groupby(r.id))\
-            .apply(merge_pandas)\
-            .sort(['id', 'k'])\
+    def test_different_schemas(self):
+        right = self.data2.withColumn('v3', lit('a'))
+        self._test_merge(self.data1, right, output_schema='id long, k int, v int, v2 int, v3 string')
+
+    def test_complex_group_by(self):
+        left = pd.DataFrame.from_dict({
+            'id': [1, 2, 3],
+            'k':  [5, 6, 7],
+            'v': [9, 10, 11]
+        })
+
+        right = pd.DataFrame.from_dict({
+            'id': [11, 12, 13],
+            'k': [5, 6, 7],
+            'v2': [90, 100, 110]
+        })
+
+        left_df =  self.spark\
+            .createDataFrame(left)\
+            .groupby(col('id') % 2 == 0)
+
+        right_df = self.spark \
+            .createDataFrame(right) \
+            .groupby(col('id') % 2 == 0)
+
+        @pandas_udf('k long, v long, v2 long', PandasUDFType.COGROUPED_MAP)
+        def merge_pandas(l, r):
+            return pd.merge(l[['k', 'v']], r[['k', 'v2']], on=['k'])
+
+        result = left_df \
+            .cogroup(right_df) \
+            .apply(merge_pandas) \
+            .sort(['k']) \
             .toPandas()
 
-        expected = pd\
-            .merge(l.toPandas(), r.toPandas(), how='outer', on=['k', 'id'])
+        expected = pd.DataFrame.from_dict({
+            'k': [5, 6, 7],
+            'v': [9, 10, 11],
+            'v2': [90, 100, 110]
+        })
+
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+
+    def _test_merge(self, left, right, output_schema='id long, k int, v int, v2 int'):
+
+        @pandas_udf(output_schema, PandasUDFType.COGROUPED_MAP)
+        def merge_pandas(l, r):
+            return pd.merge(l, r, on=['id', 'k'])
+
+        result = left \
+            .groupby('id') \
+            .cogroup(right.groupby('id')) \
+            .apply(merge_pandas)\
+            .sort(['id', 'k']) \
+            .toPandas()
+
+        left = left.toPandas()
+        right = right.toPandas()
+
+        expected = pd \
+            .merge(left, right, on=['id', 'k']) \
+            .sort_values(by=['id', 'k'])
 
         assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
