@@ -263,13 +263,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   }
 
   test("shuffle block tracking") {
-    // Mock the listener bus *only* for the functionality needed by the shuffle tracking code.
-    // Any other event sent through the mock bus will fail.
-    val bus = mock(classOf[LiveListenerBus])
-    doAnswer { invocation =>
-      monitor.onOtherEvent(invocation.getArguments()(0).asInstanceOf[SparkListenerEvent])
-    }.when(bus).post(any())
-
+    val bus = mockListenerBus()
     conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, false)
     monitor = new ExecutorMonitor(conf, client, bus, clock)
 
@@ -332,6 +326,47 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
   }
 
+  test("shuffle tracking with multiple executors and concurrent jobs") {
+    val bus = mockListenerBus()
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, false)
+    monitor = new ExecutorMonitor(conf, client, bus, clock)
+
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", null))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", null))
+
+    // Two separate jobs with separate shuffles. The first job will only run tasks on
+    // executor 1, the second on executor 2. Ensures that jobs finishing don't affect
+    // executors that are active in other jobs.
+
+    val stage1 = stageInfo(1, shuffleId = 0)
+    val stage2 = stageInfo(2)
+    monitor.onJobStart(SparkListenerJobStart(1, clock.getTimeMillis(), Seq(stage1, stage2)))
+
+    val stage3 = stageInfo(3, shuffleId = 1)
+    val stage4 = stageInfo(4)
+    monitor.onJobStart(SparkListenerJobStart(2, clock.getTimeMillis(), Seq(stage3, stage4)))
+
+    monitor.onTaskStart(SparkListenerTaskStart(1, 0, taskInfo("1", 1)))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", Success, taskInfo("1", 1), null))
+    assert(monitor.timedOutExecutors(idleDeadline) === Seq("2"))
+
+    monitor.onTaskStart(SparkListenerTaskStart(3, 0, taskInfo("2", 1)))
+    monitor.onTaskEnd(SparkListenerTaskEnd(3, 0, "foo", Success, taskInfo("2", 1), null))
+    assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
+
+    monitor.onJobEnd(SparkListenerJobEnd(1, clock.getTimeMillis(), JobSucceeded))
+    assert(monitor.isExecutorIdle("1"))
+    assert(!monitor.isExecutorIdle("2"))
+
+    monitor.onJobEnd(SparkListenerJobEnd(2, clock.getTimeMillis(), JobSucceeded))
+    assert(monitor.isExecutorIdle("2"))
+    assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
+
+    monitor.shuffleCleaned(0)
+    monitor.shuffleCleaned(1)
+    assert(monitor.timedOutExecutors(idleDeadline).toSet === Set("1", "2"))
+  }
+
   private def idleDeadline: Long = clock.getTimeMillis() + idleTimeoutMs + 1
   private def storageDeadline: Long = clock.getTimeMillis() + storageTimeoutMs + 1
   private def shuffleDeadline: Long = clock.getTimeMillis() + shuffleTimeoutMs + 1
@@ -363,6 +398,18 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     SparkListenerBlockUpdated(
       BlockUpdatedInfo(BlockManagerId(execId, "1.example.com", 42),
         RDDBlockId(rddId, splitIndex), level, 1L, 0L))
+  }
+
+  /**
+   * Mock the listener bus *only* for the functionality needed by the shuffle tracking code.
+   * Any other event sent through the mock bus will fail.
+   */
+  private def mockListenerBus(): LiveListenerBus = {
+    val bus = mock(classOf[LiveListenerBus])
+    doAnswer { invocation =>
+      monitor.onOtherEvent(invocation.getArguments()(0).asInstanceOf[SparkListenerEvent])
+    }.when(bus).post(any())
+    bus
   }
 
 }
