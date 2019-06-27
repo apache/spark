@@ -1804,6 +1804,7 @@ class SparkContext(config: SparkConf) extends Logging {
         addJarFile(new File(path))
       } else {
         val uri = new URI(path)
+        // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
         uri.getScheme match {
           // A JAR file which exists only on the driver node
