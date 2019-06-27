@@ -47,8 +47,8 @@ import org.apache.spark.sql.types.{NumericType, StructType}
  */
 @Stable
 class RelationalGroupedDataset protected[sql](
-    private val df: DataFrame,
-    private val groupingExprs: Seq[Expression],
+    val df: DataFrame,
+    val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
@@ -542,11 +542,15 @@ class RelationalGroupedDataset protected[sql](
 
     val leftAttributes = leftGroupingNamedExpressions.map(_.toAttribute)
     val rightAttributes = rightGroupingNamedExpressions.map(_.toAttribute)
-    val left = df.logicalPlan
-    val right = r.df.logicalPlan
+
+    val leftChild = df.logicalPlan
+    val rightChild = r.df.logicalPlan
+
+    val left = Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)
+    val right = Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)
+
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
     val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)
-
     Dataset.ofRows(df.sparkSession, plan)
   }
 

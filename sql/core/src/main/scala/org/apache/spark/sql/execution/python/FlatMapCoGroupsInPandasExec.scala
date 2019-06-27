@@ -17,17 +17,12 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, GroupedIterator, SparkPlan}
-import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 case class FlatMapCoGroupsInPandasExec(
     leftGroup: Seq[Attribute],
@@ -36,9 +31,7 @@ case class FlatMapCoGroupsInPandasExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends BinaryExecNode {
-
-  private val pandasFunction = func.asInstanceOf[PythonUDF].func
+  extends BinaryExecNode with AbstractPandasGroupExec {
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
@@ -53,41 +46,30 @@ case class FlatMapCoGroupsInPandasExec(
       .map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
   }
 
-
   override protected def doExecute(): RDD[InternalRow] = {
 
-    val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-    val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
-
+    val (schemaLeft, attrLeft, _) = createSchema(left, leftGroup)
+    val (schemaRight, attrRight, _) = createSchema(right, rightGroup)
 
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
-      val cogroup = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
-        .map{case (k, l, r) => (l, r)}
-      val context = TaskContext.get()
+      val projLeft = UnsafeProjection.create(attrLeft, left.output)
+      val projRight = UnsafeProjection.create(attrRight, right.output)
+      val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
+        .map{case (k, l, r) => (l.map(projLeft), r.map(projRight))}
 
-      val columnarBatchIter = new InterleavedArrowPythonRunner(
+      val runner = new InterleavedArrowPythonRunner(
         chainedFunc,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         Array(Array.empty),
-        left.schema,
-        right.schema,
+        schemaLeft,
+        schemaRight,
         sessionLocalTimeZone,
-        pythonRunnerConf).compute(cogroup, context.partitionId(), context)
+        pythonRunnerConf)
 
+      executePython(data, runner)
 
-        val unsafeProj = UnsafeProjection.create(output, output)
-
-        columnarBatchIter.flatMap { batch =>
-          //  UDF returns a StructType column in ColumnarBatch, select the children here
-          val structVector = batch.column(0).asInstanceOf[ArrowColumnVector]
-          val outputVectors = output.indices.map(structVector.getChild)
-          val flattenedBatch = new ColumnarBatch(outputVectors.toArray)
-          flattenedBatch.setNumRows(batch.numRows())
-          flattenedBatch.rowIterator.asScala
-        }.map(unsafeProj)
     }
 
   }
