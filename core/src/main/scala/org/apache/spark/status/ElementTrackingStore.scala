@@ -20,6 +20,7 @@ package org.apache.spark.status
 import java.util.Collection
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.function.Predicate
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
@@ -197,6 +198,9 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
       threshold: Long,
       action: Long => Unit)
 
+  override def viewWithCondition[T](klass: Class[T], condition: Predicate[T]): KVStoreView[T] = {
+    store.viewWithCondition(klass, condition)
+  }
 }
 
 private[spark] object ElementTrackingStore {

@@ -17,7 +17,11 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import com.google.common.collect.ImmutableSet;
 import org.junit.Test;
@@ -204,4 +208,30 @@ public class InMemoryStoreSuite {
     assertFalse(store.view(t1.getClass()).first(t2.id).skip(1).iterator().hasNext());
   }
 
+  @Test
+  public void testRetrieveWithCondition() throws Exception {
+    KVStore store = new InMemoryStore();
+
+    List<Integer> expected = Arrays.asList(0, 2, 4, 6, 8);
+    for (int i = 0; i < 10; i++) {
+      store.write(createCustomType1(i));
+    }
+
+    KVStoreView<CustomType1> actual = store.viewWithCondition(CustomType1.class,
+      c -> c.num % 2 == 0);
+
+    assertEquals(expected, StreamSupport.stream(actual.spliterator(), false)
+      .map(e -> e.num)
+      .collect(Collectors.toList()));
+  }
+
+  private CustomType1 createCustomType1(int i) {
+    CustomType1 t = new CustomType1();
+    t.key = "key" + i;
+    t.id = "id" + i;
+    t.name = "name" + i;
+    t.num = i;
+    t.child = "child" + i;
+    return t;
+  }
 }

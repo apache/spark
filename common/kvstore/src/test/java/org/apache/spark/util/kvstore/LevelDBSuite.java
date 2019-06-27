@@ -276,6 +276,21 @@ public class LevelDBSuite {
     assertEquals(expected, results);
   }
 
+  @Test
+  public void testRetrieveWithCondition() throws Exception {
+    List<Integer> expected = Arrays.asList(0, 2, 4, 6, 8);
+    for (int i = 0; i < 10; i++) {
+      db.write(createCustomType1(i));
+    }
+
+    KVStoreView<CustomType1> actual = db.viewWithCondition(CustomType1.class,
+      c -> c.num % 2 == 0);
+
+    assertEquals(expected, StreamSupport.stream(actual.spliterator(), false)
+      .map(e -> e.num)
+      .collect(Collectors.toList()));
+  }
+
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
     t.key = "key" + i;
