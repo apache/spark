@@ -120,8 +120,9 @@ private object ResourceRequestHelper extends Logging {
     val errorMessage = new mutable.StringBuilder()
 
     resourceDefinitions.foreach { case (sparkName, resourceRequest) =>
-      if (sparkConf.contains(s"${resourceRequest}.${AMOUNT}")) {
-        errorMessage.append(s"Error: Do not use $resourceRequest, " +
+      val resourceRequestAmount = s"${resourceRequest}.${AMOUNT}"
+      if (sparkConf.contains(resourceRequestAmount)) {
+        errorMessage.append(s"Error: Do not use $resourceRequestAmount, " +
             s"please use $sparkName instead!\n")
       }
     }
