@@ -209,6 +209,11 @@ abstract class RDD[T: ClassTag](
    */
   def cache(): this.type = persist()
 
+  def materialize(): RDD[T] = withScope{
+    sc.runJob(this, Utils.getIteratorSize _)
+    this
+  }
+
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
    *
