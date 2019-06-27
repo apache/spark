@@ -1806,11 +1806,11 @@ class SparkContext(config: SparkConf) extends Logging {
         val uri = new URI(path)
         Utils.validateURL(uri)
         uri.getScheme match {
-            //  A JAR file which exists only on the driver node
+          // A JAR file which exists only on the driver node
           case null =>
-            //  SPARK-22585 path without schema is not url encoded
+            // SPARK-22585 path without schema is not url encoded
             addJarFile(new File(uri.getRawPath))
-          case "file" => addJarFile(new File(uri.getRawPath))
+          case "file" => addJarFile(new File(uri.getPath))
           case "local" => "file:" + uri.getPath
           case _ => path
         }
@@ -1821,7 +1821,7 @@ class SparkContext(config: SparkConf) extends Logging {
         if (check && !Array("http", "https", "ftp", "spark").contains(scheme)) {
           val fs = hadoopPath.getFileSystem(hadoopConfiguration)
           if (!fs.exists(hadoopPath)) {
-            throw new FileNotFoundException(s"Jar ${key} not found")
+            throw new SparkException(s"Jar ${key} not found")
           }
         }
         val timestamp = System.currentTimeMillis
