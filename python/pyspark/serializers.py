@@ -68,8 +68,6 @@ else:
     xrange = range
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
-from types import GeneratorType
-
 from pyspark import cloudpickle
 from pyspark.util import _exception_message
 
@@ -237,12 +235,6 @@ class ArrowStreamSerializer(Serializer):
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
-        except BaseException as be:
-            if isinstance(iterator, GeneratorType):
-                # if the iterator is a generator, it may include some code for
-                # closing resources.
-                iterator.close()
-            raise be
         finally:
             if writer is not None:
                 writer.close()

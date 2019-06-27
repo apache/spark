@@ -29,6 +29,7 @@ try:
 except ImportError:
     has_resource_module = False
 import traceback
+from types import GeneratorType
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -481,7 +482,12 @@ def main(infile, outfile):
 
         def process():
             iterator = deserializer.load_stream(infile)
-            serializer.dump_stream(func(split_index, iterator), outfile)
+            out_iter = func(split_index, iterator)
+            try:
+                serializer.dump_stream(out_iter, outfile)
+            finally:
+                if isinstance(out_iter, GeneratorType):
+                    out_iter.close()
 
         if profiler:
             profiler.profile(process)
