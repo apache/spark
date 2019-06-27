@@ -17,7 +17,7 @@
 
 package org.apache.spark.status
 
-import java.util.{List => JList}
+import java.util.{List => JList, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
@@ -26,7 +26,7 @@ import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
+import org.apache.spark.util.kvstore.{InMemoryStore, KVStore, KVStoreView}
 
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
@@ -397,7 +397,8 @@ private[spark] class AppStatusStore(
       stageAttemptId: Int,
       offset: Int,
       length: Int,
-      sortBy: v1.TaskSorting): Seq[v1.TaskData] = {
+      sortBy: v1.TaskSorting,
+      status: Option[String]): Seq[v1.TaskData] = {
     val (indexName, ascending) = sortBy match {
       case v1.TaskSorting.ID =>
         (None, true)
@@ -406,7 +407,7 @@ private[spark] class AppStatusStore(
       case v1.TaskSorting.DECREASING_RUNTIME =>
         (Some(TaskIndexNames.EXEC_RUN_TIME), false)
     }
-    taskList(stageId, stageAttemptId, offset, length, indexName, ascending)
+    taskList(stageId, stageAttemptId, offset, length, indexName, ascending, status)
   }
 
   def taskList(
@@ -415,9 +416,18 @@ private[spark] class AppStatusStore(
       offset: Int,
       length: Int,
       sortBy: Option[String],
-      ascending: Boolean): Seq[v1.TaskData] = {
+      ascending: Boolean,
+      status: Option[String] = None): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
-    val base = store.view(classOf[TaskDataWrapper])
+    val base = status match {
+      case Some(expected) =>
+        store.viewWithCondition(classOf[TaskDataWrapper], (t: TaskDataWrapper) => {
+          t.status.toLowerCase(Locale.ROOT) == expected.toLowerCase(Locale.ROOT)
+        })
+      case None =>
+        store.view(classOf[TaskDataWrapper])
+    }
+      store.view(classOf[TaskDataWrapper])
     val indexed = sortBy match {
       case Some(index) =>
         base.index(index).parent(stageKey)
