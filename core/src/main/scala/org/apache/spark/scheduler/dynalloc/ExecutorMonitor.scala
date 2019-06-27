@@ -182,15 +182,19 @@ private[spark] class ExecutorMonitor(
     if (updateExecutors) {
       val activeShuffleIds = shuffleStages.map(_._2).toSeq
       var needTimeoutUpdate = false
+      val activatedExecs = new mutable.ArrayBuffer[String]()
       executors.asScala.foreach { case (id, exec) =>
         if (!exec.hasActiveShuffle) {
           exec.updateActiveShuffles(activeShuffleIds)
           if (exec.hasActiveShuffle) {
-            logDebug(s"Executor $id has data needed by new active job.")
             needTimeoutUpdate = true
+            activatedExecs += id
           }
         }
       }
+
+      logDebug(s"Activated executors ${activatedExecs.mkString(",")} due to shuffle data " +
+        s"needed by new job ${event.jobId}.")
 
       if (needTimeoutUpdate) {
         nextTimeout.set(Long.MinValue)
@@ -229,11 +233,18 @@ private[spark] class ExecutorMonitor(
         }
       }
 
+      val deactivatedExecs = new mutable.ArrayBuffer[String]()
       executors.asScala.foreach { case (id, exec) =>
         if (exec.hasActiveShuffle) {
           exec.updateActiveShuffles(activeShuffles)
+          if (!exec.hasActiveShuffle) {
+            deactivatedExecs += id
+          }
         }
       }
+
+      logDebug(s"Executors ${deactivatedExecs.mkString(",")} do not have active shuffle data " +
+        s"after job ${event.jobId} finished.")
     }
 
     jobToStageIDs.remove(event.jobId).foreach { stages =>
