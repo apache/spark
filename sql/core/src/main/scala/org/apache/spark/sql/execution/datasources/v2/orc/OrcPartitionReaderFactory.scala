@@ -80,6 +80,7 @@ case class OrcPartitionReaderFactory(
 
     val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+    reader.close()
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader[InternalRow]
@@ -125,6 +126,7 @@ case class OrcPartitionReaderFactory(
 
     val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+    reader.close()
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader

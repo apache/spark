@@ -635,7 +635,9 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
 
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
-      assert("LZO" === OrcFile.createReader(orcFilePath, conf).getCompressionKind.name)
+      val reader = OrcFile.createReader(orcFilePath, conf)
+      assert("LZO" === reader.getCompressionKind.name)
+      reader.close()
     }
   }
 
