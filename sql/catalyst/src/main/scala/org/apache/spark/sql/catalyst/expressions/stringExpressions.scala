@@ -461,9 +461,13 @@ object Overlay {
     val builder = new UTF8StringBuilder
     builder.append(input.substringSQL(1, pos - 1))
     builder.append(replace)
-    var length = len
-    if (len < 0) {
-      length = replace.toString().length()
+    // If you specify length, it must be a positive whole number or zero.
+    // Otherwise it will be ignored.
+    // The default value for length is the length of replace.
+    val length = if (len >= 0) {
+      len
+    } else {
+      replace.numChars
     }
     builder.append(input.substringSQL(pos + length, Int.MaxValue))
     builder.build()
@@ -508,8 +512,9 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (input, replace, pos, len) => "org.apache.spark.sql.catalyst." +
-      s"expressions.Overlay.calculate($input, $replace, $pos, $len);")
+    defineCodeGen(ctx, ev, (input, replace, pos, len) =>
+      "org.apache.spark.sql.catalyst.expressions.Overlay" +
+        s".calculate($input, $replace, $pos, $len);")
   }
 }
 
