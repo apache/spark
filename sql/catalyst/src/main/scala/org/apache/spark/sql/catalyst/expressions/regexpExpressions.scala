@@ -180,8 +180,8 @@ case class Like(
         val pattern = ctx.addMutableState(patternClass, "patternLike",
           v => s"""$v = $patternClass.compile("$regexStr");""")
 
-        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
-        val eval = left.genCode(ctx)
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate pattern again.
+        val eval = input.genCode(ctx)
         ev.copy(code = code"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
@@ -204,7 +204,7 @@ case class Like(
         s"""
           String $patternStr = $eval2.toString();
           String $escapeStr = $eval3.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, $escapeStr));
+          $patternClass $pattern = $patternClass.compile($escapeFunc($patternStr, $escapeStr));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
