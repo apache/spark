@@ -4,17 +4,18 @@
 --
 -- WITH
 -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/with.sql
+--
+-- This test suite contains two Cartesian products without using explicit CROSS JOIN syntax.
+-- Thus, we set spark.sql.crossJoin.enabled to true.
+set spark.sql.crossJoin.enabled=true;
 
 --
 -- Tests for common table expressions (WITH query, ... SELECT ...)
 --
 
 -- Basic WITH
--- [ORIGINAL SQL]
---WITH q1(x,y) AS (SELECT 1,2)
---SELECT * FROM q1, q1 AS q2;
 WITH q1(x,y) AS (SELECT 1,2)
-SELECT * FROM q1 CROSS JOIN q1 AS q2;
+SELECT * FROM q1, q1 AS q2;
 
 -- Multiple uses are evaluated only once
 -- [SPARK-19799] Support recursive SQL query
@@ -1206,6 +1207,10 @@ with test as (select 42) insert into test select * from test;
 select * from test;
 drop table test;
 
+--
+-- Clean up
+--
+
 DROP TABLE department;
 DROP TABLE tree;
 DROP TABLE graph;
@@ -1214,3 +1219,4 @@ DROP TABLE bug6051;
 DROP TABLE bug6051_2;
 DROP TABLE yy;
 DROP TABLE parent;
+set spark.sql.crossJoin.enabled=false;
