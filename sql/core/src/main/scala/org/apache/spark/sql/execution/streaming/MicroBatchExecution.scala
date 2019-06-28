@@ -51,7 +51,9 @@ class MicroBatchExecution(
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
   private val triggerExecutor = trigger match {
-    case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
+    case ProcessingTime(interval) => ProcessingTimeExecutor(
+      ProcessingTimeTrigger(interval), triggerClock)
+    case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
     case OneTimeTrigger => OneTimeExecutor()
     case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }

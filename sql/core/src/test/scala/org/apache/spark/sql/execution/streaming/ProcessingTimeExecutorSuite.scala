@@ -35,7 +35,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
   val timeout = 10.seconds
 
   test("nextBatchTime") {
-    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(100))
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTimeTrigger(100))
     assert(processingTimeExecutor.nextBatchTime(0) === 100)
     assert(processingTimeExecutor.nextBatchTime(1) === 100)
     assert(processingTimeExecutor.nextBatchTime(99) === 100)
@@ -49,7 +49,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
     val clock = new StreamManualClock()
     @volatile var continueExecuting = true
     @volatile var clockIncrementInTrigger = 0L
-    val executor = ProcessingTimeExecutor(ProcessingTime("1000 milliseconds"), clock)
+    val executor = ProcessingTimeExecutor(ProcessingTimeTrigger("1000 milliseconds"), clock)
     val executorThread = new Thread() {
       override def run(): Unit = {
         executor.execute(() => {
@@ -97,7 +97,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
 
   test("calling nextBatchTime with the result of a previous call should return the next interval") {
     val intervalMS = 100
-    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(intervalMS))
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTimeTrigger(intervalMS))
 
     val ITERATION = 10
     var nextBatchTime: Long = 0
@@ -111,7 +111,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
 
   private def testBatchTermination(intervalMs: Long): Unit = {
     var batchCounts = 0
-    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(intervalMs))
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTimeTrigger(intervalMs))
     processingTimeExecutor.execute(() => {
       batchCounts += 1
       // If the batch termination works correctly, batchCounts should be 3 after `execute`
@@ -130,7 +130,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
     @volatile var batchFallingBehindCalled = false
     val t = new Thread() {
       override def run(): Unit = {
-        val processingTimeExecutor = new ProcessingTimeExecutor(ProcessingTime(100), clock) {
+        val processingTimeExecutor = new ProcessingTimeExecutor(ProcessingTimeTrigger(100), clock) {
           override def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
             batchFallingBehindCalled = true
           }

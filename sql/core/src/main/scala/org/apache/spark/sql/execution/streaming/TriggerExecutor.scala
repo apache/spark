@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.streaming.ProcessingTime
+import org.apache.spark.sql.streaming.{ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, SystemClock}
 
 trait TriggerExecutor {
@@ -43,7 +43,9 @@ case class OneTimeExecutor() extends TriggerExecutor {
 /**
  * A trigger executor that runs a batch every `intervalMs` milliseconds.
  */
-case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock = new SystemClock())
+case class ProcessingTimeExecutor(
+    processingTime: ProcessingTimeTrigger,
+    clock: Clock = new SystemClock())
   extends TriggerExecutor with Logging {
 
   private val intervalMs = processingTime.intervalMs

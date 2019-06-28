@@ -93,7 +93,7 @@ class ContinuousExecution(
   }
 
   private val triggerExecutor = trigger match {
-    case ContinuousTrigger(t) => ProcessingTimeExecutor(ProcessingTime(t), triggerClock)
+    case ContinuousTrigger(t) => ProcessingTimeExecutor(ProcessingTimeTrigger(t), triggerClock)
     case _ => throw new IllegalStateException(s"Unsupported type of trigger: $trigger")
   }
 
