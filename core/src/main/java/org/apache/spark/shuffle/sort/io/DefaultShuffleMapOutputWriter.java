@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
 import org.apache.spark.api.shuffle.ShufflePartitionWriter;
 import org.apache.spark.api.shuffle.SupportsTransferTo;
@@ -36,7 +35,6 @@ import org.apache.spark.api.shuffle.TransferrableWritableByteChannel;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.shuffle.sort.DefaultTransferrableWritableByteChannel;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
-import org.apache.spark.storage.BlockManagerId;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.util.Utils;

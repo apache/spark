@@ -22,7 +22,6 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
 import org.apache.spark.api.shuffle.ShuffleWriteSupport;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.storage.BlockManagerId;
 
 public class DefaultShuffleWriteSupport implements ShuffleWriteSupport {
 
@@ -41,8 +40,13 @@ public class DefaultShuffleWriteSupport implements ShuffleWriteSupport {
       int shuffleId,
       int mapId,
       int numPartitions) {
+    TaskContext taskContext = TaskContext.get();
+    if (taskContext == null) {
+      throw new IllegalStateException(
+          "Task context must be set before creating a map output writer.");
+    }
     return new DefaultShuffleMapOutputWriter(
       shuffleId, mapId, numPartitions,
-        TaskContext.get().taskMetrics().shuffleWriteMetrics(), blockResolver, sparkConf);
+        taskContext.taskMetrics().shuffleWriteMetrics(), blockResolver, sparkConf);
   }
 }
