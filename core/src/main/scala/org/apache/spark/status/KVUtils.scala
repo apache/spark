@@ -82,6 +82,18 @@ private[spark] object KVUtils extends Logging {
     }
   }
 
+  /** Turns a KVStoreView into a Scala sequence. */
+  def viewToSeqPurely[T](
+      view: KVStoreView[T],
+      max: Int): Seq[T] = {
+    val iter = view.closeableIterator()
+    try {
+      iter.asScala.take(max).toSeq
+    } finally {
+      iter.close()
+    }
+  }
+
   private[spark] class MetadataMismatchException extends Exception
 
 }

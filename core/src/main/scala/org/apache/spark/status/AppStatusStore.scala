@@ -45,12 +45,9 @@ private[spark] class AppStatusStore(
   }
 
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
-    val it = store.view(classOf[JobDataWrapper]).reverse().asScala.map(_.info)
-    if (statuses != null && !statuses.isEmpty()) {
-      it.filter { job => statuses.contains(job.status) }.toSeq
-    } else {
-      it.toSeq
-    }
+    store.viewWithCondition(classOf[JobDataWrapper], (j: JobDataWrapper) =>
+      if (statuses != null && !statuses.isEmpty()) statuses.contains(j.info.status) else true
+    ).reverse().asScala.map(_.info).toSeq
   }
 
   def job(jobId: Int): v1.JobData = {
@@ -87,12 +84,9 @@ private[spark] class AppStatusStore(
   }
 
   def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {
-    val it = store.view(classOf[StageDataWrapper]).reverse().asScala.map(_.info)
-    if (statuses != null && !statuses.isEmpty()) {
-      it.filter { s => statuses.contains(s.status) }.toSeq
-    } else {
-      it.toSeq
-    }
+    store.viewWithCondition(classOf[StageDataWrapper], (s: StageDataWrapper) =>
+      if (statuses != null && !statuses.isEmpty()) statuses.contains(s.info.status) else true
+    ).reverse().asScala.map(_.info).toSeq
   }
 
   def stageData(stageId: Int, details: Boolean = false): Seq[v1.StageData] = {
