@@ -21,9 +21,6 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -377,6 +374,106 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       ExpressionEncoder.tuple(encoders)
     }
     assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
+  }
+
+  encodeDecodeTest(BigDecimal(("9" * 20) + "." + "9" * 18),
+    "scala decimal within precision/scale limit")
+  encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18),
+    "java decimal within precision/scale limit")
+
+  encodeDecodeTest(BigDecimal(("9" * 20) + "." + "9" * 18).unary_-,
+    "negative scala decimal within precision/scale limit")
+  encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18).negate,
+    "negative java decimal within precision/scale limit")
+
+  testOverflowingBigNumeric("scala big decimal") {
+    BigDecimal("1" * 21)
+  }
+
+  testOverflowingBigNumeric("java big decimal") {
+    new java.math.BigDecimal("1" * 21)
+  }
+
+  testOverflowingBigNumeric("negative scala big decimal") {
+    BigDecimal("1" * 21).unary_-
+  }
+
+  testOverflowingBigNumeric("negative java big decimal") {
+    new java.math.BigDecimal("1" * 21).negate
+  }
+
+  testOverflowingBigNumeric("scala big decimal with fractional part") {
+    BigDecimal(("1" * 21) + ".123")
+  }
+
+  testOverflowingBigNumeric("java big decimal with fractional part") {
+    new java.math.BigDecimal(("1" * 21) + ".123")
+  }
+
+  testOverflowingBigNumeric("scala big decimal with long fractional part") {
+    BigDecimal(("1" * 21)  + "." + "9999" * 100)
+  }
+
+  testOverflowingBigNumeric("java big decimal with long fractional part") {
+    new java.math.BigDecimal(("1" * 21)  + "." + "9999" * 100)
+  }
+
+  encodeDecodeTest(BigInt("9" * 38),
+    "scala big integer within precision limit")
+  encodeDecodeTest(new java.math.BigInteger("9" * 38),
+    "java big integer within precision limit")
+
+  encodeDecodeTest(BigInt("9" * 38).unary_-,
+    "negative scala big integer within precision limit")
+  encodeDecodeTest(new java.math.BigInteger("9" * 38).negate(),
+    "negative java big integer within precision limit")
+
+  testOverflowingBigNumeric("scala big int") {
+    BigInt("1" * 39)
+  }
+
+  testOverflowingBigNumeric("java big integer") {
+    new java.math.BigInteger("1" * 39)
+  }
+
+  testOverflowingBigNumeric("negative scala big int") {
+    BigInt("1" * 39).unary_-
+  }
+
+  testOverflowingBigNumeric("negative java big integer") {
+    new java.math.BigInteger("1" * 39).negate
+  }
+
+  testOverflowingBigNumeric("scala large big int") {
+    BigInt("9" * 100)
+  }
+
+  testOverflowingBigNumeric("java large big int") {
+    new java.math.BigInteger("9" * 100)
+  }
+
+  def testOverflowingBigNumeric[T: TypeTag](testName: String)(bigDecimal: => T): Any = {
+    for {
+      allowNullOnOverflow <- Seq(true, false)
+    } yield {
+      test(s"overflowing ${testName}, allowNullOnOverflow=${allowNullOnOverflow}") {
+        withSQLConf(
+          (SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key, allowNullOnOverflow.toString)
+        ) {
+          val encoder = ExpressionEncoder[T]
+          if (allowNullOnOverflow) {
+            val convertedBack = encoder.resolveAndBind().fromRow(encoder.toRow(bigDecimal))
+            assert(convertedBack === null)
+          } else {
+            val e = intercept[RuntimeException] {
+              encoder.toRow(bigDecimal)
+            }
+            assert(e.getMessage.contains("Error while encoding"))
+            assert(e.getCause.getClass === classOf[ArithmeticException])
+          }
+        }
+      }
+    }
   }
 
   private def encodeDecodeTest[T : ExpressionEncoder](
