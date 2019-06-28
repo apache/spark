@@ -20,8 +20,8 @@ package org.apache.spark.internal.io.cloud
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.lib.output.{BindingPathOutputCommitter, PathOutputCommitter}
 import org.apache.hadoop.mapreduce.{JobContext, JobStatus, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.{BindingPathOutputCommitter, PathOutputCommitter}
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.internal.Logging
@@ -41,17 +41,17 @@ class BindingParquetOutputCommitter(
 
   logDebug(s"${this.getClass.getName} binding to configured PathOutputCommitter and dest $path")
 
-  val committer = new BindingPathOutputCommitter(path, context)
+  private val committer = new BindingPathOutputCommitter(path, context)
 
   /**
    * This is the committer ultimately bound to.
    * @return the committer instantiated by the factory.
    */
-  def boundCommitter(): PathOutputCommitter = {
-    committer.getCommitter()
+  private[cloud] def boundCommitter(): PathOutputCommitter = {
+    committer.getCommitter
   }
 
-  override def getWorkPath: Path = {
+  override def getWorkPath(): Path = {
     committer.getWorkPath()
   }
 
@@ -99,9 +99,7 @@ class BindingParquetOutputCommitter(
    * @param jobContext job context
    * @param state final state of the job
    */
-  override def abortJob(
-      jobContext: JobContext,
-      state: JobStatus.State): Unit = {
+  override def abortJob(jobContext: JobContext, state: JobStatus.State): Unit = {
     try {
       committer.abortJob(jobContext, state)
     } catch {

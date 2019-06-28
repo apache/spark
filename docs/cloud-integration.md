@@ -125,12 +125,11 @@ consult the relevant documentation.
 ### Recommended settings for writing to object stores
 
 For object stores whose consistency model means that rename-based commits are safe
-use the `FileOutputCommitter` v2 algorithm for performance, v1 for safety
+use the `FileOutputCommitter` v2 algorithm for performance; v1 for safety.
 
 ```
 spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 2
 ```
-
 
 This does less renaming at the end of a job than the "version 1" algorithm.
 As it still uses `rename()` to commit files, it is unsafe to use
@@ -146,7 +145,7 @@ spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored true
 
 The original v1 commit algorithm renames the output of successful tasks
 to a job attempt directory, and then renames all the files in that directory
-into the final destination during the job commit phase
+into the final destination during the job commit phase:
 
 ```
 spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 1
@@ -157,17 +156,14 @@ very, very slow. The recommended solution to this is switch to an S3 "Zero Renam
 committer (see below).
 
 For reference, here are the performance and safety characteristics of
-different stores and connectors
-
-
-For the other object stores, their characteristics are
+different stores and connectors.
 
 | Store         | Connector | directory rename safety | rename performance |
 |---------------|-----------|-------------------------|--------------------|
 | Amazon S3     | S3A       | Unsafe                  | O(data) |
 | Azure Storage | wasb      | Safe                    | O(files) |
 | Azure Datalake Gen 2 | abfs | Safe                  | O(1) |
-| Google GCS    | gs        | Saf  e                  | O(1) |
+| Google GCS    | gs        | Safe                  | O(1) |
 
 
 As storing temporary files can run up charges; delete
@@ -244,18 +240,14 @@ spark.sql.parquet.output.committer.class org.apache.spark.internal.io.cloud.Bind
 ```
 
 Normal dataframe write commands will then use this committer for any format
-which does not provide custom committers itself. Supported formats include
-orc, parquet, csv and avro.
+which does not its own custom committer. Output formats which are known
+to work are orc, parquet, csv and avro.
 
 ```python
 mydataframe.write.format("parquet").save("s3a://bucket/destination")
 ```
 
 More details on these committers can be found in the latest Hadoop documentation.
-
-Amazon EMR's S3 connector also has a zero-rename committer. Consult
-Amazon's documentation for how to use this (independent of the ASF) feature. 
-
 
 ## Further Reading
 

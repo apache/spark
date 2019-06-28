@@ -129,7 +129,9 @@ abstract class FileCommitProtocol {
    * before the job has finished. These same task commit messages will be passed to commitJob()
    * if the entire job succeeds.
    */
-  def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {}
+  def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
+    logDebug(s"onTaskCommit($taskCommit)")
+  }
 }
 
 

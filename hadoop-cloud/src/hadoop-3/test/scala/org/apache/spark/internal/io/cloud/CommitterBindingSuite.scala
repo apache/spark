@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.hadoop.mapreduce.{Job, JobStatus, MRJobConfig, TaskAttemptID}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.io.{FileCommitProtocol, cloud}
 import org.apache.spark.internal.io.cloud.PathCommitterConstants._
 
@@ -55,7 +55,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     StubPathOutputCommitterFactory.bind(conf, "http")
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val parquet = new BindingParquetOutputCommitter(path, tContext)
-    val inner = parquet.boundCommitter().asInstanceOf[StubPathOutputCommitter]
+    val inner = parquet.boundCommitter.asInstanceOf[StubPathOutputCommitter]
     parquet.setupJob(tContext)
     assert(inner.jobSetup, s"$inner job not setup")
     parquet.setupTask(tContext)
@@ -73,18 +73,11 @@ class CommitterBindingSuite extends SparkFunSuite {
     assert(inner.jobAborted, s"$inner job not aborted")
   }
 
-  test("cloud binding to SparkConf") {
-    val sc = new SparkConf()
-    cloud.bind(sc)
-  }
-
   /**
    * Create a a new job. Sets the task attempt ID.
    *
    * @return the new job
-   * @throws IOException failure
    */
-  @throws[IOException]
   def newJob(outDir: Path): Job = {
     val job = Job.getInstance(new Configuration())
     val conf = job.getConfiguration
@@ -101,8 +94,8 @@ class CommitterBindingSuite extends SparkFunSuite {
   test("CommitterSerialization") {
     val tempDir = File.createTempFile("ser", ".bin")
 
-    tempDir.delete();
-    val committer = new PathOutputCommitProtocol(jobId, tempDir.toURI.toString,false)
+    tempDir.delete()
+    val committer = new PathOutputCommitProtocol(jobId, tempDir.toURI.toString, false)
 
     val serData = File.createTempFile("ser", ".bin")
     var out: ObjectOutputStream = null
@@ -117,7 +110,7 @@ class CommitterBindingSuite extends SparkFunSuite {
 
       val committer2 = result.asInstanceOf[PathOutputCommitProtocol]
 
-      assert(committer.getDestination() === committer2.getDestination,
+      assert(committer.destination === committer2.destination,
         "destination mismatch on round trip")
       assert(committer.destPath === committer2.destPath,
         "destPath mismatch on round trip")
@@ -133,7 +126,7 @@ class CommitterBindingSuite extends SparkFunSuite {
       jobId, "file:///tmp", false)
 
     val protocol = instance.asInstanceOf[PathOutputCommitProtocol]
-    assert("file:///tmp"=== protocol.getDestination())
+    assert("file:///tmp" === protocol.destination)
   }
 
   test("InstantiateNoDynamicPartitioning") {
@@ -143,11 +136,10 @@ class CommitterBindingSuite extends SparkFunSuite {
         jobId, "file:///tmp", true)
     }
     val cause = ex.getCause
-    if (cause == null || !cause.isInstanceOf[IOException]) {
-      // very unexpected: throw the exception and its full stack.
+    if (cause == null || !cause.isInstanceOf[IOException]
+      || !cause.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {
       throw ex
     }
-    assert(cause.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED))
   }
 
 }

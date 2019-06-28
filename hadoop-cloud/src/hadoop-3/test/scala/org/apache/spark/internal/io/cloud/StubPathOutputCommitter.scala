@@ -99,7 +99,6 @@ class StubPathOutputCommitterFactory extends PathOutputCommitterFactory {
 }
 
 object StubPathOutputCommitterFactory {
-  val Name: String = "org.apache.spark.internal.io.cloud.StubPathOutputCommitterFactory"
 
   /**
    * Given a hadoop configuration, set up the factory binding for the scheme.
@@ -109,7 +108,7 @@ object StubPathOutputCommitterFactory {
   def bind(conf: Configuration, scheme: String): Unit = {
     val key = String.format(
       PathCommitterConstants.OUTPUTCOMMITTER_FACTORY_SCHEME_PATTERN, scheme)
-    conf.set(key, Name)
+    conf.set(key, classOf[StubPathOutputCommitterFactory].getName())
   }
 
 }

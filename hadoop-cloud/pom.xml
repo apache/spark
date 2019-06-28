@@ -207,7 +207,6 @@
 
       <build>
         <plugins>
-          <!-- Include a source dir for Hadoop 3.2+ only -->
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>build-helper-maven-plugin</artifactId>

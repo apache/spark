@@ -222,6 +222,7 @@ class HadoopMapReduceCommitProtocol(
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
+    logDebug("Commit task")
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
     new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)

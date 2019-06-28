@@ -17,7 +17,6 @@
 
 package org.apache.spark.internal.io
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -70,14 +69,9 @@ import org.apache.spark.sql.internal.SQLConf
  * When working with Parquet data, you need to explicitly switch
  * the Parquet committers to use the same mechanism
  *
- * In `spark-defaults.conf`, everything can be set up with the following settings:
- * {{{
- *   spark.sql.parquet.output.committer.class org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter
- *   spark.sql.sources.commitProtocolClass org.apache.spark.internal.io.cloud.PathOutputCommitProtocol
- * }}}
+ * Consult the cloud-integration document for the specific details on how to
+ * do this.
  *
- * It can be done programmatically by calling [[cloud.bind()]] on the
- * spark configuration.
  */
 package object cloud {
 
@@ -100,16 +94,5 @@ package object cloud {
   val COMMITTER_BINDING_OPTIONS: Map[String, String] = Map(
     SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key -> PARQUET_COMMITTER_CLASSNAME,
     SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key -> PATH_COMMIT_PROTOCOL_CLASSNAME)
-
-  /**
-   * Set the options defined in [[cloud.COMMITTER_BINDING_OPTIONS]] on the
-   * spark context.
-   *
-   * Warning: this is purely experimental.
-   * @param sparkConf spark configuration to bind.
-   */
-  def bind(sparkConf: SparkConf): Unit = {
-    sparkConf.setAll(COMMITTER_BINDING_OPTIONS)
-  }
 
 }
