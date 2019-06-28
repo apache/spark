@@ -1823,6 +1823,11 @@ object SQLConf {
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
+
+  val STATS_PLAN_VISITOR_CLASS = buildConf("spark.sql.catalyst.statsPlanVisitorClass")
+    .doc("Name of custom LogicalPlanVisitor[Statistics] class.")
+    .stringConf
+    .createOptional
 }
 
 /**
@@ -2294,6 +2299,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
+
+  def statsPlanVisitorClass: Option[String] = getConf(STATS_PLAN_VISITOR_CLASS)
 
   /** ********************** SQLConf functionality methods ************ */
 

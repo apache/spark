@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.util.Utils
 
 /**
  * A trait to add statistics propagation to [[LogicalPlan]].
@@ -31,10 +32,18 @@ trait LogicalPlanStats { self: LogicalPlan =>
    * [[invalidateStatsCache()]].
    */
   def stats: Statistics = statsCache.getOrElse {
-    if (conf.cboEnabled) {
-      statsCache = Option(BasicStatsPlanVisitor.visit(self))
-    } else {
-      statsCache = Option(SizeInBytesOnlyStatsPlanVisitor.visit(self))
+    conf.statsPlanVisitorClass match {
+      case Some(className) =>
+        val statsPlanVisitor = Utils.classForName[LogicalPlanVisitor[Statistics]](className)
+          .getConstructor()
+          .newInstance()
+        statsCache = Option(statsPlanVisitor.visit(self))
+      case None =>
+        if (conf.cboEnabled) {
+          statsCache = Option(BasicStatsPlanVisitor.visit(self))
+        } else {
+          statsCache = Option(SizeInBytesOnlyStatsPlanVisitor.visit(self))
+        }
     }
     statsCache.get
   }
