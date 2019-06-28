@@ -33,8 +33,8 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   test("SPARK-28142 - continuous mode - options should be handled as case-insensitive") {
     def getPollTimeoutMsFromContinuousStream(options: CaseInsensitiveStringMap): Long = {
       val scan = getKafkaDataSourceScan(options)
-      val stream = scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
-      stream.invokePrivate(pollTimeoutMsMethod())
+      val stream = getKafkaContinuousStream(scan)
+      getValue(stream, pollTimeoutMsMethod)
     }
 
     // we're trying to read the value of "pollTimeout" to see whether option is handled correctly
@@ -51,14 +51,22 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     assert(expectedValue === getPollTimeoutMsFromContinuousStream(mapWithLowercase))
   }
 
+  private def buildCaseInsensitiveStringMap(
+      options: (String, String)*): CaseInsensitiveStringMap = {
+    val requiredOptions = Map("kafka.bootstrap.servers" -> "dummy", "subscribe" -> "dummy")
+    new CaseInsensitiveStringMap((options.toMap ++ requiredOptions).asJava)
+  }
+
   private def getKafkaDataSourceScan(options: CaseInsensitiveStringMap): Scan = {
     val provider = new KafkaSourceProvider()
     provider.getTable(options).newScanBuilder(options).build()
   }
 
-  private def buildCaseInsensitiveStringMap(
-      options: (String, String)*): CaseInsensitiveStringMap = {
-    val requiredOptions = Map("kafka.bootstrap.servers" -> "dummy", "subscribe" -> "dummy")
-    new CaseInsensitiveStringMap((options.toMap ++ requiredOptions).asJava)
+  private def getKafkaContinuousStream(scan: Scan): KafkaContinuousStream = {
+    scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
+  }
+
+  private def getValue[T](obj: AnyRef, method: PrivateMethod[T]): T = {
+    obj.invokePrivate(method())
   }
 }
