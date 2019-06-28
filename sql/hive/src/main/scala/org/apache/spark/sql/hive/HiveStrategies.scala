@@ -256,29 +256,46 @@ private[hive] trait HiveStrategies {
     def resolveAndExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
       expr match {
         case and: And =>
-          constructBinaryOperators(resolveAndExpression(and.left, partitionKeyIds), resolveAndExpression(and.right, partitionKeyIds), "and")
+          constructBinaryOperators(
+            resolveAndExpression(and.left, partitionKeyIds),
+            resolveAndExpression(and.right, partitionKeyIds),
+            "and")
         case _ =>
           resolvePredicatesExpression(expr, partitionKeyIds)
       }
     }
 
     def resolveOrExpression(or: Or, partitionKeyIds: AttributeSet): Expression = {
-      (or.left.isInstanceOf[Or],or.right.isInstanceOf[Or]) match {
-        case (true, true) => constructBinaryOperators(resolveOrExpression(or.left.asInstanceOf[Or], partitionKeyIds) , resolveOrExpression(or.right.asInstanceOf[Or], partitionKeyIds), "or")
-        case (true, false) => constructBinaryOperators(resolveOrExpression(or.left.asInstanceOf[Or], partitionKeyIds) , resolveAndExpression(or.right, partitionKeyIds), "or")
-        case (false, true) => constructBinaryOperators(resolveAndExpression(or.left, partitionKeyIds) , resolveOrExpression(or.right.asInstanceOf[Or], partitionKeyIds), "or")
-        case (false, false) => constructBinaryOperators(resolveAndExpression(or.left, partitionKeyIds) , resolveAndExpression(or.right, partitionKeyIds), "or")
+      (or.left.isInstanceOf[Or], or.right.isInstanceOf[Or]) match {
+        case (true, true) => constructBinaryOperators(
+          resolveOrExpression(or.left.asInstanceOf[Or], partitionKeyIds),
+          resolveOrExpression(or.right.asInstanceOf[Or], partitionKeyIds),
+          "or")
+        case (true, false) => constructBinaryOperators(
+          resolveOrExpression(or.left.asInstanceOf[Or], partitionKeyIds) ,
+          resolveAndExpression(or.right, partitionKeyIds),
+          "or")
+        case (false, true) => constructBinaryOperators(
+          resolveAndExpression(or.left, partitionKeyIds),
+          resolveOrExpression(or.right.asInstanceOf[Or],
+            partitionKeyIds), "or")
+        case (false, false) => constructBinaryOperators(
+          resolveAndExpression(or.left, partitionKeyIds),
+          resolveAndExpression(or.right, partitionKeyIds),
+          "or")
       }
     }
 
-    def resolvePredicatesExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression ={
-      if(!expr.references.isEmpty && expr.references.subsetOf(partitionKeyIds))
+    def resolvePredicatesExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
+      if (!expr.references.isEmpty && expr.references.subsetOf(partitionKeyIds)) {
         expr
-      else
+      } else {
         null
+      }
     }
 
-    def extractPushDownPredicate(predicates: Seq[Expression], partitionKeyIds: AttributeSet): Seq[Expression] ={
+    def extractPushDownPredicate(predicates: Seq[Expression],
+                                 partitionKeyIds: AttributeSet): Seq[Expression] = {
       predicates.map {
         case or: Or =>
           resolveOrExpression(or, partitionKeyIds)
