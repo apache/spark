@@ -24,8 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -207,10 +205,8 @@ public class LevelDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          Iterator<T> base = new LevelDBIterator<>(type, LevelDB.this, this);
-          Iterable<T> iterable = () -> base;
-          Stream<T> toStream = StreamSupport.stream(iterable.spliterator(), false);
-          return toStream.filter(condition).iterator();
+          return new LevelDBFilterItertor(
+            new LevelDBIterator<>(type, LevelDB.this, this), condition);
         } catch (Exception e) {
           throw Throwables.propagate(e);
         }
