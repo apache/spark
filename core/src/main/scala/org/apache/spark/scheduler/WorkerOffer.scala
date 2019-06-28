@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.Buffer
+
 /**
  * Represents free resources available on an executor.
  */
@@ -27,4 +29,5 @@ case class WorkerOffer(
     cores: Int,
     // `address` is an optional hostPort string, it provide more useful information than `host`
     // when multiple executors are launched on the same host.
-    address: Option[String] = None)
+    address: Option[String] = None,
+    resources: Map[String, Buffer[String]] = Map.empty)

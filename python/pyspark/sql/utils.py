@@ -131,7 +131,7 @@ def require_minimum_pandas_version():
     """ Raise ImportError if minimum version of Pandas is not installed
     """
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "0.19.2"
+    minimum_pandas_version = "0.23.2"
 
     from distutils.version import LooseVersion
     try:

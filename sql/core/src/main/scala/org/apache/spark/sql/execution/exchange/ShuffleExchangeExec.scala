@@ -87,15 +87,17 @@ case class ShuffleExchangeExec(
     }
   }
 
+  @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
+
   /**
-   * Returns a [[ShuffleDependency]] that will partition rows of its child based on
+   * A [[ShuffleDependency]] that will partition rows of its child based on
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
    * the returned ShuffleDependency will be the input of shuffle.
    */
-  private[exchange] def prepareShuffleDependency()
-    : ShuffleDependency[Int, InternalRow, InternalRow] = {
+  @transient
+  lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchangeExec.prepareShuffleDependency(
-      child.execute(),
+      inputRDD,
       child.output,
       newPartitioning,
       serializer,
@@ -135,7 +137,6 @@ case class ShuffleExchangeExec(
           assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
           shuffleRDD
         case _ =>
-          val shuffleDependency = prepareShuffleDependency()
           preparePostShuffleRDD(shuffleDependency)
       }
     }

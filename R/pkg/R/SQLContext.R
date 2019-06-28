@@ -259,7 +259,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
 createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
   useArrow <- FALSE
   firstRow <- NULL
 
@@ -302,7 +302,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
       },
       error = function(e) {
         warning(paste0("createDataFrame attempted Arrow optimization because ",
-                       "'spark.sql.execution.arrow.enabled' is set to true; however, ",
+                       "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
                        "failed, attempting non-optimization. Reason: ",
                        e))
         FALSE

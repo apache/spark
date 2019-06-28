@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
@@ -70,7 +69,7 @@ private[sql] object Dataset {
     // do not do this check in that case. this check can be expensive since it requires running
     // the whole [[Analyzer]] to resolve the deserializer
     if (dataset.exprEnc.clsTag.runtimeClass != classOf[Row]) {
-      dataset.deserializer
+      dataset.resolvedEnc
     }
     dataset
   }
@@ -217,10 +216,11 @@ class Dataset[T] private[sql](
    */
   private[sql] implicit val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
 
-  // The deserializer expression which can be used to build a projection and turn rows to objects
-  // of type T, after collecting rows to the driver side.
-  private lazy val deserializer =
-    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer).deserializer
+  // The resolved `ExpressionEncoder` which can be used to turn rows to objects of type T, after
+  // collecting rows to the driver side.
+  private lazy val resolvedEnc = {
+    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
+  }
 
   private implicit def classTag = exprEnc.clsTag
 
@@ -1119,53 +1119,61 @@ class Dataset[T] private[sql](
       throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
     }
 
-    // For both join side, combine all outputs into a single column and alias it with "_1" or "_2",
-    // to match the schema for the encoder of the join result.
-    // Note that we do this before joining them, to enable the join operator to return null for one
-    // side, in cases like outer-join.
-    val left = {
-      val combined = if (!this.exprEnc.isSerializedAsStructForTopLevel) {
+    implicit val tuple2Encoder: Encoder[(T, U)] =
+      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
+
+    val leftResultExpr = {
+      if (!this.exprEnc.isSerializedAsStructForTopLevel) {
         assert(joined.left.output.length == 1)
         Alias(joined.left.output.head, "_1")()
       } else {
         Alias(CreateStruct(joined.left.output), "_1")()
       }
-      Project(combined :: Nil, joined.left)
     }
 
-    val right = {
-      val combined = if (!other.exprEnc.isSerializedAsStructForTopLevel) {
+    val rightResultExpr = {
+      if (!other.exprEnc.isSerializedAsStructForTopLevel) {
         assert(joined.right.output.length == 1)
         Alias(joined.right.output.head, "_2")()
       } else {
         Alias(CreateStruct(joined.right.output), "_2")()
       }
-      Project(combined :: Nil, joined.right)
     }
 
-    // Rewrites the join condition to make the attribute point to correct column/field, after we
-    // combine the outputs of each join side.
-    val conditionExpr = joined.condition.get transformUp {
-      case a: Attribute if joined.left.outputSet.contains(a) =>
-        if (!this.exprEnc.isSerializedAsStructForTopLevel) {
-          left.output.head
-        } else {
-          val index = joined.left.output.indexWhere(_.exprId == a.exprId)
-          GetStructField(left.output.head, index)
-        }
-      case a: Attribute if joined.right.outputSet.contains(a) =>
-        if (!other.exprEnc.isSerializedAsStructForTopLevel) {
-          right.output.head
-        } else {
-          val index = joined.right.output.indexWhere(_.exprId == a.exprId)
-          GetStructField(right.output.head, index)
-        }
+    if (joined.joinType.isInstanceOf[InnerLike]) {
+      // For inner joins, we can directly perform the join and then can project the join
+      // results into structs. This ensures that data remains flat during shuffles /
+      // exchanges (unlike the outer join path, which nests the data before shuffling).
+      withTypedPlan(Project(Seq(leftResultExpr, rightResultExpr), joined))
+    } else { // outer joins
+      // For both join sides, combine all outputs into a single column and alias it with "_1
+      // or "_2", to match the schema for the encoder of the join result.
+      // Note that we do this before joining them, to enable the join operator to return null
+      // for one side, in cases like outer-join.
+      val left = Project(leftResultExpr :: Nil, joined.left)
+      val right = Project(rightResultExpr :: Nil, joined.right)
+
+      // Rewrites the join condition to make the attribute point to correct column/field,
+      // after we combine the outputs of each join side.
+      val conditionExpr = joined.condition.get transformUp {
+        case a: Attribute if joined.left.outputSet.contains(a) =>
+          if (!this.exprEnc.isSerializedAsStructForTopLevel) {
+            left.output.head
+          } else {
+            val index = joined.left.output.indexWhere(_.exprId == a.exprId)
+            GetStructField(left.output.head, index)
+          }
+        case a: Attribute if joined.right.outputSet.contains(a) =>
+          if (!other.exprEnc.isSerializedAsStructForTopLevel) {
+            right.output.head
+          } else {
+            val index = joined.right.output.indexWhere(_.exprId == a.exprId)
+            GetStructField(right.output.head, index)
+          }
+      }
+
+      withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE))
     }
-
-    implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
-
-    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE))
   }
 
   /**
@@ -2768,15 +2776,9 @@ class Dataset[T] private[sql](
    */
   def toLocalIterator(): java.util.Iterator[T] = {
     withAction("toLocalIterator", queryExecution) { plan =>
-      // This projection writes output to a `InternalRow`, which means applying this projection is
-      // not thread-safe. Here we create the projection inside this method to make `Dataset`
-      // thread-safe.
-      val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
-      plan.executeToIterator().map { row =>
-        // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
-        // parameter of its `get` method, so it's safe to use null here.
-        objProj(row).get(0, null).asInstanceOf[T]
-      }.asJava
+      // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
+      val enc = resolvedEnc.copy()
+      plan.executeToIterator().map(enc.fromRow).asJava
     }
   }
 
@@ -3313,20 +3315,24 @@ class Dataset[T] private[sql](
             }
           }
 
-        val arrowBatchRdd = toArrowBatchRdd(plan)
-        sparkSession.sparkContext.runJob(
-          arrowBatchRdd,
-          (it: Iterator[Array[Byte]]) => it.toArray,
-          handlePartitionBatches)
+        Utils.tryWithSafeFinally {
+          val arrowBatchRdd = toArrowBatchRdd(plan)
+          sparkSession.sparkContext.runJob(
+            arrowBatchRdd,
+            (it: Iterator[Array[Byte]]) => it.toArray,
+            handlePartitionBatches)
+        } {
+          // After processing all partitions, end the batch stream
+          batchWriter.end()
 
-        // After processing all partitions, end the stream and write batch order indices
-        batchWriter.end()
-        out.writeInt(batchOrder.length)
-        // Sort by (index of partition, batch index in that partition) tuple to get the
-        // overall_batch_index from 0 to N-1 batches, which can be used to put the
-        // transferred batches in the correct order
-        batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
-          out.writeInt(overallBatchIndex)
+          // Write batch order indices
+          out.writeInt(batchOrder.length)
+          // Sort by (index of partition, batch index in that partition) tuple to get the
+          // overall_batch_index from 0 to N-1 batches, which can be used to put the
+          // transferred batches in the correct order
+          batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+            out.writeInt(overallBatchIndex)
+          }
         }
       }
     }
@@ -3381,14 +3387,9 @@ class Dataset[T] private[sql](
    * Collect all elements from a spark plan.
    */
   private def collectFromPlan(plan: SparkPlan): Array[T] = {
-    // This projection writes output to a `InternalRow`, which means applying this projection is not
-    // thread-safe. Here we create the projection inside this method to make `Dataset` thread-safe.
-    val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
-    plan.executeCollect().map { row =>
-      // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
-      // parameter of its `get` method, so it's safe to use null here.
-      objProj(row).get(0, null).asInstanceOf[T]
-    }
+    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
+    val enc = resolvedEnc.copy()
+    plan.executeCollect().map(enc.fromRow)
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {

@@ -86,8 +86,8 @@ class BlockManagerMasterEndpoint(
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RegisterBlockManager(blockManagerId, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint) =>
-      context.reply(register(blockManagerId, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
+    case RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint) =>
+      context.reply(register(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
 
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
@@ -97,8 +97,8 @@ class BlockManagerMasterEndpoint(
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))
 
-    case GetLocationsAndStatus(blockId) =>
-      context.reply(getLocationsAndStatus(blockId))
+    case GetLocationsAndStatus(blockId, requesterHost) =>
+      context.reply(getLocationsAndStatus(blockId, requesterHost))
 
     case GetLocationsMultipleBlockIds(blockIds) =>
       context.reply(getLocationsMultipleBlockIds(blockIds))
@@ -147,18 +147,6 @@ class BlockManagerMasterEndpoint(
 
     case BlockManagerHeartbeat(blockManagerId) =>
       context.reply(heartbeatReceived(blockManagerId))
-
-    case HasExclusiveCachedBlocks(executorId) =>
-      blockManagerIdByExecutor.get(executorId) match {
-        case Some(bm) =>
-          if (blockManagerInfo.contains(bm)) {
-            val bmInfo = blockManagerInfo(bm)
-            context.reply(bmInfo.exclusiveCachedBlocks.nonEmpty)
-          } else {
-            context.reply(false)
-          }
-        case None => context.reply(false)
-      }
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
@@ -410,6 +398,7 @@ class BlockManagerMasterEndpoint(
    */
   private def register(
       idWithoutTopologyInfo: BlockManagerId,
+      localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
       slaveEndpoint: RpcEndpointRef): BlockManagerId = {
@@ -445,8 +434,8 @@ class BlockManagerMasterEndpoint(
           None
         }
 
-      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(), maxOnHeapMemSize,
-        maxOffHeapMemSize, slaveEndpoint, externalShuffleServiceBlockStatus)
+      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(), localDirs,
+        maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint, externalShuffleServiceBlockStatus)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
         Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
@@ -511,18 +500,30 @@ class BlockManagerMasterEndpoint(
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
-  private def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
+  private def getLocationsAndStatus(
+      blockId: BlockId,
+      requesterHost: String): Option[BlockLocationsAndStatus] = {
     val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val status = locations.headOption.flatMap { bmId =>
       if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
         Option(blockStatusByShuffleService(bmId).get(blockId))
       } else {
-        blockManagerInfo(bmId).getStatus(blockId)
+        blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
       }
     }
 
     if (locations.nonEmpty && status.isDefined) {
-      Some(BlockLocationsAndStatus(locations, status.get))
+      val localDirs = locations.find { loc =>
+          if (loc.port != externalShuffleServicePort && loc.host == requesterHost) {
+            blockManagerInfo
+              .get(loc)
+              .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
+              .getOrElse(false)
+          } else {
+            false
+          }
+      }.map(blockManagerInfo(_).localDirs)
+      Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {
       None
     }
@@ -573,6 +574,7 @@ object BlockStatus {
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
+    val localDirs: Array[String],
     val maxOnHeapMem: Long,
     val maxOffHeapMem: Long,
     val slaveEndpoint: RpcEndpointRef,
@@ -588,12 +590,6 @@ private[spark] class BlockManagerInfo(
 
   // Mapping from block id to its status.
   private val _blocks = new JHashMap[BlockId, BlockStatus]
-
-  /**
-   * Cached blocks which are not available via the external shuffle service.
-   * This does not include broadcast blocks.
-   */
-  private val _exclusiveCachedBlocks = new mutable.HashSet[BlockId]
 
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
 
@@ -662,15 +658,6 @@ private[spark] class BlockManagerInfo(
         }
       }
 
-      if (!blockId.isBroadcast) {
-        if (!externalShuffleServiceEnabled || !storageLevel.useDisk) {
-          _exclusiveCachedBlocks += blockId
-        } else if (blockExists) {
-          // removing block from the exclusive cached blocks when updated to non-exclusive
-          _exclusiveCachedBlocks -= blockId
-        }
-      }
-
       externalShuffleServiceBlockStatus.foreach { shuffleServiceBlocks =>
         if (!blockId.isBroadcast && blockStatus.diskSize > 0) {
           shuffleServiceBlocks.put(blockId, blockStatus)
@@ -679,7 +666,6 @@ private[spark] class BlockManagerInfo(
     } else if (blockExists) {
       // If isValid is not true, drop the block.
       _blocks.remove(blockId)
-      _exclusiveCachedBlocks -= blockId
       externalShuffleServiceBlockStatus.foreach { blockStatus =>
         blockStatus.remove(blockId)
       }
@@ -703,7 +689,6 @@ private[spark] class BlockManagerInfo(
         blockStatus.remove(blockId)
       }
     }
-    _exclusiveCachedBlocks -= blockId
   }
 
   def remainingMem: Long = _remainingMem
@@ -711,8 +696,6 @@ private[spark] class BlockManagerInfo(
   def lastSeenMs: Long = _lastSeenMs
 
   def blocks: JHashMap[BlockId, BlockStatus] = _blocks
-
-  def exclusiveCachedBlocks: collection.Set[BlockId] = _exclusiveCachedBlocks
 
   override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 
