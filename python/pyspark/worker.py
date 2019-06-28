@@ -327,7 +327,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 except StopIteration:
                     pass
                 else:
-                    raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input"
+                    raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input "
                                        "iterator.")
 
             if is_scalar_iter and num_output_rows != num_input_rows[0]:
