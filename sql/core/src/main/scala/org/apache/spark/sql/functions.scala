@@ -2517,6 +2517,28 @@ object functions {
   }
 
   /**
+   * Overlay the specified portion of `src` with `replaceString`,
+   *  starting from byte position `pos` of `inputString` and proceeding for `len` bytes.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replaceString: String, pos: Int, len: Int): Column = withExpr {
+    Overlay(src.expr, lit(replaceString).expr, lit(pos).expr, lit(len).expr)
+  }
+
+  /**
+   * Overlay the specified portion of `src` with `replaceString`,
+   *  starting from byte position `pos` of `inputString`.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replaceString: String, pos: Int): Column = withExpr {
+    new Overlay(src.expr, lit(replaceString).expr, lit(pos).expr)
+  }
+
+  /**
    * Translate any character in the src by a character in replaceString.
    * The characters in replaceString correspond to the characters in matchingString.
    * The translate will happen when any character in the string matches the character
