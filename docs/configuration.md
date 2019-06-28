@@ -444,7 +444,7 @@ Apart from these, the following properties are also available, and may be useful
     Instead, please set this through the <code>--driver-java-options</code> command line option or in
     your default properties file.
 
-    <code>spark.driver.defaultJavaOptions</code> prepended (without any parameter override) to this configuration.
+    <code>spark.driver.defaultJavaOptions</code> will be prepended to this configuration.
   </td>
 </tr>
 <tr>
@@ -513,7 +513,7 @@ Apart from these, the following properties are also available, and may be useful
     verbose gc logging to a file named for the executor ID of the app in /tmp, pass a 'value' of:
     <code>-verbose:gc -Xloggc:/tmp/{{APP_ID}}-{{EXECUTOR_ID}}.gc</code>
 
-    <code>spark.executor.defaultJavaOptions</code> will be prepended (without any parameter override) to this configuration.
+    <code>spark.executor.defaultJavaOptions</code> will be prepended to this configuration.
   </td>
 </tr>
 <tr>
