@@ -199,6 +199,11 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Sinh, DoubleType)
   }
 
+  test("asinh") {
+    testUnary(Asinh, (x: Double) => math.log(x + math.sqrt(x * x + 1.0)))
+    checkConsistencyBetweenInterpretedAndCodegen(Asinh, DoubleType)
+  }
+
   test("cos") {
     testUnary(Cos, math.cos)
     checkConsistencyBetweenInterpretedAndCodegen(Cos, DoubleType)
@@ -212,6 +217,11 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cosh") {
     testUnary(Cosh, math.cosh)
+    checkConsistencyBetweenInterpretedAndCodegen(Cosh, DoubleType)
+  }
+
+  test("acosh") {
+    testUnary(Acosh, (x: Double) => math.log(x + math.sqrt(x * x - 1.0)))
     checkConsistencyBetweenInterpretedAndCodegen(Cosh, DoubleType)
   }
 
@@ -242,6 +252,11 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("tanh") {
     testUnary(Tanh, math.tanh)
     checkConsistencyBetweenInterpretedAndCodegen(Tanh, DoubleType)
+  }
+
+    test("atanh") {
+    testUnary(Atanh, (x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)))
+    checkConsistencyBetweenInterpretedAndCodegen(Atanh, DoubleType)
   }
 
   test("toDegrees") {
