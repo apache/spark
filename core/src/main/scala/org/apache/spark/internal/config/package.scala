@@ -1075,6 +1075,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
+    ConfigBuilder("spark.shuffle.readHostLocalDisk.enabled")
+      .doc("If enabled, shuffle blocks requested from those block managers which are running on " +
+        "the same host are read from the disk directly instead of being fetched as remote blocks " +
+        "over the network.")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_SYNC =
     ConfigBuilder("spark.shuffle.sync")
       .doc("Whether to force outstanding writes to disk.")

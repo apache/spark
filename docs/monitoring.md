@@ -1031,7 +1031,9 @@ when running in local mode.
   - shuffleBytesWritten.count
   - shuffleFetchWaitTime.count
   - shuffleLocalBlocksFetched.count
+  - shuffleHostLocalBlocksFetched.count
   - shuffleLocalBytesRead.count
+  - shuffleHostLocalBytesRead.count
   - shuffleRecordsRead.count
   - shuffleRecordsWritten.count
   - shuffleRemoteBlocksFetched.count

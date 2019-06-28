@@ -25,6 +25,7 @@
     "readRecords" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
     "remoteBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "localBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
+    "hostLocalBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "fetchWaitTime" : [ 0.0, 0.0, 0.0, 1.0, 1.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "remoteBytesReadToDisk" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],

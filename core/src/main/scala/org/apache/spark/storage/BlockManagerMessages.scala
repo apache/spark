@@ -97,6 +97,15 @@ private[spark] object BlockManagerMessages {
   case class GetLocationsAndStatus(blockId: BlockId, requesterHost: String)
     extends ToBlockManagerMaster
 
+  case class GetLocalDirs(executorIds: Array[String]) extends ToBlockManagerMaster
+
+  /**
+   * The response message of `GetLocalDirs` request.
+   *
+   * @param localDirs follows the order of the block manager IDs used in the `GetLocalDirs` request.
+   */
+  case class BlockManagerLocalDirs(localDirs: Seq[Array[String]])
+
   /**
    * The response message of `GetLocationsAndStatus` request.
    *

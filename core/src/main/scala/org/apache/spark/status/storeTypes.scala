@@ -127,6 +127,7 @@ private[spark] object TaskIndexNames {
   final val SCHEDULER_DELAY = "dly"
   final val SER_TIME = "rst"
   final val SHUFFLE_LOCAL_BLOCKS = "slbl"
+  final val SHUFFLE_HOST_LOCAL_BLOCKS = "shlbl"
   final val SHUFFLE_READ_RECORDS = "srr"
   final val SHUFFLE_READ_TIME = "srt"
   final val SHUFFLE_REMOTE_BLOCKS = "srbl"
@@ -213,6 +214,8 @@ private[spark] class TaskDataWrapper(
     val shuffleRemoteBlocksFetched: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
     val shuffleLocalBlocksFetched: Long,
+    @KVIndexParam(value = TaskIndexNames.SHUFFLE_HOST_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
+    val shuffleHostLocalBlocksFetched: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_TIME, parent = TaskIndexNames.STAGE)
     val shuffleFetchWaitTime: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_REMOTE_READS, parent = TaskIndexNames.STAGE)
@@ -221,6 +224,7 @@ private[spark] class TaskDataWrapper(
       parent = TaskIndexNames.STAGE)
     val shuffleRemoteBytesReadToDisk: Long,
     val shuffleLocalBytesRead: Long,
+    val shuffleHostLocalBytesRead: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_RECORDS, parent = TaskIndexNames.STAGE)
     val shuffleRecordsRead: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_WRITE_SIZE, parent = TaskIndexNames.STAGE)
@@ -257,10 +261,12 @@ private[spark] class TaskDataWrapper(
         new ShuffleReadMetrics(
           shuffleRemoteBlocksFetched,
           shuffleLocalBlocksFetched,
+          shuffleHostLocalBlocksFetched,
           shuffleFetchWaitTime,
           shuffleRemoteBytesRead,
           shuffleRemoteBytesReadToDisk,
           shuffleLocalBytesRead,
+          shuffleHostLocalBytesRead,
           shuffleRecordsRead),
         new ShuffleWriteMetrics(
           shuffleBytesWritten,
@@ -330,7 +336,7 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_READS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalReads: Long = {
     if (hasMetrics) {
-      shuffleLocalBytesRead + shuffleRemoteBytesRead
+      shuffleLocalBytesRead + shuffleHostLocalBytesRead + shuffleRemoteBytesRead
     } else {
       -1L
     }
@@ -339,7 +345,7 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_BLOCKS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalBlocks: Long = {
     if (hasMetrics) {
-      shuffleLocalBlocksFetched + shuffleRemoteBlocksFetched
+      shuffleLocalBlocksFetched + shuffleHostLocalBlocksFetched + shuffleRemoteBlocksFetched
     } else {
       -1L
     }
@@ -477,6 +483,7 @@ private[spark] class CachedQuantile(
     val shuffleRecordsRead: Double,
     val shuffleRemoteBlocksFetched: Double,
     val shuffleLocalBlocksFetched: Double,
+    val shuffleHostLocalBlocksFetched: Double,
     val shuffleFetchWaitTime: Double,
     val shuffleRemoteBytesRead: Double,
     val shuffleRemoteBytesReadToDisk: Double,

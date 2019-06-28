@@ -542,11 +542,17 @@ private[spark] class BlockManager(
     }
   }
 
+  override def getHostLocalShuffleData(
+      blockId: ShuffleBlockId,
+      dirs: Array[String]): ManagedBuffer = {
+      shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
+  }
+
   /**
    * Interface to get local block data. Throws an exception if the block cannot be found or
    * cannot be read successfully.
    */
-  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+  override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
       shuffleManager.shuffleBlockResolver.getBlockData(blockId)
     } else {

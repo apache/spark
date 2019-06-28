@@ -49,6 +49,9 @@ class BlockManagerMasterEndpoint(
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo])
   extends IsolatedRpcEndpoint with Logging {
 
+  // Mapping from executor id to the block manager's local disk directories.
+  private val executorIdLocalDirs = new mutable.HashMap[String, Array[String]]
+
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
     new mutable.HashMap[BlockManagerId, JHashMap[BlockId, BlockStatus]]
@@ -97,6 +100,9 @@ class BlockManagerMasterEndpoint(
 
     case GetLocationsAndStatus(blockId, requesterHost) =>
       context.reply(getLocationsAndStatus(blockId, requesterHost))
+
+    case GetLocalDirs(executorIds) =>
+      context.reply(getLocalDirs(executorIds))
 
     case GetLocationsMultipleBlockIds(blockIds) =>
       context.reply(getLocationsMultipleBlockIds(blockIds))
@@ -393,6 +399,9 @@ class BlockManagerMasterEndpoint(
       topologyMapper.getTopologyForHost(idWithoutTopologyInfo.host))
 
     val time = System.currentTimeMillis()
+    if (!executorIdLocalDirs.contains(id.executorId)) {
+      executorIdLocalDirs(id.executorId) = localDirs
+    }
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
@@ -416,7 +425,7 @@ class BlockManagerMasterEndpoint(
           None
         }
 
-      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(), localDirs,
+      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(),
         maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint, externalShuffleServiceBlockStatus)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
@@ -482,6 +491,10 @@ class BlockManagerMasterEndpoint(
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
+  private def getLocalDirs(executorIds: Array[String]): BlockManagerLocalDirs = {
+    BlockManagerLocalDirs(executorIds.map(executorIdLocalDirs(_)))
+  }
+
   private def getLocationsAndStatus(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
@@ -496,15 +509,16 @@ class BlockManagerMasterEndpoint(
 
     if (locations.nonEmpty && status.isDefined) {
       val localDirs = locations.find { loc =>
-          if (loc.port != externalShuffleServicePort && loc.host == requesterHost) {
+        // When the external shuffle service running on the same host is found among the block
+        // locations then the block must be persisted on the disk. In this case the executorId
+        // can be used to access this block even when the original executor is already stopped.
+        loc.host == requesterHost &&
+          (loc.port == externalShuffleServicePort ||
             blockManagerInfo
               .get(loc)
               .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
-              .getOrElse(false)
-          } else {
-            false
-          }
-      }.map(blockManagerInfo(_).localDirs)
+              .getOrElse(false))
+      }.map(bmId => executorIdLocalDirs(bmId.executorId))
       Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {
       None
@@ -556,7 +570,6 @@ object BlockStatus {
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
-    val localDirs: Array[String],
     val maxOnHeapMem: Long,
     val maxOffHeapMem: Long,
     val slaveEndpoint: RpcEndpointRef,

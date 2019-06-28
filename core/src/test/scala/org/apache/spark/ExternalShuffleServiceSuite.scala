@@ -67,7 +67,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
 
   // This test ensures that the external shuffle service is actually in use for the other tests.
   test("using external shuffle service") {
-    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+    val confWithoutHostLocalRead =
+      conf.clone.set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", confWithoutHostLocalRead)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
 
@@ -94,6 +96,35 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       rdd.count()
     }
     e.getMessage should include ("Fetch failure will not retry stage due to testing config")
+  }
+
+  test("SPARK-27651: host local disk reading avoids external shuffle service on the same node") {
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+    conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) should equal(true)
+    sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
+    sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
+    sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
+
+    // In a slow machine, one slave may register hundreds of milliseconds ahead of the other one.
+    // If we don't wait for all slaves, it's possible that only one executor runs all jobs. Then
+    // all shuffle blocks will be in this executor, ShuffleBlockFetcherIterator will directly fetch
+    // local blocks from the local BlockManager and won't send requests to ExternalShuffleService.
+    // In this case, we won't receive FetchFailed. And it will make this test fail.
+    // Therefore, we should wait until all slaves are up
+    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+
+    val rdd = sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
+
+    rdd.count()
+    rdd.count()
+
+    // Invalidate the registered executors, disallowing access to their shuffle blocks (without
+    // deleting the actual shuffle files, so we could access them without the shuffle service).
+    rpcHandler.applicationRemoved(sc.conf.getAppId, false /* cleanupLocalDirs */)
+
+    // Now Spark will not receive FetchFailed as host local blocks are read from the local
+    // disk directly
+    rdd.count()
   }
 
   test("SPARK-25888: using external shuffle service fetching disk persisted blocks") {

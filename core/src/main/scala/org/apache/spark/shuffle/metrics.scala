@@ -28,9 +28,11 @@ package org.apache.spark.shuffle
 private[spark] trait ShuffleReadMetricsReporter {
   private[spark] def incRemoteBlocksFetched(v: Long): Unit
   private[spark] def incLocalBlocksFetched(v: Long): Unit
+  private[spark] def incHostLocalBlocksFetched(v: Long): Unit
   private[spark] def incRemoteBytesRead(v: Long): Unit
   private[spark] def incRemoteBytesReadToDisk(v: Long): Unit
   private[spark] def incLocalBytesRead(v: Long): Unit
+  private[spark] def incHostLocalBytesRead(v: Long): Unit
   private[spark] def incFetchWaitTime(v: Long): Unit
   private[spark] def incRecordsRead(v: Long): Unit
 }

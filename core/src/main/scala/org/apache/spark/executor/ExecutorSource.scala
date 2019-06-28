@@ -102,12 +102,16 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     metricRegistry.counter(MetricRegistry.name("shuffleRemoteBytesReadToDisk"))
   val METRIC_SHUFFLE_LOCAL_BYTES_READ =
     metricRegistry.counter(MetricRegistry.name("shuffleLocalBytesRead"))
+  val METRIC_SHUFFLE_HOST_LOCAL_BYTES_READ =
+    metricRegistry.counter(MetricRegistry.name("shuffleHostLocalBytesRead"))
   val METRIC_SHUFFLE_RECORDS_READ =
     metricRegistry.counter(MetricRegistry.name("shuffleRecordsRead"))
   val METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED =
     metricRegistry.counter(MetricRegistry.name("shuffleRemoteBlocksFetched"))
   val METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED =
     metricRegistry.counter(MetricRegistry.name("shuffleLocalBlocksFetched"))
+  val METRIC_SHUFFLE_HOST_LOCAL_BLOCKS_FETCHED =
+    metricRegistry.counter(MetricRegistry.name("shuffleHostLocalBlocksFetched"))
   val METRIC_SHUFFLE_BYTES_WRITTEN =
     metricRegistry.counter(MetricRegistry.name("shuffleBytesWritten"))
   val METRIC_SHUFFLE_RECORDS_WRITTEN =

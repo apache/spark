@@ -27,10 +27,12 @@
   "outputRecords" : 0,
   "shuffleRemoteBlocksFetched" : 0,
   "shuffleLocalBlocksFetched" : 0,
+  "shuffleHostLocalBlocksFetched" : 0,
   "shuffleFetchWaitTime" : 0,
   "shuffleRemoteBytesRead" : 0,
   "shuffleRemoteBytesReadToDisk" : 0,
   "shuffleLocalBytesRead" : 0,
+  "shuffleHostLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
   "shuffleReadRecords" : 0,
   "shuffleWriteBytes" : 13180,
@@ -76,10 +78,12 @@
         "shuffleReadMetrics" : {
           "remoteBlocksFetched" : 0,
           "localBlocksFetched" : 0,
+          "hostLocalBlocksFetched" : 0,
           "fetchWaitTime" : 0,
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "hostLocalBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -126,10 +130,12 @@
         "shuffleReadMetrics" : {
           "remoteBlocksFetched" : 0,
           "localBlocksFetched" : 0,
+          "hostLocalBlocksFetched" : 0,
           "fetchWaitTime" : 0,
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "hostLocalBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -176,10 +182,12 @@
         "shuffleReadMetrics" : {
           "remoteBlocksFetched" : 0,
           "localBlocksFetched" : 0,
+          "hostLocalBlocksFetched" : 0,
           "fetchWaitTime" : 0,
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "hostLocalBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -226,10 +234,12 @@
         "shuffleReadMetrics" : {
           "remoteBlocksFetched" : 0,
           "localBlocksFetched" : 0,
+          "hostLocalBlocksFetched" : 0,
           "fetchWaitTime" : 0,
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "hostLocalBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -276,10 +286,12 @@
         "shuffleReadMetrics" : {
           "remoteBlocksFetched" : 0,
           "localBlocksFetched" : 0,
+          "hostLocalBlocksFetched" : 0,
           "fetchWaitTime" : 0,
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "hostLocalBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -326,10 +338,12 @@
         "shuffleReadMetrics" : {
           "remoteBlocksFetched" : 0,
           "localBlocksFetched" : 0,
+          "hostLocalBlocksFetched" : 0,
           "fetchWaitTime" : 0,
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "hostLocalBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -376,10 +390,12 @@
         "shuffleReadMetrics" : {
           "remoteBlocksFetched" : 0,
           "localBlocksFetched" : 0,
+          "hostLocalBlocksFetched" : 0,
           "fetchWaitTime" : 0,
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "hostLocalBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -426,10 +442,12 @@
         "shuffleReadMetrics" : {
           "remoteBlocksFetched" : 0,
           "localBlocksFetched" : 0,
+          "hostLocalBlocksFetched" : 0,
           "fetchWaitTime" : 0,
           "remoteBytesRead" : 0,
           "remoteBytesReadToDisk" : 0,
           "localBytesRead" : 0,
+          "hostLocalBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {

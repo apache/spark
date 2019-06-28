@@ -367,10 +367,12 @@ private[spark] object JsonProtocol {
     val shuffleReadMetrics: JValue =
       ("Remote Blocks Fetched" -> taskMetrics.shuffleReadMetrics.remoteBlocksFetched) ~
         ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
+        ("Host Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.hostLocalBlocksFetched) ~
         ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
         ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
         ("Remote Bytes Read To Disk" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
+        ("Host Local Bytes Read" -> taskMetrics.shuffleReadMetrics.hostLocalBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
     val shuffleWriteMetrics: JValue =
       ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
@@ -908,13 +910,17 @@ private[spark] object JsonProtocol {
     // Shuffle read metrics
     jsonOption(json \ "Shuffle Read Metrics").foreach { readJson =>
       val readMetrics = metrics.createTempShuffleReadMetrics()
-      readMetrics.incRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Int])
-      readMetrics.incLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Int])
+      readMetrics.incRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Long])
+      readMetrics.incLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Long])
+      readMetrics.incHostLocalBlocksFetched(
+        jsonOption(readJson \ "Host Local Blocks Fetched").map(_.extract[Long]).getOrElse(0L))
       readMetrics.incRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
       jsonOption(readJson \ "Remote Bytes Read To Disk")
         .foreach { v => readMetrics.incRemoteBytesReadToDisk(v.extract[Long])}
       readMetrics.incLocalBytesRead(
         jsonOption(readJson \ "Local Bytes Read").map(_.extract[Long]).getOrElse(0L))
+      readMetrics.incHostLocalBytesRead(
+        jsonOption(readJson \ "Host Local Bytes Read").map(_.extract[Long]).getOrElse(0L))
       readMetrics.incFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])
       readMetrics.incRecordsRead(
         jsonOption(readJson \ "Total Records Read").map(_.extract[Long]).getOrElse(0L))
