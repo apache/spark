@@ -205,7 +205,7 @@ public class LevelDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          return new LevelDBFilterItertor(
+          return new LevelDBFilterIterator(
             new LevelDBIterator<>(type, LevelDB.this, this), condition);
         } catch (Exception e) {
           throw Throwables.propagate(e);

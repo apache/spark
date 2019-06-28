@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.function.Predicate;
 
-class LevelDBFilterItertor<T> implements KVStoreIterator<T>  {
+class LevelDBFilterIterator<T> implements KVStoreIterator<T>  {
 
   /** The LevelDBIterator being used */
   private final LevelDBIterator<T> iterator;
@@ -34,7 +34,7 @@ class LevelDBFilterItertor<T> implements KVStoreIterator<T>  {
   /** Whether the next object has been calculated yet */
   private boolean nextObjectSet = false;
 
-  LevelDBFilterItertor(LevelDBIterator<T> iterator, Predicate<T> predicate) {
+  LevelDBFilterIterator(LevelDBIterator<T> iterator, Predicate<T> predicate) {
     this.iterator = iterator;
     this.predicate = predicate;
   }
