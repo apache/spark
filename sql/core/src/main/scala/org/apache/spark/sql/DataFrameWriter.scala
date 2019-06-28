@@ -253,7 +253,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
     val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
     val shouldUseV1Source = cls.newInstance() match {
-      case f: DataSourceRegister if useV1Sources.contains(f.shortName()) => true
+      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
       case _ => useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT))
     }
     // In Data Source V2 project, partitioning is still under development.

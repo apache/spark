@@ -195,18 +195,23 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
         }
         spark.listenerManager.register(listener)
 
-        withTempPath { path =>
-          val inputData = spark.range(10)
-          inputData.write.format(format).save(path.getCanonicalPath)
-          sparkContext.listenerBus.waitUntilEmpty(1000)
-          assert(commands.length == 1)
-          assert(commands.head._1 == "save")
-          assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
-          assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
-            .fileFormat.isInstanceOf[ParquetFileFormat])
-          val df = spark.read.format(format).load(path.getCanonicalPath)
-          checkAnswer(df, inputData.toDF())
-          assert(df.queryExecution.executedPlan.find(_.isInstanceOf[FileSourceScanExec]).isDefined)
+        try {
+          withTempPath { path =>
+            val inputData = spark.range(10)
+            inputData.write.format(format).save(path.getCanonicalPath)
+            sparkContext.listenerBus.waitUntilEmpty(1000)
+            assert(commands.length == 1)
+            assert(commands.head._1 == "save")
+            assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+            assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+              .fileFormat.isInstanceOf[ParquetFileFormat])
+            val df = spark.read.format(format).load(path.getCanonicalPath)
+            checkAnswer(df, inputData.toDF())
+            assert(
+              df.queryExecution.executedPlan.find(_.isInstanceOf[FileSourceScanExec]).isDefined)
+          }
+        } finally {
+          spark.listenerManager.unregister(listener)
         }
       }
     }
