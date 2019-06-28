@@ -143,7 +143,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     assert(invalidEscape.getMessage.contains("pattern"))
     val invalidEscape2 = intercept[AnalysisException] {
-      evaluate("""a""" like("""/a""", '/'))
+      evaluateWithoutCodegen("""a""" like("""/a""", '/'))
     }
     assert(invalidEscape2.getMessage.contains("pattern"))
 
@@ -152,7 +152,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     assert(endEscape.getMessage.contains("pattern"))
     val endEscape2 = intercept[AnalysisException] {
-      evaluate("""a""" like("""a/""", '/'))
+      evaluateWithoutCodegen("""a""" like("""a/""", '/'))
     }
     assert(endEscape2.getMessage.contains("pattern"))
 
