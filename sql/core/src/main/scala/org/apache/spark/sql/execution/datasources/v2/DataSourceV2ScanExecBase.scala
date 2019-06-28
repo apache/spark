@@ -23,11 +23,16 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
-trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
+trait DataSourceV2ScanExecBase extends LeafExecNode {
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   def scan: Scan
 
@@ -52,7 +57,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
     case _ => super.outputPartitioning
   }
 
-  override def supportsBatch: Boolean = {
+  override def supportsColumnar: Boolean = {
     require(partitions.forall(readerFactory.supportColumnarReads) ||
       !partitions.exists(readerFactory.supportColumnarReads),
       "Cannot mix row-based and columnar input partitions.")
@@ -62,17 +67,22 @@ trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
 
   def inputRDD: RDD[InternalRow]
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
+  def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
 
   override def doExecute(): RDD[InternalRow] = {
-    if (supportsBatch) {
-      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
-    } else {
-      val numOutputRows = longMetric("numOutputRows")
-      inputRDD.map { r =>
-        numOutputRows += 1
-        r
-      }
+    val numOutputRows = longMetric("numOutputRows")
+    inputRDD.map { r =>
+      numOutputRows += 1
+      r
+    }
+  }
+
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val numOutputRows = longMetric("numOutputRows")
+    inputRDD.asInstanceOf[RDD[ColumnarBatch]].map {
+      b =>
+        numOutputRows += b.numRows()
+        b
     }
   }
 }
