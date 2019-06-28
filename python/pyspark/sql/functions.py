@@ -2968,20 +2968,20 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        Scalar iterator UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
 
-       >>> import pandas as pd
+       >>> import pandas as pd  # doctest: +SKIP
        >>> from pyspark.sql.functions import col, pandas_udf, struct, PandasUDFType
-       >>> pdf = pd.DataFrame([1, 2, 3], columns=["x"])
-       >>> df = spark.createDataFrame(pdf)
+       >>> pdf = pd.DataFrame([1, 2, 3], columns=["x"])  # doctest: +SKIP
+       >>> df = spark.createDataFrame(pdf)  # doctest: +SKIP
 
        When the UDF is called with a single column that is not `StructType`, the input to the
        underlying function is an iterator of `pd.Series`.
 
-       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)
+       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
        ... def plus_one(batch_iter):
        ...     for x in batch_iter:
        ...         yield x + 1
        ...
-       >>> df.select(plus_one(col("x"))).show()
+       >>> df.select(plus_one(col("x"))).show()  # doctest: +SKIP
        +-----------+
        |plus_one(x)|
        +-----------+
@@ -2993,12 +2993,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        When the UDF is called with more than one columns, the input to the underlying function is an
        iterator of `pd.Series` tuple.
 
-       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)
+       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
        ... def multiply_two_cols(batch_iter):
        ...     for a, b in batch_iter:
        ...         yield a * b
        ...
-       >>> df.select(multiply_two_cols(col("x"), col("x"))).show()
+       >>> df.select(multiply_two_cols(col("x"), col("x"))).show()  # doctest: +SKIP
        +-----------------------+
        |multiply_two_cols(x, x)|
        +-----------------------+
@@ -3010,7 +3010,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        When the UDF is called with a single column that is `StructType`, the input to the underlying
        function is an iterator of `pd.DataFrame`.
 
-       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)
+       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
        ... def multiply_two_nested_cols(pdf_iter):
        ...    for pdf in pdf_iter:
        ...        yield pdf["a"] * pdf["b"]
@@ -3019,7 +3019,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        ...     multiply_two_nested_cols(
        ...         struct(col("x").alias("a"), col("x").alias("b"))
        ...     ).alias("y")
-       ... ).show()
+       ... ).show()  # doctest: +SKIP
        +---+
        |  y|
        +---+
@@ -3032,8 +3032,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        `try ... finally ...` or use context managers to ensure the release of resources at the end
        or in case of early termination.
 
-       >>> y_bc = spark.sparkContext.broadcast(1)
-       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)
+       >>> y_bc = spark.sparkContext.broadcast(1)  # doctest: +SKIP
+       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
        ... def plus_y(batch_iter):
        ...     y = y_bc.value  # initialize some state
        ...     try:
@@ -3042,7 +3042,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        ...     finally:
        ...         pass  # release resources here, if any
        ...
-       >>> df.select(plus_y(col("x"))).show()
+       >>> df.select(plus_y(col("x"))).show()  # doctest: +SKIP
        +---------+
        |plus_y(x)|
        +---------+
