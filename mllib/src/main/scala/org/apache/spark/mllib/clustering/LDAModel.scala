@@ -397,9 +397,9 @@ class LocalLDAModel private[spark] (
     val k = this.k
     val gammaSeed = this.seed
 
-    (termCounts: NewVector) =>
+    termCounts: NewVector =>
       if (termCounts.numNonzeros == 0) {
-        Vectors.zeros(k)
+        NewVectors.zeros(k)
       } else {
         val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
