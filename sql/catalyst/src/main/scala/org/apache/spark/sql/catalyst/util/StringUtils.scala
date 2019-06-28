@@ -86,11 +86,11 @@ object StringUtils extends Logging {
           fail("it is not allowed to end with the escape character")
         }
       } else if (cur == '_') {
-	out ++= "."
+        out ++= "."
       } else if (cur == '%') {
         out ++= ".*"
       } else {
-	out ++= Pattern.quote(Character.toString(cur))
+        out ++= Pattern.quote(Character.toString(cur))
       }
     }
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
