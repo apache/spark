@@ -65,6 +65,54 @@ abstract class StringRegexExpression extends BinaryExpression
   override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
+abstract class StringRegexV2Expression extends TernaryExpression
+  with ImplicitCastInputTypes with NullIntolerant {
+
+  def escape(v: String): String
+  def matches(regex: Pattern, str: String): Boolean
+
+  override def dataType: DataType = BooleanType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+
+  protected lazy val escapeCache: Option[Char] = Option(children(2)).map { expr =>
+    expr match {
+      case Literal(value: UTF8String, StringType) =>
+        if (value.numChars() == 1) {
+          value.toString.charAt(0)
+        } else {
+          throw new IllegalArgumentException("Only a single character is allowed after ESCAPE")
+        }
+    }
+  }
+
+  // try cache the pattern for Literal
+  private lazy val cache: Pattern = children(1) match {
+    case x @ Literal(value: String, StringType) => compile(value)
+    case _ => null
+  }
+
+  protected def compile(str: String): Pattern = if (str == null) {
+    null
+  } else {
+    // Let it raise exception if couldn't compile the regex string
+    Pattern.compile(escape(str))
+  }
+
+  protected def pattern(str: String) = if (cache == null) compile(str) else cache
+
+  protected override def nullSafeEval(input1: Any, input2: Any, input3: Any): Any = {
+    val regex = pattern(input2.asInstanceOf[UTF8String].toString)
+    if(regex == null) {
+      null
+    } else {
+      matches(regex, input1.asInstanceOf[UTF8String].toString)
+    }
+  }
+
+  override def sql: String = s"${children(0).sql} ${prettyName.toUpperCase(Locale.ROOT)}" +
+    s" ${children(1).sql} ${children(2).sql}"
+}
+
 
 /**
  * Simple RegEx pattern matching function
@@ -103,20 +151,29 @@ abstract class StringRegexExpression extends BinaryExpression
     Use RLIKE to match with standard regular expressions.
   """,
   since = "1.0.0")
-case class Like(left: Expression, right: Expression) extends StringRegexExpression {
+case class Like(
+  input: Expression, pattern: Expression, escape: Expression) extends StringRegexV2Expression {
 
-  override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
+  def this(input: Expression, pattern: Expression) = {
+    this(input, pattern, Literal.create("\\", StringType))
+  }
+
+  override def children: Seq[Expression] = input :: pattern :: escape :: Nil
+
+  override def escape(v: String): String =
+    StringUtils.escapeLikeRegex(v, escapeCache.getOrElse('\\'))
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  override def toString: String = s"$left LIKE $right"
+  override def toString: String = s"$input LIKE $pattern" +
+    Option(escape).map { x => s" ESCAPE ${x.sql}" }.get
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
 
-    if (right.foldable) {
-      val rVal = right.eval()
+    if (pattern.foldable) {
+      val rVal = pattern.eval()
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
@@ -141,11 +198,13 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       }
     } else {
       val pattern = ctx.freshName("pattern")
-      val rightStr = ctx.freshName("rightStr")
-      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      val patternStr = ctx.freshName("patternStr")
+      val escapeStr = ctx.freshName("escapeStr")
+      nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
         s"""
-          String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr));
+          String $patternStr = $eval2.toString();
+          String $escapeStr = $eval3.toString();
+          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, $escapeStr));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })

@@ -65,6 +65,37 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
+  def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
+    val in = pattern.toIterator
+    val out = new StringBuilder()
+
+    def fail(message: String) = throw new Exception(
+      s"the pattern '$pattern' is invalid, $message")
+
+    while (in.hasNext) {
+      val cur = in.next
+      if (cur == escapeChar) {
+        if (in.hasNext) {
+          val c = in.next
+          if (c == '_' || c == '%' || c == escapeChar) {
+            out ++= Pattern.quote(Character.toString(c))
+          } else {
+            fail(s"the escape character is not allowed to precede '$c'")
+          }
+        } else {
+          fail("it is not allowed to end with the escape character")
+        }
+      } else if (cur == '_') {
+	out ++= "."
+      } else if (cur == '%') {
+        out ++= ".*"
+      } else {
+	out ++= Pattern.quote(Character.toString(cur))
+      }
+    }
+    "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
+  }
+
   private[this] val trueStrings = Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
   private[this] val falseStrings = Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 

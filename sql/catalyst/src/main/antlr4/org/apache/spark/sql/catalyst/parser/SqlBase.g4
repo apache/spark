@@ -662,7 +662,8 @@ predicate
     : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
     | NOT? kind=IN '(' expression (',' expression)* ')'
     | NOT? kind=IN '(' query ')'
-    | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
+    | NOT? kind=RLIKE pattern=valueExpression
+    | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=valueExpression)?
     | IS NOT? kind=NULL
     | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
@@ -942,6 +943,7 @@ ansiNonReserved
     | DISTRIBUTE
     | DIV
     | DROP
+    | ESCAPE
     | ESCAPED
     | EXCHANGE
     | EXISTS
@@ -1171,6 +1173,7 @@ nonReserved
     | DROP
     | ELSE
     | END
+    | ESCAPE
     | ESCAPED
     | EXCHANGE
     | EXISTS

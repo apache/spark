@@ -51,51 +51,90 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // null handling
     checkLiteralRow(Literal.create(null, StringType).like(_), "a", null)
+    checkLiteralRow(Literal.create(null, StringType).like(_, '/'), "a", null)
     checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create("a", StringType).like(Literal.create(null, StringType), '/'), null)
     checkEvaluation(Literal.create(null, StringType).like(Literal.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create(null, StringType).like(Literal.create(null, StringType), '/'), null)
     checkEvaluation(
       Literal.create("a", StringType).like(NonFoldableLiteral.create("a", StringType)), true)
     checkEvaluation(
+      Literal.create("a", StringType).like(NonFoldableLiteral.create("a", StringType), '/'), true)
+    checkEvaluation(
       Literal.create("a", StringType).like(NonFoldableLiteral.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create("a", StringType).like(NonFoldableLiteral.create(null, StringType), '/'), null)
     checkEvaluation(
       Literal.create(null, StringType).like(NonFoldableLiteral.create("a", StringType)), null)
     checkEvaluation(
+      Literal.create(null, StringType).like(NonFoldableLiteral.create("a", StringType), '/'), null)
+    checkEvaluation(
       Literal.create(null, StringType).like(NonFoldableLiteral.create(null, StringType)), null)
+    checkEvaluation(
+      Literal.create(null, StringType).like(NonFoldableLiteral.create(null, StringType), '/'), null)
 
     // simple patterns
     checkLiteralRow("abdef" like _, "abdef", true)
+    checkLiteralRow("abdef" like(_, '/'), "abdef", true)
     checkLiteralRow("a_%b" like _, "a\\__b", true)
+    checkLiteralRow("a_%b" like(_, '/'), "a\\__b", true)
     checkLiteralRow("addb" like _, "a_%b", true)
+    checkLiteralRow("addb" like(_, '/'), "a_%b", true)
     checkLiteralRow("addb" like _, "a\\__b", false)
+    checkLiteralRow("addb" like(_, '/'), "a\\__b", false)
     checkLiteralRow("addb" like _, "a%\\%b", false)
+    checkLiteralRow("addb" like(_, '/'), "a%\\%b", false)
     checkLiteralRow("a_%b" like _, "a%\\%b", true)
+    checkLiteralRow("a_%b" like(_, '/'), "a%\\%b", true)
     checkLiteralRow("addb" like _, "a%", true)
+    checkLiteralRow("addb" like(_, '/'), "a%", true)
     checkLiteralRow("addb" like _, "**", false)
+    checkLiteralRow("addb" like(_, '/'), "**", false)
     checkLiteralRow("abc" like _, "a%", true)
+    checkLiteralRow("abc" like(_, '/'), "a%", true)
     checkLiteralRow("abc"  like _, "b%", false)
+    checkLiteralRow("abc"  like(_, '/'), "b%", false)
     checkLiteralRow("abc"  like _, "bc%", false)
+    checkLiteralRow("abc"  like(_, '/'), "bc%", false)
     checkLiteralRow("a\nb" like _, "a_b", true)
+    checkLiteralRow("a\nb" like(_, '/'), "a_b", true)
     checkLiteralRow("ab" like _, "a%b", true)
+    checkLiteralRow("ab" like(_, '/'), "a%b", true)
     checkLiteralRow("a\nb" like _, "a%b", true)
+    checkLiteralRow("a\nb" like(_, '/'), "a%b", true)
 
     // empty input
     checkLiteralRow("" like _, "", true)
+    checkLiteralRow("" like(_, '/'), "", true)
     checkLiteralRow("a" like _, "", false)
+    checkLiteralRow("a" like(_, '/'), "", false)
     checkLiteralRow("" like _, "a", false)
+    checkLiteralRow("" like(_, '/'), "a", false)
 
     // SI-17647 double-escaping backslash
     checkLiteralRow("""\\\\""" like _, """%\\%""", true)
+    checkLiteralRow("""////""" like(_, '/'), """%//%""", true)
     checkLiteralRow("""%%""" like _, """%%""", true)
+    checkLiteralRow("""%%""" like(_, '/'), """%%""", true)
     checkLiteralRow("""\__""" like _, """\\\__""", true)
+    checkLiteralRow("""/__""" like(_, '/'), """///__""", true)
     checkLiteralRow("""\\\__""" like _, """%\\%\%""", false)
+    checkLiteralRow("""///__""" like(_, '/'), """%//%/%""", false)
     checkLiteralRow("""_\\\%""" like _, """%\\""", false)
+    checkLiteralRow("""_///%""" like(_, '/'), """%//""", false)
 
     // unicode
     // scalastyle:off nonascii
     checkLiteralRow("a\u20ACa" like _, "_\u20AC_", true)
+    checkLiteralRow("a\u20ACa" like(_, '/'), "_\u20AC_", true)
     checkLiteralRow("a€a" like _, "_€_", true)
+    checkLiteralRow("a€a" like(_, '/'), "_€_", true)
     checkLiteralRow("a€a" like _, "_\u20AC_", true)
+    checkLiteralRow("a€a" like(_, '/'), "_\u20AC_", true)
     checkLiteralRow("a\u20ACa" like _, "_€_", true)
+    checkLiteralRow("a\u20ACa" like(_, '/'), "_€_", true)
     // scalastyle:on nonascii
 
     // invalid escaping
@@ -103,19 +142,32 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithoutCodegen("""a""" like """\a""")
     }
     assert(invalidEscape.getMessage.contains("pattern"))
+    val invalidEscape2 = intercept[AnalysisException] {
+      evaluate("""a""" like("""/a""", '/'))
+    }
+    assert(invalidEscape2.getMessage.contains("pattern"))
 
     val endEscape = intercept[AnalysisException] {
       evaluateWithoutCodegen("""a""" like """a\""")
     }
     assert(endEscape.getMessage.contains("pattern"))
+    val endEscape2 = intercept[AnalysisException] {
+      evaluate("""a""" like("""a/""", '/'))
+    }
+    assert(endEscape2.getMessage.contains("pattern"))
 
     // case
     checkLiteralRow("A" like _, "a%", false)
+    checkLiteralRow("A" like(_, '/'), "a%", false)
     checkLiteralRow("a" like _, "A%", false)
+    checkLiteralRow("a" like(_, '/'), "A%", false)
     checkLiteralRow("AaA" like _, "_a_", true)
+    checkLiteralRow("AaA" like(_, '/'), "_a_", true)
 
     // example
     checkLiteralRow("""%SystemDrive%\Users\John""" like _, """\%SystemDrive\%\\Users%""", true)
+    checkLiteralRow(
+      """%SystemDrive%/Users/John""" like(_, '/'), """/%SystemDrive/%//Users%""", true)
   }
 
   test("RLIKE Regular Expression") {
