@@ -31,24 +31,18 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
 
   test("SPARK-28142 - continuous mode - options should be handled as case-insensitive") {
-    def getPollTimeoutMsFromContinuousStream(options: CaseInsensitiveStringMap): Long = {
-      val scan = getKafkaDataSourceScan(options)
-      val stream = scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
-      getValue(stream, pollTimeoutMsMethod)
-    }
-
     // we're trying to read the value of "pollTimeout" to see whether option is handled correctly
 
     // upper-case
     val expectedValue = 1000
     val mapWithUppercase = buildCaseInsensitiveStringMap(
       KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toUpperCase(Locale.ROOT) -> expectedValue.toString)
-    assert(expectedValue === getPollTimeoutMsFromContinuousStream(mapWithUppercase))
+    assert(expectedValue === getFieldFromContinuousStream(mapWithUppercase, pollTimeoutMsMethod))
 
     // lower-case
     val mapWithLowercase = buildCaseInsensitiveStringMap(
       KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toLowerCase(Locale.ROOT) -> expectedValue.toString)
-    assert(expectedValue === getPollTimeoutMsFromContinuousStream(mapWithLowercase))
+    assert(expectedValue === getFieldFromContinuousStream(mapWithLowercase, pollTimeoutMsMethod))
   }
 
   private def buildCaseInsensitiveStringMap(
@@ -62,7 +56,11 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     provider.getTable(options).newScanBuilder(options).build()
   }
 
-  private def getValue[T](obj: AnyRef, method: PrivateMethod[T]): T = {
-    obj.invokePrivate(method())
+  private def getFieldFromContinuousStream[T](
+      options: CaseInsensitiveStringMap,
+      method: PrivateMethod[T]): T = {
+    val scan = getKafkaDataSourceScan(options)
+    val stream = scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
+    stream.invokePrivate(method())
   }
 }
