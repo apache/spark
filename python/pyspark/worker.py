@@ -29,7 +29,6 @@ try:
 except ImportError:
     has_resource_module = False
 import traceback
-from types import GeneratorType
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -486,7 +485,7 @@ def main(infile, outfile):
             try:
                 serializer.dump_stream(out_iter, outfile)
             finally:
-                if isinstance(out_iter, GeneratorType):
+                if hasattr(out_iter, 'close'):
                     out_iter.close()
 
         if profiler:
