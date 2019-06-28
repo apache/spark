@@ -2211,7 +2211,7 @@ class DataFrame(object):
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame([(1, 21), (2, 30)],
         ...                            ("id", "age"))  # doctest: +SKIP
-        >>> @pandas_udf(df.schema, PandasUDFType.SCALAR_ITER)
+        >>> @pandas_udf(df.schema, PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
         ... def filter_func(iterator):
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
