@@ -28,8 +28,8 @@ package org.apache.spark.internal.config
  * value declared as a string.
  *
  * @param key the key for the configuration
- * @param prependedKey the key for the configuration which prepended
- * @param prependSeparator the separator which is used for prepend
+ * @param prependedKey the key for the configuration which will be prepended
+ * @param prependSeparator the separator which is used for prepending
  * @param valueConverter how to convert a string to the value. It should throw an exception if the
  *                       string does not have the required format.
  * @param stringConverter how to convert a value to a string that the user can use it as a valid

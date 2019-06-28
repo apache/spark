@@ -513,7 +513,7 @@ Apart from these, the following properties are also available, and may be useful
     verbose gc logging to a file named for the executor ID of the app in /tmp, pass a 'value' of:
     <code>-verbose:gc -Xloggc:/tmp/{{APP_ID}}-{{EXECUTOR_ID}}.gc</code>
 
-    <code>spark.executor.defaultJavaOptions</code> prepended (without any parameter override) to this configuration.
+    <code>spark.executor.defaultJavaOptions</code> will be prepended (without any parameter override) to this configuration.
   </td>
 </tr>
 <tr>
