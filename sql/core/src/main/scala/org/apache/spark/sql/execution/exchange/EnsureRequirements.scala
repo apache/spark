@@ -252,13 +252,17 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       leftPartitioning match {
         case HashPartitioning(leftExpressions, _)
           if leftExpressions.length == leftKeys.length &&
-            leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
+            leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x)) &&
+              leftKeys.filter(_.semanticEquals(x)).size ==
+              leftExpressions.filter(_.semanticEquals(x)).size) =>
           reorder(leftKeys, rightKeys, leftExpressions, leftKeys)
 
         case _ => rightPartitioning match {
           case HashPartitioning(rightExpressions, _)
             if rightExpressions.length == rightKeys.length &&
-              rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
+              rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x)) &&
+                rightKeys.filter(_.semanticEquals(x)).size ==
+                rightExpressions.filter(_.semanticEquals(x)).size) =>
             reorder(leftKeys, rightKeys, rightExpressions, rightKeys)
 
           case _ => (leftKeys, rightKeys)
