@@ -32,14 +32,16 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
 
   private val CUSTOM_RES_1 = "custom-resource-type-1"
   private val CUSTOM_RES_2 = "custom-resource-type-2"
-  private val MEMORY = "memory.amount"
-  private val CORES = "cores.amount"
-  private val NEW_CONFIG_EXECUTOR_MEMORY = YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + MEMORY
-  private val NEW_CONFIG_EXECUTOR_CORES = YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + CORES
-  private val NEW_CONFIG_AM_MEMORY = YARN_AM_RESOURCE_TYPES_PREFIX + MEMORY
-  private val NEW_CONFIG_AM_CORES = YARN_AM_RESOURCE_TYPES_PREFIX + CORES
-  private val NEW_CONFIG_DRIVER_MEMORY = YARN_DRIVER_RESOURCE_TYPES_PREFIX + MEMORY
-  private val NEW_CONFIG_DRIVER_CORES = YARN_DRIVER_RESOURCE_TYPES_PREFIX + CORES
+  private val MEMORY = "memory"
+  private val CORES = "cores"
+  private val NEW_CONFIG_EXECUTOR_MEMORY =
+    s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${MEMORY}.${AMOUNT}"
+  private val NEW_CONFIG_EXECUTOR_CORES =
+    s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${CORES}.${AMOUNT}"
+  private val NEW_CONFIG_AM_MEMORY = s"${YARN_AM_RESOURCE_TYPES_PREFIX}${MEMORY}.${AMOUNT}"
+  private val NEW_CONFIG_AM_CORES = s"${YARN_AM_RESOURCE_TYPES_PREFIX}${CORES}.${AMOUNT}"
+  private val NEW_CONFIG_DRIVER_MEMORY = s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${MEMORY}.${AMOUNT}"
+  private val NEW_CONFIG_DRIVER_CORES = s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${CORES}.${AMOUNT}"
 
   test("empty SparkConf should be valid") {
     val sparkConf = new SparkConf()
@@ -143,10 +145,10 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
 
   Seq(
     NEW_CONFIG_EXECUTOR_MEMORY -> "30G",
-    YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "memory-mb" -> "30G",
-    YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "mb" -> "30G",
+    s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}memory-mb.$AMOUNT" -> "30G",
+    s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}mb.$AMOUNT" -> "30G",
     NEW_CONFIG_EXECUTOR_CORES -> "5",
-    YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "vcores" -> "5",
+    s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}vcores.$AMOUNT" -> "5",
     NEW_CONFIG_AM_MEMORY -> "1G",
     NEW_CONFIG_DRIVER_MEMORY -> "1G",
     NEW_CONFIG_AM_CORES -> "3",

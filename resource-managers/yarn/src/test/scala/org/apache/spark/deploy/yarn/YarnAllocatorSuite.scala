@@ -35,6 +35,7 @@ import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
@@ -166,7 +167,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val handler = createAllocator(1, mockAmClient,
-      Map(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G"))
+      Map(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${GPU}.${AMOUNT}" -> "2G"))
 
     handler.updateResourceRequests()
     val container = createContainer("host1", resource = handler.resource)
@@ -189,10 +190,11 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG, yarnMadeupResource)
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val madeupConfigName = s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}"
     val sparkResources =
       Map(EXECUTOR_GPU_ID.amountConf -> "3",
         EXECUTOR_FPGA_ID.amountConf -> "2",
-        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}" -> "5")
+        madeupConfigName -> "5")
     val handler = createAllocator(1, mockAmClient, sparkResources)
 
     handler.updateResourceRequests()
