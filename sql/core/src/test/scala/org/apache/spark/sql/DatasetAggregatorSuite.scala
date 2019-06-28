@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
 
@@ -410,10 +411,16 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24598: sum throws exception instead of silently overflow") {
     val df1 = Seq(Long.MinValue, -10, Long.MaxValue).toDF("i")
-    checkAnswer(df1.agg(sum($"i")), Row(-11))
     val df2 = Seq(Long.MinValue, -10, 8).toDF("i")
-    val e = intercept[SparkException](df2.agg(sum($"i")).collect())
-    assert(e.getCause.isInstanceOf[ArithmeticException])
+    withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "true") {
+      checkAnswer(df1.agg(sum($"i")), Row(-11))
+      val e = intercept[SparkException](df2.agg(sum($"i")).collect())
+      assert(e.getCause.isInstanceOf[ArithmeticException])
+    }
+    withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "false") {
+      checkAnswer(df1.agg(sum($"i")), Row(-11))
+      checkAnswer(df2.agg(sum($"i")), Row(Long.MaxValue - 1))
+    }
   }
 
   test("SPARK-24569: Aggregator with output type Option[Boolean] creates column of type Row") {

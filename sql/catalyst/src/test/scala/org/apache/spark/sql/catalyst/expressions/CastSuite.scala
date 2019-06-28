@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -957,9 +958,16 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-24598: Cast to long should fail on overflow") {
-    checkExceptionInExpression[ArithmeticException](
-      cast(Literal.create(Decimal(Long.MaxValue) + Decimal(1)), LongType), "Overflow")
-    checkEvaluation(cast(Literal.create(Decimal(Long.MaxValue)), LongType), Long.MaxValue)
+    val overflowCast = cast(Literal.create(Decimal(Long.MaxValue) + Decimal(1)), LongType)
+    val nonOverflowCast = cast(Literal.create(Decimal(Long.MaxValue)), LongType)
+    withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](overflowCast, "Overflow")
+      checkEvaluation(nonOverflowCast, Long.MaxValue)
+    }
+    withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "false") {
+      checkEvaluation(overflowCast, Long.MinValue)
+      checkEvaluation(nonOverflowCast, Long.MaxValue)
+    }
   }
 
   test("up-cast") {

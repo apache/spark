@@ -1720,12 +1720,12 @@ object SQLConf {
     .createWithDefault(false)
 
   val ARITHMETIC_OPERATION_OVERFLOW_CHECK = buildConf("spark.sql.arithmetic.checkOverflow")
-    .doc("If it is set to true (default), all arithmetic operations on non-decimal fields throw " +
-      "an exception if an overflow occurs. If it is false, in case of overflow a wrong result " +
-      "is returned.")
+    .doc("If it is set to true, all arithmetic operations on non-decimal fields throw an " +
+      "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
+      "result is returned.")
     .internal()
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
