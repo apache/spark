@@ -254,14 +254,19 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAdd(manager) === 1)
 
     // Verify that running a speculative task doesn't affect the target
-    post(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-2", true)))
+    post(SparkListenerTaskStart(1, 0, createTaskInfo(1, 0, "executor-2", true)))
     assert(numExecutorsTarget(manager) === 5)
     assert(addExecutors(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
   }
 
-  test("ignore task end events from completed stages") {
+  test("properly handle task end events from completed stages") {
     val manager = createManager(createConf(0, 10, 0))
+
+    // We simulate having a stage fail, but with tasks still running.  Then another attempt for
+    // that stage is started, and we get task completions from the first stage attempt.  Make sure
+    // the value of `totalTasksRunning` is consistent as tasks finish from both attempts (we count
+    // all running tasks, from the zombie & non-zombie attempts)
     val stage = createStageInfo(0, 5)
     post(SparkListenerStageSubmitted(stage))
     val taskInfo1 = createTaskInfo(0, 0, "executor-1")
@@ -269,10 +274,27 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerTaskStart(0, 0, taskInfo1))
     post(SparkListenerTaskStart(0, 0, taskInfo2))
 
+    // The tasks in the zombie attempt haven't completed yet, so we still count them
     post(SparkListenerStageCompleted(stage))
 
+    // There are still two tasks that belong to the zombie stage running.
+    assert(totalRunningTasks(manager) === 2)
+
+    // submit another attempt for the stage.  We count completions from the first zombie attempt
+    val stageAttempt1 = createStageInfo(stage.stageId, 5, attemptId = 1)
+    post(SparkListenerStageSubmitted(stageAttempt1))
     post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo1, null))
-    post(SparkListenerTaskEnd(2, 0, null, Success, taskInfo2, null))
+    assert(totalRunningTasks(manager) === 1)
+    val attemptTaskInfo1 = createTaskInfo(3, 0, "executor-1")
+    val attemptTaskInfo2 = createTaskInfo(4, 1, "executor-1")
+    post(SparkListenerTaskStart(0, 1, attemptTaskInfo1))
+    post(SparkListenerTaskStart(0, 1, attemptTaskInfo2))
+    assert(totalRunningTasks(manager) === 3)
+    post(SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo1, null))
+    assert(totalRunningTasks(manager) === 2)
+    post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo2, null))
+    assert(totalRunningTasks(manager) === 1)
+    post(SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo2, null))
     assert(totalRunningTasks(manager) === 0)
   }
 
@@ -1033,9 +1055,10 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def createStageInfo(
       stageId: Int,
       numTasks: Int,
-      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
+      attemptId: Int = 0
     ): StageInfo = {
-    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details",
+    new StageInfo(stageId, attemptId, "name", numTasks, Seq.empty, Seq.empty, "no details",
       taskLocalityPreferences = taskLocalityPreferences)
   }
 

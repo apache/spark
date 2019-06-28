@@ -208,6 +208,13 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID =
+    buildConf("spark.sql.optimizer.reassignLambdaVariableID")
+      .doc("When true, Spark optimizer reassigns per-query unique IDs to LambdaVariable, so that " +
+        "it's more likely to hit codegen cache.")
+    .booleanConf
+    .createWithDefault(true)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -1441,6 +1448,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECIMAL_OPERATIONS_NULL_ON_OVERFLOW =
+    buildConf("spark.sql.decimalOperations.nullOnOverflow")
+      .internal()
+      .doc("When true (default), if an overflow on a decimal occurs, then NULL is returned. " +
+        "Spark's older versions and Hive behave in this way. If turned to false, SQL ANSI 2011 " +
+        "specification will be followed instead: an arithmetic exception is thrown, as most " +
+        "of the SQL databases do.")
+      .booleanConf
+      .createWithDefault(true)
+
   val LITERAL_PICK_MINIMUM_PRECISION =
     buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
       .internal()
@@ -2204,6 +2221,8 @@ class SQLConf extends Serializable with Logging {
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
+  def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 

@@ -71,7 +71,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       rows =>
         val numClusters = rows.distinct.length
         // Verify we hit the edge case
-        assert(numClusters < k && numClusters > 1)
+        assert(numClusters > 1)
     }
   }
 

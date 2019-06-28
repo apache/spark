@@ -39,7 +39,7 @@ package object config {
     ConfigBuilder("spark.driver.resourcesFile")
       .internal()
       .doc("Path to a file containing the resources allocated to the driver. " +
-        "The file should be formatted as a JSON array of ResourceInformation objects. " +
+        "The file should be formatted as a JSON array of ResourceAllocation objects. " +
         "Only used internally in standalone mode.")
       .stringConf
       .createOptional

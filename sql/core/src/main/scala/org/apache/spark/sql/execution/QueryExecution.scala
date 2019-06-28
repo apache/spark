@@ -119,6 +119,8 @@ class QueryExecution(
     InsertAdaptiveSparkPlan(sparkSession),
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
+    ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
+      sparkSession.sessionState.columnarRules),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
