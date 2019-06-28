@@ -38,11 +38,11 @@ import org.mockito.Mockito.{spy, verify}
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
-import org.apache.spark.resource.ResourceUtils.AMOUNT
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils.AMOUNT
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers {
