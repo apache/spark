@@ -850,6 +850,43 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(Exception, "reached finally block"):
                 self.spark.range(1).select(test_close(col("id"))).collect()
 
+    def test_scalar_iter_udf_close_early(self):
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            tmp_file = tmp_dir + '/reach_finally_block'
+
+            @pandas_udf('int', PandasUDFType.SCALAR_ITER)
+            def test_close(batch_iter):
+                generator_exit_caught = False
+                try:
+                    for batch in batch_iter:
+                        yield batch
+                        time.sleep(1.0)  # avoid the function finish too fast.
+                except GeneratorExit as ge:
+                    generator_exit_caught = True
+                    raise ge
+                finally:
+                    assert generator_exit_caught, "Generator exit exception was not caught."
+                    open(tmp_file, 'a').close()
+
+            with QuietTest(self.sc):
+                with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1,
+                                    "spark.sql.pandas.udf.buffer.size": 4}):
+                    self.spark.range(10).repartition(1) \
+                        .select(test_close(col("id"))).limit(2).collect()
+                    # wait here because python udf worker will take some time to detect
+                    # jvm side socket closed and then will trigger `GenerateExit` raised.
+                    # wait timeout is 10s.
+                    for i in range(100):
+                        time.sleep(0.1)
+                        if os.path.exists(tmp_file):
+                            break
+
+                    assert os.path.exists(tmp_file), "finally block not reached."
+
+        finally:
+            shutil.rmtree(tmp_dir)
+
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
