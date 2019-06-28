@@ -166,9 +166,9 @@ public class ExternalShuffleClient extends ShuffleClient {
         try {
           BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
           numRemovedBlocksFuture.complete(((BlocksRemoved) msgObj).numRemovedBlocks);
-        } catch (Exception e) {
+        } catch (Throwable t) {
           logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
-            " via external shuffle service from executor: " + execId, e);
+            " via external shuffle service from executor: " + execId, t);
           numRemovedBlocksFuture.complete(0);
         } finally {
           client.close();
