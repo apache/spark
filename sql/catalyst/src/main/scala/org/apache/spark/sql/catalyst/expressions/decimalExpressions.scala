@@ -48,11 +48,6 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
 
   private val nullOnOverflow = SQLConf.get.decimalOperationsNullOnOverflow
-  private lazy val doEval = if (nullOnOverflow) {
-    input: Long => new Decimal().setOrNull(input, precision, scale)
-  } else {
-    input: Long => new Decimal().set(input, precision, scale)
-  }
 
   override def dataType: DataType = DecimalType(precision, scale)
   override def nullable: Boolean = child.nullable || nullOnOverflow
