@@ -1203,7 +1203,7 @@ setMethod("collect",
               requireNamespace1 <- requireNamespace
               if (requireNamespace1("arrow", quietly = TRUE)) {
                 read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
-                as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
+                as_tibble <- get0("as_tibble", envir = asNamespace("arrow"), ifnotfound = NULL)
 
                 portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
                 port <- portAuth[[1]]
@@ -1213,7 +1213,11 @@ setMethod("collect",
                 output <- tryCatch({
                   doServerAuth(conn, authSecret)
                   arrowTable <- read_arrow(readRaw(conn))
-                  as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
+                  if (is.null(as_tibble)) {
+                    as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
+                  } else {
+                    as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
+                  }
                 }, finally = {
                   close(conn)
                 })
