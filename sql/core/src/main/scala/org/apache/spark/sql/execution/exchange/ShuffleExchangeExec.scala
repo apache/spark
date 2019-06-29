@@ -42,7 +42,7 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordCo
  * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
-    desiredPartitioning: Partitioning,
+    override val outputPartitioning: Partitioning,
     child: SparkPlan) extends Exchange {
 
   // NOTE: coordinator can be null after serialization/deserialization,
@@ -56,8 +56,6 @@ case class ShuffleExchangeExec(
   ) ++ readMetrics ++ writeMetrics
 
   override def nodeName: String = "Exchange"
-
-  override def outputPartitioning: Partitioning = desiredPartitioning
 
   private val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))

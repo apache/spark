@@ -161,6 +161,17 @@ case class BroadcastQueryStageExec(
   }
 }
 
+object ShuffleQueryStageExec {
+  /**
+   * Returns if the plan is a [[ShuffleQueryStageExec]] or a reused [[ShuffleQueryStageExec]].
+   */
+  def isShuffleQueryStageExec(plan: SparkPlan): Boolean = plan match {
+    case r: ReusedQueryStageExec => isShuffleQueryStageExec(r.plan)
+    case _: ShuffleQueryStageExec => true
+    case _ => false
+  }
+}
+
 object BroadcastQueryStageExec {
   /**
    * Returns if the plan is a [[BroadcastQueryStageExec]] or a reused [[BroadcastQueryStageExec]].

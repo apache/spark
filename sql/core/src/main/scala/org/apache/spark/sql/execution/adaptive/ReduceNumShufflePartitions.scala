@@ -54,37 +54,41 @@ import org.apache.spark.util.ThreadUtils
 case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    val shuffleMetrics: Seq[MapOutputStatistics] = plan.collect {
-      case stage: ShuffleQueryStageExec =>
-        val metricsFuture = stage.mapOutputStatisticsFuture
-        assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
-        ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
-      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-        val metricsFuture = stage.mapOutputStatisticsFuture
-        assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
-        ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
+    if (!conf.reducePostShufflePartitionsEnabled) {
+      return plan
     }
-
     if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])) {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
       plan
     } else {
+      val shuffleStages = plan.collect {
+        case stage: ShuffleQueryStageExec => stage
+        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => stage
+      }
+      val shuffleMetrics = shuffleStages.map { stage =>
+        val metricsFuture = stage.mapOutputStatisticsFuture
+        assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
+        ThreadUtils.awaitResult(metricsFuture, Duration.Zero)
+      }
+
       // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleMetrics.filter(_ != null)
-      if (validMetrics.nonEmpty) {
+      // We may get different pre shuffle partition number if user calls repartition manually.
+      // We don't reduce shuffle partition number in that case.
+      val distinctNumPreShufflePartitions =
+        validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
+      if (validMetrics.nonEmpty && distinctNumPreShufflePartitions == 1) {
         val partitionStartIndices = estimatePartitionStartIndices(validMetrics.toArray)
         // This transformation adds new nodes, so we must use `transformUp` here.
         plan.transformUp {
           // even for shuffle exchange whose input RDD has 0 partition, we should still update its
           // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
-          case stage: ShuffleQueryStageExec =>
+          case stage: QueryStageExec if ShuffleQueryStageExec.isShuffleQueryStageExec(stage) =>
             CoalescedShuffleReaderExec(stage, partitionStartIndices)
-          case reused: ReusedQueryStageExec if reused.plan.isInstanceOf[ShuffleQueryStageExec] =>
-            CoalescedShuffleReaderExec(reused, partitionStartIndices)
         }
       } else {
         plan

@@ -573,4 +573,23 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
     }
     withSparkSession(test, 4, None)
   }
+
+  test("Union two datasets with different pre-shuffle partition number") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      val dataset1 = spark.range(3)
+      val dataset2 = spark.range(3)
+
+      val resultDf = dataset1.repartition(2, dataset1.col("id"))
+        .union(dataset2.repartition(3, dataset2.col("id"))).toDF()
+
+      checkAnswer(resultDf,
+        Seq((0), (0), (1), (1), (2), (2)).map(i => Row(i)))
+      val finalPlan = resultDf.queryExecution.executedPlan
+        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      // As the pre-shuffle partition number are different, we will skip reducing
+      // the shuffle partition numbers.
+      assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 0)
+    }
+    withSparkSession(test, 100, None)
+  }
 }
