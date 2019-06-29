@@ -646,8 +646,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case logicalRelation @ LogicalRelation(_, _, Some(catalogTable), _)
-      if DDLUtils.isDatasourceTable(catalogTable) && catalogTable.stats.isEmpty &&
-        session.sharedState.cacheManager.lookupCachedData(plan).nonEmpty =>
+      if DDLUtils.isDatasourceTable(catalogTable) && catalogTable.stats.isEmpty =>
       logicalRelation.copy(catalogTable = Some(withStats(catalogTable)))
 
     case relation: HiveTableRelation
