@@ -111,9 +111,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
     this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
-    require(
-      decimalVal.precision <= precision,
-      s"Decimal precision ${decimalVal.precision} exceeds max precision $precision")
+    if (decimalVal.precision > precision) {
+      throw new ArithmeticException(
+        s"Decimal precision ${decimalVal.precision} exceeds max precision $precision")
+    }
     this.longVal = 0L
     this._precision = precision
     this._scale = scale

@@ -49,7 +49,6 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       intercept[ArithmeticException](evaluateWithoutCodegen(overflowExpr, null))
       intercept[ArithmeticException](checkEvaluationWithUnsafeProjection(overflowExpr, null))
     }
-
   }
 
   test("PromotePrecision") {

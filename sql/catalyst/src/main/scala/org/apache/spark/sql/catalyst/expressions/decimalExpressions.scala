@@ -61,7 +61,6 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
     } else {
       result.set(longInput, precision, scale)
     }
-    result
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
