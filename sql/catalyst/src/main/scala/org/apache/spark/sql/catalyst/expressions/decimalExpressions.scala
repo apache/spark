@@ -58,7 +58,16 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   override def nullable: Boolean = child.nullable || nullOnOverflow
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
-  protected override def nullSafeEval(input: Any): Any = doEval(input.asInstanceOf[Long])
+  protected override def nullSafeEval(input: Any): Any = {
+    val longInput = input.asInstanceOf[Long]
+    val result = new Decimal()
+    if (nullOnOverflow) {
+      result.setOrNull(longInput, precision, scale)
+    } else {
+      result.set(longInput, precision, scale)
+    }
+    result
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
