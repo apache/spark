@@ -115,6 +115,19 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       plan, expectedStatsCboOn = expectedCboStats, expectedStatsCboOff = expectedDefaultStats)
   }
 
+  test("custom stats plan visitor") {
+    // TODO: Add missing comments here
+    val range = Range(1, 5, 1, None)
+    val rangeStats = Statistics(sizeInBytes = 999)
+
+    withSQLConf(
+      SQLConf.STATS_PLAN_VISITOR_CLASS.key ->
+        "org.apache.spark.sql.catalyst.statsEstimation.CustomStatsPlanVisitor") {
+      range.invalidateStatsCache()
+      assert(range.stats == rangeStats)
+    }
+  }
+
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,
@@ -149,4 +162,45 @@ private case class DummyLogicalPlan(
   override def output: Seq[Attribute] = Nil
 
   override def computeStats(): Statistics = if (conf.cboEnabled) cboStats else defaultStats
+}
+
+// TODO: Add comments
+class CustomStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
+  override def default(p: LogicalPlan): Statistics = Statistics(sizeInBytes = 999)
+
+  override def visitAggregate(p: Aggregate): Statistics = default(p)
+
+  override def visitDistinct(p: Distinct): Statistics = default(p)
+
+  override def visitExcept(p: Except): Statistics = default(p)
+
+  override def visitExpand(p: Expand): Statistics = default(p)
+
+  override def visitFilter(p: Filter): Statistics = default(p)
+
+  override def visitGenerate(p: Generate): Statistics = default(p)
+
+  override def visitGlobalLimit(p: GlobalLimit): Statistics = default(p)
+
+  override def visitIntersect(p: Intersect): Statistics = default(p)
+
+  override def visitJoin(p: Join): Statistics = default(p)
+
+  override def visitLocalLimit(p: LocalLimit): Statistics = default(p)
+
+  override def visitPivot(p: Pivot): Statistics = default(p)
+
+  override def visitProject(p: Project): Statistics = default(p)
+
+  override def visitRepartition(p: Repartition): Statistics = default(p)
+
+  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = default(p)
+
+  override def visitSample(p: Sample): Statistics = default(p)
+
+  override def visitScriptTransform(p: ScriptTransformation): Statistics = default(p)
+
+  override def visitUnion(p: Union): Statistics = default(p)
+
+  override def visitWindow(p: Window): Statistics = default(p)
 }
