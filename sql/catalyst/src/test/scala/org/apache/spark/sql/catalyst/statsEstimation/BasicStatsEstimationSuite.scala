@@ -116,15 +116,16 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("custom stats plan visitor") {
-    // TODO: Add missing comments here
+    // Create a logical plan with a Range, which should return a Statistics object
+    // with sizeInBytes equal to (4 * 8) with the built-in plan visitor.
     val range = Range(1, 5, 1, None)
-    val rangeStats = Statistics(sizeInBytes = 999)
 
     withSQLConf(
       SQLConf.STATS_PLAN_VISITOR_CLASS.key ->
         "org.apache.spark.sql.catalyst.statsEstimation.CustomStatsPlanVisitor") {
       range.invalidateStatsCache()
-      assert(range.stats == rangeStats)
+      // CustomStatsPlanVisitor always returns a Statistics object with sizeInBytes equal to 10000.
+      assert(range.stats == Statistics(sizeInBytes = 10000))
     }
   }
 
@@ -164,9 +165,12 @@ private case class DummyLogicalPlan(
   override def computeStats(): Statistics = if (conf.cboEnabled) cboStats else defaultStats
 }
 
-// TODO: Add comments
-class CustomStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
-  override def default(p: LogicalPlan): Statistics = Statistics(sizeInBytes = 999)
+/**
+ * This class is used for unit-testing the custom logical plan visitor. It always returns
+ * a Statistics object with sizeInBytes equal to 10000.
+ */
+private class CustomStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
+  override def default(p: LogicalPlan): Statistics = Statistics(sizeInBytes = 10000)
 
   override def visitAggregate(p: Aggregate): Statistics = default(p)
 

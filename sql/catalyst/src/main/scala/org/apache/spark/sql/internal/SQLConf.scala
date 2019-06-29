@@ -1825,7 +1825,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val STATS_PLAN_VISITOR_CLASS = buildConf("spark.sql.catalyst.statsPlanVisitorClass")
-    .doc("Name of custom LogicalPlanVisitor[Statistics] class.")
+    .doc("The class that calculates statistics for a logical plan.")
     .stringConf
     .createOptional
 }
