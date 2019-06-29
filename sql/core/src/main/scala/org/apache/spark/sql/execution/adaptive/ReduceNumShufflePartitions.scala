@@ -76,10 +76,11 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleMetrics.filter(_ != null)
-      // We may get different pre shuffle partition number if user calls repartition manually.
+      // We may get different pre-shuffle partition number if user calls repartition manually.
       // We don't reduce shuffle partition number in that case.
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
+
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions == 1) {
         val partitionStartIndices = estimatePartitionStartIndices(validMetrics.toArray)
         // This transformation adds new nodes, so we must use `transformUp` here.
