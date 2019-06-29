@@ -248,9 +248,7 @@ private[hive] trait HiveStrategies {
             predicate.references.subsetOf(partitionKeyIds)
         }
         }
-
-        val extractedPruningPredicates =
-          ExtractPartitionPredicates.extractPartitionPredicate(predicates, partitionKeyIds)
+        val extractedPruningPredicates = ExtractPartitionPredicates(predicates, partitionKeyIds)
 
         pruneFilterProject(
           projectList,

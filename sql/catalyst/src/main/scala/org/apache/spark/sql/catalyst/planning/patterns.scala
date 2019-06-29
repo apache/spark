@@ -313,6 +313,8 @@ object PhysicalWindow {
 
 object ExtractPartitionPredicates extends Logging {
 
+  private type ReturnType = Seq[Expression]
+
   private def resolvePredicatesExpression(expr: Expression,
                                           partitionKeyIds: AttributeSet): Expression = {
     if (!expr.references.isEmpty && expr.references.subsetOf(partitionKeyIds)) {
@@ -356,8 +358,8 @@ object ExtractPartitionPredicates extends Logging {
     }
   }
 
-  def extractPartitionPredicate(predicates: Seq[Expression],
-                                partitionKeyIds: AttributeSet): Seq[Expression] = {
+  def apply(predicates: Seq[Expression],
+              partitionKeyIds: AttributeSet): ReturnType = {
     predicates.map(resolveExpression(_, partitionKeyIds))
       .filter(_ != null)
   }
