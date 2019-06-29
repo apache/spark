@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.expressions
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
+import org.apache.spark.sql.execution.aggregate.ScalaAggregator
 import org.apache.spark.sql.types.{AnyDataType, DataType}
 
 /**
@@ -129,6 +134,53 @@ private[sql] case class SparkUserDefinedFunction(
   }
 
   override def asNondeterministic(): SparkUserDefinedFunction = {
+    if (!deterministic) {
+      this
+    } else {
+      copy(deterministic = false)
+    }
+  }
+}
+
+/**
+ * A User Defined Function for wrapping an [[Aggregator]] in a form consumable by Data Frames.
+ * Can be either instantiated directly or via registration, for example:
+ * {{{
+ *   val agg: Aggregator[IN, BUF, OUT] = // typed aggregator
+ *   val udaf1 = UserDefinedAggregator(agg)
+ *   val udaf2 = spark.udf.register("agg", agg)
+ * }}}
+ */
+case class UserDefinedAggregator[IN: TypeTag, BUF, OUT](
+    aggregator: Aggregator[IN, BUF, OUT],
+    name: Option[String] = None,
+    nullable: Boolean = true,
+    deterministic: Boolean = true) extends UserDefinedFunction {
+
+  @scala.annotation.varargs
+  def apply(exprs: Column*): Column = {
+    val inputEncoder = (ExpressionEncoder[IN]()).resolveAndBind()
+    val aggregateExpression =
+      AggregateExpression(
+        ScalaAggregator(exprs.map(_.expr), aggregator, inputEncoder, nullable, deterministic),
+        Complete,
+        isDistinct = false)
+    Column(aggregateExpression)
+  }
+
+  override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {
+    copy(name = Option(name))
+  }
+
+  override def asNonNullable(): UserDefinedAggregator[IN, BUF, OUT] = {
+    if (!nullable) {
+      this
+    } else {
+      copy(nullable = false)
+    }
+  }
+
+  override def asNondeterministic(): UserDefinedAggregator[IN, BUF, OUT] = {
     if (!deterministic) {
       this
     } else {

@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, _}
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateSafeProjection}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
 /**
@@ -449,4 +453,86 @@ case class ScalaUDAF(
   }
 
   override def nodeName: String = udaf.getClass.getSimpleName
+}
+
+case class ScalaAggregator[IN, BUF, OUT](
+    children: Seq[Expression],
+    agg: Aggregator[IN, BUF, OUT],
+    inputEncoder: ExpressionEncoder[IN],
+    isNullable: Boolean = true,
+    isDeterministic: Boolean = true,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[BUF]
+  with NonSQLExpression
+  with UserDefinedExpression
+  with ImplicitCastInputTypes
+  with Logging {
+
+  val bufferEncoder = agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
+  val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
+
+  val dataType: DataType = outputEncoder.objSerializer.dataType
+
+  val inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
+
+  def nullable: Boolean = isNullable
+
+  override lazy val deterministic: Boolean = isDeterministic
+
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  private[this] lazy val childrenSchema: StructType = {
+    val inputFields = children.zipWithIndex.map {
+      case (child, index) =>
+        StructField(s"input$index", child.dataType, child.nullable, Metadata.empty)
+    }
+    StructType(inputFields)
+  }
+
+  private[this] lazy val inputProjection = {
+    val inputAttributes = childrenSchema.toAttributes
+    log.debug(
+      s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
+    MutableProjection.create(children, inputAttributes)
+  }
+
+  def createAggregationBuffer(): BUF = agg.zero
+
+  def update(buffer: BUF, input: InternalRow): BUF = {
+    val proj = inputProjection(input)
+    val a = inputEncoder.fromRow(proj)
+    agg.reduce(buffer, a)
+  }
+
+  def merge(buffer: BUF, input: BUF): BUF = agg.merge(buffer, input)
+
+  private[this] lazy val outputToCatalystConverter: Any => Any = {
+    CatalystTypeConverters.createToCatalystConverter(dataType)
+  }
+
+  def eval(buffer: BUF): Any = outputToCatalystConverter(agg.finish(buffer))
+
+  private[this] lazy val bufferSerializer = bufferEncoder.namedExpressions
+  private[this] lazy val bufferDeserializer = bufferEncoder.resolveAndBind().deserializer
+  private[this] lazy val bufferObjToRow = UnsafeProjection.create(bufferSerializer)
+  private[this] lazy val bufferRow = new UnsafeRow(bufferSerializer.length)
+  private[this] lazy val bufferRowToObject =
+    GenerateSafeProjection.generate(bufferDeserializer :: Nil)
+
+  def serialize(agg: BUF): Array[Byte] = bufferObjToRow(InternalRow(agg)).getBytes
+
+  def deserialize(storageFormat: Array[Byte]): BUF = {
+    bufferRow.pointTo(storageFormat, storageFormat.length)
+    bufferRowToObject(bufferRow).get(0, ObjectType(classOf[Any])).asInstanceOf[BUF]
+  }
+
+  override def toString: String =
+    s"""${agg.getClass.getSimpleName}(${children.mkString(",")})"""
+
+  override def nodeName: String = agg.getClass.getSimpleName
 }
