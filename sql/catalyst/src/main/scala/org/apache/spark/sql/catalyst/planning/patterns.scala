@@ -311,6 +311,39 @@ object PhysicalWindow {
   }
 }
 
+/**
+ * Extract partition push down condition from ExpressionSet
+ * Since origin judge condition is
+ *    {
+ *       !expression.references.isEmpty &&
+ *             expression.references.subsetOf(partitionKeyIds)
+ *    }
+ *
+ *  This can only push down simple condition expression.
+ *  Such as table:
+ *   CREATE TABLE DEFAULT.PARTITION_TABLE(
+ *   A STRING,
+ *   B STRING)
+ *   PARTITIONED BY(DT STRING)
+ *
+ * With SQL:
+ *   SELECT A, B
+ *   FROM DEFAULT.PARTITION_TABLE
+ *   WHERE DT = 20190601 OR (DT = 20190602 AND C = "TEST")
+ *
+ * Where condition "DT = 20190601 OR (DT = 20190602 AND C = "TEST")"
+ * can't be pushed down since it's reference is not subsetOf partition cols
+ * [[ExtractPartitionPredicates]] is to help extract hided partition logic in Or expression.
+ * It will return Or( DT = 20190601 , DT = 20190602 ) for partition push down.
+ *
+ * For special Or condition such as :
+ * SELECT A, B
+ * FROM DEFAULT.PARTITION_TABLE
+ * WHERE DT = 20190601 OR (DT = 20190602 OR C = "TEST")
+ *
+ * It won't think it's a validate push down condition and return a empty expression set.
+ *
+ */
 object ExtractPartitionPredicates extends Logging {
 
   private type ReturnType = Seq[Expression]
@@ -328,7 +361,11 @@ object ExtractPartitionPredicates extends Logging {
                                        right: Expression,
                                        op_type: String): Expression = {
     op_type.toUpperCase(Locale.ROOT) match {
+      // When construct 'Or' predicate only when hist children is valid.
+      // If not, we will return null
       case "OR" if left != null && right != null => Or(left, right)
+      //  For 'And' expression , left and right constraints contradict each other.
+      //  It's ok to return one side and both side
       case "AND" if left != null || right != null =>
         if (left == null) {
           right
@@ -349,6 +386,9 @@ object ExtractPartitionPredicates extends Logging {
           resolveExpression(right, partitionKeyIds),
           "and")
       case or@Or(left, right)
+        // only Or's both left and right child have partition keys can be chose
+        // Not valid Or expression will be handled by [[resolvePredicatesExpression]]
+        // It will return null and destroy treetop 'Or' expression and return null
         if or.children.forall(_.references.exists(ref => partitionKeyIds.contains(ref))) =>
         constructBinaryOperators(
           resolveExpression(left, partitionKeyIds),
