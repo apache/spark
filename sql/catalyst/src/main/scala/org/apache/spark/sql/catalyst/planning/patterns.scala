@@ -309,4 +309,53 @@ object PhysicalWindow {
 
     case _ => None
   }
+
+  object ExtractPartitionPredicates extends Logging {
+
+    private def resolvePredicatesExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
+      if (!expr.references.isEmpty && expr.references.subsetOf(partitionKeyIds)) {
+        expr
+      } else {
+        null
+      }
+    }
+
+    private def constructBinaryOperators(left: Expression, right: Expression, op_type: String): Expression = {
+      op_type.toUpperCase match {
+        case "OR" if left != null && right != null => Or(left, right)
+        case "AND" if left != null || right != null => {
+          if (left == null) {
+            right
+          } else if (right == null) {
+            left
+          } else {
+            And(left, right)
+          }
+        }
+        case _ => null
+      }
+    }
+
+    private def resolveExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
+      expr match {
+        case And(left, right) =>
+          constructBinaryOperators(
+            resolveExpression(left, partitionKeyIds),
+            resolveExpression(right, partitionKeyIds),
+            "and")
+        case or@Or(left, right)
+          if or.children.forall(_.references.exists(ref => partitionKeyIds.contains(ref))) =>
+          constructBinaryOperators(
+            resolveExpression(left, partitionKeyIds),
+            resolveExpression(right, partitionKeyIds),
+            "or")
+        case _ => resolvePredicatesExpression(expr, partitionKeyIds)
+      }
+    }
+
+    def extractPartitionPredicate(predicates: Seq[Expression], partitionKeyIds:AttributeSet): Seq[Expression] = {
+      predicates.map(resolveExpression(_, partitionKeyIds))
+        .filter(_ != null)
+    }
+  }
 }

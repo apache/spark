@@ -21,13 +21,12 @@ import java.io.IOException
 import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.PhysicalWindow.ExtractPartitionPredicates
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan,
-    ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, ScriptTransformation}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
@@ -238,47 +237,6 @@ private[hive] trait HiveStrategies {
    */
   object HiveTableScans extends Strategy {
 
-    def resolvePredicatesExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
-      if (!expr.references.isEmpty && expr.references.subsetOf(partitionKeyIds)) {
-        expr
-      } else {
-        null
-      }
-    }
-
-    def constructBinaryOperators(left: Expression, right: Expression, op_type: String): Expression = {
-      op_type.toUpperCase match {
-        case "OR" if left != null && right != null => Or(left, right)
-        case "AND" if left != null || right != null => {
-          if (left == null) {
-            right
-          } else if (right == null) {
-            left
-          } else {
-            And(left, right)
-          }
-        }
-        case _ => null
-      }
-    }
-
-    def resolveExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
-      expr match {
-        case And(left, right) =>
-          constructBinaryOperators(
-            resolveExpression(left, partitionKeyIds),
-            resolveExpression(right, partitionKeyIds),
-            "and")
-        case or@Or(left, right)
-          if or.children.forall(_.references.exists(ref => partitionKeyIds.contains(ref))) =>
-          constructBinaryOperators(
-            resolveExpression(left, partitionKeyIds),
-            resolveExpression(right, partitionKeyIds),
-            "or")
-        case _ => resolvePredicatesExpression(expr, partitionKeyIds)
-      }
-    }
-
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates, relation: HiveTableRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
@@ -290,9 +248,7 @@ private[hive] trait HiveStrategies {
         }
         }
 
-        val extractedPruningPredicates =
-          predicates.map(resolveExpression(_, partitionKeyIds))
-            .filter(_ != null)
+        val extractedPruningPredicates = ExtractPartitionPredicates.extractPartitionPredicate(predicates, partitionKeyIds)
 
         pruneFilterProject(
           projectList,

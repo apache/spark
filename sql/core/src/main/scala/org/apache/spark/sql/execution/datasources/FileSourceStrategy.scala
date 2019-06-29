@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.PhysicalWindow.ExtractPartitionPredicates
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.util.collection.BitSet
@@ -154,8 +155,7 @@ object FileSourceStrategy extends Strategy with Logging {
           fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
-        ExpressionSet(normalizedFilters
-          .filter(_.references.subsetOf(partitionSet)))
+        ExpressionSet(ExtractPartitionPredicates.extractPartitionPredicate(normalizedFilters, partitionSet))
 
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
