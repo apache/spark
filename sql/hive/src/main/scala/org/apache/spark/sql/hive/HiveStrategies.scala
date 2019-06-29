@@ -21,10 +21,10 @@ import java.io.IOException
 import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalWindow.ExtractPartitionPredicates
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, ScriptTransformation}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -248,7 +248,8 @@ private[hive] trait HiveStrategies {
         }
         }
 
-        val extractedPruningPredicates = ExtractPartitionPredicates.extractPartitionPredicate(predicates, partitionKeyIds)
+        val extractedPruningPredicates =
+          ExtractPartitionPredicates.extractPartitionPredicate(predicates, partitionKeyIds)
 
         pruneFilterProject(
           projectList,

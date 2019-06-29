@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import scala.collection.mutable
+import java.util.Locale
 
+import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -27,12 +28,12 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
- * A pattern that matches any number of project or filter operations on top of another relational
- * operator.  All filter operators are collected and their conditions are broken up and returned
- * together with the top project operator.
- * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
- * necessary.
- */
+  * A pattern that matches any number of project or filter operations on top of another relational
+  * operator.  All filter operators are collected and their conditions are broken up and returned
+  * together with the top project operator.
+  * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
+  * necessary.
+  */
 object PhysicalOperation extends PredicateHelper {
   type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
 
@@ -42,21 +43,21 @@ object PhysicalOperation extends PredicateHelper {
   }
 
   /**
-   * Collects all deterministic projects and filters, in-lining/substituting aliases if necessary.
-   * Here are two examples for alias in-lining/substitution.
-   * Before:
-   * {{{
-   *   SELECT c1 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
-   *   SELECT c1 AS c2 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
-   * }}}
-   * After:
-   * {{{
-   *   SELECT key AS c1 FROM t1 WHERE key > 10
-   *   SELECT key AS c2 FROM t1 WHERE key > 10
-   * }}}
-   */
+    * Collects all deterministic projects and filters, in-lining/substituting aliases if necessary.
+    * Here are two examples for alias in-lining/substitution.
+    * Before:
+    * {{{
+    *   SELECT c1 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
+    *   SELECT c1 AS c2 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
+    * }}}
+    * After:
+    * {{{
+    *   SELECT key AS c1 FROM t1 WHERE key > 10
+    *   SELECT key AS c2 FROM t1 WHERE key > 10
+    * }}}
+    */
   private def collectProjectsAndFilters(plan: LogicalPlan):
-      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
+  (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
     plan match {
       case Project(fields, child) if fields.forall(_.deterministic) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
@@ -76,12 +77,12 @@ object PhysicalOperation extends PredicateHelper {
     }
 
   private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
-    case a @ Alias(child, _) => a.toAttribute -> child
+    case a@Alias(child, _) => a.toAttribute -> child
   }.toMap
 
   private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
     expr.transform {
-      case a @ Alias(ref: AttributeReference, name) =>
+      case a@Alias(ref: AttributeReference, name) =>
         aliases.get(ref)
           .map(Alias(_, name)(a.exprId, a.qualifier))
           .getOrElse(a)
@@ -94,11 +95,11 @@ object PhysicalOperation extends PredicateHelper {
 }
 
 /**
- * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
- *
- * Null-safe equality will be transformed into equality as joining key (replace null with default
- * value).
- */
+  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
+  *
+  * Null-safe equality will be transformed into equality as joining key (replace null with default
+  * value).
+  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild, joinHint) */
   type ReturnType =
@@ -144,35 +145,35 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 }
 
 /**
- * A pattern that collects the filter and inner joins.
- *
- *          Filter
- *            |
- *        inner Join
- *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
- *      Filter   plan2
- *        |
- *  inner join
- *      /    \
- *   plan0    plan1
- *
- * Note: This pattern currently only works for left-deep trees.
- */
+  * A pattern that collects the filter and inner joins.
+  *
+  * Filter
+  * |
+  * inner Join
+  * /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
+  * Filter   plan2
+  * |
+  * inner join
+  * /    \
+  * plan0    plan1
+  *
+  * Note: This pattern currently only works for left-deep trees.
+  */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
   /**
-   * Flatten all inner joins, which are next to each other.
-   * Return a list of logical plans to be joined with a boolean for each plan indicating if it
-   * was involved in an explicit cross join. Also returns the entire list of join conditions for
-   * the left-deep tree.
-   */
+    * Flatten all inner joins, which are next to each other.
+    * Return a list of logical plans to be joined with a boolean for each plan indicating if it
+    * was involved in an explicit cross join. Also returns the entire list of join conditions for
+    * the left-deep tree.
+    */
   def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
-      : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
+  : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
       val (plans, conditions) = flattenJoin(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
-    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
+    case Filter(filterCondition, j@Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
@@ -180,27 +181,27 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   }
 
   def unapply(plan: LogicalPlan)
-      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
-      = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, hint))
-        if hint == JoinHint.NONE =>
+  : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
+  = plan match {
+    case f@Filter(filterCondition, j@Join(_, _, joinType: InnerLike, _, hint))
+      if hint == JoinHint.NONE =>
       Some(flattenJoin(f))
-    case j @ Join(_, _, joinType, _, hint) if hint == JoinHint.NONE =>
+    case j@Join(_, _, joinType, _, hint) if hint == JoinHint.NONE =>
       Some(flattenJoin(j))
     case _ => None
   }
 }
 
 /**
- * An extractor used when planning the physical execution of an aggregation. Compared with a logical
- * aggregation, the following transformations are performed:
- *  - Unnamed grouping expressions are named so that they can be referred to across phases of
- *    aggregation
- *  - Aggregations that appear multiple times are deduplicated.
- *  - The computation of the aggregations themselves is separated from the final result. For
- *    example, the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
- *    computation that computes `count.resultAttribute + 1`.
- */
+  * An extractor used when planning the physical execution of an aggregation. Compared with a logical
+  * aggregation, the following transformations are performed:
+  *  - Unnamed grouping expressions are named so that they can be referred to across phases of
+  * aggregation
+  *  - Aggregations that appear multiple times are deduplicated.
+  *  - The computation of the aggregations themselves is separated from the final result. For
+  * example, the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
+  * computation that computes `count.resultAttribute + 1`.
+  */
 object PhysicalAggregation {
   // groupingExpressions, aggregateExpressions, resultExpressions, child
   type ReturnType =
@@ -249,7 +250,7 @@ object PhysicalAggregation {
             // so replace each aggregate expression by its corresponding attribute in the set:
             equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
-            // Similar to AggregateExpression
+          // Similar to AggregateExpression
           case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
             equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
@@ -275,19 +276,19 @@ object PhysicalAggregation {
 }
 
 /**
- * An extractor used when planning physical execution of a window. This extractor outputs
- * the window function type of the logical window.
- *
- * The input logical window must contain same type of window functions, which is ensured by
- * the rule ExtractWindowExpressions in the analyzer.
- */
+  * An extractor used when planning physical execution of a window. This extractor outputs
+  * the window function type of the logical window.
+  *
+  * The input logical window must contain same type of window functions, which is ensured by
+  * the rule ExtractWindowExpressions in the analyzer.
+  */
 object PhysicalWindow {
   // windowFunctionType, windowExpression, partitionSpec, orderSpec, child
   private type ReturnType =
     (WindowFunctionType, Seq[NamedExpression], Seq[Expression], Seq[SortOrder], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
-    case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
+    case expr@logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
 
       // The window expression should not be empty here, otherwise it's a bug.
       if (windowExpressions.isEmpty) {
@@ -309,53 +310,56 @@ object PhysicalWindow {
 
     case _ => None
   }
+}
 
-  object ExtractPartitionPredicates extends Logging {
+object ExtractPartitionPredicates extends Logging {
 
-    private def resolvePredicatesExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
-      if (!expr.references.isEmpty && expr.references.subsetOf(partitionKeyIds)) {
-        expr
-      } else {
-        null
-      }
+  private def resolvePredicatesExpression(expr: Expression,
+                                          partitionKeyIds: AttributeSet): Expression = {
+    if (!expr.references.isEmpty && expr.references.subsetOf(partitionKeyIds)) {
+      expr
+    } else {
+      null
     }
+  }
 
-    private def constructBinaryOperators(left: Expression, right: Expression, op_type: String): Expression = {
-      op_type.toUpperCase match {
-        case "OR" if left != null && right != null => Or(left, right)
-        case "AND" if left != null || right != null => {
-          if (left == null) {
-            right
-          } else if (right == null) {
-            left
-          } else {
-            And(left, right)
-          }
+  private def constructBinaryOperators(left: Expression,
+                                       right: Expression,
+                                       op_type: String): Expression = {
+    op_type.toUpperCase(Locale.ROOT) match {
+      case "OR" if left != null && right != null => Or(left, right)
+      case "AND" if left != null || right != null =>
+        if (left == null) {
+          right
+        } else if (right == null) {
+          left
+        } else {
+          And(left, right)
         }
-        case _ => null
-      }
+      case _ => null
     }
+  }
 
-    private def resolveExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
-      expr match {
-        case And(left, right) =>
-          constructBinaryOperators(
-            resolveExpression(left, partitionKeyIds),
-            resolveExpression(right, partitionKeyIds),
-            "and")
-        case or@Or(left, right)
-          if or.children.forall(_.references.exists(ref => partitionKeyIds.contains(ref))) =>
-          constructBinaryOperators(
-            resolveExpression(left, partitionKeyIds),
-            resolveExpression(right, partitionKeyIds),
-            "or")
-        case _ => resolvePredicatesExpression(expr, partitionKeyIds)
-      }
+  private def resolveExpression(expr: Expression, partitionKeyIds: AttributeSet): Expression = {
+    expr match {
+      case And(left, right) =>
+        constructBinaryOperators(
+          resolveExpression(left, partitionKeyIds),
+          resolveExpression(right, partitionKeyIds),
+          "and")
+      case or@Or(left, right)
+        if or.children.forall(_.references.exists(ref => partitionKeyIds.contains(ref))) =>
+        constructBinaryOperators(
+          resolveExpression(left, partitionKeyIds),
+          resolveExpression(right, partitionKeyIds),
+          "or")
+      case _ => resolvePredicatesExpression(expr, partitionKeyIds)
     }
+  }
 
-    def extractPartitionPredicate(predicates: Seq[Expression], partitionKeyIds:AttributeSet): Seq[Expression] = {
-      predicates.map(resolveExpression(_, partitionKeyIds))
-        .filter(_ != null)
-    }
+  def extractPartitionPredicate(predicates: Seq[Expression],
+                                partitionKeyIds: AttributeSet): Seq[Expression] = {
+    predicates.map(resolveExpression(_, partitionKeyIds))
+      .filter(_ != null)
   }
 }
