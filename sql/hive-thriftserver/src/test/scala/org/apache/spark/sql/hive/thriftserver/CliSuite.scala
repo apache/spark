@@ -294,4 +294,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
     tmpDir.delete()
   }
+
+  test("Should not split semicolon within quoted string literals") {
+    runCliWithin(3.minute)(
+      """select "^;^";""" -> """^;^""",
+      """select "\";";""" -> """";""",
+      """select "\';";""" -> """';"""
+    )
+  }
 }
