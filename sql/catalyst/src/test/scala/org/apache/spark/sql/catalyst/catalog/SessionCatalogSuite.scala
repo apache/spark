@@ -684,15 +684,15 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val tempTable = Range(1, 10, 2, 10)
       catalog.createTempView("tbl1", tempTable, overrideIfExists = false)
       catalog.createTempView("tbl4", tempTable, overrideIfExists = false)
-      assert(catalog.listTablesAndTempViews("db1").toSet ==
+      assert(catalog.listTables("db1").toSet ==
         Set(TableIdentifier("tbl1"), TableIdentifier("tbl4")))
-      assert(catalog.listTablesAndTempViews("db2").toSet ==
+      assert(catalog.listTables("db2").toSet ==
         Set(TableIdentifier("tbl1"),
           TableIdentifier("tbl4"),
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier("tbl2", Some("db2"))))
       intercept[NoSuchDatabaseException] {
-        catalog.listTablesAndTempViews("unknown_db")
+        catalog.listTables("unknown_db")
       }
     }
   }
@@ -702,19 +702,17 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val tempTable = Range(1, 10, 2, 10)
       catalog.createTempView("tbl1", tempTable, overrideIfExists = false)
       catalog.createTempView("tbl4", tempTable, overrideIfExists = false)
-      assert(catalog.listTablesAndTempViews("db1", "*").toSet ==
-        catalog.listTablesAndTempViews("db1").toSet)
-      assert(catalog.listTablesAndTempViews("db2", "*").toSet ==
-        catalog.listTablesAndTempViews("db2").toSet)
-      assert(catalog.listTablesAndTempViews("db2", "tbl*").toSet ==
+      assert(catalog.listTables("db1", "*").toSet == catalog.listTables("db1").toSet)
+      assert(catalog.listTables("db2", "*").toSet == catalog.listTables("db2").toSet)
+      assert(catalog.listTables("db2", "tbl*").toSet ==
         Set(TableIdentifier("tbl1"),
           TableIdentifier("tbl4"),
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier("tbl2", Some("db2"))))
-      assert(catalog.listTablesAndTempViews("db2", "*1").toSet ==
+      assert(catalog.listTables("db2", "*1").toSet ==
         Set(TableIdentifier("tbl1"), TableIdentifier("tbl1", Some("db2"))))
       intercept[NoSuchDatabaseException] {
-        catalog.listTablesAndTempViews("unknown_db", "*")
+        catalog.listTables("unknown_db", "*")
       }
     }
   }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.UUID
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
@@ -57,8 +56,6 @@ private[hive] class SparkGetColumnsOperation(
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
-  private var statementId: String = _
-
   override def runInternal(): Unit = {
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName" +
       s", columnName : $columnName"
@@ -78,7 +75,7 @@ private[hive] class SparkGetColumnsOperation(
     }
 
     val db2Tabs = catalog.listDatabases(schemaPattern).map { dbName =>
-      (dbName, catalog.listTables(dbName, tablePattern))
+      (dbName, catalog.listTables(dbName, tablePattern, includeLocalTempViews = false))
     }.toMap
 
     if (isAuthV2Enabled) {
@@ -97,17 +94,21 @@ private[hive] class SparkGetColumnsOperation(
           }
       }
 
-      // Temporary views and global temporary views
+      // Global temporary views
       val globalTempViewDb = catalog.globalTempViewManager.database
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (databasePattern.matcher(globalTempViewDb).matches()) {
-        catalog.listTempViews(globalTempViewDb, tablePattern).foreach { views =>
-          catalog.getTempView(views.table).foreach { plan =>
-            addToRowSet(columnPattern, "", views.table, plan.schema)
+        catalog.globalTempViewManager.listViewNames(tablePattern).foreach { globalTempView =>
+          catalog.globalTempViewManager.get(globalTempView).foreach { plan =>
+            addToRowSet(columnPattern, globalTempViewDb, globalTempView, plan.schema)
           }
-          catalog.globalTempViewManager.get(views.table).foreach { plan =>
-            addToRowSet(columnPattern, globalTempViewDb, views.table, plan.schema)
-          }
+        }
+      }
+
+      // Temporary views
+      catalog.listLocalTempViews(tablePattern).foreach { localTempView =>
+        catalog.getTempView(localTempView.table).foreach { plan =>
+          addToRowSet(columnPattern, null, localTempView.table, plan.schema)
         }
       }
       setState(OperationState.FINISHED)

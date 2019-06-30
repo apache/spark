@@ -827,7 +827,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createTable(catalog, tableIdent1)
 
     // drop a non-empty database in CASCADE mode
-    assert(catalog.listTablesAndTempViews(dbName).contains(tableIdent1))
+    assert(catalog.listTables(dbName).contains(tableIdent1))
     assert(catalog.listDatabases().contains(dbName))
     sql(s"DROP DATABASE $dbName CASCADE")
     assert(!catalog.listDatabases().contains(dbName))
@@ -923,19 +923,19 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dby")
     createTable(catalog, tableIdent1)
 
-    assert(catalog.listTablesAndTempViews("dbx") == Seq(tableIdent1))
+    assert(catalog.listTables("dbx") == Seq(tableIdent1))
     sql("ALTER TABLE dbx.tab1 RENAME TO dbx.tab2")
-    assert(catalog.listTablesAndTempViews("dbx") == Seq(tableIdent2))
+    assert(catalog.listTables("dbx") == Seq(tableIdent2))
 
     // The database in destination table name can be omitted, and we will use the database of source
     // table for it.
     sql("ALTER TABLE dbx.tab2 RENAME TO tab1")
-    assert(catalog.listTablesAndTempViews("dbx") == Seq(tableIdent1))
+    assert(catalog.listTables("dbx") == Seq(tableIdent1))
 
     catalog.setCurrentDatabase("dbx")
     // rename without explicitly specifying database
     sql("ALTER TABLE tab1 RENAME TO tab2")
-    assert(catalog.listTablesAndTempViews("dbx") == Seq(tableIdent2))
+    assert(catalog.listTables("dbx") == Seq(tableIdent2))
     // table to rename does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.does_not_exist RENAME TO dbx.tab2")
@@ -985,7 +985,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           "cannot specify database name 'default' in the destination table"))
 
       val catalog = spark.sessionState.catalog
-      assert(catalog.listTablesAndTempViews("default") == Seq(TableIdentifier("tab1")))
+      assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     }
   }
 
@@ -1010,7 +1010,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           "cannot specify database name 'default' in the destination table"))
 
       val catalog = spark.sessionState.catalog
-      assert(catalog.listTablesAndTempViews("default") == Seq(TableIdentifier("view1")))
+      assert(catalog.listTables("default") == Seq(TableIdentifier("view1")))
     }
   }
 
@@ -1058,8 +1058,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         "RENAME TEMPORARY VIEW from '`tab1`' to '`tab2`': destination table already exists"))
 
       val catalog = spark.sessionState.catalog
-      assert(catalog.listTablesAndTempViews("default") ==
-        Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
+      assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
     }
   }
 
@@ -1094,7 +1093,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         "RENAME TEMPORARY VIEW from '`view1`' to '`view2`': destination table already exists"))
 
       val catalog = spark.sessionState.catalog
-      assert(catalog.listTablesAndTempViews("default") ==
+      assert(catalog.listTables("default") ==
         Seq(TableIdentifier("view1"), TableIdentifier("view2")))
     }
   }
@@ -1246,9 +1245,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
        |  Table 'test1'
        |)
       """.stripMargin)
-    assert(catalog.listTablesAndTempViews("default") == Seq(TableIdentifier("tab1")))
+    assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     sql("DROP VIEW tab1")
-    assert(catalog.listTablesAndTempViews("default") == Nil)
+    assert(catalog.listTables("default") == Nil)
   }
 
   protected def testDropTable(isDatasourceTable: Boolean): Unit = {
@@ -1259,9 +1258,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent, isDatasourceTable)
-    assert(catalog.listTablesAndTempViews("dbx") == Seq(tableIdent))
+    assert(catalog.listTables("dbx") == Seq(tableIdent))
     sql("DROP TABLE dbx.tab1")
-    assert(catalog.listTablesAndTempViews("dbx") == Nil)
+    assert(catalog.listTables("dbx") == Nil)
     sql("DROP TABLE IF EXISTS dbx.tab1")
     intercept[AnalysisException] {
       sql("DROP TABLE dbx.tab1")
@@ -1273,7 +1272,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
-    assert(catalog.listTablesAndTempViews("dbx") == Seq(tableIdent))
+    assert(catalog.listTables("dbx") == Seq(tableIdent))
 
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")

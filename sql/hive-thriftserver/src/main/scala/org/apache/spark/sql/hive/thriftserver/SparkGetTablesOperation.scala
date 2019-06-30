@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{List => JList, UUID}
+import java.util.{List => JList}
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
@@ -76,11 +76,11 @@ private[hive] class SparkGetTablesOperation(
 
     // Tables and views
     matchingDbs.foreach { dbName =>
-      catalog.getTablesByName(catalog.listTables(dbName, tablePattern)).foreach { catalogTable =>
-        val tableType = tableTypeString(catalogTable.tableType)
+      val tables = catalog.listTables(dbName, tablePattern, includeLocalTempViews = false)
+      catalog.getTablesByName(tables).foreach { table =>
+        val tableType = tableTypeString(table.tableType)
         if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableType)) {
-          addToRowSet(
-            catalogTable.database, catalogTable.identifier.table, tableType, catalogTable.comment)
+          addToRowSet(table.database, table.identifier.table, tableType, table.comment)
         }
       }
     }
@@ -89,10 +89,13 @@ private[hive] class SparkGetTablesOperation(
     if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(VIEW.name)) {
       val globalTempViewDb = catalog.globalTempViewManager.database
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
-      if (databasePattern.matcher(globalTempViewDb).matches()) {
-        catalog.listTempViews(globalTempViewDb, tablePattern).foreach { views =>
-          addToRowSet(globalTempViewDb, views.identifier, VIEW.name, None)
-        }
+      val tempViews = if (databasePattern.matcher(globalTempViewDb).matches()) {
+        catalog.listTables(globalTempViewDb, tablePattern, includeLocalTempViews = true)
+      } else {
+        catalog.listLocalTempViews(tablePattern)
+      }
+      tempViews.foreach { view =>
+        addToRowSet(view.database.orNull, view.table, VIEW.name, None)
       }
     }
     setState(OperationState.FINISHED)

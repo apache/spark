@@ -734,7 +734,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    sessionState.catalog.listTablesAndTempViews(databaseName).map(_.table).toArray
+    sessionState.catalog.listTables(databaseName).map(_.table).toArray
   }
 
 }

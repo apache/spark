@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.UUID
 import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType

@@ -778,8 +778,7 @@ case class ShowTablesCommand(
     if (partitionSpec.isEmpty) {
       // Show the information of tables.
       val tables =
-        tableIdentifierPattern.map(catalog.listTablesAndTempViews(db, _))
-          .getOrElse(catalog.listTablesAndTempViews(db))
+        tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
       tables.map { tableIdent =>
         val database = tableIdent.database.getOrElse("")
         val tableName = tableIdent.table
