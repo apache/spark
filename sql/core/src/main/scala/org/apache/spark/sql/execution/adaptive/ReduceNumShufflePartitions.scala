@@ -81,7 +81,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
 
-      if (validMetrics.nonEmpty && distinctNumPreShufflePartitions == 1) {
+      if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
         val partitionStartIndices = estimatePartitionStartIndices(validMetrics.toArray)
         // This transformation adds new nodes, so we must use `transformUp` here.
         plan.transformUp {
