@@ -208,6 +208,13 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID =
+    buildConf("spark.sql.optimizer.reassignLambdaVariableID")
+      .doc("When true, Spark optimizer reassigns per-query unique IDs to LambdaVariable, so that " +
+        "it's more likely to hit codegen cache.")
+    .booleanConf
+    .createWithDefault(true)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -558,6 +565,12 @@ object SQLConf {
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
     .createWithDefault(true)
+
+  val ORC_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.orc.mergeSchema")
+    .doc("When true, the Orc data source merges schemas collected from all data files, " +
+      "otherwise the schema is picked from a random data file.")
+    .booleanConf
+    .createWithDefault(false)
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
@@ -1441,6 +1454,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECIMAL_OPERATIONS_NULL_ON_OVERFLOW =
+    buildConf("spark.sql.decimalOperations.nullOnOverflow")
+      .internal()
+      .doc("When true (default), if an overflow on a decimal occurs, then NULL is returned. " +
+        "Spark's older versions and Hive behave in this way. If turned to false, SQL ANSI 2011 " +
+        "specification will be followed instead: an arithmetic exception is thrown, as most " +
+        "of the SQL databases do.")
+      .booleanConf
+      .createWithDefault(true)
+
   val LITERAL_PICK_MINIMUM_PRECISION =
     buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
       .internal()
@@ -1939,6 +1962,8 @@ class SQLConf extends Serializable with Logging {
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
+  def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
+
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
@@ -2204,6 +2229,8 @@ class SQLConf extends Serializable with Logging {
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
+  def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 

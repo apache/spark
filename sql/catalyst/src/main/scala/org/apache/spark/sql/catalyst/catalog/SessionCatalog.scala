@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -71,7 +72,7 @@ class SessionCatalog(
       conf: SQLConf) {
     this(
       () => externalCatalog,
-      () => new GlobalTempViewManager("global_temp"),
+      () => new GlobalTempViewManager(conf.getConf(GLOBAL_TEMP_DATABASE)),
       functionRegistry,
       conf,
       new Configuration(),
@@ -219,7 +220,7 @@ class SessionCatalog(
       throw new AnalysisException(s"Can not drop default database")
     }
     if (cascade && databaseExists(dbName)) {
-      listTablesAndTempViews(dbName).foreach { t =>
+      listTables(dbName).foreach { t =>
         invalidateCachedTable(QualifiedTableName(dbName, t.table))
       }
     }
@@ -775,7 +776,7 @@ class SessionCatalog(
    * Note that, if the specified database is global temporary view database, we will list global
    * temporary views.
    */
-  def listTablesAndTempViews(db: String): Seq[TableIdentifier] = listTablesAndTempViews(db, "*")
+  def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
 
   /**
    * List all matching tables in the specified database, including local temporary views.
@@ -783,53 +784,47 @@ class SessionCatalog(
    * Note that, if the specified database is global temporary view database, we will list global
    * temporary views.
    */
-  def listTablesAndTempViews(db: String, pattern: String): Seq[TableIdentifier] = {
-    listTables(db, pattern) ++ listTempViews(db, pattern)
-  }
+  def listTables(db: String, pattern: String): Seq[TableIdentifier] = listTables(db, pattern, true)
 
   /**
-   * List all tables and views in the specified database.
+   * List all matching tables in the specified database, including local temporary views
+   * if includeLocalTempViews is enabled.
+   *
+   * Note that, if the specified database is global temporary view database, we will list global
+   * temporary views.
    */
-  def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
-
-  /**
-   * List all matching tables and views in the specified database.
-   */
-  def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
+  def listTables(
+      db: String,
+      pattern: String,
+      includeLocalTempViews: Boolean): Seq[TableIdentifier] = {
     val dbName = formatDatabaseName(db)
-    requireDbExists(dbName)
-    externalCatalog.listTables(dbName, pattern).map { name =>
-      TableIdentifier(name, Some(dbName))
-    }
-  }
-
-  /**
-   * List all local temporary views and global temporary views
-   * if the specified database is global temporary view database.
-   */
-  def listTempViews(db: String): Seq[TableIdentifier] = listTables(db, "*")
-
-  /**
-   * List matching local temporary views and global temporary views
-   * if the specified database is global temporary view database.
-   */
-  def listTempViews(db: String, pattern: String): Seq[TableIdentifier] = {
-    val dbName = formatDatabaseName(db)
-    val globalTempViews = if (dbName == globalTempViewManager.database) {
+    val dbTables = if (dbName == globalTempViewManager.database) {
       globalTempViewManager.listViewNames(pattern).map { name =>
         TableIdentifier(name, Some(globalTempViewManager.database))
       }
     } else {
-      Seq.empty
+      requireDbExists(dbName)
+      externalCatalog.listTables(dbName, pattern).map { name =>
+        TableIdentifier(name, Some(dbName))
+      }
     }
 
-    val localTempViews = synchronized {
+    if (includeLocalTempViews) {
+      dbTables ++ listLocalTempViews(pattern)
+    } else {
+      dbTables
+    }
+  }
+
+  /**
+   * List all matching local temporary views.
+   */
+  def listLocalTempViews(pattern: String): Seq[TableIdentifier] = {
+    synchronized {
       StringUtils.filterPattern(tempViews.keys.toSeq, pattern).map { name =>
         TableIdentifier(name)
       }
     }
-
-    globalTempViews ++ localTempViews
   }
 
   /**
@@ -1423,7 +1418,7 @@ class SessionCatalog(
     listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
-    listTablesAndTempViews(DEFAULT_DATABASE).foreach { table =>
+    listTables(DEFAULT_DATABASE).foreach { table =>
       dropTable(table, ignoreIfNotExists = false, purge = false)
     }
     listFunctions(DEFAULT_DATABASE).map(_._1).foreach { func =>

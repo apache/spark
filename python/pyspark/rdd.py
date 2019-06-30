@@ -140,7 +140,15 @@ def _parse_memory(s):
 
 
 def _create_local_socket(sock_info):
-    (sockfile, sock) = local_connect_and_auth(*sock_info)
+    """
+    Create a local socket that can be used to load deserialized data from the JVM
+
+    :param sock_info: Tuple containing port number and authentication secret for a local socket.
+    :return: sockfile file descriptor of the local socket
+    """
+    port = sock_info[0]
+    auth_secret = sock_info[1]
+    sockfile, sock = local_connect_and_auth(port, auth_secret)
     # The RDD materialization time is unpredictable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
@@ -148,6 +156,13 @@ def _create_local_socket(sock_info):
 
 
 def _load_from_socket(sock_info, serializer):
+    """
+    Connect to a local socket described by sock_info and use the given serializer to yield data
+
+    :param sock_info: Tuple containing port number and authentication secret for a local socket.
+    :param serializer: The PySpark serializer to use
+    :return: result of Serializer.load_stream, usually a generator that yields deserialized data
+    """
     sockfile = _create_local_socket(sock_info)
     # The socket will be automatically closed when garbage-collected.
     return serializer.load_stream(sockfile)
@@ -159,7 +174,8 @@ def _local_iterator_from_socket(sock_info, serializer):
         """ Create a synchronous local iterable over a socket """
 
         def __init__(self, _sock_info, _serializer):
-            self._sockfile = _create_local_socket(_sock_info)
+            port, auth_secret, self.jsocket_auth_server = _sock_info
+            self._sockfile = _create_local_socket((port, auth_secret))
             self._serializer = _serializer
             self._read_iter = iter([])  # Initialize as empty iterator
             self._read_status = 1
@@ -179,11 +195,9 @@ def _local_iterator_from_socket(sock_info, serializer):
                     for item in self._read_iter:
                         yield item
 
-                # An error occurred, read error message and raise it
+                # An error occurred, join serving thread and raise any exceptions from the JVM
                 elif self._read_status == -1:
-                    error_msg = UTF8Deserializer().loads(self._sockfile)
-                    raise RuntimeError("An error occurred while reading the next element from "
-                                       "toLocalIterator: {}".format(error_msg))
+                    self.jsocket_auth_server.getResult()
 
         def __del__(self):
             # If local iterator is not fully consumed,
