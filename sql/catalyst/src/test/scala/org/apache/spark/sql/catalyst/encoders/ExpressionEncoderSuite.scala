@@ -427,10 +427,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   testOverflowingBigNumeric(BigInt("9" * 100), "scala very large big int")
   testOverflowingBigNumeric(new BigInteger("9" * 100), "java very big int")
 
-  private def testOverflowingBigNumeric[T: TypeTag](bigDecimal: T, testName: String): Unit = {
-    for {
-      allowNullOnOverflow <- Seq(true, false)
-    } {
+  private def testOverflowingBigNumeric[T: TypeTag](bigNumeric: T, testName: String): Unit = {
+    Seq(true, false).foreach { allowNullOnOverflow =>
       testAndVerifyNotLeakingReflectionObjects(
         s"overflowing $testName, allowNullOnOverflow=$allowNullOnOverflow") {
         withSQLConf(
@@ -440,11 +438,11 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
           // so that SQLConf changes are respected.
           val encoder = ExpressionEncoder[T]()
           if (allowNullOnOverflow) {
-            val convertedBack = encoder.resolveAndBind().fromRow(encoder.toRow(bigDecimal))
+            val convertedBack = encoder.resolveAndBind().fromRow(encoder.toRow(bigNumeric))
             assert(convertedBack === null)
           } else {
             val e = intercept[RuntimeException] {
-              encoder.toRow(bigDecimal)
+              encoder.toRow(bigNumeric)
             }
             assert(e.getMessage.contains("Error while encoding"))
             assert(e.getCause.getClass === classOf[ArithmeticException])
