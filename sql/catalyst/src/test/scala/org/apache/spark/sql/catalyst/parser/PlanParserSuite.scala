@@ -737,6 +737,40 @@ class PlanParserSuite extends AnalysisTest {
       "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
       StringTrimRight(Literal("  bunch o blanks  "), None)
     )
+
+    assertTrimPlans(
+      "SELECT TRIM('xyz' FROM 'yxTomxx')",
+      StringTrim(Literal("yxTomxx"), Some(Literal("xyz")))
+    )
+  }
+
+  test("OVERLAY function") {
+    def assertOverlayPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING '_' FROM 6)",
+      new Overlay(Literal("Spark SQL"), Literal("_"), Literal(6))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'CORE' FROM 7)",
+      new Overlay(Literal("Spark SQL"), Literal("CORE"), Literal(7))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0)",
+      Overlay(Literal("Spark SQL"), Literal("ANSI "), Literal(7), Literal(0))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'tructured' FROM 2 FOR 4)",
+      Overlay(Literal("Spark SQL"), Literal("tructured"), Literal(2), Literal(4))
+    )
   }
 
   test("precedence of set operations") {

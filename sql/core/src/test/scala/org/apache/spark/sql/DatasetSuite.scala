@@ -1571,17 +1571,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
-    intercept[NullPointerException](ds.collect())
-    val e = intercept[SparkException](ds.map(_ * 2).collect())
-    assert(e.getCause.isInstanceOf[NullPointerException])
+    val e1 = intercept[RuntimeException](ds.collect())
+    assert(e1.getCause.isInstanceOf[NullPointerException])
+    val e2 = intercept[SparkException](ds.map(_ * 2).collect())
+    assert(e2.getCause.isInstanceOf[NullPointerException])
 
     withTempPath { path =>
       Seq(Integer.valueOf(1), null).toDF("i").write.parquet(path.getCanonicalPath)
       // If the primitive values are from files, we need to do runtime null check.
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
-      intercept[NullPointerException](ds.collect())
-      val e = intercept[SparkException](ds.map(_ * 2).collect())
-      assert(e.getCause.isInstanceOf[NullPointerException])
+      val e1 = intercept[RuntimeException](ds.collect())
+      assert(e1.getCause.isInstanceOf[NullPointerException])
+      val e2 = intercept[SparkException](ds.map(_ * 2).collect())
+      assert(e2.getCause.isInstanceOf[NullPointerException])
     }
   }
 
@@ -1599,7 +1601,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
-    intercept[NullPointerException](ds.as[(Int, Int)].collect())
+    val e = intercept[RuntimeException](ds.as[(Int, Int)].collect())
+    assert(e.getCause.isInstanceOf[NullPointerException])
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {

@@ -237,11 +237,16 @@ public class TransportClient implements Closeable {
     sendRpc(message, new RpcResponseCallback() {
       @Override
       public void onSuccess(ByteBuffer response) {
-        ByteBuffer copy = ByteBuffer.allocate(response.remaining());
-        copy.put(response);
-        // flip "copy" to make it readable
-        copy.flip();
-        result.set(copy);
+        try {
+          ByteBuffer copy = ByteBuffer.allocate(response.remaining());
+          copy.put(response);
+          // flip "copy" to make it readable
+          copy.flip();
+          result.set(copy);
+        } catch (Throwable t) {
+          logger.warn("Error in responding PRC callback", t);
+          result.setException(t);
+        }
       }
 
       @Override

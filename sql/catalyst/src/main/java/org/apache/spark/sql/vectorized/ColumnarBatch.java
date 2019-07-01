@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * the entire data loading process.
  */
 @Evolving
-public final class ColumnarBatch {
+public final class ColumnarBatch implements AutoCloseable {
   private int numRows;
   private final ColumnVector[] columns;
 
@@ -41,6 +41,7 @@ public final class ColumnarBatch {
    * Called to close all the columns in this batch. It is not valid to access the data after
    * calling this. This must be called at the end to clean up memory allocations.
    */
+  @Override
   public void close() {
     for (ColumnVector c: columns) {
       c.close();
@@ -109,7 +110,17 @@ public final class ColumnarBatch {
   }
 
   public ColumnarBatch(ColumnVector[] columns) {
+    this(columns, 0);
+  }
+
+  /**
+   * Create a new batch from existing column vectors.
+   * @param columns The columns of this batch
+   * @param numRows The number of rows in this batch
+   */
+  public ColumnarBatch(ColumnVector[] columns, int numRows) {
     this.columns = columns;
+    this.numRows = numRows;
     this.row = new ColumnarBatchRow(columns);
   }
 }
