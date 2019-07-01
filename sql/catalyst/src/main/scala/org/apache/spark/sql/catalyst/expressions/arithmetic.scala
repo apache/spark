@@ -58,7 +58,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 
   protected override def nullSafeEval(input: Any): Any = {
     if (dataType.isInstanceOf[CalendarIntervalType]) {
-      input.asInstanceOf[CalendarInterval].negate
+      input.asInstanceOf[CalendarInterval].negate()
     } else {
       numeric.negate(input)
     }
