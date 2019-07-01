@@ -32,7 +32,7 @@ private[kafka010] class KafkaBatch(
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
     endingOffsets: KafkaOffsetRangeLimit)
-    extends Batch with Logging {
+      extends Batch with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
   assert(endingOffsets != EarliestOffsetRangeLimit,
