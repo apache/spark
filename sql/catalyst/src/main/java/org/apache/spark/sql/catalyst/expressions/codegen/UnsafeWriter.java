@@ -135,8 +135,8 @@ public abstract class UnsafeWriter {
     grow(16);
 
     // Write the months and microseconds fields of Interval to the variable length portion.
-    Platform.putLong(getBuffer(), cursor(), input.months());
-    Platform.putLong(getBuffer(), cursor() + 8, input.microseconds());
+    Platform.putLong(getBuffer(), cursor(), input.months);
+    Platform.putLong(getBuffer(), cursor() + 8, input.microseconds);
 
     setOffsetAndSize(ordinal, 16);
 
