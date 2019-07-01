@@ -31,6 +31,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val batches =
       Batch("InferAndPushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
+        PruneFilters,
         PushDownPredicate,
         InferFiltersFromConstraints,
         CombineFilters,

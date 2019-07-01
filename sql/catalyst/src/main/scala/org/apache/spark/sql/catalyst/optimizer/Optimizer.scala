@@ -1241,7 +1241,10 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           if (others.nonEmpty) {
             Filter(others.reduceLeft(And), join)
           } else {
-            join
+            // Add Literal(true) filter conditions to avoid those join plan whose parent filter is
+            // totally pushed down being skipped during rule transform down. Also these useless
+            // filter will be pruned in rule `PruneFilters` later.
+            Filter(Literal(true), join)
           }
         case RightOuter =>
           // push down the right side only `where` condition
@@ -1252,7 +1255,12 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoin = Join(newLeft, newRight, RightOuter, newJoinCond, hint)
 
           (leftFilterConditions ++ commonFilterCondition).
-            reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+            reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse {
+            // Add Literal(true) filter conditions to avoid those join plan whose parent filter is
+            // totally pushed down being skipped during rule transform down. Also these useless
+            // filter will be pruned in rule `PruneFilters` later.
+            Filter(Literal(true), newJoin)
+          }
         case LeftOuter | LeftExistence(_) =>
           // push down the left side only `where` condition
           val newLeft = leftFilterConditions.
@@ -1262,7 +1270,12 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoin = Join(newLeft, newRight, joinType, newJoinCond, hint)
 
           (rightFilterConditions ++ commonFilterCondition).
-            reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+            reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse {
+            // Add Literal(true) filter conditions to avoid those join plan whose parent filter is
+            // totally pushed down being skipped during rule transform down. Also these useless
+            // filter will be pruned in rule `PruneFilters` later.
+            Filter(Literal(true), newJoin)
+          }
         case FullOuter => f // DO Nothing for Full Outer Join
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")

@@ -36,7 +36,8 @@ class PruneFiltersSuite extends PlanTest {
         CombineFilters,
         PruneFilters,
         PushDownPredicate,
-        PushPredicateThroughJoin) :: Nil
+        PushPredicateThroughJoin,
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)

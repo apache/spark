@@ -33,7 +33,8 @@ class OuterJoinEliminationSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Outer Join Elimination", Once,
         EliminateOuterJoin,
-        PushPredicateThroughJoin) :: Nil
+        PushPredicateThroughJoin,
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
