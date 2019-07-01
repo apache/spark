@@ -806,7 +806,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast between string and interval") {
-    import org.apache.spark.unsafe.types.CalendarInterval
+    import org.apache.spark.sql.types.CalendarInterval
 
     checkEvaluation(Cast(Literal(""), CalendarIntervalType), null)
     checkEvaluation(Cast(Literal("interval -3 month 7 hours"), CalendarIntervalType),

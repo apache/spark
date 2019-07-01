@@ -25,8 +25,6 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
-
 
 /**
  * Helper object for stream joins. See [[StreamingSymmetricHashJoinExec]] in SQL for more details.

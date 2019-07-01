@@ -17,9 +17,9 @@
 package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.types.CalendarInterval;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**

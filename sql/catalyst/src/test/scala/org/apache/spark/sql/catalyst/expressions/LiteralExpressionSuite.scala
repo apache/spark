@@ -30,8 +30,6 @@ import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
-
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 

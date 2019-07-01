@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{DataType, Decimal}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.sql.types.{CalendarInterval, DataType, Decimal}
+import org.apache.spark.unsafe.types.UTF8String
 
 private object GenericArrayData {
 

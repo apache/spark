@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStat
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.random.RandomSampler
 
 /**

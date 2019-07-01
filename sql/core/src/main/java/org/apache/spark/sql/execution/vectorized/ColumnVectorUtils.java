@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
-import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.sql.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**

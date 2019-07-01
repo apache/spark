@@ -23,7 +23,7 @@ import scala.concurrent.duration.Duration
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.CalendarInterval
 
 /**
  * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at

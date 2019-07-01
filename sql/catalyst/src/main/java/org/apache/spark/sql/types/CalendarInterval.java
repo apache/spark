@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.types;
+package org.apache.spark.sql.types;
 
 import java.io.Serializable;
 import java.util.Locale;
@@ -103,8 +103,7 @@ public final class CalendarInterval implements Serializable {
       throw new IllegalArgumentException("Interval cannot be null or blank.");
     }
     String sInLowerCase = s.trim().toLowerCase(Locale.ROOT);
-    String interval =
-      sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
+    String interval = sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
     CalendarInterval cal = fromString(interval);
     if (cal == null) {
       throw new IllegalArgumentException("Invalid interval: " + s);
