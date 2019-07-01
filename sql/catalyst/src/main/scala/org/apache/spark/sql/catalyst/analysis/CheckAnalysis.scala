@@ -87,6 +87,10 @@ trait CheckAnalysis extends PredicateHelper {
     // of the result of cascading resolution failures.
     plan.foreachUp {
 
+      // Skip checking analysis for view, for it's only a wrapper for sub child plan and it will be
+      // eliminated in EliminateView rule
+      case v: View => checkAnalysis(v.child)
+
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
