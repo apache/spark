@@ -25,8 +25,6 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{DenseVector => NewDenseVector,
-  SparseVector => NewSparseVector, Vector => NewVector, Vectors => NewVectors}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
@@ -87,21 +85,8 @@ class ChiSqSelectorModel @Since("1.3.0") (
     }
   }
 
-  private[spark] def compress(features: NewVector): NewVector = {
-    features match {
-      case NewSparseVector(size, indices, values) =>
-        val (newIndices, newValues) = compressSparse(indices, values)
-        NewVectors.sparse(filterIndices.length, newIndices, newValues)
-      case NewDenseVector(values) =>
-        NewVectors.dense(compressDense(values))
-      case other =>
-        throw new UnsupportedOperationException(
-          s"Only sparse and dense vectors are supported but got ${other.getClass}.")
-    }
-  }
-
-  private def compressSparse(indices: Array[Int],
-                             values: Array[Double]): (Array[Int], Array[Double]) = {
+  private[spark] def compressSparse(indices: Array[Int],
+                                    values: Array[Double]): (Array[Int], Array[Double]) = {
     val newValues = new ArrayBuilder.ofDouble
     val newIndices = new ArrayBuilder.ofInt
     var i = 0
@@ -128,7 +113,7 @@ class ChiSqSelectorModel @Since("1.3.0") (
     (newIndices.result(), newValues.result())
   }
 
-  private def compressDense(values: Array[Double]): Array[Double] = {
+  private[spark] def compressDense(values: Array[Double]): Array[Double] = {
     filterIndices.map(i => values(i))
   }
 

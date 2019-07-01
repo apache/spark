@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -266,10 +266,22 @@ final class ChiSqSelectorModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val transformer: Vector => Vector = v => chiSqSelector.compress(v)
+    val newSize = selectedFeatures.length
+    val func = { vector: Vector =>
+      vector match {
+        case SparseVector(_, indices, values) =>
+          val (newIndices, newValues) = chiSqSelector.compressSparse(indices, values)
+          Vectors.sparse(newSize, newIndices, newValues)
+        case DenseVector(values) =>
+          Vectors.dense(chiSqSelector.compressDense(values))
+        case other =>
+          throw new UnsupportedOperationException(
+            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+      }
+    }
 
-    val selector = udf(transformer)
-    dataset.withColumn($(outputCol), selector(col($(featuresCol))),
+    val transformer = udf(func)
+    dataset.withColumn($(outputCol), transformer(col($(featuresCol))),
       outputSchema($(outputCol)).metadata)
   }
 

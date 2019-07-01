@@ -27,8 +27,6 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.linalg.{DenseVector => NewDenseVector,
-  SparseVector => NewSparseVector, Vector => NewVector}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -597,7 +595,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
  * Serializable companion object containing helper methods and shared code for
  * [[OnlineLDAOptimizer]] and [[LocalLDAModel]].
  */
-private[clustering] object OnlineLDAOptimizer {
+private[spark] object OnlineLDAOptimizer {
   /**
    * Uses variational inference to infer the topic distribution `gammad` given the term counts
    * for a document. `termCounts` must contain at least one non-zero entry, otherwise Breeze will
@@ -610,7 +608,7 @@ private[clustering] object OnlineLDAOptimizer {
    * @return Returns a tuple of `gammad` - estimate of gamma, the topic distribution, `sstatsd` -
    *         statistics for updating lambda and `ids` - list of termCounts vector indices.
    */
-  private[clustering] def variationalTopicInference(
+  private[spark] def variationalTopicInference(
       indices: List[Int],
       values: Array[Double],
       expElogbeta: BDM[Double],
@@ -654,20 +652,6 @@ private[clustering] object OnlineLDAOptimizer {
     val (ids: List[Int], cts: Array[Double]) = termCounts match {
       case v: DenseVector => ((0 until v.size).toList, v.values)
       case v: SparseVector => (v.indices.toList, v.values)
-    }
-    variationalTopicInference(ids, cts, expElogbeta, alpha, gammaShape, k, seed)
-  }
-
-  private[clustering] def variationalTopicInference(
-      termCounts: NewVector,
-      expElogbeta: BDM[Double],
-      alpha: breeze.linalg.Vector[Double],
-      gammaShape: Double,
-      k: Int,
-      seed: Long): (BDV[Double], BDM[Double], List[Int]) = {
-    val (ids: List[Int], cts: Array[Double]) = termCounts match {
-      case v: NewDenseVector => ((0 until v.size).toList, v.values)
-      case v: NewSparseVector => (v.indices.toList, v.values)
     }
     variationalTopicInference(ids, cts, expElogbeta, alpha, gammaShape, k, seed)
   }
