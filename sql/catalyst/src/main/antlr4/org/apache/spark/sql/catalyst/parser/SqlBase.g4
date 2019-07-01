@@ -406,7 +406,9 @@ querySpecification
        outRowFormat=rowFormat?
        (RECORDREADER recordReader=STRING)?
        fromClause?
-       (WHERE where=booleanExpression)?)
+       (WHERE where=booleanExpression)?
+       aggregation?
+       (HAVING having=booleanExpression)?)
     | ((kind=SELECT (hints+=hint)* setQuantifier? namedExpressionSeq fromClause?
        | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
        lateralView*

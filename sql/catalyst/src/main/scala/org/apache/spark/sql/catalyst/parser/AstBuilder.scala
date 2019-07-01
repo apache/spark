@@ -438,12 +438,39 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             AttributeReference("value", StringType)()), true)
         }
 
+        val namedExpressions = expressions.map {
+          case e: NamedExpression => e
+          case e: Expression => UnresolvedAlias(e)
+        }
+
+        def createProject() = if (namedExpressions.nonEmpty) {
+          Project(namedExpressions, withFilter)
+        } else {
+          withFilter
+        }
+
+        val withProject = if (aggregation == null && having != null) {
+          if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
+            // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
+            withHaving(having, createProject())
+          } else {
+            // According to SQL standard, HAVING without GROUP BY means global aggregate.
+            withHaving(having, Aggregate(Nil, namedExpressions, withFilter))
+          }
+        } else if (aggregation != null) {
+          val aggregate = withAggregation(aggregation, namedExpressions, withFilter)
+          aggregate.optionalMap(having)(withHaving)
+        } else {
+          // When hitting this branch, `having` must be null.
+          createProject()
+        }
+
         // Create the transform.
         ScriptTransformation(
           expressions,
           string(script),
           attributes,
-          withFilter,
+          withProject,
           withScriptIOSchema(
             ctx, inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
 

@@ -1498,17 +1498,17 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
   }
 
   test("transform with aggregate"){
-    val plan = parser.parsePlan(
-      """SELECT t.c, SUM(t.a) as
-        |FROM DEFAULT.TEST t
-        |GROUP BY t.c
-      """.stripMargin)
-//   val plan = parser.parsePlan(
-//      """SELECT TRANSFORM(t.c, SUM(t.a) as x)
-//        |USING 'func' AS (c1 string, a1 string )
+//    val plan = parser.parsePlan(
+//      """SELECT t.c, SUM(t.a) as
 //        |FROM DEFAULT.TEST t
 //        |GROUP BY t.c
 //      """.stripMargin)
+   val plan = parser.parsePlan(
+      """SELECT TRANSFORM(t.c, SUM(t.a) as x)
+        |USING 'func' AS (c1 string, a1 string )
+        |FROM DEFAULT.TEST t
+        |GROUP BY t.c
+      """.stripMargin)
     println(plan)
   }
 
