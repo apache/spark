@@ -1203,6 +1203,7 @@ setMethod("collect",
               requireNamespace1 <- requireNamespace
               if (requireNamespace1("arrow", quietly = TRUE)) {
                 read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
+                # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
                 as_tibble <- get0("as_tibble", envir = asNamespace("arrow"), ifnotfound = NULL)
 
                 portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
