@@ -156,6 +156,25 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       structDf.select(xxhash64($"a", $"record.*")))
   }
 
+  test("SPARK-28224: Aggregate sum large big decimal") {
+    for {
+      nullOnOverflow <- Seq(true, false)
+    } yield {
+      withSQLConf((SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key, nullOnOverflow.toString)) {
+        val structDf = largeDecimals.select("a").agg(sum("a"))
+        if (nullOnOverflow) {
+          checkAnswer(structDf, Row(null))
+        } else {
+          val e = intercept[Exception] {
+            structDf.collect
+          }
+          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
+          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+        }
+      }
+    }
+  }
+
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
     val e = intercept[AnalysisException] {
