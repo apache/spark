@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.streaming.{ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, SystemClock}
 
 trait TriggerExecutor {

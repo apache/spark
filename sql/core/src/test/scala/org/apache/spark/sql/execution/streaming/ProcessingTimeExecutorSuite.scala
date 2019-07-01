@@ -24,7 +24,6 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {

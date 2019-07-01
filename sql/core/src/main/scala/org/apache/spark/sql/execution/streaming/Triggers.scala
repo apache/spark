@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.concurrent.TimeUnit
+
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A [[Trigger]] that processes only one batch of data in a streaming query then terminates
@@ -27,3 +32,34 @@ import org.apache.spark.sql.streaming.Trigger
 @Experimental
 @Evolving
 case object OneTimeTrigger extends Trigger
+
+/**
+ * A [[Trigger]] that runs a query periodically based on the processing time. If `interval` is 0,
+ * the query will run as fast as possible.
+ */
+@Evolving
+private[sql] case class ProcessingTimeTrigger(intervalMs: Long) extends Trigger {
+  require(intervalMs >= 0, "the interval of trigger should not be negative")
+}
+
+private[sql] object ProcessingTimeTrigger {
+  def apply(interval: String): ProcessingTimeTrigger = {
+    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
+    if (cal.months > 0) {
+      throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
+    }
+    new ProcessingTimeTrigger(TimeUnit.MICROSECONDS.toMillis(cal.microseconds))
+  }
+
+  def apply(interval: Duration): ProcessingTimeTrigger = {
+    ProcessingTimeTrigger(interval.toMillis)
+  }
+
+  def create(interval: String): ProcessingTimeTrigger = {
+    apply(interval)
+  }
+
+  def create(interval: Long, unit: TimeUnit): ProcessingTimeTrigger = {
+    ProcessingTimeTrigger(unit.toMillis(interval))
+  }
+}
