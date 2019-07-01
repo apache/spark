@@ -32,5 +32,6 @@ public interface ShuffleWriteSupport {
   ShuffleMapOutputWriter createMapOutputWriter(
     int shuffleId,
     int mapId,
+    long mapTaskAttemptId,
     int numPartitions) throws IOException;
 }

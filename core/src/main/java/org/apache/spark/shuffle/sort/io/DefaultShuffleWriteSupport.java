@@ -39,6 +39,7 @@ public class DefaultShuffleWriteSupport implements ShuffleWriteSupport {
   public ShuffleMapOutputWriter createMapOutputWriter(
       int shuffleId,
       int mapId,
+      long mapTaskAttemptId,
       int numPartitions) {
     TaskContext taskContext = TaskContext.get();
     if (taskContext == null) {
