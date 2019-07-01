@@ -23,6 +23,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_SSL
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
 private[spark] case class KafkaTokenClusterConf(
     identifier: String,
@@ -37,19 +38,22 @@ private[spark] case class KafkaTokenClusterConf(
     keyPassword: Option[String],
     tokenMechanism: String,
     specifiedKafkaParams: Map[String, String]) {
-  override def toString: String = s"KafkaTokenClusterConf{" +
-    s"identifier=$identifier, " +
-    s"authBootstrapServers=$authBootstrapServers, " +
-    s"targetServersRegex=$targetServersRegex, " +
-    s"securityProtocol=$securityProtocol, " +
-    s"kerberosServiceName=$kerberosServiceName, " +
-    s"trustStoreLocation=$trustStoreLocation, " +
-    s"trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
-    s"keyStoreLocation=$keyStoreLocation, " +
-    s"keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
-    s"keyPassword=${keyPassword.map(_ => "xxx")}, " +
-    s"tokenMechanism=$tokenMechanism, " +
-    s"specifiedKafkaParams=$specifiedKafkaParams}"
+  override def toString: String = {
+    val redactedSpecifiedKafkaParams = KafkaRedactionUtil.redactParams(specifiedKafkaParams.toSeq)
+    s"KafkaTokenClusterConf{" +
+      s"identifier=$identifier, " +
+      s"authBootstrapServers=$authBootstrapServers, " +
+      s"targetServersRegex=$targetServersRegex, " +
+      s"securityProtocol=$securityProtocol, " +
+      s"kerberosServiceName=$kerberosServiceName, " +
+      s"trustStoreLocation=$trustStoreLocation, " +
+      s"trustStorePassword=${trustStorePassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
+      s"keyStoreLocation=$keyStoreLocation, " +
+      s"keyStorePassword=${keyStorePassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
+      s"keyPassword=${keyPassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
+      s"tokenMechanism=$tokenMechanism, " +
+      s"specifiedKafkaParams=$redactedSpecifiedKafkaParams}"
+  }
 }
 
 private [kafka010] object KafkaTokenSparkConf extends Logging {
