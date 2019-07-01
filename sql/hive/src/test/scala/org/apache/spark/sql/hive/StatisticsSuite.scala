@@ -1453,24 +1453,4 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
     }
   }
-
-  test("Data source tables support fallback to HDFS for size estimation") {
-    withTempDir { tempDir =>
-      Seq(false, true).foreach { fallBackToHDFSForStats =>
-        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFSForStats") {
-          withTable("spark_25474") {
-            sql(s"CREATE TABLE spark_25474 (c1 BIGINT) USING PARQUET LOCATION '${tempDir.toURI}'")
-            spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
-
-            val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
-            if (fallBackToHDFSForStats) {
-              assert(relation.stats.sizeInBytes === getDataSize(tempDir))
-            } else {
-              assert(relation.stats.sizeInBytes === conf.defaultSizeInBytes)
-            }
-          }
-        }
-      }
-    }
-  }
 }

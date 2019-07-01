@@ -626,31 +626,37 @@ object DataSourceStrategy {
  * Support for recalculating table statistics if table statistics are not available.
  */
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
-  def withStats(catalogTable: CatalogTable): CatalogTable = {
-    val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-      try {
-        val hadoopConf = session.sessionState.newHadoopConf()
-        val tablePath = new Path(catalogTable.location)
-        val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-        fs.getContentSummary(tablePath).getLength
-      } catch {
-        case e: IOException =>
-          logWarning("Failed to get table size from hdfs.", e)
-          session.sessionState.conf.defaultSizeInBytes
-      }
-    } else {
-      session.sessionState.conf.defaultSizeInBytes
+  def getHdfsSize(catalogTable: CatalogTable): Long = {
+    try {
+      val hadoopConf = session.sessionState.newHadoopConf()
+      val tablePath = new Path(catalogTable.location)
+      val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+      fs.getContentSummary(tablePath).getLength
+    } catch {
+      case e: IOException =>
+        logWarning("Failed to get table size from hdfs.", e)
+        session.sessionState.conf.defaultSizeInBytes
     }
-    catalogTable.copy(stats = Some(CatalogStatistics(sizeInBytes = sizeInBytes)))
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case logicalRelation @ LogicalRelation(_, _, Some(catalogTable), _)
-      if DDLUtils.isDatasourceTable(catalogTable) && catalogTable.stats.isEmpty =>
-      logicalRelation.copy(catalogTable = Some(withStats(catalogTable)))
+    case logical @ LogicalRelation(relation, _, Some(table), _)
+      if session.sessionState.conf.fallBackToHdfsForStatsEnabled &&
+        session.sessionState.conf.manageFilesourcePartitions && table.stats.isEmpty &&
+        table.tracksPartitionsInCatalog && table.partitionColumnNames.nonEmpty =>
+      val withStats =
+        table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(getHdfsSize(table)))))
+      logical.copy(catalogTable = Some(withStats))
 
     case relation: HiveTableRelation
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      relation.copy(tableMeta = withStats(relation.tableMeta))
+      val table = relation.tableMeta
+      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+        getHdfsSize(table)
+      } else {
+        session.sessionState.conf.defaultSizeInBytes
+      }
+      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+      relation.copy(tableMeta = withStats)
   }
 }

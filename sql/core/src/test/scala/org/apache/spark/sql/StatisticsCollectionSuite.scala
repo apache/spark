@@ -652,16 +652,36 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("Data source tables support fallback to HDFS for size estimation") {
-    withTempDir { tempDir =>
+    // Non-partitioned table
+    withTempDir { dir =>
       Seq(false, true).foreach { fallBackToHDFSForStats =>
         withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFSForStats") {
           withTable("spark_25474") {
-            sql(s"CREATE TABLE spark_25474 (c1 BIGINT) USING PARQUET LOCATION '${tempDir.toURI}'")
-            spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+            sql(s"CREATE TABLE spark_25474 (c1 BIGINT) USING PARQUET LOCATION '${dir.toURI}'")
+            spark.range(5).write.mode(SaveMode.Overwrite).parquet(dir.getCanonicalPath)
 
+            assert(getCatalogTable("spark_25474").stats.isEmpty)
+            val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
+            assert(relation.stats.sizeInBytes === getDataSize(dir))
+          }
+        }
+      }
+    }
+
+    // Partitioned table
+    Seq(false, true).foreach { fallBackToHDFSForStats =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFSForStats") {
+        withTable("spark_25474") {
+          withTempDir { dir =>
+            spark.sql("CREATE TABLE spark_25474(a int, b int) USING parquet " +
+                s"PARTITIONED BY(a) LOCATION '${dir.toURI}'")
+            spark.sql("INSERT INTO TABLE spark_25474 PARTITION(a=1) SELECT 2")
+
+            assert(getCatalogTable("spark_25474").stats.isEmpty)
             val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
             if (fallBackToHDFSForStats) {
-              assert(relation.stats.sizeInBytes === getDataSize(tempDir))
+              assert(relation.stats.sizeInBytes > 0)
+              assert(relation.stats.sizeInBytes < conf.defaultSizeInBytes)
             } else {
               assert(relation.stats.sizeInBytes === conf.defaultSizeInBytes)
             }
