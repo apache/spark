@@ -1204,7 +1204,7 @@ setMethod("collect",
               if (requireNamespace1("arrow", quietly = TRUE)) {
                 read_arrow <- get("read_arrow", envir = asNamespace("arrow"), inherits = FALSE)
                 # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
-                as_tibble <- get0("as_tibble", envir = asNamespace("arrow"), ifnotfound = NULL)
+                useAsTibble <- exists("as_tibble", envir = asNamespace("arrow"))
 
                 portAuth <- callJMethod(x@sdf, "collectAsArrowToR")
                 port <- portAuth[[1]]
@@ -1214,10 +1214,11 @@ setMethod("collect",
                 output <- tryCatch({
                   doServerAuth(conn, authSecret)
                   arrowTable <- read_arrow(readRaw(conn))
-                  if (is.null(as_tibble)) {
-                    as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
-                  } else {
+                  if (useAsTibble) {
+                    as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
                     as.data.frame(as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
+                  } else {
+                    as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
                   }
                 }, finally = {
                   close(conn)
