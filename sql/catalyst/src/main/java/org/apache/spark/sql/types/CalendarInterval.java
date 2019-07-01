@@ -48,14 +48,14 @@ public final class CalendarInterval implements Serializable {
   }
 
   private static Pattern p = Pattern.compile("interval" + unitRegex("year") + unitRegex("month") +
-          unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
-          unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"));
+    unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
+    unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"));
 
   private static Pattern yearMonthPattern =
-          Pattern.compile("^(?:['|\"])?([+|-])?(\\d+)-(\\d+)(?:['|\"])?$");
+    Pattern.compile("^(?:['|\"])?([+|-])?(\\d+)-(\\d+)(?:['|\"])?$");
 
   private static Pattern dayTimePattern =
-          Pattern.compile("^(?:['|\"])?([+|-])?((\\d+) )?(\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
+    Pattern.compile("^(?:['|\"])?([+|-])?((\\d+) )?(\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
 
   private static Pattern quoteTrimPattern = Pattern.compile("^(?:['|\"])?(.*?)(?:['|\"])?$");
 
@@ -103,8 +103,7 @@ public final class CalendarInterval implements Serializable {
       throw new IllegalArgumentException("Interval cannot be null or blank.");
     }
     String sInLowerCase = s.trim().toLowerCase(Locale.ROOT);
-    String interval =
-            sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
+    String interval = sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
     CalendarInterval cal = fromString(interval);
     if (cal == null) {
       throw new IllegalArgumentException("Invalid interval: " + s);
@@ -113,13 +112,13 @@ public final class CalendarInterval implements Serializable {
   }
 
   public static long toLongWithRange(String fieldName,
-                                     String s, long minValue, long maxValue) throws IllegalArgumentException {
+      String s, long minValue, long maxValue) throws IllegalArgumentException {
     long result = 0;
     if (s != null) {
       result = Long.parseLong(s);
       if (result < minValue || result > maxValue) {
         throw new IllegalArgumentException(String.format("%s %d outside range [%d, %d]",
-                fieldName, result, minValue, maxValue));
+          fieldName, result, minValue, maxValue));
       }
     }
     return result;
@@ -139,7 +138,7 @@ public final class CalendarInterval implements Serializable {
     Matcher m = yearMonthPattern.matcher(s);
     if (!m.matches()) {
       throw new IllegalArgumentException(
-              "Interval string does not match year-month format of 'y-m': " + s);
+        "Interval string does not match year-month format of 'y-m': " + s);
     } else {
       try {
         int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
@@ -148,7 +147,7 @@ public final class CalendarInterval implements Serializable {
         result = new CalendarInterval(sign * (years * 12 + months), 0);
       } catch (Exception e) {
         throw new IllegalArgumentException(
-                "Error parsing interval year-month string: " + e.getMessage(), e);
+          "Error parsing interval year-month string: " + e.getMessage(), e);
       }
     }
     return result;
@@ -168,23 +167,23 @@ public final class CalendarInterval implements Serializable {
     Matcher m = dayTimePattern.matcher(s);
     if (!m.matches()) {
       throw new IllegalArgumentException(
-              "Interval string does not match day-time format of 'd h:m:s.n': " + s);
+        "Interval string does not match day-time format of 'd h:m:s.n': " + s);
     } else {
       try {
         int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
         long days = m.group(2) == null ? 0 : toLongWithRange("day", m.group(3),
-                0, Integer.MAX_VALUE);
+          0, Integer.MAX_VALUE);
         long hours = toLongWithRange("hour", m.group(4), 0, 23);
         long minutes = toLongWithRange("minute", m.group(5), 0, 59);
         long seconds = toLongWithRange("second", m.group(6), 0, 59);
         // Hive allow nanosecond precision interval
         long nanos = toLongWithRange("nanosecond", m.group(8), 0L, 999999999L);
         result = new CalendarInterval(0, sign * (
-                days * MICROS_PER_DAY + hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
-                        seconds * MICROS_PER_SECOND + nanos / 1000L));
+          days * MICROS_PER_DAY + hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
+            seconds * MICROS_PER_SECOND + nanos / 1000L));
       } catch (Exception e) {
         throw new IllegalArgumentException(
-                "Error parsing interval day-time string: " + e.getMessage(), e);
+          "Error parsing interval day-time string: " + e.getMessage(), e);
       }
     }
     return result;
@@ -201,38 +200,38 @@ public final class CalendarInterval implements Serializable {
     Matcher m = quoteTrimPattern.matcher(s);
     if (!m.matches()) {
       throw new IllegalArgumentException(
-              "Interval string does not match day-time format of 'd h:m:s.n': " + s);
+        "Interval string does not match day-time format of 'd h:m:s.n': " + s);
     } else {
       try {
         switch (unit) {
           case "year":
             int year = (int) toLongWithRange("year", m.group(1),
-                    Integer.MIN_VALUE / 12, Integer.MAX_VALUE / 12);
+              Integer.MIN_VALUE / 12, Integer.MAX_VALUE / 12);
             result = new CalendarInterval(year * 12, 0L);
             break;
           case "month":
             int month = (int) toLongWithRange("month", m.group(1),
-                    Integer.MIN_VALUE, Integer.MAX_VALUE);
+              Integer.MIN_VALUE, Integer.MAX_VALUE);
             result = new CalendarInterval(month, 0L);
             break;
           case "week":
             long week = toLongWithRange("week", m.group(1),
-                    Long.MIN_VALUE / MICROS_PER_WEEK, Long.MAX_VALUE / MICROS_PER_WEEK);
+              Long.MIN_VALUE / MICROS_PER_WEEK, Long.MAX_VALUE / MICROS_PER_WEEK);
             result = new CalendarInterval(0, week * MICROS_PER_WEEK);
             break;
           case "day":
             long day = toLongWithRange("day", m.group(1),
-                    Long.MIN_VALUE / MICROS_PER_DAY, Long.MAX_VALUE / MICROS_PER_DAY);
+              Long.MIN_VALUE / MICROS_PER_DAY, Long.MAX_VALUE / MICROS_PER_DAY);
             result = new CalendarInterval(0, day * MICROS_PER_DAY);
             break;
           case "hour":
             long hour = toLongWithRange("hour", m.group(1),
-                    Long.MIN_VALUE / MICROS_PER_HOUR, Long.MAX_VALUE / MICROS_PER_HOUR);
+              Long.MIN_VALUE / MICROS_PER_HOUR, Long.MAX_VALUE / MICROS_PER_HOUR);
             result = new CalendarInterval(0, hour * MICROS_PER_HOUR);
             break;
           case "minute":
             long minute = toLongWithRange("minute", m.group(1),
-                    Long.MIN_VALUE / MICROS_PER_MINUTE, Long.MAX_VALUE / MICROS_PER_MINUTE);
+              Long.MIN_VALUE / MICROS_PER_MINUTE, Long.MAX_VALUE / MICROS_PER_MINUTE);
             result = new CalendarInterval(0, minute * MICROS_PER_MINUTE);
             break;
           case "second": {
@@ -242,7 +241,7 @@ public final class CalendarInterval implements Serializable {
           }
           case "millisecond":
             long millisecond = toLongWithRange("millisecond", m.group(1),
-                    Long.MIN_VALUE / MICROS_PER_MILLI, Long.MAX_VALUE / MICROS_PER_MILLI);
+              Long.MIN_VALUE / MICROS_PER_MILLI, Long.MAX_VALUE / MICROS_PER_MILLI);
             result = new CalendarInterval(0, millisecond * MICROS_PER_MILLI);
             break;
           case "microsecond": {
@@ -265,17 +264,17 @@ public final class CalendarInterval implements Serializable {
     String[] parts = secondNano.split("\\.");
     if (parts.length == 1) {
       return toLongWithRange("second", parts[0], Long.MIN_VALUE / MICROS_PER_SECOND,
-              Long.MAX_VALUE / MICROS_PER_SECOND) * MICROS_PER_SECOND;
+        Long.MAX_VALUE / MICROS_PER_SECOND) * MICROS_PER_SECOND;
 
     } else if (parts.length == 2) {
       long seconds = parts[0].equals("") ? 0L : toLongWithRange("second", parts[0],
-              Long.MIN_VALUE / MICROS_PER_SECOND, Long.MAX_VALUE / MICROS_PER_SECOND);
+        Long.MIN_VALUE / MICROS_PER_SECOND, Long.MAX_VALUE / MICROS_PER_SECOND);
       long nanos = toLongWithRange("nanosecond", parts[1], 0L, 999999999L);
       return seconds * MICROS_PER_SECOND + nanos / 1000L;
 
     } else {
       throw new IllegalArgumentException(
-              "Interval string does not match second-nano format of ss.nnnnnnnnn");
+        "Interval string does not match second-nano format of ss.nnnnnnnnn");
     }
   }
 
