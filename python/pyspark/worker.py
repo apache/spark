@@ -481,7 +481,12 @@ def main(infile, outfile):
 
         def process():
             iterator = deserializer.load_stream(infile)
-            serializer.dump_stream(func(split_index, iterator), outfile)
+            out_iter = func(split_index, iterator)
+            try:
+                serializer.dump_stream(out_iter, outfile)
+            finally:
+                if hasattr(out_iter, 'close'):
+                    out_iter.close()
 
         if profiler:
             profiler.profile(process)
