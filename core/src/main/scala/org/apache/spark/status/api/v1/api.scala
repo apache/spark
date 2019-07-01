@@ -30,6 +30,7 @@ import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
+import org.apache.spark.resource.ResourceInformation
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -107,7 +108,8 @@ class ExecutorSummary private[spark](
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
-    val attributes: Map[String, String])
+    val attributes: Map[String, String],
+    val resources: Map[String, ResourceInformation])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,

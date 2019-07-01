@@ -39,6 +39,19 @@ function formatStatus(status, type, row) {
     return "Dead"
 }
 
+function formatResourceCells(resources) {
+    var result = ""
+    var count = 0
+    $.each(resources, function (name, resInfo) {
+        if (count > 0) {
+            result += ", "
+        }
+        result += name + ': [' + resInfo.addresses.join(", ") + ']'
+        count += 1
+    });
+    return result
+}
+
 jQuery.extend(jQuery.fn.dataTableExt.oSort, {
     "title-numeric-pre": function (a) {
         var x = a.match(/title="*(-?[0-9\.]+)/)[1];
@@ -62,6 +75,12 @@ $(document).ajaxStart(function () {
 function logsExist(execs) {
     return execs.some(function(exec) {
         return !($.isEmptyObject(exec["executorLogs"]));
+    });
+}
+
+function resourcesExist(execs) {
+    return execs.some(function(exec) {
+        return !($.isEmptyObject(exec["resources"]));
     });
 }
 
@@ -386,6 +405,7 @@ $(document).ready(function () {
                         },
                         {data: 'diskUsed', render: formatBytes},
                         {data: 'totalCores'},
+                        {name: 'resourcesCol', data: 'resources', render: formatResourceCells, orderable: false},
                         {
                             data: 'activeTasks',
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
@@ -434,6 +454,7 @@ $(document).ready(function () {
                 var dt = $(selector).DataTable(conf);
                 dt.column('executorLogsCol:name').visible(logsExist(response));
                 dt.column('threadDumpCol:name').visible(getThreadDumpEnabled());
+                dt.column('resourcesCol:name').visible(resourcesExist(response));
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";

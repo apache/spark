@@ -49,7 +49,8 @@
     "MajorGCCount": 0,
     "MajorGCTime": 0
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "9",
   "hostPort" : "rezamemory-2.gce.something.com:40797",
@@ -104,5 +105,6 @@
     "MajorGCCount": 0,
     "MajorGCTime": 0
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 } ]

@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -31,8 +32,8 @@ import org.apache.spark.util.collection.OpenHashMap
  * @param addresses Resource addresses provided by the executor
  */
 private[spark] class ExecutorResourceInfo(
-    val name: String,
-    addresses: Seq[String]) extends Serializable {
+    name: String,
+    addresses: Seq[String]) extends ResourceInformation(name, addresses.toArray) with Serializable {
 
   /**
    * Map from an address to its availability, the value `true` means the address is available,

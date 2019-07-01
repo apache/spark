@@ -49,7 +49,8 @@
     "MajorGCCount": 0,
     "MajorGCTime": 0
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "7",
   "hostPort" : "node6340.grid.company.com:5933",
@@ -82,7 +83,8 @@
     "totalOffHeapStorageMemory" : 0
   },
   "blacklistedInStages" : [ ],
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "6",
   "hostPort" : "node6644.grid.company.com:8445",
@@ -115,7 +117,8 @@
     "totalOffHeapStorageMemory" : 0
   },
   "blacklistedInStages" : [ ],
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "5",
   "hostPort" : "node2477.grid.company.com:20123",
@@ -148,7 +151,8 @@
     "totalOffHeapStorageMemory" : 0
   },
   "blacklistedInStages" : [ ],
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "4",
   "hostPort" : "node4243.grid.company.com:16084",
@@ -203,7 +207,8 @@
     "MajorGCCount": 0,
     "MajorGCTime": 0
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "3",
   "hostPort" : "node0998.grid.company.com:45265",
@@ -258,7 +263,8 @@
     "MajorGCCount": 0,
     "MajorGCTime": 0
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "2",
   "hostPort" : "node4045.grid.company.com:29262",
@@ -313,7 +319,8 @@
     "MajorGCCount": 0,
     "MajorGCTime": 0
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "1",
   "hostPort" : "node1404.grid.company.com:34043",
@@ -368,5 +375,6 @@
     "MajorGCCount": 0,
     "MajorGCTime": 0
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 } ]

@@ -52,7 +52,8 @@
     "MajorGCCount" : 3,
     "MajorGCTime" : 170
   },
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "2",
   "hostPort" : "028.company.com:46325",
@@ -85,7 +86,8 @@
     "totalOffHeapStorageMemory" : 0
   },
   "blacklistedInStages" : [ ],
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 }, {
   "id" : "1",
   "hostPort" : "036.company.com:35126",
@@ -118,5 +120,6 @@
     "totalOffHeapStorageMemory" : 0
   },
   "blacklistedInStages" : [ ],
-  "attributes" : { }
+  "attributes" : { },
+  "resources" : { }
 } ]
