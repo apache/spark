@@ -162,14 +162,14 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(row.toSeq(schema).head == decimal)
   }
 
-  test("RowEncoder should respect nullOnOverflow for decimals") {
+  test("SPARK-23179: RowEncoder should respect nullOnOverflow for decimals") {
     val schema = new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT)
     testDecimalOverflow(schema, Row(BigDecimal("9" * 100)))
     testDecimalOverflow(schema, Row(new java.math.BigDecimal("9" * 100)))
   }
 
   private def testDecimalOverflow(schema: StructType, row: Row): Unit = {
-    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> false.toString) {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "false") {
       val encoder = RowEncoder(schema).resolveAndBind()
       intercept[Exception] {
         encoder.toRow(row)
@@ -182,7 +182,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       }
     }
 
-    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> true.toString) {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "true") {
       val encoder = RowEncoder(schema).resolveAndBind()
       assert(encoder.fromRow(encoder.toRow(row)).get(0) == null)
     }
