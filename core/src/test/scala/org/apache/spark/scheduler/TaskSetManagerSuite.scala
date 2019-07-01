@@ -739,7 +739,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Mark the task as available for speculation, and then offer another resource,
     // which should be used to launch a speculative copy of the task.
-    manager.addPendingSpeculativeTask(singleTask.partitionId)
+    manager.speculatableTasks += singleTask.partitionId
+    manager.addPendingTask(singleTask.partitionId, speculative = true)
     val task2 = manager.resourceOffer("execB", "host2", TaskLocality.ANY).get
 
     assert(manager.runningTasks === 2)
@@ -884,7 +885,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
     assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index == 1)
 
-    manager.addPendingSpeculativeTask(1)
+    manager.speculatableTasks += 1
+    manager.addPendingTask(1, speculative = true)
     clock.advance(LOCALITY_WAIT_MS)
     // schedule the nonPref task
     assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 2)
@@ -975,7 +977,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched.addExecutor("execA", "host1")
     sched.addExecutor("execB.2", "host2")
     manager.executorAdded()
-    assert(manager.pendingTasksWithNoPrefs.size === 0)
+    assert(manager.pendingTasks.noPrefs.size === 0)
     // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
     assert(manager.resourceOffer("execA", "host1", ANY) !== None)
@@ -1327,7 +1329,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)
 
     // Assert the task has been black listed on the executor it was last executed on.
-    when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean())).thenAnswer(
+    when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean(), anyBoolean())).thenAnswer(
       (invocationOnMock: InvocationOnMock) => {
         val task: Int = invocationOnMock.getArgument(0)
         assert(taskSetManager.taskSetBlacklistHelperOpt.get.
@@ -1339,7 +1341,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val e = new ExceptionFailure("a", "b", Array(), "c", None)
     taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
 
-    verify(taskSetManagerSpy, times(1)).addPendingTask(0, false)
+    verify(taskSetManagerSpy, times(1)).addPendingTask(0, false, false)
   }
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
@@ -1654,5 +1656,82 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Allocated resource addresses should still present in `availableResources`, they will only
     // get removed inside TaskSchedulerImpl later.
     assert(availableResources(GPU) sameElements Array("0", "1", "2", "3"))
+  }
+
+  test("SPARK-26755 Ensure that a speculative task is submitted only once for execution") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(4)
+    // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+    // Offer resources for 4 tasks to start
+    for ((k, v) <- List(
+      "exec1" -> "host1",
+      "exec1" -> "host1",
+      "exec2" -> "host2",
+      "exec2" -> "host2")) {
+      val taskOption = manager.resourceOffer(k, v, NO_PREF)
+      assert(taskOption.isDefined)
+      val task = taskOption.get
+      assert(task.executorId === k)
+    }
+    assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+    clock.advance(1)
+    // Complete the first 2 tasks and leave the other 2 tasks in running
+    for (id <- Set(0, 1)) {
+      manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+      assert(sched.endedTasks(id) === Success)
+    }
+    // checkSpeculatableTasks checks that the task runtime is greater than the threshold for
+    // speculating. Since we use a threshold of 0 for speculation, tasks need to be running for
+    // > 0ms, so advance the clock by 1ms here.
+    clock.advance(1)
+    assert(manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.toSet === Set(2, 3))
+    assert(manager.pendingSpeculatableTasks.forExecutor.size === 0)
+    assert(manager.pendingSpeculatableTasks.forHost.size === 0)
+    assert(manager.pendingSpeculatableTasks.forRack.size === 0)
+    assert(manager.pendingSpeculatableTasks.anyPrefs.size === 2)
+    assert(manager.pendingSpeculatableTasks.noPrefs.size === 2)
+
+    // Offer resource to start the speculative attempt for the running task
+    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
+    val taskOption6 = manager.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption5.isDefined)
+    val task5 = taskOption5.get
+    assert(task5.index === 2)
+    assert(task5.taskId === 4)
+    assert(task5.executorId === "exec1")
+    assert(task5.attemptNumber === 1)
+    assert(taskOption6.isDefined)
+    val task6 = taskOption6.get
+    assert(task6.index === 3)
+    assert(task6.taskId === 5)
+    assert(task6.executorId === "exec1")
+    assert(task6.attemptNumber === 1)
+    sched.initialize(new FakeSchedulerBackend() {
+      override def killTask(
+        taskId: Long,
+        executorId: String,
+        interruptThread: Boolean,
+        reason: String): Unit = {}
+    })
+    clock.advance(1)
+    // Running checkSpeculatableTasks again should return false
+    assert(!manager.checkSpeculatableTasks(0))
+    assert(manager.pendingSpeculatableTasks.forExecutor.size === 0)
+    assert(manager.pendingSpeculatableTasks.forHost.size === 0)
+    assert(manager.pendingSpeculatableTasks.forRack.size === 0)
+    // allPendingSpeculativeTasks will still have two pending tasks but
+    // pendingSpeculatableTasksWithNoPrefs should have none
+    assert(manager.pendingSpeculatableTasks.anyPrefs.size === 2)
+    assert(manager.pendingSpeculatableTasks.noPrefs.size === 0)
   }
 }
