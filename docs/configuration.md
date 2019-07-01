@@ -432,7 +432,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.driver.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to the driver. This is intended to be set by application developers.
+    A string of extra JVM options to pass to the driver. This is intended to be set by users.
 
     For instance, GC settings or other logging.
     Note that it is illegal to set maximum heap size (-Xmx) settings with this option. Maximum heap
@@ -501,7 +501,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to executors. This is intended to be set by application developers.
+    A string of extra JVM options to pass to executors. This is intended to be set by users.
 
     For instance, GC settings or other logging.
     Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
