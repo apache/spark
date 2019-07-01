@@ -211,7 +211,8 @@ class JoinReorderGASuite extends PlanTest with StatsEstimationTestBase {
   test("don't reorder if project contains non-attribute") {
     val originalPlan =
       t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-          .select((nameToAttr("t1.k-1-2") + nameToAttr("t2.k-1-5")) as "key", nameToAttr("t1.v-1-10"))
+          .select((nameToAttr("t1.k-1-2")
+              + nameToAttr("t2.k-1-5")) as "key", nameToAttr("t1.v-1-10"))
           .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
           .select("key".attr)
 
