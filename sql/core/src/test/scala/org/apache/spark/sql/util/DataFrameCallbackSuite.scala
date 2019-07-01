@@ -202,7 +202,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       assert(commands(2)._1 == "insertInto")
       assert(commands(2)._2.isInstanceOf[InsertIntoTable])
       assert(commands(2)._2.asInstanceOf[InsertIntoTable].table
-        .asInstanceOf[UnresolvedRelation].tableIdentifier.table == "tab")
+        .asInstanceOf[UnresolvedRelation].multipartIdentifier == Seq("tab"))
     }
     // exiting withTable adds commands(3) via onSuccess (drops tab)
 

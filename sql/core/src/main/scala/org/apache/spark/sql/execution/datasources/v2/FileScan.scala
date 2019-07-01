@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Locale, OptionalLong}
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
@@ -29,6 +30,7 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 abstract class FileScan(
     sparkSession: SparkSession,
@@ -40,6 +42,21 @@ abstract class FileScan(
    */
   def isSplitable(path: Path): Boolean = {
     false
+  }
+
+  override def description(): String = {
+    val locationDesc =
+      fileIndex.getClass.getSimpleName + fileIndex.rootPaths.mkString("[", ", ", "]")
+    val metadata: Map[String, String] = Map(
+      "ReadSchema" -> readDataSchema.catalogString,
+      "Location" -> locationDesc)
+    val metadataStr = metadata.toSeq.sorted.map {
+      case (key, value) =>
+        val redactedValue =
+          Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
+        key + ": " + StringUtils.abbreviate(redactedValue, 100)
+    }.mkString(", ")
+    s"${this.getClass.getSimpleName} $metadataStr"
   }
 
   protected def partitions: Seq[FilePartition] = {

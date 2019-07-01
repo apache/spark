@@ -17,8 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{InputStream, IOException, SequenceInputStream}
-import java.nio.ByteBuffer
+import java.io.{InputStream, IOException}
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 

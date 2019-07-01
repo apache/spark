@@ -27,14 +27,15 @@ import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
-import org.apache.hive.service.cli.thrift.TBoolValue;
-import org.apache.hive.service.cli.thrift.TByteValue;
-import org.apache.hive.service.cli.thrift.TColumnValue;
-import org.apache.hive.service.cli.thrift.TDoubleValue;
-import org.apache.hive.service.cli.thrift.TI16Value;
-import org.apache.hive.service.cli.thrift.TI32Value;
-import org.apache.hive.service.cli.thrift.TI64Value;
-import org.apache.hive.service.cli.thrift.TStringValue;
+import org.apache.hadoop.hive.serde2.thrift.Type;
+import org.apache.hive.service.rpc.thrift.TBoolValue;
+import org.apache.hive.service.rpc.thrift.TByteValue;
+import org.apache.hive.service.rpc.thrift.TColumnValue;
+import org.apache.hive.service.rpc.thrift.TDoubleValue;
+import org.apache.hive.service.rpc.thrift.TI16Value;
+import org.apache.hive.service.rpc.thrift.TI32Value;
+import org.apache.hive.service.rpc.thrift.TI64Value;
+import org.apache.hive.service.rpc.thrift.TStringValue;
 
 /**
  * Protocols before HIVE_CLI_SERVICE_PROTOCOL_V6 (used by RowBasedSet)
@@ -138,10 +139,11 @@ public class ColumnValue {
     return TColumnValue.stringVal(tStringValue);
   }
 
-  private static TColumnValue stringValue(HiveDecimal value) {
+  private static TColumnValue stringValue(HiveDecimal value, TypeDescriptor typeDescriptor) {
     TStringValue tStrValue = new TStringValue();
     if (value != null) {
-      tStrValue.setValue(value.toString());
+      int scale = typeDescriptor.getDecimalDigits();
+      tStrValue.setValue(value.toFormatString(scale));
     }
     return TColumnValue.stringVal(tStrValue);
   }
@@ -162,7 +164,9 @@ public class ColumnValue {
     return TColumnValue.stringVal(tStrValue);
   }
 
-  public static TColumnValue toTColumnValue(Type type, Object value) {
+  public static TColumnValue toTColumnValue(TypeDescriptor typeDescriptor, Object value) {
+    Type type = typeDescriptor.getType();
+
     switch (type) {
     case BOOLEAN_TYPE:
       return booleanValue((Boolean)value);
@@ -193,7 +197,7 @@ public class ColumnValue {
     case INTERVAL_DAY_TIME_TYPE:
       return stringValue((HiveIntervalDayTime) value);
     case DECIMAL_TYPE:
-      return stringValue(((HiveDecimal)value));
+      return stringValue((HiveDecimal)value, typeDescriptor);
     case BINARY_TYPE:
       return stringValue((String)value);
     case ARRAY_TYPE:
@@ -201,6 +205,8 @@ public class ColumnValue {
     case STRUCT_TYPE:
     case UNION_TYPE:
     case USER_DEFINED_TYPE:
+      return stringValue((String)value);
+    case NULL_TYPE:
       return stringValue((String)value);
     default:
       return null;

@@ -476,7 +476,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       new KafkaContinuousStream(
         kafkaOffsetReader,
         kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
-        parameters,
+        options,
         checkpointLocation,
         startingStreamOffsets,
         failOnDataLoss(caseInsensitiveParams))
