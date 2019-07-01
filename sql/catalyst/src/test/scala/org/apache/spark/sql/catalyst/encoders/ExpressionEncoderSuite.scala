@@ -387,7 +387,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18),
     "java decimal within precision/scale limit")
 
-  encodeDecodeTest(BigDecimal(("9" * 20) + "." + "9" * 18).unary_-,
+  encodeDecodeTest(-BigDecimal(("9" * 20) + "." + "9" * 18),
     "negative scala decimal within precision/scale limit")
   encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18).negate,
     "negative java decimal within precision/scale limit")
