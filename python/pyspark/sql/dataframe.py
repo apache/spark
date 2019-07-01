@@ -2229,7 +2229,7 @@ class DataFrame(object):
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
                 or udf.evalType != PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
             raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "SQL_SCALAR_PANDAS_ITER_UDF.")
+                             "SCALAR_ITER.")
 
         if not isinstance(udf.returnType, StructType):
             raise ValueError("The returnType of the pandas_udf must be a StructType")
