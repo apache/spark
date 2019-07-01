@@ -386,14 +386,14 @@ class DenseVector(Vector):
 
     def toArray(self):
         """
-        Returns an numpy.ndarray
+        Returns the underlying numpy.ndarray
         """
         return self.array
 
     @property
     def values(self):
         """
-        Returns a list of values
+        Returns the underlying numpy.ndarray
         """
         return self.array
 
@@ -681,7 +681,7 @@ class SparseVector(Vector):
 
     def toArray(self):
         """
-        Returns a copy of this SparseVector as a 1-dimensional NumPy array.
+        Returns a copy of this SparseVector as a 1-dimensional numpy.ndarray.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
         arr[self.indices] = self.values
@@ -862,7 +862,7 @@ class Matrix(object):
 
     def toArray(self):
         """
-        Returns its elements in a NumPy ndarray.
+        Returns its elements in a numpy.ndarray.
         """
         raise NotImplementedError
 
@@ -937,7 +937,7 @@ class DenseMatrix(Matrix):
 
     def toArray(self):
         """
-        Return an numpy.ndarray
+        Return a numpy.ndarray
 
         >>> m = DenseMatrix(2, 2, range(4))
         >>> m.toArray()
@@ -1121,7 +1121,7 @@ class SparseMatrix(Matrix):
 
     def toArray(self):
         """
-        Return an numpy.ndarray
+        Return a numpy.ndarray
         """
         A = np.zeros((self.numRows, self.numCols), dtype=np.float64, order='F')
         for k in xrange(self.colPtrs.size - 1):
