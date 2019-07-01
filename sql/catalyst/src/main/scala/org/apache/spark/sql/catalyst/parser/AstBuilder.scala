@@ -1408,7 +1408,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTrim(ctx: TrimContext): Expression = withOrigin(ctx) {
     val srcStr = expression(ctx.srcStr)
     val trimStr = Option(ctx.trimStr).map(expression)
-    ctx.trimOption.getType match {
+    Option(ctx.trimOption).map(_.getType).getOrElse(SqlBaseParser.BOTH) match {
       case SqlBaseParser.BOTH =>
         StringTrim(srcStr, trimStr)
       case SqlBaseParser.LEADING =>
@@ -1418,6 +1418,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case other =>
         throw new ParseException("Function trim doesn't support with " +
           s"type $other. Please use BOTH, LEADING or TRAILING as trim type", ctx)
+    }
+  }
+
+  /**
+   * Create a Overlay expression.
+   */
+  override def visitOverlay(ctx: OverlayContext): Expression = withOrigin(ctx) {
+    val input = expression(ctx.input)
+    val replace = expression(ctx.replace)
+    val position = expression(ctx.position)
+    val lengthOpt = Option(ctx.length).map(expression)
+    lengthOpt match {
+      case Some(length) => Overlay(input, replace, position, length)
+      case None => new Overlay(input, replace, position)
     }
   }
 
