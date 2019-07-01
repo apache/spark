@@ -38,7 +38,7 @@ private[kafka010] class KafkaRelation(
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
     endingOffsets: KafkaOffsetRangeLimit)
-    extends BaseRelation with TableScan with Logging {
+  extends BaseRelation with TableScan with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
   assert(endingOffsets != EarliestOffsetRangeLimit,
