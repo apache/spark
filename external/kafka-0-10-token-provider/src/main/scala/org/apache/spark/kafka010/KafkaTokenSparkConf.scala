@@ -38,22 +38,19 @@ private[spark] case class KafkaTokenClusterConf(
     keyPassword: Option[String],
     tokenMechanism: String,
     specifiedKafkaParams: Map[String, String]) {
-  override def toString: String = {
-    val redactedSpecifiedKafkaParams = KafkaRedactionUtil.redactParams(specifiedKafkaParams.toSeq)
-    s"KafkaTokenClusterConf{" +
-      s"identifier=$identifier, " +
-      s"authBootstrapServers=$authBootstrapServers, " +
-      s"targetServersRegex=$targetServersRegex, " +
-      s"securityProtocol=$securityProtocol, " +
-      s"kerberosServiceName=$kerberosServiceName, " +
-      s"trustStoreLocation=$trustStoreLocation, " +
-      s"trustStorePassword=${trustStorePassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
-      s"keyStoreLocation=$keyStoreLocation, " +
-      s"keyStorePassword=${keyStorePassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
-      s"keyPassword=${keyPassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
-      s"tokenMechanism=$tokenMechanism, " +
-      s"specifiedKafkaParams=$redactedSpecifiedKafkaParams}"
-  }
+  override def toString: String = s"KafkaTokenClusterConf{" +
+    s"identifier=$identifier, " +
+    s"authBootstrapServers=$authBootstrapServers, " +
+    s"targetServersRegex=$targetServersRegex, " +
+    s"securityProtocol=$securityProtocol, " +
+    s"kerberosServiceName=$kerberosServiceName, " +
+    s"trustStoreLocation=$trustStoreLocation, " +
+    s"trustStorePassword=${trustStorePassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
+    s"keyStoreLocation=$keyStoreLocation, " +
+    s"keyStorePassword=${keyStorePassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
+    s"keyPassword=${keyPassword.map(_ => REDACTION_REPLACEMENT_TEXT)}, " +
+    s"tokenMechanism=$tokenMechanism, " +
+    s"specifiedKafkaParams=${KafkaRedactionUtil.redactParams(specifiedKafkaParams.toSeq)}}"
 }
 
 private [kafka010] object KafkaTokenSparkConf extends Logging {
