@@ -242,7 +242,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("deprecated configs") {
-    // Set `loadDefaults` to be false, so avoid system props's noises.
     val conf = new SparkConf(false)
     val newName = UPDATE_INTERVAL_S.key
 
