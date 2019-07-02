@@ -1011,6 +1011,64 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         """.stripMargin), (2 to 6).map(i => Row(i)))
   }
 
+  test("SPARK-28227 test script transform with aggregation") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    val data = (1 to 100000).map { i => (i, i, i) }
+    data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
+
+    //  without aggregation
+    assert(0 === sql(
+      s"""SELECT TRANSFORM ( d2, d1, cast(d3 as string) )
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+    assert(0 === sql(
+      s"""SELECT TRANSFORM ( d2, d1, d3+1 )
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+      assert(100 === sql(
+      s"""SELECT TRANSFORM (*)
+         |USING 'cat' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+      assert(100 === sql(
+      s"""SELECT TRANSFORM ( d2 as d4, max(d1) as maxd1, cast(sum(d3) as string))
+         |USING 'cat' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100
+         |GROUP BY d2""".stripMargin).count())
+
+
+      assert(100 === sql(
+      s"""SELECT TRANSFORM ( d2, max(d1) as maxd1, cast(sum(d3) as string))
+         |USING 'cat' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100
+         |GROUP BY d2""".stripMargin).count())
+
+      assert(0 === sql(
+      s"""SELECT TRANSFORM ( d2, max(d1) as maxd1, cast(sum(d3) as string))
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100
+         |GROUP BY d2
+         |HAVING maxd1 > 0""".stripMargin).count())
+
+      assert(90 === sql(
+      s"""SELECT TRANSFORM ( d2, max(d1) as maxd1, cast(sum(d3) as string))
+         |USING 'cat' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100
+         |GROUP BY d2
+         |HAVING max(d1) > 10""".stripMargin).count())
+
+  }
+
+
   test("Sorting columns are not in Generate") {
     withTempView("data") {
       spark.range(1, 5)
