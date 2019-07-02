@@ -86,7 +86,7 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     checkType(Divide(d2, d1), DecimalType(10, 6))
     checkType(Remainder(d1, d2), DecimalType(3, 2))
     checkType(Remainder(d2, d1), DecimalType(3, 2))
-    checkType(Sum(d1), DecimalType(12, 1))
+    checkType(Sum(d1), DecimalType(DecimalType.MAX_PRECISION, 1))
     checkType(Average(d1), DecimalType(6, 5))
 
     checkType(Add(Add(d1, d2), d1), DecimalType(7, 2))
@@ -97,7 +97,7 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     checkType(Subtract(Subtract(d2, d1), d1), DecimalType(7, 2))
     checkType(Multiply(Multiply(d1, d1), d2), DecimalType(11, 4))
     checkType(Divide(d2, Add(d1, d1)), DecimalType(10, 6))
-    checkType(Sum(Add(d1, d1)), DecimalType(13, 1))
+    checkType(Sum(Add(d1, d1)), DecimalType(DecimalType.MAX_PRECISION, 1))
   }
 
   test("Comparison operations") {

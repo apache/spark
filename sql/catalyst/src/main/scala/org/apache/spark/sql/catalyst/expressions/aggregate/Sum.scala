@@ -50,8 +50,8 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     TypeUtils.checkForNumericExpr(child.dataType, "function sum")
 
   private lazy val resultType = child.dataType match {
-    case DecimalType.Fixed(precision, scale) =>
-      DecimalType.bounded(precision + 10, scale)
+    case DecimalType.Fixed(_, scale) =>
+      DecimalType.bounded(DecimalType.MAX_PRECISION, scale)
     case _: IntegralType => LongType
     case _ => DoubleType
   }
