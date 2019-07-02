@@ -47,6 +47,9 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    */
   abstract class Strategy { def maxIterations: Int }
 
+  /** A strategy that is idempotent, i.e. additional runs should not change query plans */
+  case object Idempotent extends Strategy { val maxIterations = 1 }
+
   /** A strategy that only runs once. */
   case object Once extends Strategy { val maxIterations = 1 }
 
@@ -139,6 +142,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
               throw new TreeNodeException(curPlan, message, null)
             } else {
               logWarning(message)
+            }
+          }
+          // Run idempotence checker for batches with Idempotent Strategy
+          if (Utils.isTesting && batch.strategy == Idempotent) {
+            val checkPlan = batch.rules.foldLeft(curPlan) { case (plan, rule) => rule(plan) }
+            if (!checkPlan.fastEquals(curPlan)) {
+              val message = s"Idempotent batch ${batch.name} failed idempotence checker"
+              throw new TreeNodeException(curPlan, message, null)
             }
           }
           continue = false

@@ -30,6 +30,31 @@ class RuleExecutorSuite extends SparkFunSuite {
     }
   }
 
+  object SetMaxLiterals extends Rule[Expression] {
+    def apply(e: Expression): Expression = e transform {
+      case IntegerLiteral(i) => Literal(Integer.MAX_VALUE)
+    }
+  }
+
+  test("idempotent") {
+    object ApplyIdempotent extends RuleExecutor[Expression] {
+      val batches = Batch("idempotent", Idempotent, SetMaxLiterals) :: Nil
+    }
+
+    assert(ApplyIdempotent.execute(Literal(10)) === Literal(Integer.MAX_VALUE))
+  }
+
+  test("idempotence checker") {
+    object NonIdempotent extends RuleExecutor[Expression] {
+      val batches = Batch("non idempotent", Idempotent, DecrementLiterals) :: Nil
+    }
+
+    val message = intercept[TreeNodeException[LogicalPlan]] {
+      NonIdempotent.execute(Literal(3))
+    }.getMessage
+    assert(message.contains("failed idempotence checker"))
+  }
+
   test("only once") {
     object ApplyOnce extends RuleExecutor[Expression] {
       val batches = Batch("once", Once, DecrementLiterals) :: Nil
