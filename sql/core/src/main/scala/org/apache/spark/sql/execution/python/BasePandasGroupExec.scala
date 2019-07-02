@@ -14,7 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.execution.python
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions}
@@ -25,8 +29,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConverters._
 
 abstract class BasePandasGroupExec(func: Expression,
                                    output: Seq[Attribute]) extends SparkPlan {
@@ -42,8 +44,8 @@ abstract class BasePandasGroupExec(func: Expression,
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
 
-  protected def executePython[T](data: Iterator[T],
-                                  runner: BasePythonRunner[T, ColumnarBatch]): Iterator[InternalRow] = {
+  protected def executePython[T]
+  (data: Iterator[T], runner: BasePythonRunner[T, ColumnarBatch]): Iterator[InternalRow] = {
 
     val context = TaskContext.get()
     val columnarBatchIter = runner.compute(data, context.partitionId(), context)
@@ -62,7 +64,8 @@ abstract class BasePandasGroupExec(func: Expression,
 
   protected def groupAndDedup(
       input: Iterator[InternalRow], groupingAttributes: Seq[Attribute],
-      inputSchema: Seq[Attribute], dedupSchema: Seq[Attribute]): Iterator[(InternalRow, Iterator[InternalRow])] = {
+      inputSchema: Seq[Attribute], dedupSchema: Seq[Attribute]
+                             ): Iterator[(InternalRow, Iterator[InternalRow])] = {
     val groupedIter = GroupedIterator(input, groupingAttributes, inputSchema)
     val dedupProj = UnsafeProjection.create(dedupSchema, inputSchema)
     groupedIter.map {

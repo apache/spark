@@ -43,12 +43,12 @@ class InterleavedArrowPythonRunner(
   extends BaseArrowPythonRunner[(Iterator[InternalRow], Iterator[InternalRow])](
     funcs, evalType, argOffsets) {
 
-  protected override def newWriterThread(
-                                          env: SparkEnv,
-                                          worker: Socket,
-                                          inputIterator: Iterator[(Iterator[InternalRow], Iterator[InternalRow])],
-                                          partitionIndex: Int,
-                                          context: TaskContext): WriterThread = {
+  protected def newWriterThread(
+        env: SparkEnv,
+        worker: Socket,
+        inputIterator: Iterator[(Iterator[InternalRow], Iterator[InternalRow])],
+        partitionIndex: Int,
+        context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
