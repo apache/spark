@@ -247,7 +247,23 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
   }
 
-  test("allow group.id overriding") {
+  test("allow group.id prefix") {
+    testGroupId("groupIdPrefix", (expected, actual) => {
+      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+        "Valid consumer groups don't contain the expected group id - " +
+        s"Valid consumer groups: $actual / expected group id: $expected")
+    })
+  }
+
+  test("allow group.id override") {
+    testGroupId("kafka.group.id", (expected, actual) => {
+      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+        s"contain the expected group id - Valid consumer groups: $actual / " +
+        s"expected group id: $expected")
+    })
+  }
+
+  private def testGroupId(groupIdKey: String, validateGroupId: (String, Iterable[String]) => Unit) {
     // Tests code path KafkaSourceProvider.createRelation(.)
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
@@ -256,15 +272,13 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
     testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
 
     val customGroupId = "id-" + Random.nextInt()
-    val df = createDF(topic, withOptions = Map("kafka.group.id" -> customGroupId))
+    val df = createDF(topic, withOptions = Map(groupIdKey -> customGroupId))
     checkAnswer(df, (1 to 30).map(_.toString).toDF())
 
     val consumerGroups = testUtils.listConsumerGroups()
     val validGroups = consumerGroups.valid().get()
     val validGroupsId = validGroups.asScala.map(_.groupId())
-    assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
-      s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
-      s"expected group id: $customGroupId")
+    validateGroupId(customGroupId, validGroupsId)
   }
 
   test("read Kafka transactional messages: read_committed") {
