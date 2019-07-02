@@ -28,7 +28,12 @@ import org.apache.spark.sql.internal.SQLConf
  */
 
 /**
- * Make sure that a view's child plan produces the view's output attributes. We try to wrap the
+ * This rule has two goals:
+ *
+ * 1. Removes [[View]] operators from the plan. The operator is respected till the end of analysis
+ * stage because we want to see which part of an analyzed logical plan is generated from a view.
+ *
+ * 2. Make sure that a view's child plan produces the view's output attributes. We try to wrap the
  * child by:
  * 1. Generate the `queryOutput` by:
  *    1.1. If the query column names are defined, map the column names to attributes in the child
@@ -47,8 +52,12 @@ import org.apache.spark.sql.internal.SQLConf
  * This should be only done after the batch of Resolution, because the view attributes are not
  * completely resolved during the batch of Resolution.
  */
-case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+object EliminateView extends Rule[LogicalPlan] with CastSupport {
+  override def conf: SQLConf = SQLConf.get
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // The child has the different output attributes with the View operator. Adds a Project over
+    // the child of the view.
     case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
@@ -84,7 +93,12 @@ case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupp
           }
         case (_, originAttr) => originAttr
       }
-      v.copy(child = Project(newOutput, child))
+      Project(newOutput, child)
+
+    // The child should have the same output attributes with the View operator, so we simply
+    // remove the View operator.
+    case v @ View(_, _, child) =>
+      child
   }
 
   /**
@@ -101,21 +115,5 @@ case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupp
     }.getOrElse(throw new AnalysisException(
       s"Attribute with name '$name' is not found in " +
         s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
-  }
-}
-
-/**
- * Removes [[View]] operators from the plan. The operator is respected till the end of analysis
- * stage because we want to see which part of an analyzed logical plan is generated from a view.
- */
-object EliminateView extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // The child should have the same output attributes with the View operator, so we simply
-    // remove the View operator.
-    case v @ View(_, output, child) =>
-      assert(v.sameOutput(child),
-        s"The output of the child ${child.output.mkString("[", ",", "]")} is different from the " +
-          s"view output ${output.mkString("[", ",", "]")}")
-      child
   }
 }
