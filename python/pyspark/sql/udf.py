@@ -64,6 +64,12 @@ def _create_udf(f, returnType, evalType):
                 "Invalid function: pandas_udfs with function type GROUPED_MAP "
                 "must take either one argument (data) or two arguments (key, data).")
 
+        if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF \
+                and len(argspec.args) not in (2, 3):
+            raise ValueError(
+                "Invalid function: pandas_udfs with function type COGROUPED_MAP "
+                "must take either two arguments (left, right) or three arguments (key, left, right).")
+
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
         f, returnType=returnType, name=None, evalType=evalType, deterministic=True)
@@ -131,6 +137,17 @@ class UserDefinedFunction(object):
                 except TypeError:
                     raise NotImplementedError(
                         "Invalid returnType with grouped map Pandas UDFs: "
+                        "%s is not supported" % str(self._returnType_placeholder))
+            else:
+                raise TypeError("Invalid returnType for grouped map Pandas "
+                                "UDFs: returnType must be a StructType.")
+        elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+            if isinstance(self._returnType_placeholder, StructType):
+                try:
+                    to_arrow_type(self._returnType_placeholder)
+                except TypeError:
+                    raise NotImplementedError(
+                        "Invalid returnType with cogrouped map Pandas UDFs: "
                         "%s is not supported" % str(self._returnType_placeholder))
             else:
                 raise TypeError("Invalid returnType for grouped map Pandas "

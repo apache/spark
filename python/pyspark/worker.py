@@ -113,9 +113,18 @@ def wrap_scalar_pandas_udf(f, return_type, eval_type):
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
 
-    def wrapped(key_Series, left_value_series, right_value_series):
+    def wrapped(left_key_series, left_value_series, right_key_series, right_value_series):
         import pandas as pd
-        result = f(pd.concat(left_value_series, axis=1), pd.concat(right_value_series, axis=1))
+
+        left_df = pd.concat(left_value_series, axis=1)
+        right_df = pd.concat(right_value_series, axis=1)
+
+        if len(argspec.args) == 2:
+            result = f(left_df, right_df)
+        elif len(argspec.args) == 3:
+            key_series = left_key_series if not left_df.empty else right_key_series
+            key = tuple(s[0] for s in key_series)
+            result = f(key, left_df, right_df)
         if not isinstance(result, pd.DataFrame):
             raise TypeError("Return type of the user-defined function should be "
                             "pandas.DataFrame, but is {}".format(type(result)))
@@ -126,7 +135,7 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
         return result
 
-    return lambda k, vl, vr: [(wrapped(k, vl, vr), to_arrow_type(return_type))]
+    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec):
@@ -377,9 +386,9 @@ def read_udfs(pickleSer, infile, eval_type):
         parsed_offsets = parse_grouped_arg_offsets(arg_offsets)
         arg0 = ["a[0][%d]" % o for o in parsed_offsets[0][0]]
         arg1 = ["a[0][%d]" % o for o in parsed_offsets[0][1]]
-        arg2 = ["a[1][%d]" % o for o in parsed_offsets[1][1]]
-        mapper_str = "lambda a: f([%s], [%s], [%s])" % (", ".join(arg0), ", ".join(arg1), ", ".join(arg2))
-        print("mapper string is " + mapper_str)
+        arg2 = ["a[1][%d]" % o for o in parsed_offsets[1][0]]
+        arg3 = ["a[1][%d]" % o for o in parsed_offsets[1][1]]
+        mapper_str = "lambda a: f([%s], [%s], [%s], [%s])" % (", ".join(arg0), ", ".join(arg1), ", ".join(arg2), ", ".join(arg3))
     else:
         # Create function like this:
         #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))
@@ -401,26 +410,18 @@ def read_udfs(pickleSer, infile, eval_type):
 
 
 def parse_grouped_arg_offsets(arg_offsets):
-    print('arg offsets are ' + str(arg_offsets))
     parsed = []
     i = 0
     while i < len(arg_offsets):
         offsets_len = arg_offsets[i]
-        print('i is ' + str(i))
-        print('offsets_len is ' + str(offsets_len))
         i += 1
         offsets = arg_offsets[i: i + offsets_len]
-        print('offsets are ' + str(offsets))
         split_index = offsets[0] + 1
-        print('split index is ' + str(split_index))
         keys = offsets[1: split_index]
         values = offsets[split_index:]
-        print('keys are ' + str(keys))
-        print('values are ' + str(values))
         parsed.append([keys, values])
         i += offsets_len
     return parsed
-
 
 
 def main(infile, outfile):

@@ -31,7 +31,7 @@ from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal
+    from pandas.util.testing import assert_frame_equal, assert_series_equal
 
 if have_pyarrow:
     import pyarrow as pa
@@ -96,7 +96,7 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
             'v2': [90, 100, 110]
         })
 
-        left_df =  self.spark\
+        left_df = self.spark\
             .createDataFrame(left)\
             .groupby(col('id') % 2 == 0)
 
@@ -122,7 +122,108 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
-    def _test_merge(self, left, right, output_schema='id long, k int, v int, v2 int'):
+    def test_with_key_left(self):
+        self._test_with_key_left(self.data1, self.data2)
+
+    def test_with_key_right(self):
+        self._test_with_key_right(self.data1, self.data2)
+
+    def test_with_key_left_group_empty(self):
+        left = self.data1.where(col("id") % 2 == 0)
+        self._test_with_key_right(left, self.data2)
+
+    def test_with_key_right_group_empty(self):
+        right = self.data2.where(col("id") % 2 == 0)
+        self._test_with_key_left(self.data1, right)
+
+    def test_with_key_complex(self):
+
+        @pandas_udf('id long, k int, v int, key boolean', PandasUDFType.COGROUPED_MAP)
+        def left_assign_key(key, l, _):
+            return l.assign(key=key[0])
+
+        result = self.data1 \
+            .groupby(col('id') % 2 == 0)\
+            .cogroup(self.data2.groupby(col('id') % 2 == 0)) \
+            .apply(left_assign_key) \
+            .sort(['id', 'k']) \
+            .toPandas()
+
+        expected = self.data1.toPandas()
+        expected = expected.assign(key=expected.id % 2 == 0)
+
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+
+    def test_wrong_return_type(self):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    NotImplementedError,
+                    'Invalid returnType.*cogrouped map Pandas UDF.*MapType'):
+                pandas_udf(
+                    lambda l, r: l,
+                    'id long, v map<int, int>',
+                    PandasUDFType.COGROUPED_MAP)
+
+    def test_wrong_args(self):
+        left = self.data1
+        right = self.data2
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+                left.groupby('id').cogroup(right.groupby('id')).apply(lambda l, r: l)
+            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+                left.groupby('id').cogroup(right.groupby('id')).apply(udf(lambda l, r: l, DoubleType()))
+            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+                left.groupby('id').cogroup(right.groupby('id')).apply(sum(left.v))
+            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+                left.groupby('id').cogroup(right.groupby('id')).apply(left.v + 1)
+            with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+                left.groupby('id').cogroup(right.groupby('id')).apply(
+                    pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())])))
+            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+                left.groupby('id').cogroup(right.groupby('id')).apply(pandas_udf(lambda x, y: x, DoubleType()))
+            with self.assertRaisesRegexp(ValueError, 'Invalid udf.*COGROUPED_MAP'):
+                left.groupby('id').cogroup(right.groupby('id')).apply(
+                    pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
+
+    @staticmethod
+    def _test_with_key_left(left, right):
+
+        @pandas_udf('id long, k int, v int, key long', PandasUDFType.COGROUPED_MAP)
+        def left_assign_key(key, l, _):
+            return l.assign(key=key[0])
+
+        result = left \
+            .groupby('id') \
+            .cogroup(right.groupby('id')) \
+            .apply(left_assign_key) \
+            .toPandas()
+
+        expected = left.toPandas()
+        expected = expected.assign(key=expected.id)
+
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+
+    @staticmethod
+    def _test_with_key_right(left, right):
+
+        @pandas_udf('id long, k int, v2 int, key long', PandasUDFType.COGROUPED_MAP)
+        def right_assign_key(key, _, r):
+            return r.assign(key=key[0])
+
+        result = left \
+            .groupby('id') \
+            .cogroup(right.groupby('id')) \
+            .apply(right_assign_key) \
+            .toPandas()
+
+        expected = right.toPandas()
+        expected = expected.assign(key=expected.id)
+
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+
+    @staticmethod
+    def _test_merge(left, right, output_schema='id long, k int, v int, v2 int'):
 
         @pandas_udf(output_schema, PandasUDFType.COGROUPED_MAP)
         def merge_pandas(l, r):

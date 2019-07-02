@@ -16,6 +16,8 @@
 #
 
 from pyspark.sql.dataframe import DataFrame
+from pyspark.rdd import PythonEvalType
+from pyspark.sql.column import Column
 
 
 class CoGroupedData(object):
@@ -26,6 +28,11 @@ class CoGroupedData(object):
         self.sql_ctx = gd1.sql_ctx
 
     def apply(self, udf):
+        # Columns are special because hasattr always return True
+        if isinstance(udf, Column) or not hasattr(udf, 'func') \
+           or udf.evalType != PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "COGROUPED_MAP.")
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
         jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc.expr())
