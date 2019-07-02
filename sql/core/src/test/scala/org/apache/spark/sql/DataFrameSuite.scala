@@ -156,7 +156,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       structDf.select(xxhash64($"a", $"record.*")))
   }
 
-  test("SPARK-28224: Aggregate sum large big decimal") {
+  test("SPARK-28224: Aggregate sum big decimal overflow") {
     for {
       nullOnOverflow <- Seq(true, false)
     } yield {
@@ -173,6 +173,16 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("Aggregate sum integers") {
+    val structDf = largeAndSmallInts.select("a").agg(sum("a"))
+    checkAnswer(structDf, Row(BigInt("6442450941")))
+  }
+
+  test("Aggregate sum double") {
+    val structDf = salary.select("salary").agg(sum("salary"))
+    checkAnswer(structDf, Row(3000.0d))
   }
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
