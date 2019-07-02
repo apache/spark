@@ -157,9 +157,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-28224: Aggregate sum big decimal overflow") {
-    for {
-      nullOnOverflow <- Seq(true, false)
-    } yield {
+    Seq(true, false).foreach { nullOnOverflow =>
       withSQLConf((SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key, nullOnOverflow.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
         if (nullOnOverflow) {
