@@ -934,4 +934,33 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       assert(error.message.contains("function count_if requires boolean type"))
     }
   }
+
+  test("nondeterministic udf in grouping expressions") {
+    import org.apache.spark.sql.catalyst.plans.logical.Project
+    import org.apache.spark.sql.catalyst.expressions.Alias
+
+    val df = spark.range(100).toDF()
+    val nondeter_udf = udf((v: Int) => v).asNondeterministic()
+    df.sparkSession.udf.register("random_udf", udf((v: Int) => v).asNondeterministic())
+
+    val query = df.select('id, nondeter_udf('id).as('udf_col))
+      .groupBy('udf_col).agg(sum('id))
+    // non-deterministic udfs should not be treated as non-deterministic since they do not mix
+    // in the Nondeterministic trait
+    assert(query.queryExecution.analyzed.collect { case Project(p, _) =>
+      p.collect{ case Alias(_, "_nondeterministic") => true }.isEmpty
+    }.forall(identity))
+  }
+
+  test("nondeterministic trait in grouping expressions") {
+    import org.apache.spark.sql.catalyst.plans.logical.Project
+    import org.apache.spark.sql.catalyst.expressions.Alias
+
+    val df = spark.range(100).toDF()
+    val query = df.select(rand(10), 'id).groupBy(rand(10)).agg(sum('id))
+    // random mixins Nondeterministic trait, hence requires two additional project
+    assert(query.queryExecution.analyzed.collect { case Project(p, _) =>
+      p.collect{ case Alias(_, "_nondeterministic") => true }.isEmpty
+    }.size == 2)
+  }
 }

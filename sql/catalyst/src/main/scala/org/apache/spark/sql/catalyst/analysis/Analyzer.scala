@@ -2138,7 +2138,7 @@ class Analyzer(
       case p: Project => p
       case f: Filter => f
 
-      case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
+      case a: Aggregate if a.groupingExpressions.exists(nondeterministic) =>
         val nondeterToAttr = getNondeterToAttr(a.groupingExpressions)
         val newChild = Project(a.child.output ++ nondeterToAttr.values, a.child)
         a.transformExpressions { case e =>
@@ -2148,7 +2148,7 @@ class Analyzer(
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
       // schema with its child.
-      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
+      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(nondeterministic) =>
         val nondeterToAttr = getNondeterToAttr(p.expressions)
         val newPlan = p.transformExpressions { case e =>
           nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
@@ -2156,6 +2156,12 @@ class Analyzer(
         val newChild = Project(p.child.output ++ nondeterToAttr.values, p.child)
         Project(p.output, newPlan.withNewChildren(newChild :: Nil))
     }
+
+    /**
+     * Find whether this expression contains any node with Nondeterministic trait.
+     */
+    private def nondeterministic(expr: Expression): Boolean =
+      expr.map(_.isInstanceOf[Nondeterministic]).exists(identity)
 
     private def getNondeterToAttr(exprs: Seq[Expression]): Map[Expression, NamedExpression] = {
       exprs.filterNot(_.deterministic).flatMap { expr =>
