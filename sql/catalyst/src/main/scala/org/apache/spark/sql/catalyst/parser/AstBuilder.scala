@@ -550,10 +550,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     val childOutput = withProject match {
-      case f: Filter if f.child.isInstanceOf[UnresolvedRelation] =>
-        expressions
-      case f: Filter if !f.child.isInstanceOf[UnresolvedRelation] =>
+      case f: Filter =>
         f.child match {
+          case r: UnresolvedRelation => expressions
           case agg: Aggregate => agg.aggregateExpressions
           case project: Project => project.projectList
           // actually it won't happen
@@ -566,10 +565,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     // Get ScripTransformation's child's output cols
     val input = childOutput.map {
-      case a: Alias =>
-        UnresolvedAttribute(a.name)
+      case a: Alias => UnresolvedAttribute(a.name)
       case e: UnresolvedAlias => assignAliases(e)
-      case e: UnresolvedAttribute => e
       case e: Expression => e
     }
 
