@@ -373,6 +373,9 @@ class InterleavedArrowReader(object):
         else:
             raise ValueError('Received invalid stream status {0}'.format(stream_status))
 
+    def next(self):
+        return self.__next__()
+
     def _read_df(self):
         import pyarrow as pa
         reader = pa.ipc.open_stream(self._stream)
