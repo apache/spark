@@ -409,9 +409,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       return new Array[InternalRow](0)
     }
 
-    val childRDD = getByteArrayRdd(n).map(_._2)
+    val childRDD = getByteArrayRdd(n)
 
-    val buf = new Array[InternalRow](n)
+    val buf = new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
     var scannedRowCount = 0
     var partsScanned = 0
@@ -436,24 +436,25 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
       val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
       val sc = sqlContext.sparkContext
-      val res = sc.runJob(childRDD,
-        (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty[Byte], p)
+      val res = sc.runJob(childRDD, (it: Iterator[(Long, Array[Byte])]) =>
+        if (it.hasNext) it.next() else (0L, Array.empty[Byte]), p)
+
       var i = 0
       while (scannedRowCount < n && i < res.length) {
-        val rows = decodeUnsafeRows(res(i))
-        while (scannedRowCount < n && rows.hasNext) {
-          buf(scannedRowCount) = rows.next()
-          scannedRowCount += 1
+        val rows = decodeUnsafeRows(res(i)._2)
+        val additionalRowCount = (res(i)._1 min (n - scannedRowCount)).toInt
+        if (additionalRowCount > 0) {
+          buf ++= new Array[InternalRow](additionalRowCount)
+          for (rowIndex <- scannedRowCount until scannedRowCount + additionalRowCount) {
+            buf(rowIndex) = rows.next()
+          }
+          scannedRowCount += additionalRowCount
         }
         i += 1
       }
       partsScanned += p.size
     }
-    if (scannedRowCount < n) {
-      buf.take(scannedRowCount)
-    } else {
-      buf
-    }
+    buf.toArray
   }
 
   protected def newMutableProjection(
