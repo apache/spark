@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -537,9 +538,44 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       createProject()
     }
 
+
+    def assignAliases(exprs: UnresolvedAlias): Expression = {
+      exprs.child match {
+        case ne: NamedExpression => UnresolvedAttribute(ne.name)
+        case c@Cast(ne: NamedExpression, _, _) => UnresolvedAttribute(ne.name)
+        case e if exprs.aliasFunc.isDefined =>
+          UnresolvedAttribute(exprs.aliasFunc.get.apply(e))
+        case e => UnresolvedAttribute(toPrettySQL(e))
+      }
+    }
+
+    val childOutput = withProject match {
+      case f: Filter if f.child.isInstanceOf[UnresolvedRelation] =>
+        expressions
+      case f: Filter if !f.child.isInstanceOf[UnresolvedRelation] =>
+        f.child match {
+          case agg: Aggregate => agg.aggregateExpressions
+          case project: Project => project.projectList
+          // actually it won't happen
+          case _ => throw new ParseException("Script Transform meet a parser error", ctx)
+        }
+      case p: Project => p.projectList
+      case a: Aggregate => a.aggregateExpressions
+    }
+
+
+    // Get ScripTransformation's child's output cols
+    val input = childOutput.map {
+      case a: Alias =>
+        UnresolvedAttribute(a.name)
+      case e: UnresolvedAlias => assignAliases(e)
+      case e: UnresolvedAttribute => e
+      case e: Expression => e
+    }
+
     // Create the transform.
     ScriptTransformation(
-      withProject.output,
+      input,
       string(transformClause.script),
       attributes,
       withProject,
