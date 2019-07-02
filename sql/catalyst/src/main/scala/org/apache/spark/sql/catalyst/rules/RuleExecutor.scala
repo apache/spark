@@ -141,6 +141,15 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
               logWarning(message)
             }
           }
+          // check idempotence of once strategy by running it one more time
+          if (Utils.isTesting && batch.strategy == Once) {
+            val checkPlan = batch.rules.foldLeft(curPlan) { case (plan, rule) => rule(plan) }
+            if (!checkPlan.fastEquals(curPlan)) {
+              val message = s"Batch ${batch.name} with Once strategy fails idempotence check\n" +
+                s"${sideBySide(curPlan.treeString, checkPlan.treeString).mkString("\n")}"
+              throw new TreeNodeException(checkPlan, message, null)
+            }
+          }
           continue = false
         }
 
