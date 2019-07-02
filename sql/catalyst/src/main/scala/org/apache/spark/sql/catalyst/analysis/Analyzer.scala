@@ -210,38 +210,6 @@ class Analyzer(
   )
 
   /**
-   * Analyze cte definitions and substitute child plan with analyzed cte definitions.
-   */
-  object CTESubstitution extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case With(child, relations) =>
-        // substitute CTE expressions right-to-left to resolve references to previous CTEs:
-        // with a as (select * from t), b as (select * from a) select * from b
-        relations.foldRight(child) {
-          case ((cteName, ctePlan), currentPlan) =>
-            substituteCTE(currentPlan, cteName, ctePlan)
-        }
-      case other => other
-    }
-
-    private def substituteCTE(
-        plan: LogicalPlan,
-        cteName: String,
-        ctePlan: LogicalPlan): LogicalPlan = {
-      plan resolveOperatorsUp {
-        case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
-          ctePlan
-        case other =>
-          // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
-          other transformExpressions {
-            case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.plan, cteName, ctePlan))
-          }
-      }
-    }
-  }
-
-  /**
    * Substitute child plan with WindowSpecDefinitions.
    */
   object WindowsSubstitution extends Rule[LogicalPlan] {

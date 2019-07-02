@@ -1838,6 +1838,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_CTE_SUBSTITUTION_ENABLED = buildConf("spark.sql.legacy.cte.substitution.enabled")
+    .internal()
+    .doc("When true, outer CTE definitions takes precedence over inner definitions.")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
@@ -2321,6 +2327,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
+
+  def legacyCTESubstitutionEnabled: Boolean = getConf(LEGACY_CTE_SUBSTITUTION_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
