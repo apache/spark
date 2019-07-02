@@ -2431,7 +2431,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.1.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2441,7 +2441,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-source-plugin</artifactId>
-          <version>3.0.1</version>
+          <version>3.1.0</version>
           <configuration>
             <attach>true</attach>
           </configuration>
@@ -2600,7 +2600,7 @@
                   <pluginExecutionFilter>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
-                    <versionRange>3.1.0</versionRange>
+                    <versionRange>3.1.2</versionRange>
                     <goals>
                       <goal>test-jar</goal>
                     </goals>
