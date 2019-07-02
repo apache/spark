@@ -46,20 +46,20 @@ case class FlatMapCoGroupsInPandasExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
 
-    val (schemaLeft, leftDedup, _) = createSchema(left, leftGroup)
-    val (schemaRight, rightDedup, _) = createSchema(right, rightGroup)
+    val (schemaLeft, leftDedup, leftArgOffsets) = createSchema(left, leftGroup)
+    val (schemaRight, rightDedup, rightArgOffsets) = createSchema(right, rightGroup)
 
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
 
       val leftGrouped = groupAndDedup(leftData, leftGroup, left.output, leftDedup)
       val rightGrouped = groupAndDedup(rightData, rightGroup, right.output, rightDedup)
       val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
-        .map{case (k, l, r) => (l, r)}
+        .map{case (_, l, r) => (l, r)}
 
       val runner = new InterleavedArrowPythonRunner(
         chainedFunc,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-        Array(Array.empty),
+        Array(leftArgOffsets ++ rightArgOffsets),
         schemaLeft,
         schemaRight,
         sessionLocalTimeZone,

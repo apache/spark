@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, UnsafeProjection}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan}
@@ -72,7 +71,7 @@ abstract class BasePandasGroupExec(func: Expression,
   }
 
   protected def createSchema(child: SparkPlan, groupingAttributes: Seq[Attribute])
-    : (StructType, Seq[Attribute], Array[Array[Int]]) = {
+    : (StructType, Seq[Attribute], Array[Int]) = {
 
     // Deduplicate the grouping attributes.
     // If a grouping attribute also appears in data attributes, then we don't need to send the
@@ -114,7 +113,9 @@ abstract class BasePandasGroupExec(func: Expression,
     val dataArgOffsets = nonDupGroupingAttributes.length until
       (nonDupGroupingAttributes.length + dataAttributes.length)
 
-    val argOffsets = Array(Array(groupingAttributes.length) ++ groupingArgOffsets ++ dataArgOffsets)
+    val argOffsetsLength = groupingAttributes.length + dataArgOffsets.length + 1
+    val argOffsets = Array(argOffsetsLength,
+          groupingAttributes.length) ++ groupingArgOffsets ++ dataArgOffsets
 
     // Attributes after deduplication
     val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes

@@ -82,7 +82,7 @@ case class FlatMapGroupsInPandasExec(
       val runner = new ArrowPythonRunner(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-        argOffsets,
+        Array(argOffsets),
         dedupSchema,
         sessionLocalTimeZone,
         pythonRunnerConf)
