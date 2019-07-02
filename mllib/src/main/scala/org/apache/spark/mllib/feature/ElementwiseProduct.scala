@@ -54,25 +54,25 @@ class ElementwiseProduct @Since("1.4.0") (
   }
 
   private[spark] def transformDense(values: Array[Double]): Array[Double] = {
-    val array = values.clone()
+    val newValues = values.clone()
     val dim = scalingVec.size
     var i = 0
     while (i < dim) {
-      array(i) *= scalingVec(i)
+      newValues(i) *= scalingVec(i)
       i += 1
     }
-    array
+    newValues
   }
 
   private[spark] def transformSparse(indices: Array[Int],
                                      values: Array[Double]): (Array[Int], Array[Double]) = {
-    val array = values.clone()
-    val dim = array.length
+    val newValues = values.clone()
+    val dim = newValues.length
     var i = 0
     while (i < dim) {
       values(i) *= scalingVec(indices(i))
       i += 1
     }
-    (indices, array)
+    (indices, newValues)
   }
 }
