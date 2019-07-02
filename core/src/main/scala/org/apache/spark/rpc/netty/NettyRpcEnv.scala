@@ -29,8 +29,9 @@ import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
@@ -47,11 +48,15 @@ private[netty] class NettyRpcEnv(
     host: String,
     securityManager: SecurityManager,
     numUsableCores: Int) extends RpcEnv(conf) with Logging {
+  val role = conf.get(EXECUTOR_ID).map { id =>
+    if (id == SparkContext.DRIVER_IDENTIFIER) "driver" else "executor"
+  }
 
   private[netty] val transportConf = SparkTransportConf.fromSparkConf(
     conf.clone.set(RPC_IO_NUM_CONNECTIONS_PER_PEER, 1),
     "rpc",
-    conf.get(RPC_IO_THREADS).getOrElse(numUsableCores))
+    conf.get(RPC_IO_THREADS).getOrElse(numUsableCores),
+    role)
 
   private val dispatcher: Dispatcher = new Dispatcher(this, numUsableCores)
 

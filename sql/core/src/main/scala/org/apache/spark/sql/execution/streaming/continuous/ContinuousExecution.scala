@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
-import org.apache.spark.sql.sources.v2.{SupportsContinuousRead, SupportsStreamingWrite}
+import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Clock
@@ -42,7 +42,7 @@ class ContinuousExecution(
     name: String,
     checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    sink: SupportsStreamingWrite,
+    sink: SupportsWrite,
     trigger: Trigger,
     triggerClock: Clock,
     outputMode: OutputMode,
@@ -63,22 +63,23 @@ class ContinuousExecution(
   override val logicalPlan: WriteToContinuousDataSource = {
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
     var nextSourceId = 0
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
-      case s @ StreamingRelationV2(
-          ds, dsName, table: SupportsContinuousRead, options, output, _) =>
+      case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _) =>
+        if (!table.supports(TableCapability.CONTINUOUS_READ)) {
+          throw new UnsupportedOperationException(
+            s"Data source $sourceName does not support continuous processing.")
+        }
+
         v2ToRelationMap.getOrElseUpdate(s, {
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
-          logInfo(s"Reading table [$table] from DataSourceV2 named '$dsName' [$ds]")
+          logInfo(s"Reading table [$table] from DataSourceV2 named '$sourceName' [$ds]")
           // TODO: operator pushdown.
           val scan = table.newScanBuilder(options).build()
           val stream = scan.toContinuousStream(metadataPath)
           StreamingDataSourceV2Relation(output, scan, stream)
         })
-
-      case StreamingRelationV2(_, sourceName, _, _, _, _) =>
-        throw new UnsupportedOperationException(
-          s"Data source $sourceName does not support continuous processing.")
     }
 
     sources = _logicalPlan.collect {
@@ -86,6 +87,7 @@ class ContinuousExecution(
     }
     uniqueSources = sources.distinct
 
+    // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     WriteToContinuousDataSource(
       createStreamingWrite(sink, extraOptions, _logicalPlan), _logicalPlan)
   }
@@ -350,8 +352,7 @@ class ContinuousExecution(
     // number of batches that must be retained and made recoverable, so we should keep the
     // specified number of metadata that have been committed.
     if (minLogEntriesToMaintain <= epoch) {
-      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
-      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
+      purge(epoch + 1 - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()

@@ -225,11 +225,19 @@ class StreamingTests(ReusedSQLTestCase):
             self.fail("bad udf should fail the query")
         except StreamingQueryException as e:
             # This is expected
-            self.assertTrue("ZeroDivisionError" in e.desc)
+            self._assert_exception_tree_contains_msg(e, "ZeroDivisionError")
         finally:
             sq.stop()
         self.assertTrue(type(sq.exception()) is StreamingQueryException)
-        self.assertTrue("ZeroDivisionError" in sq.exception().desc)
+        self._assert_exception_tree_contains_msg(sq.exception(), "ZeroDivisionError")
+
+    def _assert_exception_tree_contains_msg(self, exception, msg):
+        e = exception
+        contains = msg in e.desc
+        while e.cause is not None and not contains:
+            e = e.cause
+            contains = msg in e.desc
+        self.assertTrue(contains, "Exception tree doesn't contain the expected message: %s" % msg)
 
     def test_query_manager_await_termination(self):
         df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
@@ -563,7 +571,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

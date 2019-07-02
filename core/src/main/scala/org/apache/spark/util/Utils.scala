@@ -197,14 +197,15 @@ private[spark] object Utils extends Logging {
    * Preferred alternative to Class.forName(className), as well as
    * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
    */
-  def classForName(
+  def classForName[C](
       className: String,
       initialize: Boolean = true,
-      noSparkClassLoader: Boolean = false): Class[_] = {
+      noSparkClassLoader: Boolean = false): Class[C] = {
     if (!noSparkClassLoader) {
-      Class.forName(className, initialize, getContextOrSparkClassLoader)
+      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
     } else {
-      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader)
+      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
+        asInstanceOf[Class[C]]
     }
     // scalastyle:on classforname
   }
@@ -1388,7 +1389,9 @@ private[spark] object Utils extends Logging {
         originalThrowable = cause
         try {
           logError("Aborting task", originalThrowable)
-          TaskContext.get().markTaskFailed(originalThrowable)
+          if (TaskContext.get() != null) {
+            TaskContext.get().markTaskFailed(originalThrowable)
+          }
           catchBlock
         } catch {
           case t: Throwable =>
@@ -2595,7 +2598,7 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
    * its value is replaced with a dummy text.
    */
-  def redact(regex: Option[Regex], kvs: Seq[(String, String)]): Seq[(String, String)] = {
+  def redact[K, V](regex: Option[Regex], kvs: Seq[(K, V)]): Seq[(K, V)] = {
     regex match {
       case None => kvs
       case Some(r) => redact(r, kvs)
@@ -2617,7 +2620,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+  private def redact[K, V](redactionPattern: Regex, kvs: Seq[(K, V)]): Seq[(K, V)] = {
     // If the sensitive information regex matches with either the key or the value, redact the value
     // While the original intent was to only redact the value if the key matched with the regex,
     // we've found that especially in verbose mode, the value of the property may contain sensitive
@@ -2631,12 +2634,19 @@ private[spark] object Utils extends Logging {
     // arbitrary property contained the term 'password', we may redact the value from the UI and
     // logs. In order to work around it, user would have to make the spark.redaction.regex property
     // more specific.
-    kvs.map { case (key, value) =>
-      redactionPattern.findFirstIn(key)
-        .orElse(redactionPattern.findFirstIn(value))
-        .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
-        .getOrElse((key, value))
-    }
+    kvs.map {
+      case (key: String, value: String) =>
+        redactionPattern.findFirstIn(key)
+          .orElse(redactionPattern.findFirstIn(value))
+          .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+          .getOrElse((key, value))
+      case (key, value: String) =>
+        redactionPattern.findFirstIn(value)
+          .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+          .getOrElse((key, value))
+      case (key, value) =>
+        (key, value)
+    }.asInstanceOf[Seq[(K, V)]]
   }
 
   /**
@@ -2680,10 +2690,11 @@ private[spark] object Utils extends Logging {
    * other state) and decide they do not need to be added. A log message is printed in that case.
    * Other exceptions are bubbled up.
    */
-  def loadExtensions[T](extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
+  def loadExtensions[T <: AnyRef](
+      extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
     classes.flatMap { name =>
       try {
-        val klass = classForName(name)
+        val klass = classForName[T](name)
         require(extClass.isAssignableFrom(klass),
           s"$name is not a subclass of ${extClass.getName()}.")
 

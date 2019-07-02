@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
-import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
@@ -316,7 +315,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-23587: MapObjects should support interpreted execution") {
-    def testMapObjects(collection: Any, collectionCls: Class[_], inputType: DataType): Unit = {
+    def testMapObjects[T](collection: Any, collectionCls: Class[T], inputType: DataType): Unit = {
       val function = (lambda: Expression) => Add(lambda, Literal(1))
       val elementType = IntegerType
       val expected = Seq(2, 3, 4)
@@ -449,7 +448,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val row = RandomDataGenerator.randomRow(random, schema)
         val rowConverter = RowEncoder(schema)
         val internalRow = rowConverter.toRow(row)
-        val lambda = LambdaVariable("dummy", "dummuIsNull", schema(0).dataType, schema(0).nullable)
+        val lambda = LambdaVariable("dummy", schema(0).dataType, schema(0).nullable, id = 0)
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
       }
     }

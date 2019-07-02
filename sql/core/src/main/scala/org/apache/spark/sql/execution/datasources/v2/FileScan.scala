@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.Locale
+import java.util.{Locale, OptionalLong}
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
@@ -25,20 +26,37 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, Scan}
+import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 abstract class FileScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     readDataSchema: StructType,
-    readPartitionSchema: StructType) extends Scan with Batch {
+    readPartitionSchema: StructType) extends Scan with Batch with SupportsReportStatistics {
   /**
    * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(path: Path): Boolean = {
     false
+  }
+
+  override def description(): String = {
+    val locationDesc =
+      fileIndex.getClass.getSimpleName + fileIndex.rootPaths.mkString("[", ", ", "]")
+    val metadata: Map[String, String] = Map(
+      "ReadSchema" -> readDataSchema.catalogString,
+      "Location" -> locationDesc)
+    val metadataStr = metadata.toSeq.sorted.map {
+      case (key, value) =>
+        val redactedValue =
+          Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
+        key + ": " + StringUtils.abbreviate(redactedValue, 100)
+    }.mkString(", ")
+    s"${this.getClass.getSimpleName} $metadataStr"
   }
 
   protected def partitions: Seq[FilePartition] = {
@@ -80,10 +98,27 @@ abstract class FileScan(
     partitions.toArray
   }
 
+  override def estimateStatistics(): Statistics = {
+    new Statistics {
+      override def sizeInBytes(): OptionalLong = {
+        val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
+        val size = (compressionFactor * fileIndex.sizeInBytes).toLong
+        OptionalLong.of(size)
+      }
+
+      override def numRows(): OptionalLong = OptionalLong.empty()
+    }
+  }
+
   override def toBatch: Batch = this
 
   override def readSchema(): StructType =
     StructType(readDataSchema.fields ++ readPartitionSchema.fields)
+
+  // Returns whether the two given arrays of [[Filter]]s are equivalent.
+  protected def equivalentFilters(a: Array[Filter], b: Array[Filter]): Boolean = {
+    a.sortBy(_.hashCode()).sameElements(b.sortBy(_.hashCode()))
+  }
 
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 

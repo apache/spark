@@ -249,14 +249,25 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   /**
    * Create new `Decimal` with given precision and scale.
    *
-   * @return a non-null `Decimal` value if successful or `null` if overflow would occur.
+   * @return a non-null `Decimal` value if successful. Otherwise, if `nullOnOverflow` is true, null
+   *         is returned; if `nullOnOverflow` is false, an `ArithmeticException` is thrown.
    */
   private[sql] def toPrecision(
       precision: Int,
       scale: Int,
-      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP): Decimal = {
+      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
+      nullOnOverflow: Boolean = true): Decimal = {
     val copy = clone()
-    if (copy.changePrecision(precision, scale, roundMode)) copy else null
+    if (copy.changePrecision(precision, scale, roundMode)) {
+      copy
+    } else {
+      if (nullOnOverflow) {
+        null
+      } else {
+        throw new ArithmeticException(
+          s"$toDebugString cannot be represented as Decimal($precision, $scale).")
+      }
+    }
   }
 
   /**

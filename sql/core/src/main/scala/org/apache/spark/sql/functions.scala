@@ -358,9 +358,10 @@ object functions {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def countDistinct(expr: Column, exprs: Column*): Column = {
-    withAggregateFunction(Count.apply((expr +: exprs).map(_.expr)), isDistinct = true)
-  }
+  def countDistinct(expr: Column, exprs: Column*): Column =
+    // For usage like countDistinct("*"), we should let analyzer expand star and
+    // resolve function.
+    Column(UnresolvedFunction("count", (expr +: exprs).map(_.expr), isDistinct = true))
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -2516,6 +2517,28 @@ object functions {
   }
 
   /**
+   * Overlay the specified portion of `src` with `replaceString`,
+   *  starting from byte position `pos` of `inputString` and proceeding for `len` bytes.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replaceString: String, pos: Int, len: Int): Column = withExpr {
+    Overlay(src.expr, lit(replaceString).expr, lit(pos).expr, lit(len).expr)
+  }
+
+  /**
+   * Overlay the specified portion of `src` with `replaceString`,
+   *  starting from byte position `pos` of `inputString`.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replaceString: String, pos: Int): Column = withExpr {
+    new Overlay(src.expr, lit(replaceString).expr, lit(pos).expr)
+  }
+
+  /**
    * Translate any character in the src by a character in replaceString.
    * The characters in replaceString correspond to the characters in matchingString.
    * The translate will happen when any character in the string matches the character
@@ -2942,8 +2965,8 @@ object functions {
    *
    * @param date A date, timestamp or string. If a string, the data must be in a format that can be
    *             cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
-   *               or 'month', 'mon', 'mm' for truncate by month
+   * @param format: 'year', 'yyyy', 'yy' to truncate by year,
+   *               or 'month', 'mon', 'mm' to truncate by month
    *
    * @return A date, or null if `date` was a string that could not be cast to a date or `format`
    *         was an invalid value
@@ -2957,11 +2980,11 @@ object functions {
   /**
    * Returns timestamp truncated to the unit specified by the format.
    *
-   * For example, `date_tunc("2018-11-19 12:01:19", "year")` returns 2018-01-01 00:00:00
+   * For example, `date_trunc("year", "2018-11-19 12:01:19")` returns 2018-01-01 00:00:00
    *
-   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
-   *                'month', 'mon', 'mm' for truncate by month,
-   *                'day', 'dd' for truncate by day,
+   * @param format: 'year', 'yyyy', 'yy' to truncate by year,
+   *                'month', 'mon', 'mm' to truncate by month,
+   *                'day', 'dd' to truncate by day,
    *                Other options are: 'second', 'minute', 'hour', 'week', 'month', 'quarter'
    * @param timestamp A date, timestamp or string. If a string, the data must be in a format that
    *                  can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -3322,6 +3345,8 @@ object functions {
 
   /**
    * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements in the array and
+   * `key` and `value` for elements in the map unless specified otherwise.
    *
    * @group collection_funcs
    * @since 1.3.0
@@ -3330,6 +3355,8 @@ object functions {
 
   /**
    * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements in the array and
+   * `key` and `value` for elements in the map unless specified otherwise.
    * Unlike explode, if the array/map is null or empty then null is produced.
    *
    * @group collection_funcs
@@ -3339,6 +3366,8 @@ object functions {
 
   /**
    * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column name `pos` for position, and `col` for elements in the array
+   * and `key` and `value` for elements in the map unless specified otherwise.
    *
    * @group collection_funcs
    * @since 2.1.0
@@ -3347,6 +3376,8 @@ object functions {
 
   /**
    * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column name `pos` for position, and `col` for elements in the array
+   * and `key` and `value` for elements in the map unless specified otherwise.
    * Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
    *
    * @group collection_funcs

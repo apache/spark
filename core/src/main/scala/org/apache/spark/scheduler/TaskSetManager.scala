@@ -21,6 +21,7 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.collection.immutable.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
@@ -29,6 +30,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
@@ -62,13 +64,7 @@ private[spark] class TaskSetManager(
   private val addedJars = HashMap[String, Long](sched.sc.addedJars.toSeq: _*)
   private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
 
-  // Quantile of tasks at which to start speculation
-  val speculationQuantile = conf.get(SPECULATION_QUANTILE)
-  val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
-
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
-
-  val speculationEnabled = conf.get(SPECULATION_ENABLED)
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -79,6 +75,12 @@ private[spark] class TaskSetManager(
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
+
+  val speculationEnabled = conf.get(SPECULATION_ENABLED)
+  // Quantile of tasks at which to start speculation
+  val speculationQuantile = conf.get(SPECULATION_QUANTILE)
+  val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
+  val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -467,7 +469,8 @@ private[spark] class TaskSetManager(
   def resourceOffer(
       execId: String,
       host: String,
-      maxLocality: TaskLocality.TaskLocality)
+      maxLocality: TaskLocality.TaskLocality,
+      availableResources: Map[String, Seq[String]] = Map.empty)
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -532,6 +535,17 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
+        val extraResources = sched.resourcesReqsPerTask.map { taskReq =>
+          val rName = taskReq.resourceName
+          val count = taskReq.amount
+          val rAddresses = availableResources.getOrElse(rName, Seq.empty)
+          assert(rAddresses.size >= count, s"Required $count $rName addresses, but only " +
+            s"${rAddresses.size} available.")
+          // We'll drop the allocated addresses later inside TaskSchedulerImpl.
+          val allocatedAddresses = rAddresses.take(count)
+          (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
+        }.toMap
+
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
           taskId,
@@ -543,6 +557,7 @@ private[spark] class TaskSetManager(
           addedFiles,
           addedJars,
           task.localProperties,
+          extraResources,
           serializedTask)
       }
     } else {
@@ -806,9 +821,6 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
-    // There may be multiple tasksets for this stage -- we let all of them know that the partition
-    // was completed.  This may result in some of the tasksets getting completed.
-    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -819,12 +831,9 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: TaskInfo): Unit = {
+  private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
-        if (speculationEnabled && !isZombie) {
-          successfulTaskDurations.insert(taskInfo.duration)
-        }
         tasksSuccessful += 1
         successful(index) = true
         if (tasksSuccessful == numTasks) {
@@ -1038,10 +1047,13 @@ private[spark] class TaskSetManager(
       return false
     }
     var foundTasks = false
-    val minFinishedForSpeculation = (speculationQuantile * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
 
-    if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
+    // It's possible that a task is marked as completed by the scheduler, then the size of
+    // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
+    // tasks that are submitted by this `TaskSetManager` and are completed successfully.
+    val numSuccessfulTasks = successfulTaskDurations.size()
+    if (numSuccessfulTasks >= minFinishedForSpeculation) {
       val time = clock.getTimeMillis()
       val medianDuration = successfulTaskDurations.median
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)

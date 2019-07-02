@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
-import java.time.{LocalDate, LocalDateTime, LocalTime}
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkException
@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 
@@ -120,35 +121,36 @@ object Cast {
   }
 
   /**
-   * Return true iff we may truncate during casting `from` type to `to` type. e.g. long -> int,
-   * timestamp -> date.
+   * Returns true iff we can safely up-cast the `from` type to `to` type without any truncating or
+   * precision lose or possible runtime failures. For example, long -> int, string -> int are not
+   * up-cast.
    */
-  def mayTruncate(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => true
-    case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => true
-    case (from, to) if illegalNumericPrecedence(from, to) => true
-    case (TimestampType, DateType) => true
-    case (StringType, to: NumericType) => true
-    case _ => false
-  }
-
-  private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-    val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
-    val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
-    toPrecedence >= 0 && fromPrecedence > toPrecedence
-  }
-
-  /**
-   * Returns true iff we can safely cast the `from` type to `to` type without any truncating or
-   * precision lose, e.g. int -> long, date -> timestamp.
-   */
-  def canSafeCast(from: AtomicType, to: AtomicType): Boolean = (from, to) match {
+  def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
-    case (from, to) if legalNumericPrecedence(from, to) => true
+    case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
     case (_, StringType) => true
+
+    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
+    // `timestampToLong` for details.
+    case (TimestampType, LongType) => true
+    case (LongType, TimestampType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      resolvableNullability(fn, tn) && canUpCast(fromType, toType)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      resolvableNullability(fn, tn) && canUpCast(fromKey, toKey) && canUpCast(fromValue, toValue)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (f1, f2) =>
+            resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
+        }
+
     case _ => false
   }
 
@@ -620,6 +622,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     // We can return what the children return. Same thing should happen in the codegen path.
     if (DataType.equalsStructurally(from, to)) {
       identity
+    } else if (from == NullType) {
+      // According to `canCast`, NullType can be casted to any type.
+      // For primitive types, we don't reach here because the guard of `nullSafeEval`.
+      // But for nested types like struct, we might reach here for nested null type field.
+      // We won't call the returned function actually, but returns a placeholder.
+      _ => throw new SparkException(s"should not directly cast from NullType to $to.")
     } else {
       to match {
         case dt if dt == from => identity[Any]
@@ -936,9 +944,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
        """
     case TimestampType =>
+      val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId"),
-        zoneId.getClass)
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
       (c, evPrim, evNull) =>
         code"""$evPrim =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToEpochDays($c, $zid);"""
@@ -1028,7 +1037,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val zid = ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId")
+      val zoneIdClass = classOf[ZoneId]
+      val zid = JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         code"""
@@ -1045,9 +1057,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case _: IntegralType =>
       (c, evPrim, evNull) => code"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
+      val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, "java.time.ZoneId"),
-        zoneId.getClass)
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
       (c, evPrim, evNull) =>
         code"""$evPrim =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.epochDaysToMicros($c, $zid);"""

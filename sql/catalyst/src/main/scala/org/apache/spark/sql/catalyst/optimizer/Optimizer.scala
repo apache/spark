@@ -66,6 +66,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         PushPredicateThroughJoin,
         PushDownPredicate,
         PushDownLeftSemiAntiJoin,
+        PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
         ColumnPruning,
         InferFiltersFromConstraints,
@@ -171,7 +172,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
-      ObjectSerializerPruning) :+
+      ObjectSerializerPruning,
+      ReassignLambdaVariableID) :+
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) :+
@@ -769,6 +771,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
         if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty &&
+          we1.nonEmpty && we2.nonEmpty &&
           // This assumes Window contains the same type of window expressions. This is ensured
           // by ExtractWindowFunctions.
           WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
@@ -1141,6 +1144,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     case _: Repartition => true
     case _: ScriptTransformation => true
     case _: Sort => true
+    case _: BatchEvalPython => true
+    case _: ArrowEvalPython => true
     case _ => false
   }
 
@@ -1416,9 +1421,9 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Project(projectList, LocalRelation(output, data, isStreaming))
         if !projectList.exists(hasUnevaluableExpr) =>
-      val projection = new InterpretedProjection(projectList, output)
+      val projection = new InterpretedMutableProjection(projectList, output)
       projection.initialize(0)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection), isStreaming)
+      LocalRelation(projectList.map(_.toAttribute), data.map(projection(_).copy()), isStreaming)
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming)) =>
       LocalRelation(output, data.take(limit), isStreaming)

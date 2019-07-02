@@ -29,6 +29,8 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ManualClock}
@@ -1372,7 +1374,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(taskOption4.get.addedJars === addedJarsMidTaskSet)
   }
 
-  test("[SPARK-24677] Avoid NoSuchElementException from MedianHeap") {
+  test("SPARK-24677: Avoid NoSuchElementException from MedianHeap") {
     val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
@@ -1386,39 +1388,17 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val dagScheduler = new FakeDAGScheduler(sc, sched)
     sched.setDAGScheduler(dagScheduler)
 
-    val taskSet1 = FakeTask.createTaskSet(10)
-    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet1.tasks.map { task =>
-      task.metrics.internalAccums
-    }
+    val taskSet = FakeTask.createTaskSet(10)
 
-    sched.submitTasks(taskSet1)
+    sched.submitTasks(taskSet)
     sched.resourceOffers(
-      (0 until 10).map { idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) })
+      (0 until 8).map { idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) })
 
-    val taskSetManager1 = sched.taskSetManagerForAttempt(0, 0).get
-
-    // fail fetch
-    taskSetManager1.handleFailedTask(
-      taskSetManager1.taskAttempts.head.head.taskId, TaskState.FAILED,
-      FetchFailed(null, 0, 0, 0, "fetch failed"))
-
-    assert(taskSetManager1.isZombie)
-    assert(taskSetManager1.runningTasks === 9)
-
-    val taskSet2 = FakeTask.createTaskSet(10, stageAttemptId = 1)
-    sched.submitTasks(taskSet2)
-    sched.resourceOffers(
-      (11 until 20).map { idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) })
-
-    // Complete the 2 tasks and leave 8 task in running
-    for (id <- Set(0, 1)) {
-      taskSetManager1.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
-      assert(sched.endedTasks(id) === Success)
-    }
-
-    val taskSetManager2 = sched.taskSetManagerForAttempt(0, 1).get
-    assert(!taskSetManager2.successfulTaskDurations.isEmpty())
-    taskSetManager2.checkSpeculatableTasks(0)
+    val taskSetManager = sched.taskSetManagerForAttempt(0, 0).get
+    assert(taskSetManager.runningTasks === 8)
+    taskSetManager.markPartitionCompleted(8)
+    assert(taskSetManager.successfulTaskDurations.isEmpty())
+    taskSetManager.checkSpeculatableTasks(0)
   }
 
 
@@ -1654,5 +1634,25 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // the single-host resolution, but the real rack resolution would have cached all hosts
     // by that point.
     assert(FakeRackUtil.numBatchInvocation === 1)
+  }
+
+  test("TaskSetManager allocate resource addresses from available resources") {
+    import TestUtils._
+
+    sc = new SparkContext("local", "test")
+    sc.conf.set(TASK_GPU_ID.amountConf, "2")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    val availableResources = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF, availableResources)
+    assert(taskOption.isDefined)
+    val allocatedResources = taskOption.get.resources
+    assert(allocatedResources.size == 1)
+    assert(allocatedResources(GPU).addresses sameElements Array("0", "1"))
+    // Allocated resource addresses should still present in `availableResources`, they will only
+    // get removed inside TaskSchedulerImpl later.
+    assert(availableResources(GPU) sameElements Array("0", "1", "2", "3"))
   }
 }

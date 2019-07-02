@@ -73,8 +73,8 @@ case class AliasViewChild(conf: SQLConf) extends Rule[LogicalPlan] with CastSupp
         case (attr, originAttr) if !attr.semanticEquals(originAttr) =>
           // The dataType of the output attributes may be not the same with that of the view
           // output, so we should cast the attribute to the dataType of the view output attribute.
-          // Will throw an AnalysisException if the cast can't perform or might truncate.
-          if (Cast.mayTruncate(originAttr.dataType, attr.dataType)) {
+          // Will throw an AnalysisException if the cast is not a up-cast.
+          if (!Cast.canUpCast(originAttr.dataType, attr.dataType)) {
             throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
               s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} as it " +
               s"may truncate\n")

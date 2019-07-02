@@ -21,7 +21,6 @@ import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -282,6 +281,7 @@ object FunctionRegistry {
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),
+    expression[CountIf]("count_if"),
     expression[CovPopulation]("covar_pop"),
     expression[CovSample]("covar_samp"),
     expression[First]("first"),
@@ -290,8 +290,10 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Last]("last_value"),
     expression[Max]("max"),
+    expression[MaxBy]("max_by"),
     expression[Average]("mean"),
     expression[Min]("min"),
+    expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
@@ -346,6 +348,7 @@ object FunctionRegistry {
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
+    expression[Overlay]("overlay"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),

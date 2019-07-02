@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalog.v2.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -34,38 +32,6 @@ private[sql] object LogicalExpressions {
   // a generic parser that is only used for parsing multi-part field names.
   // because this is only used for field names, the SQL conf passed in does not matter.
   private lazy val parser = new CatalystSqlParser(SQLConf.get)
-
-  def fromPartitionColumns(columns: String*): Array[IdentityTransform] =
-    columns.map(identity).toArray
-
-  def fromBucketSpec(spec: BucketSpec): BucketTransform = {
-    if (spec.sortColumnNames.nonEmpty) {
-      throw new AnalysisException(
-        s"Cannot convert bucketing with sort columns to a transform: $spec")
-    }
-
-    bucket(spec.numBuckets, spec.bucketColumnNames: _*)
-  }
-
-  implicit class TransformHelper(transforms: Seq[Transform]) {
-    def asPartitionColumns: Seq[String] = {
-      val (idTransforms, nonIdTransforms) = transforms.partition(_.isInstanceOf[IdentityTransform])
-
-      if (nonIdTransforms.nonEmpty) {
-        throw new AnalysisException("Transforms cannot be converted to partition columns: " +
-            nonIdTransforms.map(_.describe).mkString(", "))
-      }
-
-      idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference).map { ref =>
-        val parts = ref.fieldNames
-        if (parts.size > 1) {
-          throw new AnalysisException(s"Cannot partition by nested column: $ref")
-        } else {
-          parts(0)
-        }
-      }
-    }
-  }
 
   def literal[T](value: T): LiteralValue[T] = {
     val internalLit = catalyst.expressions.Literal(value)
@@ -128,6 +94,17 @@ private[sql] final case class BucketTransform(
   override def toString: String = describe
 }
 
+private[sql] object BucketTransform {
+  def unapply(transform: Transform): Option[(Int, NamedReference)] = transform match {
+    case NamedTransform("bucket", Seq(
+        Lit(value: Int, IntegerType),
+        Ref(seq: Seq[String]))) =>
+      Some((value, FieldReference(seq)))
+    case _ =>
+      None
+  }
+}
+
 private[sql] final case class ApplyTransform(
     name: String,
     args: Seq[Expression]) extends Transform {
@@ -145,10 +122,46 @@ private[sql] final case class ApplyTransform(
   override def toString: String = describe
 }
 
+/**
+ * Convenience extractor for any Literal.
+ */
+private object Lit {
+  def unapply[T](literal: Literal[T]): Some[(T, DataType)] = {
+    Some((literal.value, literal.dataType))
+  }
+}
+
+/**
+ * Convenience extractor for any NamedReference.
+ */
+private object Ref {
+  def unapply(named: NamedReference): Some[Seq[String]] = {
+    Some(named.fieldNames)
+  }
+}
+
+/**
+ * Convenience extractor for any Transform.
+ */
+private object NamedTransform {
+  def unapply(transform: Transform): Some[(String, Seq[Expression])] = {
+    Some((transform.name, transform.arguments))
+  }
+}
+
 private[sql] final case class IdentityTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "identity"
   override def describe: String = ref.describe
+}
+
+private[sql] object IdentityTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("identity", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
 }
 
 private[sql] final case class YearsTransform(
@@ -156,9 +169,27 @@ private[sql] final case class YearsTransform(
   override val name: String = "years"
 }
 
+private[sql] object YearsTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("years", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
+}
+
 private[sql] final case class MonthsTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "months"
+}
+
+private[sql] object MonthsTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("months", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
 }
 
 private[sql] final case class DaysTransform(
@@ -166,9 +197,27 @@ private[sql] final case class DaysTransform(
   override val name: String = "days"
 }
 
+private[sql] object DaysTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("days", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
+}
+
 private[sql] final case class HoursTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "hours"
+}
+
+private[sql] object HoursTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("hours", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
@@ -183,17 +232,10 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
 }
 
 private[sql] final case class FieldReference(parts: Seq[String]) extends NamedReference {
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.MultipartIdentifierHelper
   override def fieldNames: Array[String] = parts.toArray
-  override def describe: String = parts.map(quote).mkString(".")
+  override def describe: String = parts.quoted
   override def toString: String = describe
-
-  private def quote(part: String): String = {
-    if (part.contains(".") || part.contains("`")) {
-      s"`${part.replace("`", "``")}`"
-    } else {
-      part
-    }
-  }
 }
 
 private[sql] object FieldReference {

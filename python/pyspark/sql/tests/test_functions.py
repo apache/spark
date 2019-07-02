@@ -19,6 +19,7 @@ import datetime
 import sys
 
 from pyspark.sql import Row
+from pyspark.sql.functions import udf, input_file_name
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -278,6 +279,21 @@ class FunctionsTests(ReusedSQLTestCase):
             df.select(df.name).orderBy(functions.desc_nulls_last('name')).collect(),
             [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
 
+    def test_input_file_name_reset_for_rdd(self):
+        rdd = self.sc.textFile('python/test_support/hello/hello.txt').map(lambda x: {'data': x})
+        df = self.spark.createDataFrame(rdd, "data STRING")
+        df.select(input_file_name().alias('file')).collect()
+
+        non_file_df = self.spark.range(100).select(input_file_name())
+
+        results = non_file_df.collect()
+        self.assertTrue(len(results) == 100)
+
+        # [SPARK-24605]: if everything was properly reset after the last job, this should return
+        # empty string rather than the file read in the last job.
+        for result in results:
+            self.assertEqual(result[0], '')
+
 
 if __name__ == "__main__":
     import unittest
@@ -285,7 +301,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

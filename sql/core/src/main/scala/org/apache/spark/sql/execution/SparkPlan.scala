@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
@@ -34,10 +33,20 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.sql.vectorized.ColumnarBatch
+
+object SparkPlan {
+  /** The original [[LogicalPlan]] from which this [[SparkPlan]] is converted. */
+  val LOGICAL_PLAN_TAG = TreeNodeTag[LogicalPlan]("logical_plan")
+
+  /** The [[LogicalPlan]] inherited from its ancestor. */
+  val LOGICAL_PLAN_INHERITED_TAG = TreeNodeTag[LogicalPlan]("logical_plan_inherited")
+}
 
 /**
  * The base class for physical operators.
@@ -65,12 +74,52 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   // whether we should fallback when hitting compilation errors caused by codegen
   private val codeGenFallBack = (sqlContext == null) || sqlContext.conf.codegenFallback
 
+  /**
+   * Return true if this stage of the plan supports columnar execution.
+   */
+  def supportsColumnar: Boolean = false
+
+  /**
+   * The exact java types of the columns that are output in columnar processing mode. This
+   * is a performance optimization for code generation and is optional.
+   */
+  def vectorTypes: Option[Seq[String]] = None
+
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     if (sqlContext != null) {
       SparkSession.setActiveSession(sqlContext.sparkSession)
     }
     super.makeCopy(newArgs)
+  }
+
+  /**
+   * @return The logical plan this plan is linked to.
+   */
+  def logicalLink: Option[LogicalPlan] =
+    getTagValue(SparkPlan.LOGICAL_PLAN_TAG)
+      .orElse(getTagValue(SparkPlan.LOGICAL_PLAN_INHERITED_TAG))
+
+  /**
+   * Set logical plan link recursively if unset.
+   */
+  def setLogicalLink(logicalPlan: LogicalPlan): Unit = {
+    setLogicalLink(logicalPlan, false)
+  }
+
+  private def setLogicalLink(logicalPlan: LogicalPlan, inherited: Boolean = false): Unit = {
+    // Stop at a descendant which is the root of a sub-tree transformed from another logical node.
+    if (inherited && getTagValue(SparkPlan.LOGICAL_PLAN_TAG).isDefined) {
+      return
+    }
+
+    val tag = if (inherited) {
+      SparkPlan.LOGICAL_PLAN_INHERITED_TAG
+    } else {
+      SparkPlan.LOGICAL_PLAN_TAG
+    }
+    setTagValue(tag, logicalPlan)
+    children.foreach(_.setLogicalLink(logicalPlan, true))
   }
 
   /**
@@ -142,6 +191,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
     }
     doExecuteBroadcast()
+  }
+
+  /**
+   * Returns the result of this query as an RDD[ColumnarBatch] by delegating to `doColumnarExecute`
+   * after preparations.
+   *
+   * Concrete implementations of SparkPlan should override `doColumnarExecute` if `supportsColumnar`
+   * returns true.
+   */
+  final def executeColumnar(): RDD[ColumnarBatch] = executeQuery {
+    if (isCanonicalizedPlan) {
+      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+    }
+    doExecuteColumnar()
   }
 
   /**
@@ -233,6 +296,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
     throw new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+  }
+
+  /**
+   * Produces the result of the query as an `RDD[ColumnarBatch]` if [[supportsColumnar]] returns
+   * true. By convention the executor that creates a ColumnarBatch is responsible for closing it
+   * when it is no longer needed. This allows input formats to be able to reuse batches if needed.
+   */
+  protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    throw new IllegalStateException(s"Internal Error ${this.getClass} has column support" +
+      s" mismatch:\n${this}")
   }
 
   /**

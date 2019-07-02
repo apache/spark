@@ -42,8 +42,8 @@ ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
 #
 # This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
 # the most current package versions (instead of potentially using old versions cached by docker).
-RUN apt-get clean && apt-get update && $APT_INSTALL gnupg && \
-  echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu bionic-cran35/' >> /etc/apt/sources.list && \
+RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
+  echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' >> /etc/apt/sources.list && \
   gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
@@ -74,7 +74,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg && \
   # R depends on pandoc*, libssl (which are installed above).
   $APT_INSTALL r-base r-base-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
-  Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='http://cran.us.r-project.org/')" && \
+  Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
   # Install tools needed to build the documentation.
   $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \

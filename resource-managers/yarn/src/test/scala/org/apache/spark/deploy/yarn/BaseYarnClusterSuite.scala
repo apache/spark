@@ -52,7 +52,7 @@ abstract class BaseYarnClusterSuite
     |log4j.logger.org.apache.hadoop=WARN
     |log4j.logger.org.eclipse.jetty=WARN
     |log4j.logger.org.mortbay=WARN
-    |log4j.logger.org.spark_project.jetty=WARN
+    |log4j.logger.org.sparkproject.jetty=WARN
     """.stripMargin
 
   private var yarnCluster: MiniYARNCluster = _
@@ -167,7 +167,7 @@ abstract class BaseYarnClusterSuite
 
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(2.minutes), interval(1.second)) {
+      eventually(timeout(3.minutes), interval(1.second)) {
         assert(handle.getState().isFinal())
       }
     } finally {

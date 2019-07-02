@@ -16,18 +16,26 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.io.File
+import java.io.{File, IOException}
+import java.net.URI
 import java.security.SecureRandom
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder, Quantity, QuantityBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.Utils.getHadoopFileSystem
 
 private[spark] object KubernetesUtils extends Logging {
 
@@ -209,4 +217,108 @@ private[spark] object KubernetesUtils extends Logging {
     Hex.encodeHexString(random) + time
   }
 
+  /**
+   * This function builds the Quantity objects for each resource in the Spark resource
+   * configs based on the component name(spark.driver.resource or spark.executor.resource).
+   * It assumes we can use the Kubernetes device plugin format: vendor-domain/resource.
+   * It returns a set with a tuple of vendor-domain/resource and Quantity for each resource.
+   */
+  def buildResourcesQuantities(
+      componentName: String,
+      sparkConf: SparkConf): Map[String, Quantity] = {
+    val requests = ResourceUtils.parseAllResourceRequests(sparkConf, componentName)
+    requests.map { request =>
+      val vendorDomain = request.vendor.getOrElse(throw new SparkException("Resource: " +
+        s"${request.id.resourceName} was requested, but vendor was not specified."))
+      val quantity = new QuantityBuilder(false)
+        .withAmount(request.amount.toString)
+        .build()
+      (KubernetesConf.buildKubernetesResourceName(vendorDomain, request.id.resourceName), quantity)
+    }.toMap
+  }
+
+  /**
+   * Upload files and modify their uris
+   */
+  def uploadAndTransformFileUris(fileUris: Iterable[String], conf: Option[SparkConf] = None)
+    : Iterable[String] = {
+    fileUris.map { uri =>
+      uploadFileUri(uri, conf)
+    }
+  }
+
+  private def isLocalDependency(uri: URI): Boolean = {
+    uri.getScheme match {
+      case null | "file" => true
+      case _ => false
+    }
+  }
+
+  def isLocalAndResolvable(resource: String): Boolean = {
+    resource != SparkLauncher.NO_RESOURCE &&
+      isLocalDependency(Utils.resolveURI(resource))
+  }
+
+  def renameMainAppResource(resource: String, conf: SparkConf): String = {
+    if (isLocalAndResolvable(resource)) {
+      SparkLauncher.NO_RESOURCE
+    } else {
+      resource
+   }
+  }
+
+  def uploadFileUri(uri: String, conf: Option[SparkConf] = None): String = {
+    conf match {
+      case Some(sConf) =>
+        if (sConf.get(KUBERNETES_FILE_UPLOAD_PATH).isDefined) {
+          val fileUri = Utils.resolveURI(uri)
+          try {
+            val hadoopConf = SparkHadoopUtil.get.newConfiguration(sConf)
+            val uploadPath = sConf.get(KUBERNETES_FILE_UPLOAD_PATH).get
+            val fs = getHadoopFileSystem(Utils.resolveURI(uploadPath), hadoopConf)
+            val randomDirName = s"spark-upload-${UUID.randomUUID()}"
+            fs.mkdirs(new Path(s"${uploadPath}/${randomDirName}"))
+            val targetUri = s"${uploadPath}/${randomDirName}/${fileUri.getPath.split("/").last}"
+            log.info(s"Uploading file: ${fileUri.getPath} to dest: $targetUri...")
+            uploadFileToHadoopCompatibleFS(new Path(fileUri.getPath), new Path(targetUri), fs)
+            targetUri
+          } catch {
+            case e: Exception =>
+              throw new SparkException(s"Uploading file ${fileUri.getPath} failed...", e)
+          }
+        } else {
+          throw new SparkException("Please specify " +
+            "spark.kubernetes.file.upload.path property.")
+        }
+      case _ => throw new SparkException("Spark configuration is missing...")
+    }
+  }
+
+  /**
+   * Upload a file to a Hadoop-compatible filesystem.
+   */
+  private def uploadFileToHadoopCompatibleFS(
+      src: Path,
+      dest: Path,
+      fs: FileSystem,
+      delSrc : Boolean = false,
+      overwrite: Boolean = true): Unit = {
+    try {
+      fs.copyFromLocalFile(false, true, src, dest)
+    } catch {
+      case e: IOException =>
+        throw new SparkException(s"Error uploading file ${src.getName}", e)
+    }
+  }
+
+  def buildPodWithServiceAccount(serviceAccount: Option[String], pod: SparkPod): Option[Pod] = {
+    serviceAccount.map { account =>
+      new PodBuilder(pod.pod)
+        .editOrNewSpec()
+          .withServiceAccount(account)
+          .withServiceAccountName(account)
+        .endSpec()
+        .build()
+    }
+  }
 }

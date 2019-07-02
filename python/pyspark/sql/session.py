@@ -530,7 +530,6 @@ class SparkSession(object):
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        from distutils.version import LooseVersion
         from pyspark.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import from_arrow_type, to_arrow_type, TimestampType
         from pyspark.sql.utils import require_minimum_pandas_version, \
@@ -544,11 +543,7 @@ class SparkSession(object):
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
-            if LooseVersion(pa.__version__) < LooseVersion("0.12.0"):
-                temp_batch = pa.RecordBatch.from_pandas(pdf[0:100], preserve_index=False)
-                arrow_schema = temp_batch.schema
-            else:
-                arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
+            arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
             struct = StructType()
             for name, field in zip(schema, arrow_schema):
                 struct.add(name, from_arrow_type(field.type), nullable=field.nullable)
@@ -656,7 +651,12 @@ class SparkSession(object):
         .. versionchanged:: 2.1
            Added verifySchema.
 
-        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+
+        .. note:: When Arrow optimization is enabled, strings inside Pandas DataFrame in Python
+            2 are converted into bytes as they are bytes in Python 2 whereas regular strings are
+            left as strings. When using strings in Python 2, use unicode `u""` as Python standard
+            practice.
 
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
@@ -736,28 +736,28 @@ class SparkSession(object):
                           (x.encode('utf-8') if not isinstance(x, str) else x)
                           for x in data.columns]
 
-            if self._wrapped._conf.arrowEnabled() and len(data) > 0:
+            if self._wrapped._conf.arrowPySparkEnabled() and len(data) > 0:
                 try:
                     return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
                     from pyspark.util import _exception_message
 
-                    if self._wrapped._conf.arrowFallbackEnabled():
+                    if self._wrapped._conf.arrowPySparkFallbackEnabled():
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
                             "failed by the reason below:\n  %s\n"
                             "Attempting non-optimization as "
-                            "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                            "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                             "true." % _exception_message(e))
                         warnings.warn(msg)
                     else:
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                            "the error below and will not continue because automatic fallback "
-                            "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
-                            "false.\n  %s" % _exception_message(e))
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                            "reached the error below and will not continue because automatic "
+                            "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
+                            "has been set to false.\n  %s" % _exception_message(e))
                         warnings.warn(msg)
                         raise
             data = self._convert_from_pandas(data, schema, timezone)

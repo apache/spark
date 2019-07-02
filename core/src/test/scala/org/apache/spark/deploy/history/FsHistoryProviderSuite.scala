@@ -34,7 +34,6 @@ import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
-import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
@@ -52,16 +51,21 @@ import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
 
-class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
+class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
   private var testDir: File = null
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
   }
 
-  after {
-    Utils.deleteRecursively(testDir)
+  override def afterEach(): Unit = {
+    try {
+      Utils.deleteRecursively(testDir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   /** Create a fake log file using the new log format used in Spark 1.3+ */
@@ -733,7 +737,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1.second), interval(10.milliseconds)) {
+      eventually(timeout(3.second), interval(10.milliseconds)) {
         provider.getConfig().keys should not contain ("HDFS State")
       }
     } finally {
@@ -741,7 +745,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
-  test("provider reports error after FS leaves safe mode") {
+  testRetry("provider reports error after FS leaves safe mode") {
     testDir.delete()
     val clock = new ManualClock()
     val provider = new SafeModeTestProvider(createTestConf(), clock)
@@ -751,7 +755,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1.second), interval(10.milliseconds)) {
+      eventually(timeout(3.second), interval(10.milliseconds)) {
         verify(errorHandler).uncaughtException(any(), any())
       }
     } finally {
@@ -766,11 +770,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // write out one totally bogus hidden file
     val hiddenGarbageFile = new File(testDir, ".garbage")
-    val out = new PrintWriter(hiddenGarbageFile)
-    // scalastyle:off println
-    out.println("GARBAGE")
-    // scalastyle:on println
-    out.close()
+    Utils.tryWithResource(new PrintWriter(hiddenGarbageFile)) { out =>
+      // scalastyle:off println
+      out.println("GARBAGE")
+      // scalastyle:on println
+    }
 
     // also write out one real event log file, but since its a hidden file, we shouldn't read it
     val tmpNewAppFile = newLogFile("hidden", None, inProgress = false)
@@ -1118,17 +1122,16 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     writeFile(accessGranted, true, None,
       SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
       SparkListenerApplicationEnd(5L))
+    var isReadable = false
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
-      argThat((path: Path) => path.getName.toLowerCase(Locale.ROOT) == "accessdenied"))
+      argThat((path: Path) => path.getName.toLowerCase(Locale.ROOT) == "accessdenied" &&
+        !isReadable))
     val mockedProvider = spy(provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
     }
-    writeFile(accessDenied, true, None,
-      SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None),
-      SparkListenerApplicationEnd(5L))
     // Doing 2 times in order to check the blacklist filter too
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
@@ -1136,8 +1139,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val accessDeniedPath = new Path(accessDenied.getPath)
     assert(mockedProvider.isBlacklisted(accessDeniedPath))
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
+    isReadable = true
     mockedProvider.cleanLogs()
-    assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+    updateAndCheck(mockedProvider) { list =>
+      assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+      assert(list.exists(_.name == "accessDenied"))
+      assert(list.exists(_.name == "accessGranted"))
+      list.size should be(2)
+    }
   }
 
   test("check in-progress event logs absolute length") {

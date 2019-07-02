@@ -37,6 +37,9 @@ abstract class ExecSubqueryExpression extends PlanExpression[BaseSubqueryExec] {
    */
   def updateResult(): Unit
 
+  /** Updates the expression with a new plan. */
+  override def withNewPlan(plan: BaseSubqueryExec): ExecSubqueryExpression
+
   override def canonicalize(attrs: AttributeSeq): ExecSubqueryExpression = {
     withNewPlan(plan.canonicalized.asInstanceOf[BaseSubqueryExec])
       .asInstanceOf[ExecSubqueryExpression]
@@ -116,7 +119,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
         ScalarSubquery(
-          SubqueryExec(s"subquery${subquery.exprId.id}", executedPlan),
+          SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
     }
   }

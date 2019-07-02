@@ -412,8 +412,6 @@ private[ui] class StageDataSource(
   }
 
   private def stageRow(stageData: v1.StageData): StageTableRowData = {
-    val description = stageData.description.getOrElse("")
-
     val formattedSubmissionTime = stageData.submissionTime match {
       case Some(t) => UIUtils.formatDate(t)
       case None => "Unknown"

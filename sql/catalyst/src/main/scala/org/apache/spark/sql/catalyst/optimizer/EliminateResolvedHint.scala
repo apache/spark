@@ -19,17 +19,21 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replaces [[ResolvedHint]] operators from the plan. Move the [[HintInfo]] to associated [[Join]]
  * operators, otherwise remove it if no [[Join]] operator is matched.
  */
 object EliminateResolvedHint extends Rule[LogicalPlan] {
+
+  private val hintErrorHandler = SQLConf.get.hintErrorHandler
+
   // This is also called in the beginning of the optimization phase, and as a result
   // is using transformUp rather than resolveOperators.
   def apply(plan: LogicalPlan): LogicalPlan = {
     val pulledUp = plan transformUp {
-      case j: Join =>
+      case j: Join if j.hint == JoinHint.NONE =>
         val (newLeft, leftHints) = extractHintsFromPlan(j.left)
         val (newRight, rightHints) = extractHintsFromPlan(j.right)
         val newJoinHint = JoinHint(mergeHints(leftHints), mergeHints(rightHints))
@@ -37,7 +41,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
     }
     pulledUp.transformUp {
       case h: ResolvedHint =>
-        handleInvalidHintInfo(h.hints)
+        hintErrorHandler.joinNotFoundForJoinHint(h.hints)
         h.child
     }
   }
@@ -46,7 +50,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
    * Combine a list of [[HintInfo]]s into one [[HintInfo]].
    */
   private def mergeHints(hints: Seq[HintInfo]): Option[HintInfo] = {
-    hints.reduceOption((h1, h2) => h1.merge(h2, handleOverriddenHintInfo))
+    hints.reduceOption((h1, h2) => h1.merge(h2, hintErrorHandler))
   }
 
   /**
@@ -56,7 +60,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
    * in this method will be cleaned up later by this rule, and may emit warnings depending on the
    * configurations.
    */
-  private def extractHintsFromPlan(plan: LogicalPlan): (LogicalPlan, Seq[HintInfo]) = {
+  private[sql] def extractHintsFromPlan(plan: LogicalPlan): (LogicalPlan, Seq[HintInfo]) = {
     plan match {
       case h: ResolvedHint =>
         val (plan, hints) = extractHintsFromPlan(h.child)
@@ -75,13 +79,5 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
         (e.copy(left = plan), hints)
       case p: LogicalPlan => (p, Seq.empty)
     }
-  }
-
-  private def handleInvalidHintInfo(hint: HintInfo): Unit = {
-    logWarning(s"A join hint $hint is specified but it is not part of a join relation.")
-  }
-
-  private def handleOverriddenHintInfo(hint: HintInfo): Unit = {
-    logWarning(s"Join hint $hint is overridden by another hint and will not take effect.")
   }
 }

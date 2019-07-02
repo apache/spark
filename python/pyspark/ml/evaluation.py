@@ -27,7 +27,8 @@ from pyspark.ml.common import inherit_doc
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
 __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
-           'MulticlassClassificationEvaluator', 'ClusteringEvaluator']
+           'MulticlassClassificationEvaluator', 'MultilabelClassificationEvaluator',
+           'ClusteringEvaluator', 'RankingEvaluator']
 
 
 @inherit_doc
@@ -291,6 +292,9 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     0.66...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
     0.66...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "truePositiveRateByLabel",
+    ...     evaluator.metricLabel: 1.0})
+    0.75...
     >>> mce_path = temp_path + "/mce"
     >>> evaluator.save(mce_path)
     >>> evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
@@ -312,20 +316,31 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|weightedPrecision|weightedRecall|accuracy)",
+                       "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate|"
+                       "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel|"
+                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel)",
                        typeConverter=TypeConverters.toString)
+    metricLabel = Param(Params._dummy(), "metricLabel",
+                        "The class whose metric will be computed in truePositiveRateByLabel|"
+                        "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel."
+                        " Must be >= 0. The default value is 0.",
+                        typeConverter=TypeConverters.toFloat)
+    beta = Param(Params._dummy(), "beta",
+                 "The beta value used in weightedFMeasure|fMeasureByLabel."
+                 " Must be > 0. The default value is 1.",
+                 typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="f1", weightCol=None):
+                 metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="f1", weightCol=None)
+                 metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0)
         """
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
-        self._setDefault(metricName="f1")
+        self._setDefault(metricName="f1", metricLabel=0.0, beta=1.0)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -343,14 +358,136 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         return self.getOrDefault(self.metricName)
 
+    @since("3.0.0")
+    def setMetricLabel(self, value):
+        """
+        Sets the value of :py:attr:`metricLabel`.
+        """
+        return self._set(metricLabel=value)
+
+    @since("3.0.0")
+    def getMetricLabel(self):
+        """
+        Gets the value of metricLabel or its default value.
+        """
+        return self.getOrDefault(self.metricLabel)
+
+    @since("3.0.0")
+    def setBeta(self, value):
+        """
+        Sets the value of :py:attr:`beta`.
+        """
+        return self._set(beta=value)
+
+    @since("3.0.0")
+    def getBeta(self):
+        """
+        Gets the value of beta or its default value.
+        """
+        return self.getOrDefault(self.beta)
+
     @keyword_only
     @since("1.5.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="f1", weightCol=None):
+                  metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="f1", weightCol=None)
+                  metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0)
         Sets params for multiclass classification evaluator.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+
+@inherit_doc
+class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
+                                        JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Evaluator for Multilabel Classification, which expects two input
+    columns: prediction and label.
+
+    >>> scoreAndLabels = [([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
+    ...     ([], [0.0]), ([2.0], [2.0]), ([2.0, 0.0], [2.0, 0.0]),
+    ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])]
+    >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
+    ...
+    >>> evaluator = MultilabelClassificationEvaluator(predictionCol="prediction")
+    >>> evaluator.evaluate(dataset)
+    0.63...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
+    0.54...
+    >>> mlce_path = temp_path + "/mlce"
+    >>> evaluator.save(mlce_path)
+    >>> evaluator2 = MultilabelClassificationEvaluator.load(mlce_path)
+    >>> str(evaluator2.getPredictionCol())
+    'prediction'
+
+    .. versionadded:: 3.0.0
+    """
+    metricName = Param(Params._dummy(), "metricName",
+                       "metric name in evaluation "
+                       "(subsetAccuracy|accuracy|hammingLoss|precision|recall|f1Measure|"
+                       "precisionByLabel|recallByLabel|f1MeasureByLabel|microPrecision|"
+                       "microRecall|microF1Measure)",
+                       typeConverter=TypeConverters.toString)
+    metricLabel = Param(Params._dummy(), "metricLabel",
+                        "The class whose metric will be computed in precisionByLabel|"
+                        "recallByLabel|f1MeasureByLabel. "
+                        "Must be >= 0. The default value is 0.",
+                        typeConverter=TypeConverters.toFloat)
+
+    @keyword_only
+    def __init__(self, predictionCol="prediction", labelCol="label",
+                 metricName="f1Measure", metricLabel=0.0):
+        """
+        __init__(self, predictionCol="prediction", labelCol="label", \
+                 metricName="f1Measure", metricLabel=0.0)
+        """
+        super(MultilabelClassificationEvaluator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.evaluation.MultilabelClassificationEvaluator", self.uid)
+        self._setDefault(metricName="f1Measure", metricLabel=0.0)
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
+
+    @since("3.0.0")
+    def setMetricName(self, value):
+        """
+        Sets the value of :py:attr:`metricName`.
+        """
+        return self._set(metricName=value)
+
+    @since("3.0.0")
+    def getMetricName(self):
+        """
+        Gets the value of metricName or its default value.
+        """
+        return self.getOrDefault(self.metricName)
+
+    @since("3.0.0")
+    def setMetricLabel(self, value):
+        """
+        Sets the value of :py:attr:`metricLabel`.
+        """
+        return self._set(metricLabel=value)
+
+    @since("3.0.0")
+    def getMetricLabel(self):
+        """
+        Gets the value of metricLabel or its default value.
+        """
+        return self.getOrDefault(self.metricLabel)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, predictionCol="prediction", labelCol="label",
+                  metricName="f1Measure", metricLabel=0.0):
+        """
+        setParams(self, predictionCol="prediction", labelCol="label", \
+                  metricName="f1Measure", metricLabel=0.0)
+        Sets params for multilabel classification evaluator.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -448,6 +585,99 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         Gets the value of `distanceMeasure`
         """
         return self.getOrDefault(self.distanceMeasure)
+
+
+@inherit_doc
+class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
+                       JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Evaluator for Ranking, which expects two input
+    columns: prediction and label.
+
+    >>> scoreAndLabels = [([1.0, 6.0, 2.0, 7.0, 8.0, 3.0, 9.0, 10.0, 4.0, 5.0],
+    ...     [1.0, 2.0, 3.0, 4.0, 5.0]),
+    ...     ([4.0, 1.0, 5.0, 6.0, 2.0, 7.0, 3.0, 8.0, 9.0, 10.0], [1.0, 2.0, 3.0]),
+    ...     ([1.0, 2.0, 3.0, 4.0, 5.0], [])]
+    >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
+    ...
+    >>> evaluator = RankingEvaluator(predictionCol="prediction")
+    >>> evaluator.evaluate(dataset)
+    0.35...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "precisionAtK", evaluator.k: 2})
+    0.33...
+    >>> ranke_path = temp_path + "/ranke"
+    >>> evaluator.save(ranke_path)
+    >>> evaluator2 = RankingEvaluator.load(ranke_path)
+    >>> str(evaluator2.getPredictionCol())
+    'prediction'
+
+    .. versionadded:: 3.0.0
+    """
+    metricName = Param(Params._dummy(), "metricName",
+                       "metric name in evaluation "
+                       "(meanAveragePrecision|meanAveragePrecisionAtK|"
+                       "precisionAtK|ndcgAtK|recallAtK)",
+                       typeConverter=TypeConverters.toString)
+    k = Param(Params._dummy(), "k",
+              "The ranking position value used in meanAveragePrecisionAtK|precisionAtK|"
+              "ndcgAtK|recallAtK. Must be > 0. The default value is 10.",
+              typeConverter=TypeConverters.toInt)
+
+    @keyword_only
+    def __init__(self, predictionCol="prediction", labelCol="label",
+                 metricName="meanAveragePrecision", k=10):
+        """
+        __init__(self, predictionCol="prediction", labelCol="label", \
+                 metricName="meanAveragePrecision", k=10)
+        """
+        super(RankingEvaluator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.evaluation.RankingEvaluator", self.uid)
+        self._setDefault(metricName="meanAveragePrecision", k=10)
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
+
+    @since("3.0.0")
+    def setMetricName(self, value):
+        """
+        Sets the value of :py:attr:`metricName`.
+        """
+        return self._set(metricName=value)
+
+    @since("3.0.0")
+    def getMetricName(self):
+        """
+        Gets the value of metricName or its default value.
+        """
+        return self.getOrDefault(self.metricName)
+
+    @since("3.0.0")
+    def setK(self, value):
+        """
+        Sets the value of :py:attr:`k`.
+        """
+        return self._set(k=value)
+
+    @since("3.0.0")
+    def getK(self):
+        """
+        Gets the value of k or its default value.
+        """
+        return self.getOrDefault(self.k)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, predictionCol="prediction", labelCol="label",
+                  metricName="meanAveragePrecision", k=10):
+        """
+        setParams(self, predictionCol="prediction", labelCol="label", \
+                  metricName="meanAveragePrecision", k=10)
+        Sets params for ranking evaluator.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
 
 
 if __name__ == "__main__":

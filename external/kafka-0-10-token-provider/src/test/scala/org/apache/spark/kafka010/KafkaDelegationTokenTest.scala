@@ -20,6 +20,7 @@ package org.apache.spark.kafka010
 import java.{util => ju}
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
 import org.mockito.Mockito.mock
@@ -38,6 +39,21 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
 
   protected val tokenId = "tokenId" + ju.UUID.randomUUID().toString
   protected val tokenPassword = "tokenPassword" + ju.UUID.randomUUID().toString
+
+  protected val identifier1 = "cluster1"
+  protected val identifier2 = "cluster2"
+  protected val tokenService1 = KafkaTokenUtil.getTokenService(identifier1)
+  protected val tokenService2 = KafkaTokenUtil.getTokenService(identifier2)
+  protected val bootStrapServers = "127.0.0.1:0"
+  protected val matchingTargetServersRegex = "127.0.0.*:0"
+  protected val nonMatchingTargetServersRegex = "127.0.intentionally_non_matching.*:0"
+  protected val trustStoreLocation = "/path/to/trustStore"
+  protected val trustStorePassword = "trustStoreSecret"
+  protected val keyStoreLocation = "/path/to/keyStore"
+  protected val keyStorePassword = "keyStoreSecret"
+  protected val keyPassword = "keySecret"
+  protected val keytab = "/path/to/keytab"
+  protected val principal = "user@domain.com"
 
   private class KafkaJaasConfiguration extends Configuration {
     val entry =
@@ -70,22 +86,39 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
     Configuration.setConfiguration(new KafkaJaasConfiguration)
   }
 
-  protected def addTokenToUGI(): Unit = {
+  protected def addTokenToUGI(tokenService: Text): Unit = {
     val token = new Token[KafkaDelegationTokenIdentifier](
       tokenId.getBytes,
       tokenPassword.getBytes,
       KafkaTokenUtil.TOKEN_KIND,
-      KafkaTokenUtil.TOKEN_SERVICE
+      tokenService
     )
     val creds = new Credentials()
-    creds.addToken(KafkaTokenUtil.TOKEN_SERVICE, token)
+    creds.addToken(token.getService, token)
     UserGroupInformation.getCurrentUser.addCredentials(creds)
   }
 
-  protected def setSparkEnv(settings: Traversable[(String, String)]): Unit = {
+  protected def setSparkEnv(settings: Iterable[(String, String)]): Unit = {
     val conf = new SparkConf().setAll(settings)
     val env = mock(classOf[SparkEnv])
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
+  }
+
+  protected def createClusterConf(
+      identifier: String,
+      securityProtocol: String): KafkaTokenClusterConf = {
+    KafkaTokenClusterConf(
+      identifier,
+      bootStrapServers,
+      KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX,
+      securityProtocol,
+      KafkaTokenSparkConf.DEFAULT_SASL_KERBEROS_SERVICE_NAME,
+      Some(trustStoreLocation),
+      Some(trustStorePassword),
+      Some(keyStoreLocation),
+      Some(keyStorePassword),
+      Some(keyPassword),
+      KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
   }
 }
