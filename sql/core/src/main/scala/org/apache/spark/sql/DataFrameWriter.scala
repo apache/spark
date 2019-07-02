@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
@@ -256,6 +255,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
       case _ => useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT))
     }
+
     // In Data Source V2 project, partitioning is still under development.
     // Here we fallback to V1 if partitioning columns are specified.
     // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
