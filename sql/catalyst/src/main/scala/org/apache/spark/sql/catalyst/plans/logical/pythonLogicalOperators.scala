@@ -39,14 +39,26 @@ case class FlatMapGroupsInPandas(
   override val producedAttributes = AttributeSet(output)
 }
 
+/**
+ * Map partitions using an udf: iter(pandas.Dataframe) -> iter(pandas.DataFrame).
+ * This is used by DataFrame.mapPartitionsInPandas()
+ */
+case class MapPartitionsInPandas(
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes = AttributeSet(output)
+}
+
 
 case class FlatMapCoGroupsInPandas(
-                                  leftAttributes: Seq[Attribute],
-                                  rightAttributes: Seq[Attribute],
-                                  functionExpr: Expression,
-                                  output: Seq[Attribute],
-                                  left: LogicalPlan,
-                                  right: LogicalPlan) extends BinaryNode {
+                                    leftAttributes: Seq[Attribute],
+                                    rightAttributes: Seq[Attribute],
+                                    functionExpr: Expression,
+                                    output: Seq[Attribute],
+                                    left: LogicalPlan,
+                                    right: LogicalPlan) extends BinaryNode {
   override val producedAttributes = AttributeSet(output)
 }
 

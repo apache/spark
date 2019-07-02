@@ -32,6 +32,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -248,7 +249,12 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
+    if (handlePersistence) {
+      rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -263,6 +269,10 @@ class BisectingKMeans @Since("2.0.0") (
       .setDistanceMeasure($(distanceMeasure))
     val parentModel = bkm.run(rdd, Some(instr))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
+    if (handlePersistence) {
+      rdd.unpersist()
+    }
+
     val summary = new BisectingKMeansSummary(
       model.transform(dataset),
       $(predictionCol),

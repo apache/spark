@@ -30,8 +30,6 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
  */
 private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
-  def vectorTypes: Option[Seq[String]] = None
-
   protected def supportsBatch: Boolean = true
 
   override lazy val metrics = Map(
