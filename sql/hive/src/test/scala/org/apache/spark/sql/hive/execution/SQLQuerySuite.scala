@@ -1013,8 +1013,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-28227 test script transform with aggregation") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
-    val data = (1 to 100000).map { i => (i, i, i) }
-    data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
+    val data1 = (1 to 100000).map { i => (i, i, i) }
+    data1.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
 
     //  without aggregation
     assert(0 === sql(
@@ -1029,13 +1029,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
          |FROM script_trans
          |WHERE d1 <= 100""".stripMargin).count())
 
-      assert(100 === sql(
+    assert(100 === sql(
       s"""SELECT TRANSFORM (*)
          |USING 'cat' AS (a,b,c)
          |FROM script_trans
          |WHERE d1 <= 100""".stripMargin).count())
 
-      assert(100 === sql(
+    assert(100 === sql(
       s"""SELECT TRANSFORM ( d2 as d4, max(d1) as maxd1, cast(sum(d3) as string))
          |USING 'cat' AS (a,b,c)
          |FROM script_trans
@@ -1043,14 +1043,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
          |GROUP BY d2""".stripMargin).count())
 
 
-      assert(100 === sql(
+    assert(100 === sql(
       s"""SELECT TRANSFORM ( d2, max(d1) as maxd1, cast(sum(d3) as string))
          |USING 'cat' AS (a,b,c)
          |FROM script_trans
          |WHERE d1 <= 100
          |GROUP BY d2""".stripMargin).count())
 
-      assert(0 === sql(
+    assert(0 === sql(
       s"""SELECT TRANSFORM ( d2, max(d1) as maxd1, cast(sum(d3) as string))
          |USING 'cat 1>&2' AS (a,b,c)
          |FROM script_trans
@@ -1058,7 +1058,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
          |GROUP BY d2
          |HAVING maxd1 > 0""".stripMargin).count())
 
-      assert(90 === sql(
+    assert(90 === sql(
       s"""SELECT TRANSFORM ( d2, max(d1) as maxd1, cast(sum(d3) as string))
          |USING 'cat' AS (a,b,c)
          |FROM script_trans
@@ -1066,6 +1066,27 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
          |GROUP BY d2
          |HAVING max(d1) > 10""".stripMargin).count())
 
+    val data2 = (1 to 5).map { i => (i, i) }
+    data2.toDF("key", "value").createOrReplaceTempView("test")
+    checkAnswer(
+      sql(
+        """FROM
+          |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string)) t
+          |SELECT thing1 + 1
+        """.stripMargin), (2 to 6).map(i => Row(i)))
+
+    val data3 = (1 to 5).map { i => (i % 2, i) }
+    data3.toDF("key", "value").createOrReplaceTempView("test")
+    checkAnswer(
+      sql(
+        """FROM
+          |(SELECT TRANSFORM(key, SUM(value) value)
+          |USING 'cat' AS (`thing1` int, thing2 string)
+          |FROM test
+          |GROUP BY key
+          |) t
+          |SELECT (thing2 + 1) as result
+        """.stripMargin).sort("result"), Array(7, 10).map(i => Row(i)))
   }
 
 
