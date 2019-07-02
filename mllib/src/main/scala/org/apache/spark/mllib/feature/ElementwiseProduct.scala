@@ -70,7 +70,7 @@ class ElementwiseProduct @Since("1.4.0") (
     val dim = newValues.length
     var i = 0
     while (i < dim) {
-      values(i) *= scalingVec(indices(i))
+      newValues(i) *= scalingVec(indices(i))
       i += 1
     }
     (indices, newValues)
