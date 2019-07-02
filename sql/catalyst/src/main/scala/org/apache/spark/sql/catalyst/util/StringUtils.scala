@@ -69,7 +69,7 @@ object StringUtils extends Logging {
     val in = pattern.toIterator
     val out = new StringBuilder()
 
-    def fail(message: String) = throw new Exception(
+    def fail(message: String) = throw new AnalysisException(
       s"the pattern '$pattern' is invalid, $message")
 
     while (in.hasNext) {
