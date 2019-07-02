@@ -19,8 +19,23 @@ package org.apache.spark.deploy.master
 
 import scala.collection.mutable
 
+import org.apache.spark.resource.{ResourceAllocator, ResourceInformation}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
+
+private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
+  extends ResourceAllocator(name, addresses) {
+
+  def toResourceInformation(): ResourceInformation = {
+    new ResourceInformation(name, addresses.toArray)
+  }
+
+  def acquire(amount: Int): Seq[String] = {
+    val allocated = availableAddrs.take(amount)
+    acquire(allocated)
+    allocated
+  }
+}
 
 private[spark] class WorkerInfo(
     val id: String,
@@ -29,7 +44,8 @@ private[spark] class WorkerInfo(
     val cores: Int,
     val memory: Int,
     val endpoint: RpcEndpointRef,
-    val webUiAddress: String)
+    val webUiAddress: String,
+    val resources: Map[String, WorkerResourceInfo])
   extends Serializable {
 
   Utils.checkHost(host)
@@ -40,6 +56,8 @@ private[spark] class WorkerInfo(
   @transient var state: WorkerState.Value = _
   @transient var coresUsed: Int = _
   @transient var memoryUsed: Int = _
+  @transient var driverToResourcesUsed: mutable.HashMap[String, Map[String, Seq[String]]] = _
+  @transient var execToResourcesUsed: mutable.HashMap[String, Map[String, Seq[String]]] = _
 
   @transient var lastHeartbeat: Long = _
 
@@ -47,6 +65,17 @@ private[spark] class WorkerInfo(
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
+  def resourcesFree: Map[String, Int] = {
+    resources.map { case (rName, rInfo) =>
+      rName -> rInfo.availableAddrs.length
+    }
+  }
+
+  def assignedResources: Map[String, Seq[String]] = {
+    resources.map { case (rName, rInfo) =>
+      (rName, rInfo.addresses)
+    }
+  }
 
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
@@ -59,6 +88,8 @@ private[spark] class WorkerInfo(
     state = WorkerState.ALIVE
     coresUsed = 0
     memoryUsed = 0
+    driverToResourcesUsed = new mutable.HashMap
+    execToResourcesUsed = new mutable.HashMap
     lastHeartbeat = System.currentTimeMillis()
   }
 
@@ -71,6 +102,7 @@ private[spark] class WorkerInfo(
     executors(exec.fullId) = exec
     coresUsed += exec.cores
     memoryUsed += exec.memory
+    execToResourcesUsed(exec.fullId) = exec.resources
   }
 
   def removeExecutor(exec: ExecutorDesc) {
@@ -78,6 +110,7 @@ private[spark] class WorkerInfo(
       executors -= exec.fullId
       coresUsed -= exec.cores
       memoryUsed -= exec.memory
+      execToResourcesUsed.remove(exec.fullId)
     }
   }
 
@@ -89,12 +122,14 @@ private[spark] class WorkerInfo(
     drivers(driver.id) = driver
     memoryUsed += driver.desc.mem
     coresUsed += driver.desc.cores
+    driverToResourcesUsed(driver.id) = driver.resources
   }
 
   def removeDriver(driver: DriverInfo) {
     drivers -= driver.id
     memoryUsed -= driver.desc.mem
     coresUsed -= driver.desc.cores
+    driverToResourcesUsed.remove(driver.id)
   }
 
   def setState(state: WorkerState.Value): Unit = {
@@ -102,4 +137,36 @@ private[spark] class WorkerInfo(
   }
 
   def isAlive(): Boolean = this.state == WorkerState.ALIVE
+
+  /**
+   * acquire specified amount resources for driver/executor from the worker
+   * @param resourceReqs the resources requirement from driver/executor
+   * @return
+   */
+  def acquireResources(resourceReqs: Map[String, Int])
+  : Map[String, Seq[String]] = {
+    resourceReqs.map { case (rName, amount) =>
+      rName -> resources(rName).acquire(amount)
+    }
+  }
+
+  /**
+   * used during master recovery
+   */
+  def notifyResources(expected: Map[String, Seq[String]]): Unit = {
+    expected.foreach { case (rName, addresses) =>
+      resources(rName).acquire(addresses)
+    }
+  }
+
+  /**
+   * release resources to worker from the driver/executor
+   * @param allocated the resources which allocated to driver/executor previously
+   */
+  def releaseResources(allocated: Map[String, Seq[String]])
+  : Unit = {
+    allocated.foreach { case (rName, addresses) =>
+      resources(rName).release(addresses)
+    }
+  }
 }

@@ -22,12 +22,13 @@ import java.nio.file.{Files, Paths}
 
 import scala.util.control.NonFatal
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Extraction}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -70,6 +71,30 @@ private[spark] object ResourceUtils extends Logging {
   // internally we currently only support addresses, so its just an integer count
   val AMOUNT = "amount"
 
+  def prepareResourceFile(
+      componentName: String,
+      resources: Map[String, ResourceInformation],
+      dir: File): File = {
+    implicit val formats = DefaultFormats
+    val compShortName = componentName.substring(componentName.lastIndexOf(".") + 1)
+    val tmpFile = Utils.tempFileWith(dir)
+    val allocation = resources.map { case (rName, rInfo) =>
+      ResourceAllocation(ResourceID(componentName, rName), rInfo.addresses)
+    }.toSeq
+    val allocationJson = Extraction.decompose(allocation)
+    try {
+      Files.write(tmpFile.toPath, compact(render(allocationJson)).getBytes())
+    } catch {
+      case NonFatal(e) =>
+        val errMsg = s"Exception threw while preparing resource file for $compShortName"
+        logError(errMsg, e)
+        throw new SparkException(errMsg, e)
+    }
+    val resourceFile = File.createTempFile(s"resource-${compShortName}-", ".json", dir)
+    tmpFile.renameTo(resourceFile)
+    resourceFile
+  }
+
   def parseResourceRequest(sparkConf: SparkConf, resourceId: ResourceID): ResourceRequest = {
     val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
     val amount = settings.getOrElse(AMOUNT,
@@ -98,6 +123,12 @@ private[spark] object ResourceUtils extends Logging {
     parseAllResourceRequests(sparkConf, SPARK_TASK_PREFIX).map { request =>
       TaskResourceRequirement(request.id.resourceName, request.amount)
     }
+  }
+
+  def parseResourceRequirements(sparkConf: SparkConf, componentName: String): Map[String, Int] = {
+    parseAllResourceRequests(sparkConf, componentName).map { request =>
+      request.id.resourceName -> request.amount
+    }.toMap
   }
 
   private def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
@@ -175,7 +206,7 @@ private[spark] object ResourceUtils extends Logging {
           "doesn't exist!")
       }
     } else {
-      throw new SparkException(s"User is expecting to use resource: $resourceName but " +
+      throw new SparkException(s"User is expecting to use resource: $resourceName, but " +
         "didn't specify a discovery script!")
     }
     if (!result.name.equals(resourceName)) {

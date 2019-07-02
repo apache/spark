@@ -86,7 +86,8 @@ class PersistenceEngineSuite extends SparkFunSuite {
           cores = 0,
           memory = 0,
           endpoint = workerEndpoint,
-          webUiAddress = "http://localhost:80")
+          webUiAddress = "http://localhost:80",
+          Map.empty)
 
         persistenceEngine.addWorker(workerToPersist)
 

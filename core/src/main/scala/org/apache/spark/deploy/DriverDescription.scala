@@ -22,7 +22,8 @@ private[deploy] case class DriverDescription(
     mem: Int,
     cores: Int,
     supervise: Boolean,
-    command: Command) {
+    command: Command,
+    resourceReqs: Map[String, Int] = Map.empty) {
 
   override def toString: String = s"DriverDescription (${command.mainClass})"
 }

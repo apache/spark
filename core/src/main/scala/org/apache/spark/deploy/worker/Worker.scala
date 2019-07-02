@@ -179,6 +179,7 @@ private[deploy] class Worker(
     masterRpcAddresses.length // Make sure we can register with all masters at the same time
   )
 
+  // would be validate after worker successfully registered with master
   // visible for tests
   private[deploy] var resources: Map[String, ResourceInformation] = _
 
@@ -234,6 +235,26 @@ private[deploy] class Worker(
       case e: Exception =>
         logError("Failed to setup worker resources: ", e)
         System.exit(1)
+    }
+  }
+
+  private def makeResourceRequest(): Map[ResourceInformation, Int] = {
+    parseAllResourceRequests(conf, SPARK_WORKER_PREFIX).map { req =>
+      resources(req.id.resourceName) -> req.amount
+    }.toMap
+  }
+
+  private def makeResourceInformation(resourceAddrs: Map[String, Seq[String]])
+  : Map[String, ResourceInformation] = {
+    resourceAddrs.map { case (rName, addresses) =>
+      rName -> new ResourceInformation(rName, addresses.toArray)
+    }
+  }
+
+  private def makeResourceAddresses(resourceInfos: Map[String, ResourceInformation])
+  : Map[String, Seq[String]] = {
+    resourceInfos.map { case (rName, rInfo) =>
+      rName -> rInfo.addresses.toSeq
     }
   }
 
@@ -405,12 +426,14 @@ private[deploy] class Worker(
       cores,
       memory,
       workerWebUiUrl,
-      masterEndpoint.address))
+      masterEndpoint.address,
+      makeResourceRequest()))
   }
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
-      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate) =>
+      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress,
+            assignedResources, duplicate) =>
         val preferredMasterAddress = if (preferConfiguredMasterAddress) {
           masterAddress.toSparkURL
         } else {
@@ -426,6 +449,8 @@ private[deploy] class Worker(
 
         logInfo(s"Successfully registered with master $preferredMasterAddress")
         registered = true
+        // update the resources to what the master assigns to the worker finally
+        resources = makeResourceInformation(assignedResources)
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
         forwardMessageScheduler.scheduleAtFixedRate(
           () => Utils.tryLogNonFatalError { self.send(SendHeartbeat) },
@@ -506,15 +531,22 @@ private[deploy] class Worker(
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
       changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
-      val execs = executors.values.
-        map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
-      masterRef.send(WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq))
+      val execWithResources = executors.values.map { e =>
+        (new ExecutorDescription(e.appId, e.execId, e.cores, e.state),
+          makeResourceAddresses(e.resources))
+      }
+      val driverWithResources = drivers.keys.map { id =>
+        (id, makeResourceAddresses(drivers(id).resources))
+      }
+
+      masterRef.send(WorkerSchedulerStateResponse(
+        workerId, execWithResources.toList, driverWithResources.toSeq))
 
     case ReconnectWorker(masterUrl) =>
       logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
       registerWithMaster()
 
-    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
+    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, resources) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else {
@@ -567,7 +599,8 @@ private[deploy] class Worker(
             workerUri,
             conf,
             appLocalDirs,
-            ExecutorState.LAUNCHING)
+            ExecutorState.LAUNCHING,
+            makeResourceInformation(resources))
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -601,7 +634,7 @@ private[deploy] class Worker(
         }
       }
 
-    case LaunchDriver(driverId, driverDesc) =>
+    case LaunchDriver(driverId, driverDesc, resources) =>
       logInfo(s"Asked to launch driver $driverId")
       val driver = new DriverRunner(
         conf,
@@ -611,7 +644,8 @@ private[deploy] class Worker(
         driverDesc.copy(command = Worker.maybeUpdateSSLSettings(driverDesc.command, conf)),
         self,
         workerUri,
-        securityMgr)
+        securityMgr,
+        makeResourceInformation(resources))
       drivers(driverId) = driver
       driver.start()
 

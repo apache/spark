@@ -27,6 +27,9 @@ private[master] class ExecutorDesc(
     val memory: Int) {
 
   var state = ExecutorState.LAUNCHING
+  // resources(e.f. gpu/fpga) allocated to this driver
+  // map from resource name to its addresses
+  private var _resources: Map[String, Seq[String]] = _
 
   /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
   def copyState(execDesc: ExecutorDescription) {
@@ -49,4 +52,8 @@ private[master] class ExecutorDesc(
   override def toString: String = fullId
 
   override def hashCode: Int = toString.hashCode()
+
+  def withResources(r: Map[String, Seq[String]]): Unit = _resources = r
+
+  def resources: Map[String, Seq[String]] = _resources
 }

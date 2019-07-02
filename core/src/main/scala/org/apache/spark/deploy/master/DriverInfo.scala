@@ -34,6 +34,9 @@ private[deploy] class DriverInfo(
   @transient var exception: Option[Exception] = None
   /* Most recent worker assigned to this driver */
   @transient var worker: Option[WorkerInfo] = None
+  // resources(e.f. gpu/fpga) allocated to this driver
+  // map from resource name to its addresses
+  private var _resources: Map[String, Seq[String]] = _
 
   init()
 
@@ -47,4 +50,8 @@ private[deploy] class DriverInfo(
     worker = None
     exception = None
   }
+
+  def withResources(r: Map[String, Seq[String]]): Unit = _resources = r
+
+  def resources: Map[String, Seq[String]] = _resources
 }
