@@ -298,6 +298,7 @@ private[sql] trait SQLTestData { self =>
     testData3
     negativeData
     largeAndSmallInts
+    largeDecimals
     decimalData
     binaryData
     upperCaseData
