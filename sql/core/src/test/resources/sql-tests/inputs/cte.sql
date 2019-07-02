@@ -56,7 +56,7 @@ WITH
   )
 SELECT * FROM t2;
 
--- CTE in CTE definition shadows outer 2"
+-- CTE in CTE definition shadows outer 2
 WITH
   t(c) AS (SELECT 1),
   t2 AS (
