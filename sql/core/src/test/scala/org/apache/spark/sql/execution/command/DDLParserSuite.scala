@@ -1167,6 +1167,25 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
       p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
   }
 
+  test("SPARK-28227 transform with aggregate"){
+    //   val plan = parser.parsePlan(
+    //      """SELECT TRANSFORM(t.c, SUM(t.a) as x)
+    //        |USING 'func' AS (c1 string, a1 string )
+    //    val plan = parser.parsePlan(
+    //      """SELECT t.c, SUM(t.a) as
+    //        |FROM DEFAULT.TEST t
+    //        |GROUP BY t.c
+    //      """.stripMargin)
+    val plan = parser.parsePlan(
+      """SELECT TRANSFORM(t.c, SUM(t.a) as x)
+        |USING 'func' AS (c1 string, a1 string )
+        |FROM DEFAULT.TEST t
+        |WHERE t.c > 0
+        |GROUP BY t.c
+      """.stripMargin)
+    println(plan)
+  }
+
   test("use backticks in output of Script Transform") {
     parser.parsePlan(
       """SELECT `t`.`thing1`
