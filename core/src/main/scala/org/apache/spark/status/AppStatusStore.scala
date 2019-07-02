@@ -17,7 +17,7 @@
 
 package org.apache.spark.status
 
-import java.util.{List => JList, Locale}
+import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
@@ -26,7 +26,7 @@ import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.kvstore.{InMemoryStore, KVStore, KVStoreView}
+import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
@@ -406,6 +406,8 @@ private[spark] class AppStatusStore(
         (Some(TaskIndexNames.EXEC_RUN_TIME), true)
       case v1.TaskSorting.DECREASING_RUNTIME =>
         (Some(TaskIndexNames.EXEC_RUN_TIME), false)
+      case v1.TaskSorting.STATUS =>
+        (Some(TaskIndexNames.STATUS), true)
     }
     taskList(stageId, stageAttemptId, offset, length, indexName, ascending, status)
   }
@@ -419,25 +421,21 @@ private[spark] class AppStatusStore(
       ascending: Boolean,
       status: Option[String] = None): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
-    val base = status match {
-      case Some(expected) =>
-        store.viewWithCondition(classOf[TaskDataWrapper], (t: TaskDataWrapper) => {
-          t.status.toLowerCase(Locale.ROOT) == expected.toLowerCase(Locale.ROOT)
-        })
-      case None =>
-        store.view(classOf[TaskDataWrapper])
-    }
-      store.view(classOf[TaskDataWrapper])
+    val base = store.view(classOf[TaskDataWrapper])
     val indexed = sortBy match {
       case Some(index) =>
         base.index(index).parent(stageKey)
-
       case _ =>
         // Sort by ID, which is the "stage" index.
         base.index("stage").first(stageKey).last(stageKey)
     }
-
-    val ordered = if (ascending) indexed else indexed.reverse()
+    val filtered = status match {
+      case Some(s) =>
+        indexed.filter(t => t.status.equalsIgnoreCase(s))
+      case None =>
+        indexed
+    }
+    val ordered = if (ascending) filtered else filtered.reverse()
     val taskDataWrapperIter = ordered.skip(offset).max(length).asScala
     constructTaskDataList(taskDataWrapperIter)
   }

@@ -21,6 +21,8 @@ import com.google.common.base.Preconditions;
 
 import org.apache.spark.annotation.Private;
 
+import java.util.function.Predicate;
+
 /**
  * A configurable view that allows iterating over values in a {@link KVStore}.
  *
@@ -43,6 +45,7 @@ public abstract class KVStoreView<T> implements Iterable<T> {
   Object first = null;
   Object last = null;
   Object parent = null;
+  Predicate predicate = null;
   long skip = 0L;
   long max = Long.MAX_VALUE;
 
@@ -107,6 +110,11 @@ public abstract class KVStoreView<T> implements Iterable<T> {
    */
   public KVStoreView<T> skip(long n) {
     this.skip = n;
+    return this;
+  }
+
+  public KVStoreView<T> filter(Predicate<T> predicate) {
+    this.predicate = predicate;
     return this;
   }
 

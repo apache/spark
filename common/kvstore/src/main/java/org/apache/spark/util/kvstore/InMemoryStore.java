@@ -107,12 +107,6 @@ public class InMemoryStore implements KVStore {
   }
 
   @Override
-  public <T> KVStoreView<T> viewWithCondition(Class<T> type, Predicate<T> condition) {
-    InstanceList<T> list = inMemoryLists.get(type);
-    return list != null ? list.viewWithCondition(condition) : emptyView();
-  }
-
-  @Override
   public void close() {
     metadata = null;
     inMemoryLists.clear();
@@ -250,12 +244,6 @@ public class InMemoryStore implements KVStore {
       return new InMemoryView<>(data.values(), ti);
     }
 
-    public InMemoryView<T> viewWithCondition(Predicate<T> condition) {
-      return new InMemoryView<>(
-        data.values().stream().filter(condition).collect(Collectors.toList()),
-        ti);
-    }
-
     private static <T> Predicate<? super T> getPredicate(
         KVTypeInfo.Accessor getter,
         Collection<?> values) {
@@ -307,6 +295,10 @@ public class InMemoryStore implements KVStore {
       final List<T> sorted = copyElements();
       sorted.sort((e1, e2) -> modifier * compare(e1, e2, getter));
       Stream<T> stream = sorted.stream();
+
+      if (predicate != null) {
+        stream = stream.filter(predicate);
+      }
 
       if (first != null) {
         Comparable<?> firstKey = asKey(first);

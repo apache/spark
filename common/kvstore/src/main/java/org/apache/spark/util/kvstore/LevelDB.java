@@ -23,7 +23,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -193,24 +192,14 @@ public class LevelDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          return new LevelDBIterator<>(type, LevelDB.this, this);
-        } catch (Exception e) {
-          throw Throwables.propagate(e);
-        }
-      }
-    };
-  }
-
-  @Override
-  public <T> KVStoreView<T> viewWithCondition(Class<T> type, Predicate<T> condition) throws Exception {
-    return new KVStoreView<T>() {
-      @Override
-      public Iterator<T> iterator() {
-        try {
-          Iterator<T> base = new LevelDBIterator<>(type, LevelDB.this, this);
-          Iterable<T> iterable = () -> base;
-          Stream<T> toStream = StreamSupport.stream(iterable.spliterator(), false);
-          return toStream.filter(condition).iterator();
+          if (predicate != null) {
+            Iterator<T> base = new LevelDBIterator<>(type, LevelDB.this, this);
+            Iterable<T> iterable = () -> base;
+            Stream<T> toStream = StreamSupport.stream(iterable.spliterator(), false);
+            return toStream.filter(predicate).iterator();
+          } else {
+            return new LevelDBIterator<>(type, LevelDB.this, this);
+          }
         } catch (Exception e) {
           throw Throwables.propagate(e);
         }

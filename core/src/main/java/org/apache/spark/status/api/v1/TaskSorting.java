@@ -27,7 +27,8 @@ import java.util.Set;
 public enum TaskSorting {
   ID,
   INCREASING_RUNTIME("runtime"),
-  DECREASING_RUNTIME("-runtime");
+  DECREASING_RUNTIME("-runtime"),
+  STATUS("status");
 
   private final Set<String> alternateNames;
   TaskSorting(String... names) {

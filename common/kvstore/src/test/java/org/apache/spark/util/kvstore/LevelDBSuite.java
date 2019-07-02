@@ -283,8 +283,7 @@ public class LevelDBSuite {
       db.write(createCustomType1(i));
     }
 
-    KVStoreView<CustomType1> actual = db.viewWithCondition(CustomType1.class,
-      c -> c.num % 2 == 0);
+    KVStoreView<CustomType1> actual = db.view(CustomType1.class).filter(c -> c.num % 2 == 0);
 
     assertEquals(expected, StreamSupport.stream(actual.spliterator(), false)
       .map(e -> e.num)
