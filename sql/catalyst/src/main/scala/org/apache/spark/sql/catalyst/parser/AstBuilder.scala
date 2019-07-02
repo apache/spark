@@ -467,7 +467,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
         // Create the transform.
         ScriptTransformation(
-          expressions,
+          withProject.output,
           string(script),
           attributes,
           withProject,
