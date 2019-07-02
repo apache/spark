@@ -413,9 +413,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
     val buf = new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
-    var scannedRowCount = 0
     var partsScanned = 0
-    while (scannedRowCount < n && partsScanned < totalParts) {
+    while (buf.length < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1L
@@ -424,12 +423,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         // Otherwise, interpolate the number of partitions we need to try, but overestimate
         // it by 50%. We also cap the estimation in the end.
         val limitScaleUpFactor = Math.max(sqlContext.conf.limitScaleUpFactor, 2)
-        if (scannedRowCount == 0) {
+        if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
-          val left = n - scannedRowCount
+          val left = n - buf.length
           // As left > 0, numPartsToTry is always >= 1
-          numPartsToTry = Math.ceil(1.5 * left * partsScanned / scannedRowCount).toInt
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.length).toInt
           numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
       }
@@ -440,16 +439,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         if (it.hasNext) it.next() else (0L, Array.empty[Byte]), p)
 
       var i = 0
-      while (scannedRowCount < n && i < res.length) {
+      while (buf.length < n && i < res.length) {
         val rows = decodeUnsafeRows(res(i)._2)
-        val additionalRowCount = (res(i)._1 min (n - scannedRowCount)).toInt
-        if (additionalRowCount > 0) {
-          buf ++= new Array[InternalRow](additionalRowCount)
-          for (rowIndex <- scannedRowCount until scannedRowCount + additionalRowCount) {
-            buf(rowIndex) = rows.next()
-          }
-          scannedRowCount += additionalRowCount
+        val rowsToTake = if (n - buf.length >= res(i)._1) {
+          rows.toArray
+        } else {
+          rows.take(n - buf.length).toArray
         }
+        buf ++= rowsToTake
         i += 1
       }
       partsScanned += p.size
