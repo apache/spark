@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
+import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -62,15 +61,11 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
       val queryOutput = if (queryColumnNames.nonEmpty) {
-        // If the view output doesn't have the same number of columns with the query column names,
-        // throw an AnalysisException.
-        if (output.length != queryColumnNames.length) {
-          throw new AnalysisException(
-            s"The view output ${output.mkString("[", ",", "]")} doesn't have the same number of " +
-              s"columns with the query column names ${queryColumnNames.mkString("[", ",", "]")}")
-        }
+        // Find the attribute that has the expected attribute name from an attribute list, the names
+        // are compared using conf.resolver.
+        // `CheckAnalysis` already guarantees the expected attribute can be found for sure.
         desc.viewQueryColumnNames.map { colName =>
-          findAttributeByName(colName, child.output, resolver)
+          child.output.find(attr => resolver(attr.name, colName)).get
         }
       } else {
         // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
@@ -80,40 +75,16 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
       // Map the attributes in the query output to the attributes in the view output by index.
       val newOutput = output.zip(queryOutput).map {
         case (attr, originAttr) if !attr.semanticEquals(originAttr) =>
-          // The dataType of the output attributes may be not the same with that of the view
-          // output, so we should cast the attribute to the dataType of the view output attribute.
-          // Will throw an AnalysisException if the cast is not a up-cast.
-          if (!Cast.canUpCast(originAttr.dataType, attr.dataType)) {
-            throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
-              s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} as it " +
-              s"may truncate\n")
-          } else {
-            Alias(cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
-              qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
-          }
+          // `CheckAnalysis` already guarantees that the cast is a up-cast for sure.
+          Alias(cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
+            qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
         case (_, originAttr) => originAttr
       }
       Project(newOutput, child)
 
     // The child should have the same output attributes with the View operator, so we simply
     // remove the View operator.
-    case v @ View(_, _, child) =>
+    case View(_, _, child) =>
       child
-  }
-
-  /**
-   * Find the attribute that has the expected attribute name from an attribute list, the names
-   * are compared using conf.resolver.
-   * If the expected attribute is not found, throw an AnalysisException.
-   */
-  private def findAttributeByName(
-      name: String,
-      attrs: Seq[Attribute],
-      resolver: Resolver): Attribute = {
-    attrs.find { attr =>
-      resolver(attr.name, name)
-    }.getOrElse(throw new AnalysisException(
-      s"Attribute with name '$name' is not found in " +
-        s"'${attrs.map(_.name).mkString("(", ",", ")")}'"))
   }
 }
