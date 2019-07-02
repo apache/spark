@@ -90,3 +90,12 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
+if __name__ == "__main__":
+    from pyspark.sql.tests.test_pandas_udf_cogrouped_map import *
+
+    try:
+        import xmlrunner
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

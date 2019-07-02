@@ -373,6 +373,9 @@ class InterleavedArrowReader(object):
         batch2 = pa.read_record_batch(self._reader.read_next_message(),  self._schema2)
         return batch1, batch2
 
+    def next(self):
+        return self.__next__()
+
 
 class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     """
