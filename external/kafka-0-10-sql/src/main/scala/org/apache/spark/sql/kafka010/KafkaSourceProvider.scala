@@ -590,8 +590,10 @@ private[kafka010] object KafkaSourceProvider extends Logging {
    * Returns a unique batch consumer group (group.id), allowing the user to set the prefix of
    * the consumer group
    */
-  private[kafka010] def batchUniqueGroupId(): String = {
-    s"spark-kafka-relation-${UUID.randomUUID}"
+  private[kafka010] def batchUniqueGroupId(parameters: Map[String, String]): String = {
+    val groupIdPrefix = parameters
+      .getOrElse(GROUP_ID_PREFIX, "spark-kafka-relation")
+    s"${groupIdPrefix}-${UUID.randomUUID}"
   }
 
   /**

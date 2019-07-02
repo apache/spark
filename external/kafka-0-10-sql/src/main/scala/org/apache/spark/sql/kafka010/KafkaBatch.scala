@@ -47,7 +47,7 @@ private[kafka010] class KafkaBatch(
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = KafkaSourceProvider.batchUniqueGroupId()
+    val uniqueGroupId = KafkaSourceProvider.batchUniqueGroupId(sourceOptions)
 
     val kafkaOffsetReader = new KafkaOffsetReader(
       strategy,
