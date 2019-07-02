@@ -36,7 +36,7 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
-import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockFetcher}
+import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEndpointRef
@@ -115,13 +115,40 @@ private[spark] class NettyBlockTransferService(
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
+    doFetchBlocks(execId, blockIds, listener, () => {
+      val client = clientFactory.createClient(host, port)
+      new OneForOneShuffleBlockFetcher(
+        client, appId, execId, shuffleGenerationId, blockIds,
+        listener, transportConf, tempFileManager)
+    })
+  }
+
+  override def fetchDataBlocks(
+      host: String,
+      port: Int,
+      execId: String,
+      blockIds: Array[String],
+      listener: BlockFetchingListener,
+      tempFileManager: DownloadFileManager): Unit = {
+    logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
+    doFetchBlocks(execId, blockIds, listener, () => {
+      val client = clientFactory.createClient(host, port)
+      new OneForOneDataBlockFetcher(
+        client, appId, execId, blockIds,
+        listener, transportConf, tempFileManager)
+    })
+  }
+
+  private def doFetchBlocks(
+      execId: String,
+      blockIds: Array[String],
+      listener: BlockFetchingListener,
+      createBlockFetcher: () => OneForOneBlockFetcher): Unit = {
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
-          val client = clientFactory.createClient(host, port)
           try {
-            new OneForOneBlockFetcher(client, appId, execId, shuffleGenerationId, blockIds,
-              listener, transportConf, tempFileManager).start()
+            createBlockFetcher().start()
           } catch {
             case e: IOException =>
               Try {

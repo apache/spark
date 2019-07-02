@@ -1657,6 +1657,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
 
+    override def fetchDataBlocks(
+        host: String,
+        port: Int,
+        execId: String,
+        blockIds: Array[String],
+        listener: BlockFetchingListener,
+        tempFileManager: DownloadFileManager): Unit = {
+      listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
+    }
+
     override def close(): Unit = {}
 
     override def hostName: String = { "MockBlockTransferServiceHost" }

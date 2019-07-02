@@ -60,12 +60,16 @@ public class OneForOneBlockFetcherSuite {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
     blocks.put("shuffle_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+    int shuffleGenerationId = 1;
 
     BlockFetchingListener listener = fetchBlocks(
       blocks,
       blockIds,
-      new FetchShuffleBlocks("app-id", "exec-id", 0, -1, new int[] { 0 }, new int[][] {{ 0 }}),
-      conf);
+      new FetchShuffleBlocks(
+        "app-id", "exec-id", 0, shuffleGenerationId, new int[] { 0 }, new int[][] {{ 0 }}),
+      conf,
+      true,
+      shuffleGenerationId);
 
     verify(listener).onBlockFetchSuccess("shuffle_0_0_0", blocks.get("shuffle_0_0_0"));
   }
@@ -84,7 +88,9 @@ public class OneForOneBlockFetcherSuite {
         new HashMap<String, String>() {{
           put("spark.shuffle.useOldFetchProtocol", "true");
         }}
-      )));
+      )),
+      false,
+      -1);
 
     verify(listener).onBlockFetchSuccess("shuffle_0_0_0", blocks.get("shuffle_0_0_0"));
   }
@@ -102,7 +108,9 @@ public class OneForOneBlockFetcherSuite {
       blockIds,
       new FetchShuffleBlocks(
         "app-id", "exec-id", 0, -1, new int[] { 0 }, new int[][] {{ 0, 1, 2 }}),
-      conf);
+      conf,
+      true,
+      -1);
 
     for (int i = 0; i < 3; i ++) {
       verify(listener, times(1)).onBlockFetchSuccess(
@@ -122,7 +130,9 @@ public class OneForOneBlockFetcherSuite {
       blocks,
       blockIds,
       new OpenBlocks("app-id", "exec-id", blockIds),
-      conf);
+      conf,
+      false,
+      -1);
 
     for (int i = 0; i < 3; i ++) {
       verify(listener, times(1)).onBlockFetchSuccess("b" + i, blocks.get("b" + i));
@@ -141,7 +151,9 @@ public class OneForOneBlockFetcherSuite {
       blocks,
       blockIds,
       new OpenBlocks("app-id", "exec-id", blockIds),
-      conf);
+      conf,
+      false,
+      -1);
 
     // Each failure will cause a failure to be invoked in all remaining block fetches.
     verify(listener, times(1)).onBlockFetchSuccess("b0", blocks.get("b0"));
@@ -161,7 +173,9 @@ public class OneForOneBlockFetcherSuite {
       blocks,
       blockIds,
       new OpenBlocks("app-id", "exec-id", blockIds),
-      conf);
+      conf,
+      false,
+      -1);
 
     // We may call both success and failure for the same block.
     verify(listener, times(1)).onBlockFetchSuccess("b0", blocks.get("b0"));
@@ -177,7 +191,9 @@ public class OneForOneBlockFetcherSuite {
         Maps.newLinkedHashMap(),
         new String[] {},
         new OpenBlocks("app-id", "exec-id", new String[] {}),
-        conf);
+        conf,
+        false,
+        -1);
       fail();
     } catch (IllegalArgumentException e) {
       assertEquals("Zero-sized blockIds array", e.getMessage());
@@ -196,11 +212,19 @@ public class OneForOneBlockFetcherSuite {
       LinkedHashMap<String, ManagedBuffer> blocks,
       String[] blockIds,
       BlockTransferMessage expectMessage,
-      TransportConf transportConf) {
+      TransportConf transportConf,
+      boolean useShuffleBlockFetcher,
+      int shuffleGenerationId) {
     TransportClient client = mock(TransportClient.class);
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
-    OneForOneBlockFetcher fetcher =
-      new OneForOneBlockFetcher(client, "app-id", "exec-id", blockIds, listener, transportConf);
+    OneForOneBlockFetcher fetcher = null;
+    if (useShuffleBlockFetcher) {
+      fetcher = new OneForOneShuffleBlockFetcher(
+        client, "app-id", "exec-id", shuffleGenerationId, blockIds, listener, transportConf, null);
+    } else {
+      fetcher = new OneForOneDataBlockFetcher(
+        client, "app-id", "exec-id", blockIds, listener, transportConf, null);
+    }
 
     // Respond to the "OpenBlocks" message with an appropriate ShuffleStreamHandle with streamId 123
     doAnswer(invocationOnMock -> {

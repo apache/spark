@@ -90,6 +90,17 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   }
 
   @Override
+  public void fetchDataBlocks(
+      String host,
+      int port,
+      String execId,
+      String[] blockIds,
+      BlockFetchingListener listener,
+      DownloadFileManager downloadFileManager) {
+    doFetchBlocks(host, port, execId, -1, blockIds, listener, downloadFileManager, false);
+  }
+
+  @Override
   public void fetchBlocks(
       String host,
       int port,
@@ -98,15 +109,33 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       String[] blockIds,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager) {
+    doFetchBlocks(host, port, execId, shuffleGenerationId, blockIds, listener,
+        downloadFileManager, true);
+  }
+
+  private void doFetchBlocks(
+      String host,
+      int port,
+      String execId,
+      int shuffleGenerationId,
+      String[] blockIds,
+      BlockFetchingListener listener,
+      DownloadFileManager downloadFileManager,
+      boolean isShuffleBlocks) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
-          (blockIds1, listener1) -> {
-            TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId, shuffleGenerationId,
+        (blockIds1, listener1) -> {
+          TransportClient client = clientFactory.createClient(host, port);
+          if (isShuffleBlocks) {
+            new OneForOneShuffleBlockFetcher(client, appId, execId, shuffleGenerationId,
               blockIds1, listener1, conf, downloadFileManager).start();
-          };
+          } else {
+            new OneForOneDataBlockFetcher(client, appId, execId,
+              blockIds1, listener1, conf, downloadFileManager).start();
+          }
+        };
 
       int maxRetries = conf.maxIORetries();
       if (maxRetries > 0) {

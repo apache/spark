@@ -2712,9 +2712,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   private def constructIndeterminateStageRetryScenario(): (Int, Int) = {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
+
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
     val shuffleId1 = shuffleDep1.shuffleId
     val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+
     val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
     val shuffleId2 = shuffleDep2.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
@@ -2726,18 +2728,21 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       (Success, makeMapStatus("hostA", 2)),
       (Success, makeMapStatus("hostB", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
     // Finish the second shuffle map stage.
     complete(taskSets(1), Seq(
       (Success, makeMapStatus("hostC", 2)),
       (Success, makeMapStatus("hostD", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
     // The first task of the final stage failed with fetch failure
     runEvent(makeCompletionEvent(
       taskSets(2).tasks(0),
       FetchFailed(makeBlockManagerId("hostC"), shuffleId2, 0, 0, "ignored"),
       null))
+
     val failedStages = scheduler.failedStages.toSeq
-    assert(failedStages.length == 2)
+    assert(failedStages.map(_.id) == Seq(1, 2))
     // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
@@ -2746,6 +2751,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(failedStages.collect {
       case stage: ResultStage => stage
     }.head.findMissingPartitions() == Seq(0, 1))
+
     scheduler.resubmitFailedStages()
     (shuffleId1, shuffleId2)
   }
@@ -2758,13 +2764,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     init(conf)
 
     val (shuffleId1, _) = constructIndeterminateStageRetryScenario()
-    // The second task of the `shuffleMapRdd2` failed with fetch failure
+    // The first task of the `shuffleMapRdd2` failed with fetch failure
     runEvent(makeCompletionEvent(
-      taskSets(3).tasks(0),
+      taskSets(3).tasks(1),
       Success,
       makeMapStatus("hostC", 2)))
     runEvent(makeCompletionEvent(
-      taskSets(3).tasks(1),
+      taskSets(3).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0, 0, "ignored"),
       null))
 
@@ -2835,7 +2841,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     submit(finalRdd, Array(0, 1), properties = new Properties())
 
-    // Finish the first 3 shuffle map stages.
+    // Finish the first 2 shuffle map stages.
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 2)),
       (Success, makeMapStatus("hostB", 2))))

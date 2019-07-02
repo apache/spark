@@ -552,7 +552,9 @@ private[spark] class BlockManager(
       // to fetch shuffle blocks. After Spark 3.0, all shuffle block fetching will use new
       // protocol FetchShuffleBlocks and use getShuffleBlockData in BlockManager.
       // See more details in SPARK-27665.
-      shuffleManager.shuffleBlockResolver.getBlockData(-1, blockId.asInstanceOf[ShuffleBlockId])
+      val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
+      shuffleManager.shuffleBlockResolver.getBlockData(
+        shuffleBlockId.shuffleId, -1, shuffleBlockId.mapId, shuffleBlockId.reduceId)
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -576,8 +578,8 @@ private[spark] class BlockManager(
       shuffleGenerationId: Int,
       mapId: Int,
       reduceId: Int): ManagedBuffer = {
-    val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
-    shuffleManager.shuffleBlockResolver.getBlockData(shuffleGenerationId, shuffleBlockId)
+    shuffleManager.shuffleBlockResolver.getBlockData(
+      shuffleId, shuffleGenerationId, mapId, reduceId)
   }
 
   /**

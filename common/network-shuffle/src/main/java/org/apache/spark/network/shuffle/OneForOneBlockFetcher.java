@@ -19,11 +19,8 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 
-import com.google.common.primitives.Ints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,53 +31,43 @@ import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
-import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
-import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.util.TransportConf;
 
 /**
  * Simple wrapper on top of a TransportClient which interprets each chunk as a whole block, and
  * invokes the BlockFetchingListener appropriately. This class is agnostic to the actual RPC
- * handler, as long as there is a single "open blocks" message which returns a ShuffleStreamHandle,
+ * handler, as long as there is a single "open blocks" message which returns a StreamHandle,
  * and Java serialization is used.
  *
  * Note that this typically corresponds to a
  * {@link org.apache.spark.network.server.OneForOneStreamManager} on the server side.
  */
-public class OneForOneBlockFetcher {
+public abstract class OneForOneBlockFetcher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockFetcher.class);
 
   private final TransportClient client;
-  private final BlockTransferMessage message;
-  private final String[] blockIds;
+  protected final String appId;
+  protected final String execId;
+  protected final String[] blockIds;
   private final BlockFetchingListener listener;
   private final ChunkReceivedCallback chunkCallback;
-  private final TransportConf transportConf;
+  protected final TransportConf transportConf;
   private final DownloadFileManager downloadFileManager;
 
   private StreamHandle streamHandle = null;
 
-  public OneForOneBlockFetcher(
-    TransportClient client,
-    String appId,
-    String execId,
-    String[] blockIds,
-    BlockFetchingListener listener,
-    TransportConf transportConf) {
-    this(client, appId, execId, -1, blockIds, listener, transportConf, null);
-  }
-
-  public OneForOneBlockFetcher(
+  protected OneForOneBlockFetcher(
       TransportClient client,
       String appId,
       String execId,
-      int shuffleGenerationId,
       String[] blockIds,
       BlockFetchingListener listener,
       TransportConf transportConf,
       DownloadFileManager downloadFileManager) {
     this.client = client;
+    this.appId = appId;
+    this.execId = execId;
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
@@ -89,65 +76,12 @@ public class OneForOneBlockFetcher {
     if (blockIds.length == 0) {
       throw new IllegalArgumentException("Zero-sized blockIds array");
     }
-    if (!transportConf.useOldFetchProtocol() && isShuffleBlocks(blockIds)) {
-      this.message = createFetchShuffleBlocksMsg(appId, execId, shuffleGenerationId, blockIds);
-    } else {
-      this.message = new OpenBlocks(appId, execId, blockIds);
-    }
-  }
-
-  private boolean isShuffleBlocks(String[] blockIds) {
-    for (String blockId : blockIds) {
-      if (!blockId.startsWith("shuffle_")) {
-        return false;
-      }
-    }
-    return true;
   }
 
   /**
-   * Analyze the pass in blockIds and create FetchShuffleBlocks message.
-   * The blockIds has been sorted by mapId and reduceId. It's produced in
-   * org.apache.spark.MapOutputTracker.convertMapStatuses.
+   * Create the corresponding message for this fetcher.
    */
-  private FetchShuffleBlocks createFetchShuffleBlocksMsg(
-      String appId, String execId, int shuffleGenerationId, String[] blockIds) {
-    int shuffleId = splitBlockId(blockIds[0])[0];
-    HashMap<Integer, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
-    for (String blockId : blockIds) {
-      int[] blockIdParts = splitBlockId(blockId);
-      if (blockIdParts[0] != shuffleId) {
-        throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
-          ", got:" + blockId);
-      }
-      int mapId = blockIdParts[1];
-      if (!mapIdToReduceIds.containsKey(mapId)) {
-        mapIdToReduceIds.put(mapId, new ArrayList<>());
-      }
-      mapIdToReduceIds.get(mapId).add(blockIdParts[2]);
-    }
-    int[] mapIds = Ints.toArray(mapIdToReduceIds.keySet());
-    int[][] reduceIdArr = new int[mapIds.length][];
-    for (int i = 0; i < mapIds.length; i++) {
-      reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
-    }
-    return new FetchShuffleBlocks(
-      appId, execId, shuffleId, shuffleGenerationId, mapIds, reduceIdArr);
-  }
-
-  /** Split the shuffleBlockId and return shuffleId, mapId and reduceId. */
-  private int[] splitBlockId(String blockId) {
-    String[] blockIdParts = blockId.split("_");
-    if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
-      throw new IllegalArgumentException(
-        "Unexpected shuffle block id format: " + blockId);
-    }
-    return new int[] {
-      Integer.parseInt(blockIdParts[1]),
-      Integer.parseInt(blockIdParts[2]),
-      Integer.parseInt(blockIdParts[3])
-    };
-  }
+  public abstract BlockTransferMessage createBlockTransferMessage();
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
   private class ChunkCallback implements ChunkReceivedCallback {
@@ -171,7 +105,7 @@ public class OneForOneBlockFetcher {
    * {@link StreamHandle}. We will send all fetch requests immediately, without throttling.
    */
   public void start() {
-    client.sendRpc(message.toByteBuffer(), new RpcResponseCallback() {
+    client.sendRpc(createBlockTransferMessage().toByteBuffer(), new RpcResponseCallback() {
       @Override
       public void onSuccess(ByteBuffer response) {
         try {

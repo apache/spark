@@ -47,11 +47,10 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
 
       override def hostName: String = "localhost-unused"
 
-      override def fetchBlocks(
+      override def fetchDataBlocks(
           host: String,
           port: Int,
           execId: String,
-          shuffleGenerationId: Int,
           blockIds: Array[String],
           listener: BlockFetchingListener,
           tempFileManager: DownloadFileManager): Unit = {
@@ -91,6 +90,18 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
           classTag: ClassTag[_]): Future[Unit] = {
         // This method is unused in this test
         throw new UnsupportedOperationException("uploadBlock")
+      }
+
+      override def fetchBlocks(
+          host: String,
+          port: Int,
+          execId: String,
+          shuffleGenerationId: Int,
+          blockIds: Array[String],
+          listener: BlockFetchingListener,
+          tempFileManager: DownloadFileManager): Unit = {
+        // This method is unused in this test
+        throw new UnsupportedOperationException("fetchBlocks")
       }
     }
 

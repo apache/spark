@@ -48,6 +48,7 @@ import org.apache.spark.network.shuffle.BlockFetchingListener;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver;
 import org.apache.spark.network.shuffle.OneForOneBlockFetcher;
+import org.apache.spark.network.shuffle.OneForOneShuffleBlockFetcher;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
@@ -203,7 +204,8 @@ public class SaslIntegrationSuite {
 
       String[] blockIds = { "shuffle_0_1_2", "shuffle_0_3_4" };
       OneForOneBlockFetcher fetcher =
-          new OneForOneBlockFetcher(client1, "app-2", "0", blockIds, listener, conf);
+        new OneForOneShuffleBlockFetcher(
+          client1, "app-2", "0", -1, blockIds, listener, conf, null);
       fetcher.start();
       blockFetchLatch.await();
       checkSecurityException(exception.get());

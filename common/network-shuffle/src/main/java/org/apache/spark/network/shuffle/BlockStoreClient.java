@@ -56,7 +56,18 @@ public abstract class BlockStoreClient implements Closeable {
       DownloadFileManager downloadFileManager);
 
   /**
-   * Get the shuffle MetricsSet from BlockStoreClient, this will be used in MetricsSystem to
+   * Fetch a sequence of non-shuffle blocks from a remote node asynchronously.
+   */
+  public abstract void fetchDataBlocks(
+      String host,
+      int port,
+      String execId,
+      String[] blockIds,
+      BlockFetchingListener listener,
+      DownloadFileManager downloadFileManager);
+
+  /**
+   * Get the shuffle MetricsSet from ShuffleClient, this will be used in MetricsSystem to
    * get the Shuffle related metrics.
    */
   public MetricSet shuffleMetrics() {
