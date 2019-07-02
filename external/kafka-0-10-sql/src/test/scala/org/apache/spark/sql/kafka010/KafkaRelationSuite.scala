@@ -26,23 +26,29 @@ import scala.util.Random
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest {
+abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext with KafkaTest {
 
   import testImplicits._
 
   private val topicId = new AtomicInteger(0)
 
-  private var testUtils: KafkaTestUtils = _
+  protected var testUtils: KafkaTestUtils = _
 
-  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "kafka")
 
-  private def assignString(topic: String, partitions: Iterable[Int]): String = {
-    JsonUtils.partitions(partitions.map(p => new TopicPartition(topic, p)))
-  }
+  protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -61,7 +67,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     }
   }
 
-  private def createDF(
+  protected def createDF(
       topic: String,
       withOptions: Map[String, String] = Map.empty[String, String],
       brokerAddress: Option[String] = None) = {
@@ -76,7 +82,6 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     }
     df.load().selectExpr("CAST(value AS STRING)")
   }
-
 
   test("explicit earliest to latest offsets") {
     val topic = newTopic()
@@ -199,7 +204,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
           .read
           .format("kafka")
         options.foreach { case (k, v) => reader.option(k, v) }
-        reader.load()
+        reader.load().collect()
       }
       expectedMsgs.foreach { m =>
         assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
@@ -359,5 +364,35 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
       checkAnswer(df, (1 to 15).map(_.toString).toDF)
     }
+  }
+}
+
+class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "kafka")
+
+  test("V1 Source is used when set through SQLConf") {
+    val topic = newTopic()
+    val df = createDF(topic)
+    assert(df.logicalPlan.collect {
+      case LogicalRelation(_, _, _, _) => true
+    }.nonEmpty)
+  }
+}
+
+class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+
+  test("V2 Source is used when set through SQLConf") {
+    val topic = newTopic()
+    val df = createDF(topic)
+    assert(df.logicalPlan.collect {
+      case DataSourceV2Relation(_, _, _) => true
+    }.nonEmpty)
   }
 }
