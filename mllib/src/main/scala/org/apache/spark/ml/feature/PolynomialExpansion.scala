@@ -36,7 +36,19 @@ import org.apache.spark.sql.types.DataType
  * the fact that multiplication distributes over addition". Take a 2-variable feature vector
  * as an example: `(x, y)`, if we want to expand it with degree 2, then we get
  * `(x, x * x, y, x * y, y * y)`.
- */
+ *  
+ * To this was added :
+ * Polynomial Root expansion :
+ * For example, for Vector (x, y) and degree 3 we obtain : (x^(1/2), x^(1/3), y^(1/2), y^(1/3))
+ * The parsing is done with java.lang.Math.pow function, which does not allow negative basis when fractional power
+ *
+ * An exception is raised:
+ * If the first argument is finite and less than zero
+ * and if the second argument is finite and not an integer,
+ * (then the result is NaN)
+ * according to the documentation :
+ * <a href="https://docs.oracle.com/javase/8/docs/api/java/lang/Math.html#pow-double-double-></a>
+*/
 @Since("1.4.0")
 class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, PolynomialExpansion] with DefaultParamsWritable {
@@ -63,9 +75,25 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
   /** @group setParam */
   @Since("1.4.0")
   def setDegree(value: Int): this.type = set(degree, value)
+    
+  /**
+    Fraction degree (radical of degree n)
+   */
+  val degreeRoot = new IntParam(this, "degreeRoot", "the polynomial root degree to expand (>= 1)",
+    ParamValidators.gtEq(1))
+
+  setDefault(degreeRoot -> 1)
+
+  /** @group getParam */
+  @Since("1.4.0")
+  def getDegreeRoot: Int = $(degreeRoot)
+
+  /** @group setParam */
+  @Since("1.4.0")
+  def setDegreeRoot(value: Int): this.type = set(degreeRoot, value)  
 
   override protected def createTransformFunc: Vector => Vector = { v =>
-    PolynomialExpansion.expand(v, $(degree))
+    PolynomialExpansion.expand(v, $(degree), $(degreeRoot))
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
@@ -159,15 +187,70 @@ object PolynomialExpansion extends DefaultParamsReadable[PolynomialExpansion] {
     }
     curPolyIdx + getPolySize(lastFeatureIdx + 1, degree)
   }
+  
+  
+  /** Root degree : pow(X,1/n) */
+  @Since("1.6.0")
+  def expandDenseRoot(values: Array[Double], degreeRoot: Int): Array[Double] = {
+    val n = values.length
+    val polyValues = new Array[Double](n * (degreeRoot-1))
+    var j:Int = 0
+    for (v <- values) {
+      var i:Int = 0
+      while (i<degreeRoot-1){
+        val resVal = Math.pow(v,1.toFloat/(degreeRoot-i))
+        if (resVal.isNaN) {
+          polyValues(j*(degreeRoot-1) + i) = 0.0
+        } else {
+          polyValues(j*(degreeRoot-1) + i) = resVal
+        }
+        i = i+1
+      }
+      j = j+1
+    }
 
+    polyValues
+  }
+
+  @Since("1.6.0")
+  def expandSparseRoot(values: Array[Double], degreeRoot: Int): (Array[Double],Array[Int]) = {
+    val n = values.length
+    val polyValues = new Array[Double](n * (degreeRoot-1))
+    var curPolyIdx:Int = 0
+    val indices = new Array[Int](n * (degreeRoot-1))
+    var count = 0
+    var j:Int = 0
+    for (v <- values) {
+      var i:Int = 0
+      while (i < degreeRoot-1){
+        curPolyIdx = j*(degreeRoot-1) + i
+        curPolyIdx = count
+        indices(curPolyIdx) = curPolyIdx
+        val resVal = Math.pow(v,1.toFloat/(degreeRoot-i))
+        if (resVal.isNaN) {
+          polyValues(j*(degreeRoot-1) + i) = 0.0
+        } else {
+          polyValues(j*(degreeRoot-1) + i) = resVal
+        }
+        i = i+1
+        count = count+1
+      }
+      j = j+1
+    }
+    (polyValues,indices)
+  }
+
+  @Since("1.6.0")
   private def expand(dv: DenseVector, degree: Int): DenseVector = {
     val n = dv.size
     val polySize = getPolySize(n, degree)
     val polyValues = new Array[Double](polySize - 1)
     expandDense(dv.values, n - 1, degree, 1.0, polyValues, -1)
-    new DenseVector(polyValues)
+    val polyValuesRoot:Array[Double] = expandDenseRoot(dv.values, degreeRoot)
+    new DenseVector(polyValues ++ polyValuesRoot)
   }
 
+  @Since("1.6.0")
   private def expand(sv: SparseVector, degree: Int): SparseVector = {
     val polySize = getPolySize(sv.size, degree)
     val nnz = sv.values.length
@@ -178,13 +261,24 @@ object PolynomialExpansion extends DefaultParamsReadable[PolynomialExpansion] {
     polyValues.sizeHint(nnzPolySize - 1)
     expandSparse(
       sv.indices, sv.values, nnz - 1, sv.size - 1, degree, 1.0, polyIndices, polyValues, -1)
-    new SparseVector(polySize - 1, polyIndices.result(), polyValues.result())
+    
+    // Root exponent (fractional) : x ^ (1/exp)
+    val npv = expandSparseRoot(sv.values,degreeRoot)
+    val indicesRoot = npv._2
+    val polyValueRoot = npv._1
+
+    for (i <- polySize until polySize+indicesRoot.length){
+      polyIndices += i
+    }
+    new SparseVector(polySize - 1 + indicesRoot.length, polyIndices.result(), polyValues.result() ++ polyValueRoot)
   }
 
-  private[feature] def expand(v: Vector, degree: Int): Vector = {
+  @Since("1.6.0")
+  private[feature] def expand(v: Vector, degree: Int, degreeRoot:Int): Vector = {
     v match {
-      case dv: DenseVector => expand(dv, degree)
-      case sv: SparseVector => expand(sv, degree)
+      case `v` if v.toArray.exists(_<0) => throw new IllegalArgumentException("Cannot extract root from  negative basis !")
+      case dv: DenseVector => expand(dv, degree, degreeRoot)
+      case sv: SparseVector => expand(sv, degree, degreeRoot)
       case _ => throw new IllegalArgumentException
     }
   }
