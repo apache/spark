@@ -73,6 +73,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         CollapseRepartition,
         CollapseProject,
         CollapseWindow,
+        CombineFilters,
         CombineLimits,
         CombineUnions,
         // Constant folding and strength reduction
