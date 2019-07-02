@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.command.InsertIntoDataSourceDirCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -188,6 +189,15 @@ abstract class BaseSessionStateBuilder(
         customCheckRules
 
     override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
+
+    override def checkAnalysis(plan: LogicalPlan): Unit = {
+      // We should check it's innerChildren for InsertIntoDataSourceDirCommand
+      val planToCheck = plan match {
+        case e: InsertIntoDataSourceDirCommand => e.query
+        case _ => plan
+      }
+      super.checkAnalysis(planToCheck)
+    }
   }
 
   /**

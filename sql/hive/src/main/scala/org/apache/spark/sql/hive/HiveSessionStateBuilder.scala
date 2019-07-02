@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.command.InsertIntoDataSourceDirCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.hive.execution.{InsertIntoHiveDirCommand, InsertIntoHiveTable}
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
@@ -98,12 +97,9 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
 
     override def checkAnalysis(plan: LogicalPlan): Unit = {
-      // We should check it's innerChildren for Command like logical plan
-      // (e.g. InsertIntoDataSourceDirCommand)
+      // We should check it's innerChildren for InsertIntoDataSourceDirCommand
       val planToCheck = plan match {
         case e: InsertIntoDataSourceDirCommand => e.query
-        case e: InsertIntoHiveDirCommand => e.query
-        case e: InsertIntoHiveTable => e.query
         case _ => plan
       }
       super.checkAnalysis(planToCheck)
