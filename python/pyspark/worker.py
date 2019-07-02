@@ -372,9 +372,9 @@ def read_udfs(pickleSer, infile, eval_type):
         arg_offsets, udf = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
         udfs['f'] = udf
-        split_offset = arg_offsets[0] + 1
-        arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
-        arg1 = ["a[%d]" % o for o in arg_offsets[split_offset:]]
+        parsed_offsets = parse_grouped_arg_offsets(arg_offsets)
+        arg0 = ["a[%d]" % o for o in parsed_offsets[0][0]]
+        arg1 = ["a[%d]" % o for o in parsed_offsets[0][1]]
         mapper_str = "lambda a: f([%s], [%s])" % (", ".join(arg0), ", ".join(arg1))
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because cogrouped map doesn't
