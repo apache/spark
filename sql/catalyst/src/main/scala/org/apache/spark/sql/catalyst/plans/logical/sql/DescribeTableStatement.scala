@@ -24,6 +24,6 @@ import org.apache.spark.sql.catalyst.plans.DescribeTableSchemas
 case class DescribeTableStatement(
     tableName: Seq[String],
     partitionSpec: TablePartitionSpec,
-    extended: Boolean) extends ParsedStatement {
+    isExtended: Boolean) extends ParsedStatement {
   override def output: Seq[Attribute] = DescribeTableSchemas.DESCRIBE_TABLE_ATTRIBUTES
 }
