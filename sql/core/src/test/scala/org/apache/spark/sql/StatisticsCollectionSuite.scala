@@ -642,12 +642,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
           val stagingFileSize = staging.length()
           val metadataFileSize = metadata.length()
-          val tableLocationSize = new File(new URI(tableLocation)).listFiles()
-            .filter(!_.getName.endsWith(".crc")).map(_.length()).sum
+          val tableLocationSize = getDataSize(new File(new URI(tableLocation)))
 
           val stats = checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
           assert(stats.get.sizeInBytes === tableLocationSize - stagingFileSize - metadataFileSize)
-          assert(stats.get.sizeInBytes === getLocalDirSize(new File(new URI(tableLocation))))
         }
       }
     }
