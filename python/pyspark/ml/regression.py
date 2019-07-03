@@ -610,27 +610,11 @@ class TreeEnsembleParams(DecisionTreeParams):
         super(TreeEnsembleParams, self).__init__()
 
     @since("1.4.0")
-    def setSubsamplingRate(self, value):
-        """
-        Sets the value of :py:attr:`subsamplingRate`.
-        """
-        return self._set(subsamplingRate=value)
-
-    @since("1.4.0")
     def getSubsamplingRate(self):
         """
         Gets the value of subsamplingRate or its default value.
         """
         return self.getOrDefault(self.subsamplingRate)
-
-    @since("1.4.0")
-    def setFeatureSubsetStrategy(self, value):
-        """
-        Sets the value of :py:attr:`featureSubsetStrategy`.
-
-        .. note:: Deprecated in 2.4.0 and will be removed in 3.0.0.
-        """
-        return self._set(featureSubsetStrategy=value)
 
     @since("1.4.0")
     def getFeatureSubsetStrategy(self):
@@ -1036,6 +1020,13 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def _create_model(self, java_model):
         return RandomForestRegressionModel(java_model)
 
+    @since("1.4.0")
+    def setSubsamplingRate(self, value):
+        """
+        Sets the value of :py:attr:`subsamplingRate`.
+        """
+        return self._set(subsamplingRate=value)
+
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
         """
@@ -1186,6 +1177,13 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         Sets the value of :py:attr:`lossType`.
         """
         return self._set(lossType=value)
+
+    @since("1.4.0")
+    def setSubsamplingRate(self, value):
+        """
+        Sets the value of :py:attr:`subsamplingRate`.
+        """
+        return self._set(subsamplingRate=value)
 
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
