@@ -38,8 +38,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
       val metaData = statement.getConnection.getMetaData
 
-      checkResult(metaData.getSchemas(null, "%"),
-        Seq("db1", "db2", "default"))
+      checkResult(metaData.getSchemas(null, "%"), Seq("db1", "db2", "default", "global_temp"))
       checkResult(metaData.getSchemas(null, "db1"), Seq("db1"))
       checkResult(metaData.getSchemas(null, "db_not_exist"), Seq.empty)
       checkResult(metaData.getSchemas(null, "db*"), Seq("db1", "db2"))
@@ -68,7 +67,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       val metaData = statement.getConnection.getMetaData
 
       checkResult(metaData.getTables(null, "%", "%", null),
-        Seq("table1", "table2", "view1"))
+        Seq("table1", "table2", "view1", "view_global_temp_1", "view_temp_1"))
 
       checkResult(metaData.getTables(null, "%", "table1", null), Seq("table1"))
 
@@ -78,10 +77,19 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         Seq("table1", "table2"))
 
       checkResult(metaData.getTables(null, "%", "%", Array("VIEW")),
-        Seq("view1"))
+        Seq("view1", "view_global_temp_1", "view_temp_1"))
+
+      checkResult(metaData.getTables(null, "%", "view_global_temp_1", null),
+        Seq("view_global_temp_1"))
+
+      checkResult(metaData.getTables(null, "%", "view_temp_1", null),
+        Seq("view_temp_1"))
 
       checkResult(metaData.getTables(null, "%", "%", Array("TABLE", "VIEW")),
-        Seq("table1", "table2", "view1"))
+        Seq("table1", "table2", "view1", "view_global_temp_1", "view_temp_1"))
+
+      checkResult(metaData.getTables(null, "%", "table_not_exist", Array("TABLE", "VIEW")),
+        Seq.empty)
     }
   }
 
@@ -119,7 +127,9 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
           ("table1", "val", "12", "STRING", "String column"),
           ("table2", "key", "4", "INT", ""),
           ("table2", "val", "3", "DECIMAL(10,0)", "Decimal column"),
-          ("view1", "key", "4", "INT", "Int column")))
+          ("view1", "key", "4", "INT", "Int column"),
+          ("view_global_temp_1", "col2", "4", "INT", ""),
+          ("view_temp_1", "col2", "4", "INT", "")))
 
       checkResult(metaData.getColumns(null, "%", "table1", null),
         Seq(
@@ -128,6 +138,30 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
       checkResult(metaData.getColumns(null, "%", "table1", "key"),
         Seq(("table1", "key", "4", "INT", "Int column")))
+
+      checkResult(metaData.getColumns(null, "%", "view%", null),
+        Seq(
+          ("view1", "key", "4", "INT", "Int column"),
+          ("view_global_temp_1", "col2", "4", "INT", ""),
+          ("view_temp_1", "col2", "4", "INT", "")))
+
+      checkResult(metaData.getColumns(null, "%", "view_global_temp_1", null),
+        Seq(("view_global_temp_1", "col2", "4", "INT", "")))
+
+      checkResult(metaData.getColumns(null, "%", "view_temp_1", null),
+        Seq(("view_temp_1", "col2", "4", "INT", "")))
+
+      checkResult(metaData.getColumns(null, "%", "view_temp_1", "col2"),
+        Seq(("view_temp_1", "col2", "4", "INT", "")))
+
+      checkResult(metaData.getColumns(null, "default", "%", null),
+        Seq(
+          ("table1", "key", "4", "INT", "Int column"),
+          ("table1", "val", "12", "STRING", "String column"),
+          ("table2", "key", "4", "INT", ""),
+          ("table2", "val", "3", "DECIMAL(10,0)", "Decimal column"),
+          ("view1", "key", "4", "INT", "Int column"),
+          ("view_temp_1", "col2", "4", "INT", "")))
 
       checkResult(metaData.getColumns(null, "%", "table_not_exist", null), Seq.empty)
     }
