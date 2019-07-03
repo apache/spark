@@ -30,13 +30,12 @@ private object MsSqlServerDialect extends JdbcDialect {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
       Option(StringType)
     } else {
-      val answer = sqlType match {
-        case java.sql.Types.TINYINT  => Option(ByteType)
-        case java.sql.Types.SMALLINT => Option(ShortType)
-        case java.sql.Types.REAL     => Option(FloatType)
-        case _ => None
+        sqlType match {
+          case java.sql.Types.TINYINT => Some(ByteType)
+          case java.sql.Types.SMALLINT => Some(ShortType)
+          case java.sql.Types.REAL => Some(FloatType)
+          case _ => None
       }
-      answer
     }
   }
 
@@ -45,8 +44,8 @@ private object MsSqlServerDialect extends JdbcDialect {
     case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
-    case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
-    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ByteType => Some(JdbcType("TINYINT", java.sql.Types.TINYINT))
+    case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case _ => None
   }
 
