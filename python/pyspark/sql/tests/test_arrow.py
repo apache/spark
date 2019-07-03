@@ -271,7 +271,7 @@ class ArrowTests(ReusedSQLTestCase):
         fields[0], fields[1] = fields[1], fields[0]  # swap str with int
         wrong_schema = StructType(fields)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "integer.*required.*got.*str"):
+            with self.assertRaisesRegexp(Exception, "integer.*required"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
