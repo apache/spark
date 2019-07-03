@@ -1389,18 +1389,9 @@ private[spark] object Utils extends Logging {
         originalThrowable = cause
         try {
           logError("Aborting task", originalThrowable)
-<<<<<<< HEAD
-          val taskContext = TaskContext.get()
-          if (taskContext != null) {
-            taskContext.markTaskFailed(originalThrowable)
-          }
-||||||| merged common ancestors
-          TaskContext.get().markTaskFailed(originalThrowable)
-=======
           if (TaskContext.get() != null) {
             TaskContext.get().markTaskFailed(originalThrowable)
           }
->>>>>>> origin/master
           catchBlock
         } catch {
           case t: Throwable =>
