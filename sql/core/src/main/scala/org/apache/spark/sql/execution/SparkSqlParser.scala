@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -336,8 +337,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       if (ctx.partitionSpec != null) {
         throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
       } else {
-        DescribeColumnCommand(
-          visitTableIdentifier(ctx.tableIdentifier),
+        DescribeColumnStatement(
+          visitMultipartIdentifier(ctx.multipartIdentifier()),
           ctx.describeColName.nameParts.asScala.map(_.getText),
           isExtended)
       }
@@ -352,8 +353,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       } else {
         Map.empty[String, String]
       }
-      DescribeTableCommand(
-        visitTableIdentifier(ctx.tableIdentifier),
+      DescribeTableStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
         partitionSpec,
         isExtended)
     }
