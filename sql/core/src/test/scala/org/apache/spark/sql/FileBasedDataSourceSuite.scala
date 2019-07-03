@@ -662,15 +662,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         withTempDir { dir =>
           dir.delete()
           spark.range(1000).write.orc(dir.toString)
-          // ignore hidden files
-          val allFiles = dir.listFiles(new FilenameFilter {
-            override def accept(dir: File, name: String): Boolean = {
-              !name.startsWith(".") && !name.startsWith("_")
-            }
-          })
-          val totalSize = allFiles.map(_.length()).sum
           val df = spark.read.orc(dir.toString)
-          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(totalSize))
+          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
         }
       }
     }

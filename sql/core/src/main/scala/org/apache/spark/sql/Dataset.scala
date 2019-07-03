@@ -26,11 +26,11 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
-import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
+import org.apache.spark.api.python.{PythonEvalType, PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
@@ -70,7 +69,7 @@ private[sql] object Dataset {
     // do not do this check in that case. this check can be expensive since it requires running
     // the whole [[Analyzer]] to resolve the deserializer
     if (dataset.exprEnc.clsTag.runtimeClass != classOf[Row]) {
-      dataset.deserializer
+      dataset.resolvedEnc
     }
     dataset
   }
@@ -217,10 +216,11 @@ class Dataset[T] private[sql](
    */
   private[sql] implicit val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
 
-  // The deserializer expression which can be used to build a projection and turn rows to objects
-  // of type T, after collecting rows to the driver side.
-  private lazy val deserializer =
-    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer).deserializer
+  // The resolved `ExpressionEncoder` which can be used to turn rows to objects of type T, after
+  // collecting rows to the driver side.
+  private lazy val resolvedEnc = {
+    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
+  }
 
   private implicit def classTag = exprEnc.clsTag
 
@@ -2644,6 +2644,25 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Applies a Scalar iterator Pandas UDF to each partition. The user-defined function
+   * defines a transformation: `iter(pandas.DataFrame)` -> `iter(pandas.DataFrame)`.
+   * Each partition is each iterator consisting of DataFrames as batches.
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def mapPartitionsInPandas(f: PythonUDF): DataFrame = {
+    Dataset.ofRows(
+      sparkSession,
+      MapPartitionsInPandas(
+        // Here, the evalType is SQL_SCALAR_PANDAS_ITER_UDF since we share the
+        // same Pandas type. To avoid conflicts, it sets SQL_MAP_PANDAS_ITER_UDF here.
+        f.copy(evalType = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF),
+        f.dataType.asInstanceOf[StructType].toAttributes,
+        logicalPlan))
+  }
+
+  /**
    * :: Experimental ::
    * (Scala-specific)
    * Returns a new Dataset by first applying a function to all elements of this Dataset,
@@ -2776,15 +2795,9 @@ class Dataset[T] private[sql](
    */
   def toLocalIterator(): java.util.Iterator[T] = {
     withAction("toLocalIterator", queryExecution) { plan =>
-      // This projection writes output to a `InternalRow`, which means applying this projection is
-      // not thread-safe. Here we create the projection inside this method to make `Dataset`
-      // thread-safe.
-      val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
-      plan.executeToIterator().map { row =>
-        // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
-        // parameter of its `get` method, so it's safe to use null here.
-        objProj(row).get(0, null).asInstanceOf[T]
-      }.asJava
+      // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
+      val enc = resolvedEnc.copy()
+      plan.executeToIterator().map(enc.fromRow).asJava
     }
   }
 
@@ -3321,34 +3334,24 @@ class Dataset[T] private[sql](
             }
           }
 
-        var sparkException: Option[SparkException] = None
-        try {
+        Utils.tryWithSafeFinally {
           val arrowBatchRdd = toArrowBatchRdd(plan)
           sparkSession.sparkContext.runJob(
             arrowBatchRdd,
             (it: Iterator[Array[Byte]]) => it.toArray,
             handlePartitionBatches)
-        } catch {
-          case e: SparkException =>
-            sparkException = Some(e)
-        }
+        } {
+          // After processing all partitions, end the batch stream
+          batchWriter.end()
 
-        // After processing all partitions, end the batch stream
-        batchWriter.end()
-        sparkException match {
-          case Some(exception) =>
-            // Signal failure and write error message
-            out.writeInt(-1)
-            PythonRDD.writeUTF(exception.getMessage, out)
-          case None =>
-            // Write batch order indices
-            out.writeInt(batchOrder.length)
-            // Sort by (index of partition, batch index in that partition) tuple to get the
-            // overall_batch_index from 0 to N-1 batches, which can be used to put the
-            // transferred batches in the correct order
-            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
-              out.writeInt(overallBatchIndex)
-            }
+          // Write batch order indices
+          out.writeInt(batchOrder.length)
+          // Sort by (index of partition, batch index in that partition) tuple to get the
+          // overall_batch_index from 0 to N-1 batches, which can be used to put the
+          // transferred batches in the correct order
+          batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overallBatchIndex) =>
+            out.writeInt(overallBatchIndex)
+          }
         }
       }
     }
@@ -3403,14 +3406,9 @@ class Dataset[T] private[sql](
    * Collect all elements from a spark plan.
    */
   private def collectFromPlan(plan: SparkPlan): Array[T] = {
-    // This projection writes output to a `InternalRow`, which means applying this projection is not
-    // thread-safe. Here we create the projection inside this method to make `Dataset` thread-safe.
-    val objProj = GenerateSafeProjection.generate(deserializer :: Nil)
-    plan.executeCollect().map { row =>
-      // The row returned by SafeProjection is `SpecificInternalRow`, which ignore the data type
-      // parameter of its `get` method, so it's safe to use null here.
-      objProj(row).get(0, null).asInstanceOf[T]
-    }
+    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
+    val enc = resolvedEnc.copy()
+    plan.executeCollect().map(enc.fromRow)
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {

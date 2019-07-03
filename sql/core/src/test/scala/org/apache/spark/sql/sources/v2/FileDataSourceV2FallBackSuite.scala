@@ -17,17 +17,21 @@
 package org.apache.spark.sql.sources.v2
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.execution.datasources.FileFormat
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.{FileSourceScanExec, QueryExecution}
+import org.apache.spark.sql.execution.datasources.{FileFormat, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 
 class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
@@ -167,6 +171,48 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
           df.write.format(dummyParquetWriterV2).save(path)
         }
         assert(exception.message.equals("Dummy file writer"))
+      }
+    }
+  }
+
+  test("Fallback Parquet V2 to V1") {
+    Seq("parquet", classOf[ParquetDataSourceV2].getCanonicalName).foreach { format =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> format,
+        SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> format) {
+        val commands = ArrayBuffer.empty[(String, LogicalPlan)]
+        val exceptions = ArrayBuffer.empty[(String, Exception)]
+        val listener = new QueryExecutionListener {
+          override def onFailure(
+              funcName: String,
+              qe: QueryExecution,
+              exception: Exception): Unit = {
+            exceptions += funcName -> exception
+          }
+
+          override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+            commands += funcName -> qe.logical
+          }
+        }
+        spark.listenerManager.register(listener)
+
+        try {
+          withTempPath { path =>
+            val inputData = spark.range(10)
+            inputData.write.format(format).save(path.getCanonicalPath)
+            sparkContext.listenerBus.waitUntilEmpty(1000)
+            assert(commands.length == 1)
+            assert(commands.head._1 == "save")
+            assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+            assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+              .fileFormat.isInstanceOf[ParquetFileFormat])
+            val df = spark.read.format(format).load(path.getCanonicalPath)
+            checkAnswer(df, inputData.toDF())
+            assert(
+              df.queryExecution.executedPlan.find(_.isInstanceOf[FileSourceScanExec]).isDefined)
+          }
+        } finally {
+          spark.listenerManager.unregister(listener)
+        }
       }
     }
   }

@@ -1422,6 +1422,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a Overlay expression.
+   */
+  override def visitOverlay(ctx: OverlayContext): Expression = withOrigin(ctx) {
+    val input = expression(ctx.input)
+    val replace = expression(ctx.replace)
+    val position = expression(ctx.position)
+    val lengthOpt = Option(ctx.length).map(expression)
+    lengthOpt match {
+      case Some(length) => Overlay(input, replace, position, length)
+      case None => new Overlay(input, replace, position)
+    }
+  }
+
+  /**
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {

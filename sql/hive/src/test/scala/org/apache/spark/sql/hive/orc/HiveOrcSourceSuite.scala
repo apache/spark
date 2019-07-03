@@ -166,4 +166,8 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-11412 read and merge orc schemas in parallel") {
+    testMergeSchemasInParallel(OrcFileOperator.readOrcSchemasInParallel)
+  }
 }

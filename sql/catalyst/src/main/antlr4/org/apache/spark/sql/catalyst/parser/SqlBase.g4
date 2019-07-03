@@ -717,6 +717,8 @@ primaryExpression
       ((FOR | ',') len=valueExpression)? ')'                                                   #substring
     | TRIM '(' trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
        FROM srcStr=valueExpression ')'                                                         #trim
+    | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
+      FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
     ;
 
 constant
@@ -1014,12 +1016,14 @@ ansiNonReserved
     | OUT
     | OUTPUTFORMAT
     | OVER
+    | OVERLAY
     | OVERWRITE
     | PARTITION
     | PARTITIONED
     | PARTITIONS
     | PERCENTLIT
     | PIVOT
+    | PLACING
     | POSITION
     | PRECEDING
     | PRINCIPALS
@@ -1265,12 +1269,14 @@ nonReserved
     | OUTPUTFORMAT
     | OVER
     | OVERLAPS
+    | OVERLAY
     | OVERWRITE
     | PARTITION
     | PARTITIONED
     | PARTITIONS
     | PERCENTLIT
     | PIVOT
+    | PLACING
     | POSITION
     | PRECEDING
     | PRIMARY
@@ -1521,12 +1527,14 @@ OUTER: 'OUTER';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
 OVER: 'OVER';
 OVERLAPS: 'OVERLAPS';
+OVERLAY: 'OVERLAY';
 OVERWRITE: 'OVERWRITE';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';
 PERCENTLIT: 'PERCENT';
 PIVOT: 'PIVOT';
+PLACING: 'PLACING';
 POSITION: 'POSITION';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
