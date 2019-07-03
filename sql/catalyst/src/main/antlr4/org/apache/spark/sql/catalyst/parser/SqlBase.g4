@@ -278,7 +278,7 @@ locationSpec
     ;
 
 query
-    : ctes? queryNoWith
+    : ctes? queryTerm queryOrganization
     ;
 
 insertInto
@@ -378,10 +378,6 @@ resource
 dmlStatementNoWith
     : insertInto queryTerm queryOrganization                                       #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
-    ;
-
-queryNoWith
-    : queryTerm queryOrganization
     ;
 
 queryOrganization
