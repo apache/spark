@@ -1559,6 +1559,24 @@ object functions {
    */
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
+    /**
+   * @param columnName hyperbolic angle
+   * @return inverse hyperbolic cosine of the given value
+   *
+   * @group math_funcs
+   * @since 3.0.0
+   */
+  def acosh(columnName: String): Column = acosh(Column(columnName))
+
+   /**
+    * @param e hyperbolic angle
+    * @return inverse hyperbolic sine of the given value
+    *
+    * @group math_funcs
+    * @since 3.0.0
+    */
+  def acosh(e: Column): Column = withExpr { Acosh(e.expr) }
+
   /**
    * Computes the exponential of the given value.
    *
@@ -2023,11 +2041,29 @@ object functions {
 
   /**
    * @param columnName hyperbolic angle
-   * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+   * @return inverse hyperbolic sine of the given value
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 3.0.0
    */
+  def asinh(columnName: String): Column = asinh(Column(columnName))
+
+   /**
+    * @param e hyperbolic angle
+    * @return inverse hyperbolic sine of the given value
+    *
+    * @group math_funcs
+    * @since 3.0.0
+    */
+  def asinh(e: Column): Column = withExpr { Asinh(e.expr) }
+
+   /**
+    * @param columnName hyperbolic angle
+    * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+    *
+    * @group math_funcs
+    * @since 1.4.0
+    */
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
@@ -2065,6 +2101,24 @@ object functions {
    * @since 1.4.0
    */
   def tanh(columnName: String): Column = tanh(Column(columnName))
+
+  /**
+   * @param columnName hyperbolic angle
+   * @return inverse hyperbolic tangent of the given value
+   *
+   * @group math_funcs
+   * @since 3.0.0
+   */
+  def atanh(columnName: String): Column = atanh(Column(columnName))
+
+  /**
+   * @param e hyperbolic angle
+   * @return inverse hyperbolic tangent of the given value
+   *
+   * @group math_funcs
+   * @since 3.0.0
+   */
+  def atanh(e: Column): Column = withExpr { Atanh(e.expr) }
 
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.

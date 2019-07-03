@@ -187,6 +187,15 @@ _functions_2_4 = {
                        ' column name, and null values appear after non-null values',
 }
 
+_functions_3_0_over_column = {
+    'asinh': """:param col: hyperbolic angle
+           :return: inverse hyperbolic sine of the given value""",
+    'acosh': """:param col: hyperbolic angle
+           :return: inverse hyperbolic cosine of the given value""",
+    'atanh': """:param col: hyperbolic angle
+           :return: invere hyperbolic tangent of the given value""",
+}
+
 _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
@@ -307,6 +316,8 @@ for _name, _message in _functions_deprecated.items():
     globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
 for _name, _doc in _functions_2_4.items():
     globals()[_name] = since(2.4)(_create_function(_name, _doc))
+for _name, _doc in _functions_3_0_over_column.items():
+    globals()[_name] = since(3.0)(_create_function(_name, _doc))
 del _name, _doc
 
 

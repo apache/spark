@@ -685,6 +685,19 @@ setMethod("cosh",
             column(jc)
           })
 
+#' @details
+#' \code{acosh}: Returns inverse hyperbolic cosine of the given value
+#'
+#' @rdname column_math_functions
+#' @aliases cosh cosh,Column-method
+#' @note cosh since 3.0.0
+setMethod("acosh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "acosh", x@jc)
+            column(jc)
+          })
+
 #' Returns the number of items in a group
 #'
 #' This can be used as a column aggregate function with \code{Column} as input,
@@ -1513,6 +1526,19 @@ setMethod("sinh",
           })
 
 #' @details
+#' \code{asinh}: Returns inverse hyperbolic sine of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases asinh asinh,Column-method
+#' @note asinh since 3.0.0
+setMethod("asinh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "asinh", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{skewness}: Returns the skewness of the values in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1691,6 +1717,19 @@ setMethod("tanh",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "tanh", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{atanh}: Returns the inverse hyperbolic tangent of the given value
+#'
+#' @rdname column_math_functions
+#' @aliases atanh atanh,Column-method
+#' @note atanh since 3.0.0
+setMethod("atanh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "atanh", x@jc)
             column(jc)
           })
 
