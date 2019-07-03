@@ -616,7 +616,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-25691: AliasViewChild with different nullabilities") {
     object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
-      val batches = Batch("View", Once, AliasViewChild(conf), EliminateView) :: Nil
+      val batches = Batch("View", Once, EliminateView) :: Nil
     }
     val relation = LocalRelation('a.int.notNull, 'b.string)
     val view = View(CatalogTable(
