@@ -2227,12 +2227,9 @@ class DataFrame(object):
         """
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-                or udf.evalType != PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+                or udf.evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
             raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "SCALAR_ITER.")
-
-        if not isinstance(udf.returnType, StructType):
-            raise ValueError("The returnType of the pandas_udf must be a StructType")
+                             "MAP_ITER.")
 
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.mapPartitionsInPandas(udf_column._jc.expr())
