@@ -21,31 +21,81 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.scalatest.PrivateMethodTester
+import org.mockito.Mockito.{mock, when}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.sql.sources.v2.reader.Scan
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
+class KafkaSourceProviderSuite
+  extends SparkFunSuite
+  with BeforeAndAfterEach
+  with PrivateMethodTester {
+
   private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
+  private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
+
+  override protected def afterEach(): Unit = {
+    SparkEnv.set(null)
+  }
+
+  test("micro-batch mode - options should be handled as case-insensitive") {
+    def verifyFieldsInMicroBatchStream(
+        options: CaseInsensitiveStringMap,
+        expectedPollTimeoutMs: Long,
+        expectedMaxOffsetsPerTrigger: Option[Long]): Unit = {
+      // KafkaMicroBatchStream reads Spark conf from SparkEnv for default value
+      // hence we set mock SparkEnv here before creating KafkaMicroBatchStream
+      val sparkEnv = mock(classOf[SparkEnv])
+      when(sparkEnv.conf).thenReturn(new SparkConf())
+      SparkEnv.set(sparkEnv)
+
+      val scan = getKafkaDataSourceScan(options)
+      val stream = scan.toMicroBatchStream("dummy").asInstanceOf[KafkaMicroBatchStream]
+
+      assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
+      assert(expectedMaxOffsetsPerTrigger === getField(stream, maxOffsetsPerTriggerMethod))
+    }
+
+    // upper-case
+    val expectedValue = 1000L
+    val mapWithUppercase = buildKafkaSourceCaseInsensitiveStringMap(
+      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toUpperCase(Locale.ROOT) -> expectedValue.toString,
+      KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER.toUpperCase(Locale.ROOT) -> expectedValue.toString
+    )
+    verifyFieldsInMicroBatchStream(mapWithUppercase, expectedValue, Some(expectedValue))
+
+    // lower-case
+    val mapWithLowercase = buildKafkaSourceCaseInsensitiveStringMap(
+      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toLowerCase(Locale.ROOT) -> expectedValue.toString,
+      KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER.toLowerCase(Locale.ROOT) -> expectedValue.toString
+    )
+    verifyFieldsInMicroBatchStream(mapWithLowercase, expectedValue, Some(expectedValue))
+  }
 
   test("SPARK-28142 - continuous mode - options should be handled as case-insensitive") {
-    // we're trying to read the value of "pollTimeout" to see whether option is handled correctly
+    def verifyFieldsInContinuousStream(
+        options: CaseInsensitiveStringMap,
+        expectedPollTimeoutMs: Long): Unit = {
+      val scan = getKafkaDataSourceScan(options)
+      val stream = scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
+      assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
+    }
 
     // upper-case
     val expectedValue = 1000
-    val mapWithUppercase = buildCaseInsensitiveStringMap(
+    val mapWithUppercase = buildKafkaSourceCaseInsensitiveStringMap(
       KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toUpperCase(Locale.ROOT) -> expectedValue.toString)
-    assert(expectedValue === getFieldFromContinuousStream(mapWithUppercase, pollTimeoutMsMethod))
+    verifyFieldsInContinuousStream(mapWithUppercase, expectedValue)
 
     // lower-case
-    val mapWithLowercase = buildCaseInsensitiveStringMap(
+    val mapWithLowercase = buildKafkaSourceCaseInsensitiveStringMap(
       KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toLowerCase(Locale.ROOT) -> expectedValue.toString)
-    assert(expectedValue === getFieldFromContinuousStream(mapWithLowercase, pollTimeoutMsMethod))
+    verifyFieldsInContinuousStream(mapWithLowercase, expectedValue)
   }
 
-  private def buildCaseInsensitiveStringMap(
+  private def buildKafkaSourceCaseInsensitiveStringMap(
       options: (String, String)*): CaseInsensitiveStringMap = {
     val requiredOptions = Map("kafka.bootstrap.servers" -> "dummy", "subscribe" -> "dummy")
     new CaseInsensitiveStringMap((options.toMap ++ requiredOptions).asJava)
@@ -56,11 +106,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     provider.getTable(options).newScanBuilder(options).build()
   }
 
-  private def getFieldFromContinuousStream[T](
-      options: CaseInsensitiveStringMap,
-      method: PrivateMethod[T]): T = {
-    val scan = getKafkaDataSourceScan(options)
-    val stream = scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
-    stream.invokePrivate(method())
+  private def getField[T](obj: AnyRef, method: PrivateMethod[T]): T = {
+    obj.invokePrivate(method())
   }
 }
