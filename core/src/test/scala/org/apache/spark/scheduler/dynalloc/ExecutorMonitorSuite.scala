@@ -25,6 +25,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doAnswer, mock, when}
 
 import org.apache.spark._
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
@@ -102,11 +103,13 @@ class ExecutorMonitorSuite extends SparkFunSuite {
       monitor.onTaskStart(SparkListenerTaskStart(i, 1, taskInfo("1", 1)))
       assert(!monitor.isExecutorIdle("1"))
 
-      monitor.onTaskEnd(SparkListenerTaskEnd(i, 1, "foo", Success, taskInfo("1", 1), null))
+      monitor.onTaskEnd(SparkListenerTaskEnd(i, 1, "foo", Success, taskInfo("1", 1),
+        new ExecutorMetrics, null))
       assert(!monitor.isExecutorIdle("1"))
     }
 
-    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("1", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("1", 1),
+      new ExecutorMetrics, null))
     assert(monitor.isExecutorIdle("1"))
     assert(monitor.timedOutExecutors(clock.getTimeMillis()).isEmpty)
     assert(monitor.timedOutExecutors(clock.getTimeMillis() + idleTimeoutMs + 1) === Seq("1"))
@@ -256,7 +259,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     monitor.executorsKilled(Seq("3"))
     assert(monitor.pendingRemovalCount === 2)
 
-    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("2", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("2", 1),
+      new ExecutorMetrics, null))
     assert(monitor.timedOutExecutors().isEmpty)
     clock.advance(idleDeadline)
     assert(monitor.timedOutExecutors().toSet === Set("2"))
