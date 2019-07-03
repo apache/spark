@@ -219,6 +219,20 @@ abstract class LogicalPlan
    * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
    */
   def refresh(): Unit = children.foreach(_.refresh())
+
+  /**
+   * Returns true iff `other`'s output is semantically the same, ie.:
+   *  - it contains the same number of `Attribute`s;
+   *  - references are the same;
+   *  - the order is equal too.
+   */
+  def sameOutput(other: LogicalPlan): Boolean = {
+    val thisOutput = this.output
+    val otherOutput = other.output
+    thisOutput.length == otherOutput.length && thisOutput.zip(otherOutput).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
+    }
+  }
 }
 
 /**
