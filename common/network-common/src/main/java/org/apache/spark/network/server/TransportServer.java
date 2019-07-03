@@ -130,6 +130,10 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
     }
 
+    if (conf.enableTcpAutoClose()) {
+      bootstrap.childOption(ChannelOption.AUTO_CLOSE, true);
+    }
+
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) {

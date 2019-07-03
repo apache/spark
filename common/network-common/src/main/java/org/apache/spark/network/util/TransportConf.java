@@ -43,6 +43,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
   private final String SPARK_NETWORK_VERBOSE_METRICS;
   private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
+  private final String SPARK_NETWORK_IO_ENABLETCPAUTOCLOSE_KEY;
 
   private final ConfigProvider conf;
 
@@ -66,6 +67,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
     SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
+    SPARK_NETWORK_IO_ENABLETCPAUTOCLOSE_KEY = getConfKey("io.enableTcpAutoClose");
   }
 
   public int getInt(String name, int defaultValue) {
@@ -181,6 +183,15 @@ public class TransportConf {
    */
   public boolean enableTcpKeepAlive() {
     return conf.getBoolean(SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY, false);
+  }
+
+  /**
+   * Whether to enable TCP auto-close. If true, the TCP auto-close are enabled, which removes
+   * connections automatically.
+   * See [SPARK-23182] for details.
+   */
+  public boolean enableTcpAutoClose() {
+    return conf.getBoolean(SPARK_NETWORK_IO_ENABLETCPAUTOCLOSE_KEY, false);
   }
 
   /**
