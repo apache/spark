@@ -299,7 +299,10 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
     Examples:
       > SELECT _FUNC_(1);
        0.0
-  """)
+      > SELECT _FUNC_(0);
+       NaN
+  """,
+  since = "3.0.0")
 case class Acosh(child: Expression)
   extends UnaryMathExpression((x: Double) => math.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -590,7 +593,8 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "3.0.0")
 case class Asinh(child: Expression)
   extends UnaryMathExpression((x: Double) => math.log(x + math.sqrt(x * x + 1.0)), "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -671,7 +675,10 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+      > SELECT _FUNC_(2);
+       NaN
+  """,
+  since = "3.0.0")
 case class Atanh(child: Expression)
   extends UnaryMathExpression((x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)), "ATANH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
