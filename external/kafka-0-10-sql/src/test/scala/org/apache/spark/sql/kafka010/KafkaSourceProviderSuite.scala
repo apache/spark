@@ -58,20 +58,16 @@ class KafkaSourceProviderSuite
       assert(expectedMaxOffsetsPerTrigger === getField(stream, maxOffsetsPerTriggerMethod))
     }
 
-    // upper-case
     val expectedValue = 1000L
-    val mapWithUppercase = buildKafkaSourceCaseInsensitiveStringMap(
-      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toUpperCase(Locale.ROOT) -> expectedValue.toString,
-      KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER.toUpperCase(Locale.ROOT) -> expectedValue.toString
-    )
-    verifyFieldsInMicroBatchStream(mapWithUppercase, expectedValue, Some(expectedValue))
+    val mapToTest = Seq(
+      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString,
+      KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER -> expectedValue.toString)
 
-    // lower-case
-    val mapWithLowercase = buildKafkaSourceCaseInsensitiveStringMap(
-      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toLowerCase(Locale.ROOT) -> expectedValue.toString,
-      KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER.toLowerCase(Locale.ROOT) -> expectedValue.toString
-    )
-    verifyFieldsInMicroBatchStream(mapWithLowercase, expectedValue, Some(expectedValue))
+    Seq(
+      mapToTest.map(entry => (entry._1.toUpperCase(Locale.ROOT), entry._2)),
+      mapToTest.map(entry => (entry._1.toLowerCase(Locale.ROOT), entry._2)))
+      .map(buildKafkaSourceCaseInsensitiveStringMap)
+      .foreach(verifyFieldsInMicroBatchStream(_, expectedValue, Some(expectedValue)))
   }
 
   test("SPARK-28142 - continuous mode - options should be handled as case-insensitive") {
@@ -83,16 +79,14 @@ class KafkaSourceProviderSuite
       assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
     }
 
-    // upper-case
     val expectedValue = 1000
-    val mapWithUppercase = buildKafkaSourceCaseInsensitiveStringMap(
-      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toUpperCase(Locale.ROOT) -> expectedValue.toString)
-    verifyFieldsInContinuousStream(mapWithUppercase, expectedValue)
+    val mapToTest = Seq(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString)
 
-    // lower-case
-    val mapWithLowercase = buildKafkaSourceCaseInsensitiveStringMap(
-      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT.toLowerCase(Locale.ROOT) -> expectedValue.toString)
-    verifyFieldsInContinuousStream(mapWithLowercase, expectedValue)
+    Seq(
+      mapToTest.map(entry => (entry._1.toUpperCase(Locale.ROOT), entry._2)),
+      mapToTest.map(entry => (entry._1.toLowerCase(Locale.ROOT), entry._2)))
+      .map(buildKafkaSourceCaseInsensitiveStringMap)
+      .foreach(verifyFieldsInContinuousStream(_, expectedValue))
   }
 
   private def buildKafkaSourceCaseInsensitiveStringMap(
