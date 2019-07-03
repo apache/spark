@@ -124,10 +124,6 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
     testOneToOneMathFunction(sinh, math.sinh)
   }
 
-  test("asinh") {
-    testOneToOneMathFunction(asinh, (x: Double) => math.log(x + math.sqrt(x * x + 1.0)))
-  }
-
   test("cos") {
     testOneToOneMathFunction(cos, math.cos)
   }
@@ -140,10 +136,6 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
     testOneToOneMathFunction(cosh, math.cosh)
   }
 
-  test("acosh") {
-    testOneToOneMathFunction(acosh, (x: Double) => math.log(x + math.sqrt(x * x - 1.0)))
-  }
-
   test("tan") {
     testOneToOneMathFunction(tan, math.tan)
   }
@@ -154,10 +146,6 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("tanh") {
     testOneToOneMathFunction(tanh, math.tanh)
-  }
-
-  test("atanh") {
-    testOneToOneMathFunction(atanh, (x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)))
   }
 
   test("degrees") {
