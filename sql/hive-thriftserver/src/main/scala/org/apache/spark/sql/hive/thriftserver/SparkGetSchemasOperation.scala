@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.regex.Pattern
+
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
@@ -55,6 +57,12 @@ private[hive] class SparkGetSchemasOperation(
       val schemaPattern = convertSchemaPattern(schemaName)
       sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
         rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
+      }
+
+      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
+      val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
+      if (databasePattern.matcher(globalTempViewDb).matches()) {
+        rowSet.addRow(Array[AnyRef](globalTempViewDb, DEFAULT_HIVE_CATALOG))
       }
       setState(OperationState.FINISHED)
     } catch {
