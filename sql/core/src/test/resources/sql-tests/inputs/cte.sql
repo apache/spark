@@ -4,6 +4,9 @@ create temporary view t2 as select * from values 0, 1 as t(id);
 -- WITH clause should not fall into infinite loop by referencing self
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s;
 
+WITH r AS (SELECT (SELECT * FROM r))
+SELECT * FROM r;
+
 -- WITH clause should reference the base table
 WITH t AS (SELECT 1 FROM t) SELECT * FROM t;
 
@@ -133,13 +136,6 @@ SELECT (
     SELECT * FROM t
   )
 );
-
--- no infinite recursion during CTE substitution
-WITH r AS (SELECT * FROM r)
-SELECT * FROM r;
-
-WITH r AS (SELECT (SELECT * FROM r))
-SELECT * FROM r;
 
 -- Clean up
 DROP VIEW IF EXISTS t;
