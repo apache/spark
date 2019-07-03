@@ -1560,15 +1560,6 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
-   * @param e hyperbolic angle
-   * @return inverse hyperbolic sine of the given value
-   *
-   * @group math_funcs
-   * @since 3.0.0
-   */
-  def acosh(e: Column): Column = withExpr { Acosh(e.expr) }
-
-  /**
    * Computes the exponential of the given value.
    *
    * @group math_funcs
@@ -2031,21 +2022,12 @@ object functions {
   def sinh(e: Column): Column = withExpr { Sinh(e.expr) }
 
   /**
-   * @param e hyperbolic angle
-   * @return inverse hyperbolic sine of the given value
+   * @param columnName hyperbolic angle
+   * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
    *
    * @group math_funcs
-   * @since 3.0.0
+   * @since 1.4.0
    */
-  def asinh(e: Column): Column = withExpr { Asinh(e.expr) }
-
-   /**
-    * @param columnName hyperbolic angle
-    * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
-    *
-    * @group math_funcs
-    * @since 1.4.0
-    */
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
@@ -2083,15 +2065,6 @@ object functions {
    * @since 1.4.0
    */
   def tanh(columnName: String): Column = tanh(Column(columnName))
-
-  /**
-   * @param e hyperbolic angle
-   * @return inverse hyperbolic tangent of the given value
-   *
-   * @group math_funcs
-   * @since 3.0.0
-   */
-  def atanh(e: Column): Column = withExpr { Atanh(e.expr) }
 
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
