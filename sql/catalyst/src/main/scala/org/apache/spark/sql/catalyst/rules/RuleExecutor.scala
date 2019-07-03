@@ -145,10 +145,17 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             }
           }
           // Run idempotence checker for batches with Idempotent Strategy
-          if (Utils.isTesting && batch.strategy == Idempotent) {
+          if (Utils.isTesting && batch.strategy == Once) {
             val checkPlan = batch.rules.foldLeft(curPlan) { case (plan, rule) => rule(plan) }
             if (!checkPlan.fastEquals(curPlan)) {
-              val message = s"Idempotent batch ${batch.name} failed idempotence checker"
+              val message =
+                s"""|Idempotent batch ${batch.name} failed idempotence checker
+                    |previous
+                    |${curPlan}
+                    |
+                    |after
+                    |${checkPlan}
+                 """.stripMargin
               throw new TreeNodeException(curPlan, message, null)
             }
           }
