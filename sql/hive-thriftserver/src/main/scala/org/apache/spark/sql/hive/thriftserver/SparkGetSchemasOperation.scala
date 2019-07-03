@@ -45,10 +45,8 @@ private[hive] class SparkGetSchemasOperation(
     schemaName: String)
   extends GetSchemasOperation(parentSession, catalogName, schemaName) with Logging {
 
-  private var statementId: String = _
-
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
+    val statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"

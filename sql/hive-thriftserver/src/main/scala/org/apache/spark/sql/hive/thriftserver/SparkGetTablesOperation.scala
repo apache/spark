@@ -55,10 +55,8 @@ private[hive] class SparkGetTablesOperation(
   extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
     with Logging{
 
-  private var statementId: String = _
-
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
+    val statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
