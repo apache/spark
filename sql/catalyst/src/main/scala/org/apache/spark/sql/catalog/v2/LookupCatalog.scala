@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalog.v2
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogManager
 
 /**
  * A trait to encapsulate catalog lookup function and helpful extractors.
@@ -26,24 +27,29 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 @Experimental
 trait LookupCatalog {
 
-  protected def lookupCatalog(name: String): CatalogPlugin
-
-  type CatalogObjectIdentifier = (Option[CatalogPlugin], Identifier)
+  val catalogManager: CatalogManager
 
   /**
    * Extract catalog plugin and identifier from a multi-part identifier.
    */
   object CatalogObjectIdentifier {
-    def unapply(parts: Seq[String]): Some[CatalogObjectIdentifier] = parts match {
-      case Seq(name) =>
-        Some((None, Identifier.of(Array.empty, name)))
-      case Seq(catalogName, tail @ _*) =>
+    def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = {
+      assert(parts.nonEmpty)
+      if (parts.length == 1) {
+        catalogManager.getDefaultCatalog().map { catalog =>
+          (catalog, Identifier.of(Array.empty, parts.last))
+        }
+      } else {
         try {
-          Some((Some(lookupCatalog(catalogName)), Identifier.of(tail.init.toArray, tail.last)))
+          val catalog = catalogManager.getCatalog(parts.head)
+          Some((catalog, Identifier.of(parts.tail.init.toArray, parts.last)))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((None, Identifier.of(parts.init.toArray, parts.last)))
+            catalogManager.getDefaultCatalog().map { catalog =>
+              (catalog, Identifier.of(parts.init.toArray, parts.last))
+            }
         }
+      }
     }
   }
 
@@ -54,17 +60,11 @@ trait LookupCatalog {
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogObjectIdentifier(None, ident) =>
-        ident.namespace match {
-          case Array() =>
-            Some(TableIdentifier(ident.name))
-          case Array(database) =>
-            Some(TableIdentifier(ident.name, Some(database)))
-          case _ =>
-            None
-        }
-      case _ =>
-        None
+      case Seq(tblName) => Some(TableIdentifier(tblName))
+      case Seq(dbName, tblName) => Some(TableIdentifier(tblName, Some(dbName)))
+      case CatalogObjectIdentifier(_, _) =>
+        throw new IllegalStateException(parts.mkString(".") + " is not a TableIdentifier.")
+      case _ => None
     }
   }
 }

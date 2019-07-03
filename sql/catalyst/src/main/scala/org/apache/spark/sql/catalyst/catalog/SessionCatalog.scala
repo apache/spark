@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.{Identifier, LookupCatalog}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Im
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
@@ -61,7 +63,7 @@ class SessionCatalog(
     conf: SQLConf,
     hadoopConf: Configuration,
     parser: ParserInterface,
-    functionResourceLoader: FunctionResourceLoader) extends Logging {
+    functionResourceLoader: FunctionResourceLoader) extends Logging with LookupCatalog {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -90,6 +92,7 @@ class SessionCatalog(
 
   lazy val externalCatalog = externalCatalogBuilder()
   lazy val globalTempViewManager = globalTempViewManagerBuilder()
+  override lazy val catalogManager = new CatalogManager(conf, externalCatalog)
 
   /** List of temporary views, mapping from table name to their logical plan. */
   @GuardedBy("this")
@@ -710,12 +713,15 @@ class SessionCatalog(
   /**
    * Return a [[LogicalPlan]] that represents the given table or view.
    *
-   * If a database is specified in `name`, this will return the table/view from that database.
-   * If no database is specified, this will first attempt to return a temporary view with
-   * the same name, then, if that does not exist, return the table/view from the current database.
+   * In general, the rule is:
+   *   1. If the name matches a temp view or global temp view, return that view.
+   *   2. If the first part of the name matches a registered catalog, look up the table from that
+   *      catalog.
+   *   3. If the default catalog config is set, look up the table from that default catalog.
+   *   4. Otherwise, look up the table from the `ExternalCatalog`.
    *
-   * Note that, the global temp view database is also valid here, this will return the global temp
-   * view matching the given name.
+   * Note that, the name resolution is case sensitive for the new catalog, and case insensitive for
+   * temp views and the `ExternalCatalog`.
    *
    * If the relation is a view, we generate a [[View]] operator from the view description, and
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
@@ -723,32 +729,62 @@ class SessionCatalog(
    *
    * @param name The name of the table/view that we look up.
    */
-  def lookupRelation(name: TableIdentifier): LogicalPlan = {
+  def lookupRelation(name: Seq[String]): LogicalPlan = {
+    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.CatalogHelper
+    assert(name.nonEmpty)
+
+    def relationForExternalCatalog(tblName: String, dbName: String, table: CatalogTable) = {
+      if (table.tableType == CatalogTableType.VIEW) {
+        val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
+        logDebug(s"'$viewText' will be used for the view($table).")
+        // The relation is a view, so we wrap the relation by:
+        // 1. Add a [[View]] operator over the relation to keep track of the view desc;
+        // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
+        val child = View(
+          desc = table,
+          output = table.schema.toAttributes,
+          child = parser.parsePlan(viewText))
+        SubqueryAlias(tblName, dbName, child)
+      } else {
+        SubqueryAlias(tblName, dbName, UnresolvedCatalogRelation(table))
+      }
+    }
+
+    val tblName = formatTableName(name.last)
     synchronized {
-      val db = formatDatabaseName(name.database.getOrElse(currentDb))
-      val table = formatTableName(name.table)
-      if (db == globalTempViewManager.database) {
-        globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, db, viewDef)
-        }.getOrElse(throw new NoSuchTableException(db, table))
-      } else if (name.database.isDefined || !tempViews.contains(table)) {
-        val metadata = externalCatalog.getTable(db, table)
-        if (metadata.tableType == CatalogTableType.VIEW) {
-          val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-          logDebug(s"'$viewText' will be used for the view($table).")
-          // The relation is a view, so we wrap the relation by:
-          // 1. Add a [[View]] operator over the relation to keep track of the view desc;
-          // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
-          val child = View(
-            desc = metadata,
-            output = metadata.schema.toAttributes,
-            child = parser.parsePlan(viewText))
-          SubqueryAlias(table, db, child)
+      if (name.length == 1) {
+        if (tempViews.contains(tblName)) {
+          SubqueryAlias(tblName, tempViews(tblName))
         } else {
-          SubqueryAlias(table, db, UnresolvedCatalogRelation(metadata))
+          catalogManager.getDefaultCatalog().map { catalog =>
+            val table = catalog.asTableCatalog.loadTable(Identifier.of(Array.empty, name.head))
+            DataSourceV2Relation.create(table)
+          }.getOrElse {
+            val dbName = formatDatabaseName(currentDb)
+            val table = externalCatalog.getTable(dbName, tblName)
+            relationForExternalCatalog(tblName, dbName, table)
+          }
+        }
+      } else if (name.length == 2) {
+        val dbName = formatDatabaseName(name.head)
+        if (dbName == globalTempViewManager.database) {
+          globalTempViewManager.get(tblName).map { viewDef =>
+            SubqueryAlias(tblName, dbName, viewDef)
+          }.getOrElse(throw new NoSuchTableException(dbName, tblName))
+        } else {
+          name match {
+            case CatalogObjectIdentifier(catalog, ident) =>
+              val table = catalog.asTableCatalog.loadTable(ident)
+              DataSourceV2Relation.create(table)
+            case _ =>
+              val table = externalCatalog.getTable(dbName, tblName)
+              relationForExternalCatalog(tblName, dbName, table)
+          }
         }
       } else {
-        SubqueryAlias(table, tempViews(table))
+        val table = catalogManager.getCatalog(name.head).asTableCatalog
+          .loadTable(Identifier.of(name.tail.init.toArray, name.last))
+        DataSourceV2Relation.create(table)
       }
     }
   }

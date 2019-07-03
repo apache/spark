@@ -22,11 +22,11 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
+import org.apache.spark.sql.catalog.v2.{Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogManager, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -37,61 +37,55 @@ import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBui
 
 case class DataSourceResolution(
     conf: SQLConf,
-    findCatalog: String => CatalogPlugin)
+    catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with CastSupport with LookupCatalog {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
-  override protected def lookupCatalog(name: String): CatalogPlugin = findCatalog(name)
-
-  def defaultCatalog: Option[CatalogPlugin] = conf.defaultV2Catalog.map(findCatalog)
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case CreateTableStatement(
-        AsTableIdentifier(table), schema, partitionCols, bucketSpec, properties,
-        V1WriteProvider(provider), options, location, comment, ifNotExists) =>
+    case c: CreateTableStatement =>
+      c.tableName match {
+        case CatalogObjectIdentifier(catalog, ident) =>
+          convertCreateTable(catalog.asTableCatalog, ident, c)
 
-      val tableDesc = buildCatalogTable(table, schema, partitionCols, bucketSpec, properties,
-        provider, options, location, comment, ifNotExists)
-      val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+        // TODO: The query will fail if the provider is v2. We can fix this by introducing v2
+        // session catalog, see SPARK-27919.
+        case AsTableIdentifier(ident) =>
+          val tableDesc = buildCatalogTable(ident, c.tableSchema, c.partitioning, c.bucketSpec,
+            c.properties, c.provider, c.options, c.location, c.comment, c.ifNotExists)
+          val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+          CreateTable(tableDesc, mode, None)
 
-      CreateTable(tableDesc, mode, None)
+        case _ =>
+          throw new AnalysisException(
+            s"No catalog specified for table ${c.tableName.quoted} and no default catalog is set")
+      }
 
-    case create: CreateTableStatement =>
-      // the provider was not a v1 source, convert to a v2 plan
-      val CatalogObjectIdentifier(maybeCatalog, identifier) = create.tableName
-      val catalog = maybeCatalog.orElse(defaultCatalog)
-          .getOrElse(throw new AnalysisException(
-            s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
-          .asTableCatalog
-      convertCreateTable(catalog, identifier, create)
+    case c: CreateTableAsSelectStatement =>
+      c.tableName match {
+        case CatalogObjectIdentifier(catalog, ident) =>
+          convertCTAS(catalog.asTableCatalog, ident, c)
 
-    case CreateTableAsSelectStatement(
-        AsTableIdentifier(table), query, partitionCols, bucketSpec, properties,
-        V1WriteProvider(provider), options, location, comment, ifNotExists) =>
+        // TODO: The query will fail if the provider is v2. We can fix this by introducing v2
+        // session catalog, see SPARK-27919.
+        case AsTableIdentifier(ident) =>
+          val tableDesc = buildCatalogTable(ident, new StructType(), c.partitioning, c.bucketSpec,
+            c.properties, c.provider, c.options, c.location, c.comment, c.ifNotExists)
+          val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+          CreateTable(tableDesc, mode, Some(c.asSelect))
 
-      val tableDesc = buildCatalogTable(table, new StructType, partitionCols, bucketSpec,
-        properties, provider, options, location, comment, ifNotExists)
-      val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+        case _ =>
+          throw new AnalysisException(
+            s"No catalog specified for table ${c.tableName.quoted} and no default catalog is set")
+      }
 
-      CreateTable(tableDesc, mode, Some(query))
-
-    case create: CreateTableAsSelectStatement =>
-      // the provider was not a v1 source, convert to a v2 plan
-      val CatalogObjectIdentifier(maybeCatalog, identifier) = create.tableName
-      val catalog = maybeCatalog.orElse(defaultCatalog)
-          .getOrElse(throw new AnalysisException(
-            s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
-          .asTableCatalog
-      convertCTAS(catalog, identifier, create)
-
-    case DropTableStatement(CatalogObjectIdentifier(Some(catalog), ident), ifExists, _) =>
+    case DropTableStatement(CatalogObjectIdentifier(catalog, ident), ifExists, _) =>
       DropTable(catalog.asTableCatalog, ident, ifExists)
 
     case DropTableStatement(AsTableIdentifier(tableName), ifExists, purge) =>
       DropTableCommand(tableName, ifExists, isView = false, purge)
 
-    case DropViewStatement(CatalogObjectIdentifier(Some(catalog), ident), _) =>
+    case DropViewStatement(CatalogObjectIdentifier(catalog, ident), _) =>
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view $ident " +
           s"because view support in catalog has not been implemented yet")

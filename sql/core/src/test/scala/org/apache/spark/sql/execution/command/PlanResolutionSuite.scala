@@ -20,11 +20,15 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 import java.util.Locale
 
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
+import org.mockito.invocation.InvocationOnMock
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, Identifier, TableCatalog, TestTableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, Identifier, TableCatalog, TestTableCatalog}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogManager, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceResolution}
@@ -43,17 +47,26 @@ class PlanResolutionSuite extends AnalysisTest {
     newCatalog
   }
 
-  private val lookupCatalog: String => CatalogPlugin = {
-    case "testcat" =>
-      testCat
-    case name =>
-      throw new CatalogNotFoundException(s"No such catalog: $name")
+  private def createCatalogManager(hasDefaultCatalog: Boolean): CatalogManager = {
+    val manager = mock(classOf[CatalogManager])
+    when(manager.getCatalog(any())).thenAnswer((invocation: InvocationOnMock) => {
+      val name = invocation.getArgument[String](0)
+      if (name == "testcat") {
+        testCat
+      } else {
+        throw new CatalogNotFoundException(s"No such catalog: $name")
+      }
+    })
+    if (hasDefaultCatalog) {
+      when(manager.getDefaultCatalog()).thenReturn(Some(testCat))
+    } else {
+      when(manager.getDefaultCatalog()).thenReturn(None)
+    }
+    manager
   }
 
-  def parseAndResolve(query: String): LogicalPlan = {
-    val newConf = conf.copy()
-    newConf.setConfString("spark.sql.default.catalog", "testcat")
-    DataSourceResolution(newConf, lookupCatalog).apply(parsePlan(query))
+  def parseAndResolve(query: String, hasDefaultCatalog: Boolean = false): LogicalPlan = {
+    DataSourceResolution(conf, createCatalogManager(hasDefaultCatalog)).apply(parsePlan(query))
   }
 
   private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
@@ -84,7 +97,7 @@ class PlanResolutionSuite extends AnalysisTest {
       case CreateTable(tableDesc, _, None) =>
         assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
-        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getName} from query," +
             s"got ${other.getClass.getName}: $query")
     }
   }
@@ -306,7 +319,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |    id bigint,
          |    description string,
          |    point struct<x: double, y: double>)
-         |USING parquet
+         |USING xyz
          |COMMENT 'table comment'
          |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
          |OPTIONS (path 's3://bucket/path/to/data', other 20)
@@ -316,63 +329,76 @@ class PlanResolutionSuite extends AnalysisTest {
       "p1" -> "v1",
       "p2" -> "v2",
       "other" -> "20",
-      "provider" -> "parquet",
+      "provider" -> "xyz",
       "location" -> "s3://bucket/path/to/data",
       "comment" -> "table comment")
 
-    parseAndResolve(sql) match {
-      case create: CreateV2Table =>
-        assert(create.catalog.name == "testcat")
-        assert(create.tableName == Identifier.of(Array("mydb"), "table_name"))
-        assert(create.tableSchema == new StructType()
+    Seq(true, false).foreach { hasDefaultCatalog =>
+      // Since the identifier specifies a registered catalog, the default catalog doesn't matter.
+      parseAndResolve(sql, hasDefaultCatalog) match {
+        case create: CreateV2Table =>
+          assert(create.catalog.name == "testcat")
+          assert(create.tableName == Identifier.of(Array("mydb"), "table_name"))
+          assert(create.tableSchema == new StructType()
             .add("id", LongType)
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
-        assert(create.partitioning.isEmpty)
-        assert(create.properties == expectedProperties)
-        assert(create.ignoreIfExists)
+          assert(create.partitioning.isEmpty)
+          assert(create.properties == expectedProperties)
+          assert(create.ignoreIfExists)
 
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
+        case other =>
+          fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
             s"got ${other.getClass.getName}: $sql")
+      }
     }
   }
 
-  test("Test v2 CreateTable with data source v2 provider") {
+  test("Test v2 CreateTable with default catalog") {
     val sql =
-      s"""
-         |CREATE TABLE IF NOT EXISTS mydb.page_view (
-         |    id bigint,
-         |    description string,
-         |    point struct<x: double, y: double>)
-         |USING $orc2
-         |COMMENT 'This is the staging page view table'
-         |LOCATION '/user/external/page_view'
-         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+      """
+        |CREATE TABLE mydb.table_name(i int) USING xyz
+        |OPTIONS (a 1, b 0.1, c TRUE)
       """.stripMargin
 
     val expectedProperties = Map(
-      "p1" -> "v1",
-      "p2" -> "v2",
-      "provider" -> orc2,
-      "location" -> "/user/external/page_view",
-      "comment" -> "This is the staging page view table")
+      "a" -> "1",
+      "b" -> "0.1",
+      "c" -> "true",
+      "provider" -> "xyz")
 
-    parseAndResolve(sql) match {
+    parseAndResolve(sql, hasDefaultCatalog = true) match {
       case create: CreateV2Table =>
         assert(create.catalog.name == "testcat")
-        assert(create.tableName == Identifier.of(Array("mydb"), "page_view"))
-        assert(create.tableSchema == new StructType()
-            .add("id", LongType)
-            .add("description", StringType)
-            .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
+        assert(create.tableName == Identifier.of(Array("mydb"), "table_name"))
+        assert(create.tableSchema == new StructType().add("i", IntegerType))
         assert(create.partitioning.isEmpty)
         assert(create.properties == expectedProperties)
-        assert(create.ignoreIfExists)
+        assert(!create.ignoreIfExists)
+    }
+  }
 
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+  test("Test v2 CTAS with default catalog") {
+    val sql =
+      """
+        |CREATE TABLE mydb.table_name USING xyz
+        |OPTIONS (a 1, b 0.1, c TRUE)
+        |AS SELECT * FROM src
+      """.stripMargin
+
+    val expectedProperties = Map(
+      "a" -> "1",
+      "b" -> "0.1",
+      "c" -> "true",
+      "provider" -> "xyz")
+
+    parseAndResolve(sql, hasDefaultCatalog = true) match {
+      case create: CreateTableAsSelect =>
+        assert(create.catalog.name == "testcat")
+        assert(create.tableName == Identifier.of(Array("mydb"), "table_name"))
+        assert(create.partitioning.isEmpty)
+        assert(create.properties == expectedProperties)
+        assert(!create.ignoreIfExists)
     }
   }
 
@@ -380,7 +406,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql =
       s"""
          |CREATE TABLE IF NOT EXISTS testcat.mydb.table_name
-         |USING parquet
+         |USING xyz
          |COMMENT 'table comment'
          |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
          |OPTIONS (path 's3://bucket/path/to/data', other 20)
@@ -391,55 +417,25 @@ class PlanResolutionSuite extends AnalysisTest {
       "p1" -> "v1",
       "p2" -> "v2",
       "other" -> "20",
-      "provider" -> "parquet",
+      "provider" -> "xyz",
       "location" -> "s3://bucket/path/to/data",
       "comment" -> "table comment")
 
-    parseAndResolve(sql) match {
-      case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "testcat")
-        assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
-        assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions == Map("other" -> "20"))
-        assert(ctas.partitioning.isEmpty)
-        assert(ctas.ignoreIfExists)
+    Seq(true, false).foreach { hasDefaultCatalog =>
+      // Since the identifier specifies a registered catalog, the default catalog doesn't matter.
+      parseAndResolve(sql, hasDefaultCatalog) match {
+        case ctas: CreateTableAsSelect =>
+          assert(ctas.catalog.name == "testcat")
+          assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
+          assert(ctas.properties == expectedProperties)
+          assert(ctas.writeOptions == Map("other" -> "20"))
+          assert(ctas.partitioning.isEmpty)
+          assert(ctas.ignoreIfExists)
 
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
+        case other =>
+          fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
             s"got ${other.getClass.getName}: $sql")
-    }
-  }
-
-  test("Test v2 CTAS with data source v2 provider") {
-    val sql =
-      s"""
-        |CREATE TABLE IF NOT EXISTS mydb.page_view
-        |USING $orc2
-        |COMMENT 'This is the staging page view table'
-        |LOCATION '/user/external/page_view'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT * FROM src
-      """.stripMargin
-
-    val expectedProperties = Map(
-      "p1" -> "v1",
-      "p2" -> "v2",
-      "provider" -> orc2,
-      "location" -> "/user/external/page_view",
-      "comment" -> "This is the staging page view table")
-
-    parseAndResolve(sql) match {
-      case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "testcat")
-        assert(ctas.tableName == Identifier.of(Array("mydb"), "page_view"))
-        assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions.isEmpty)
-        assert(ctas.partitioning.isEmpty)
-        assert(ctas.ignoreIfExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+      }
     }
   }
 

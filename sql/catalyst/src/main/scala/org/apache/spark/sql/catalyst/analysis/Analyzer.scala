@@ -24,7 +24,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, LookupCatalog}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -37,7 +36,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -98,14 +96,11 @@ class Analyzer(
     catalog: SessionCatalog,
     conf: SQLConf,
     maxIterations: Int)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
-
-  override protected def lookupCatalog(name: String): CatalogPlugin =
-    throw new CatalogNotFoundException("No catalog lookup function")
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
@@ -163,7 +158,6 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
-      ResolveTables ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
@@ -659,20 +653,6 @@ class Analyzer(
   }
 
   /**
-   * Resolve table relations with concrete relations from v2 catalog.
-   *
-   * [[ResolveRelations]] still resolves v1 tables.
-   */
-  object ResolveTables extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
-        loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
-    }
-  }
-
-  /**
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
@@ -704,7 +684,7 @@ class Analyzer(
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
-      case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
+      case u @ UnresolvedRelation(ident) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)
         if (foundRelation != u) {
@@ -735,7 +715,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoTable(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
+      case i @ InsertIntoTable(u @ UnresolvedRelation(ident), _, child, _, _)
           if child.resolved =>
         EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
           case v: View =>
@@ -752,28 +732,20 @@ class Analyzer(
     //    and the default database is only used to look up a view);
     // 3. Use the currentDb of the SessionCatalog.
     private def lookupTableFromCatalog(
-        tableIdentifier: TableIdentifier,
+        ident: Seq[String],
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
-      val tableIdentWithDb = tableIdentifier.copy(
-        database = tableIdentifier.database.orElse(defaultDatabase))
+      val identWithDb = if (ident.length == 1) {
+        defaultDatabase.toSeq ++ ident
+      } else {
+        ident
+      }
       try {
-        catalog.lookupRelation(tableIdentWithDb)
+        catalog.lookupRelation(identWithDb)
       } catch {
         case _: NoSuchTableException | _: NoSuchDatabaseException =>
           u
       }
-    }
-
-    // If the database part is specified, and we support running SQL directly on files, and
-    // it's not a temporary view, and the table does not exist, then let's just return the
-    // original UnresolvedRelation. It is possible we are matching a query like "select *
-    // from parquet.`/path/to/query`". The plan will get resolved in the rule `ResolveDataSource`.
-    // Note that we are testing (!db_exists || !table_exists) because the catalog throws
-    // an exception from tableExists if the database does not exist.
-    private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {
-      table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
-        (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))
     }
   }
 

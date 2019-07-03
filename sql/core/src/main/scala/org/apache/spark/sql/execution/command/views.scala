@@ -181,8 +181,6 @@ case class CreateViewCommand(
    * Permanent views are not allowed to reference temp objects, including temp function and views
    */
   private def verifyTemporaryObjectsNotExists(sparkSession: SparkSession): Unit = {
-    import sparkSession.sessionState.analyzer.AsTableIdentifier
-
     if (!isTemporary) {
       // This func traverses the unresolved plan `child`. Below are the reasons:
       // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
@@ -190,13 +188,21 @@ case class CreateViewCommand(
       // added/generated from a temporary view.
       // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
       // package (e.g., HiveGenericUDF).
-      child.collect {
+      child.foreach {
         // Disallow creating permanent views based on temporary views.
-        case UnresolvedRelation(AsTableIdentifier(ident))
-            if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
-          // temporary views are only stored in the session catalog
-          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-            s"referencing a temporary view $ident")
+        case UnresolvedRelation(parts) =>
+          // The `DataSourceResolution` rule guarantees this.
+          assert(parts.nonEmpty && parts.length <= 2)
+          val tblIdent = if (parts.length == 1) {
+            TableIdentifier(parts.head)
+          } else {
+            TableIdentifier(parts.last, Some(parts.head))
+          }
+          if (sparkSession.sessionState.catalog.isTemporaryTable(tblIdent)) {
+            // temporary views are only stored in the session catalog
+            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+              s"referencing a temporary view $tblIdent")
+          }
         case other if !other.resolved => other.expressions.flatMap(_.collect {
           // Disallow creating permanent views based on temporary UDFs.
           case e: UnresolvedFunction
@@ -204,6 +210,7 @@ case class CreateViewCommand(
             throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
               s"referencing a temporary function `${e.name}`")
         })
+        case _ =>
       }
     }
   }

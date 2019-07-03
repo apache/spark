@@ -21,23 +21,18 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, Identifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 
 class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
-
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
-
-  private val orc2 = classOf[OrcDataSourceV2].getName
-
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.default.catalog", "testcat")
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -45,46 +40,77 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     df2.createOrReplaceTempView("source2")
   }
 
+  private def getTestCatalog() = {
+    spark.sessionState.catalog.catalogManager.getCatalog("testcat")
+      .asInstanceOf[TestInMemoryTableCatalog]
+  }
+
   after {
-    spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
+    getTestCatalog().clearTables()
     spark.sql("DROP TABLE source")
     spark.sql("DROP TABLE source2")
   }
 
-  test("CreateTable: use v2 plan because catalog is set") {
-    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+  test("CreateTable: basic") {
+    def checkTestCatalog(sql: String): Unit = {
+      spark.sql(sql)
+      val testCatalog = getTestCatalog()
+      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
-    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+      assert(table.name == "testcat.table_name")
+      assert(table.partitioning.isEmpty)
+      assert(table.properties == Map("provider" -> "foo").asJava)
+      assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
-    assert(table.name == "testcat.table_name")
-    assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
-    assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
+      val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+    }
 
-    val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
-  }
+    withClue("table identifier specifies catalog") {
+      withTable("testcat.table_name") {
+        checkTestCatalog("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+      }
+    }
 
-  test("CreateTable: use v2 plan because provider is v2") {
-    spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $orc2")
+    withClue("table identifier doesn't specify catalog") {
+      // This would create table in ExternalCatalog.
+      val e = intercept[Exception] {
+        spark.sql("CREATE TABLE table_name (id bigint, data string) USING foo")
+      }
+      assert(e.getMessage.contains("Failed to find data source: foo"))
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
-    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+      withTable("table_name") {
+        spark.sql("CREATE TABLE table_name (id bigint, data string) USING json")
+        intercept[NoSuchTableException] {
+          getTestCatalog().loadTable(Identifier.of(Array(), "table_name"))
+        }
+        val table = spark.sharedState.externalCatalog.getTable("default", "table_name")
+        assert(table.identifier == TableIdentifier("table_name", Some("default")))
+      }
+    }
 
-    assert(table.name == "testcat.table_name")
-    assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> orc2).asJava)
-    assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
+    withClue("table identifier doesn't specify catalog and has more than 2 name parts") {
+      // Spark tries to fallback to ExternalCatalog, which can't handle 3-part table name.
+      val e = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE ns1.ns2.table_name (id bigint, data string) USING json")
+      }
+      assert(e.message.contains("No catalog specified for table ns1.ns2.table_name"))
+      assert(e.message.contains("no default catalog is set"))
+    }
 
-    val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+    withClue("table identifier doesn't specify catalog but default catalog is set") {
+      withSQLConf(SQLConf.DEFAULT_V2_CATALOG.key -> "testcat") {
+        withTable("table_name") {
+          checkTestCatalog("CREATE TABLE table_name (id bigint, data string) USING foo")
+        }
+      }
+    }
   }
 
   test("CreateTable: fail if table exists") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = getTestCatalog()
 
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
@@ -115,7 +141,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     spark.sql(
       "CREATE TABLE IF NOT EXISTS testcat.table_name (id bigint, data string) USING foo")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = getTestCatalog()
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
@@ -138,61 +164,75 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("CreateTable: fail analysis when default catalog is needed but missing") {
-    val originalDefaultCatalog = conf.getConfString("spark.sql.default.catalog")
-    try {
-      conf.unsetConf("spark.sql.default.catalog")
-
-      val exc = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
-      }
-
-      assert(exc.getMessage.contains("No catalog specified for table"))
-      assert(exc.getMessage.contains("table_name"))
-      assert(exc.getMessage.contains("no default catalog is set"))
-
-    } finally {
-      conf.setConfString("spark.sql.default.catalog", originalDefaultCatalog)
+    val exc = intercept[AnalysisException] {
+      spark.sql(s"CREATE TABLE a.b.c USING foo")
     }
+
+    assert(exc.getMessage.contains("No catalog specified for table"))
+    assert(exc.getMessage.contains("a.b.c"))
+    assert(exc.getMessage.contains("no default catalog is set"))
   }
 
-  test("CreateTableAsSelect: use v2 plan because catalog is set") {
-    spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
+  test("CreateTableAsSelect: basic") {
+    def checkTestCatalog(sql: String): Unit = {
+      spark.sql(sql)
+      val testCatalog = getTestCatalog()
+      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
-    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+      assert(table.name == "testcat.table_name")
+      assert(table.partitioning.isEmpty)
+      assert(table.properties == Map("provider" -> "foo").asJava)
+      assert(table.schema == new StructType().add("a", StringType, false))
 
-    assert(table.name == "testcat.table_name")
-    assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
-    assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+      val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Row("1"))
+    }
 
-    val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
-  }
+    withClue("table identifier specifies catalog") {
+      withTable("testcat.table_name") {
+        checkTestCatalog("CREATE TABLE testcat.table_name USING foo AS SELECT '1' AS a")
+      }
+    }
 
-  test("CreateTableAsSelect: use v2 plan because provider is v2") {
-    spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
+    withClue("table identifier doesn't specify catalog") {
+      // This would create table in ExternalCatalog.
+      val e = intercept[Exception] {
+        spark.sql("CREATE TABLE table_name USING foo AS SELECT '1' AS a")
+      }
+      assert(e.getMessage.contains("Failed to find data source: foo"))
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
-    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+      withTable("table_name") {
+        spark.sql("CREATE TABLE table_name USING json AS SELECT '1' AS a")
+        intercept[NoSuchTableException] {
+          getTestCatalog().loadTable(Identifier.of(Array(), "table_name"))
+        }
+        val table = spark.sharedState.externalCatalog.getTable("default", "table_name")
+        assert(table.schema == new StructType().add("a", StringType))
+      }
+    }
 
-    assert(table.name == "testcat.table_name")
-    assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> orc2).asJava)
-    assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+    withClue("table identifier doesn't specify catalog and has more than 2 name parts") {
+      // Spark tries to fallback to ExternalCatalog, which can't handle 3-part table name.
+      val e = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE ns1.ns2.table_name USING foo AS SELECT '1' AS a")
+      }
+      assert(e.message.contains("No catalog specified for table ns1.ns2.table_name"))
+      assert(e.message.contains("no default catalog is set"))
+    }
 
-    val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
+    withClue("table identifier doesn't specify catalog but default catalog is set") {
+      withSQLConf(SQLConf.DEFAULT_V2_CATALOG.key -> "testcat") {
+        withTable("table_name") {
+          checkTestCatalog("CREATE TABLE table_name USING foo AS SELECT '1' AS a")
+        }
+      }
+    }
   }
 
   test("CreateTableAsSelect: fail if table exists") {
     spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = getTestCatalog()
 
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
@@ -230,7 +270,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     spark.sql(
       "CREATE TABLE IF NOT EXISTS testcat.table_name USING foo AS SELECT id, data FROM source")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = getTestCatalog()
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
@@ -252,30 +292,22 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("CreateTableAsSelect: fail analysis when default catalog is needed but missing") {
-    val originalDefaultCatalog = conf.getConfString("spark.sql.default.catalog")
-    try {
-      conf.unsetConf("spark.sql.default.catalog")
-
-      val exc = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
-      }
-
-      assert(exc.getMessage.contains("No catalog specified for table"))
-      assert(exc.getMessage.contains("table_name"))
-      assert(exc.getMessage.contains("no default catalog is set"))
-
-    } finally {
-      conf.setConfString("spark.sql.default.catalog", originalDefaultCatalog)
+    val exc = intercept[AnalysisException] {
+      spark.sql(s"CREATE TABLE a.b.c USING foo AS SELECT id, data FROM source")
     }
+
+    assert(exc.getMessage.contains("No catalog specified for table"))
+    assert(exc.getMessage.contains("a.b.c"))
+    assert(exc.getMessage.contains("no default catalog is set"))
   }
 
   test("DropTable: basic") {
     val tableName = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     sql(s"CREATE TABLE $tableName USING foo AS SELECT id, data FROM source")
-    assert(spark.catalog("testcat").asTableCatalog.tableExists(ident) === true)
+    assert(getTestCatalog().tableExists(ident) === true)
     sql(s"DROP TABLE $tableName")
-    assert(spark.catalog("testcat").asTableCatalog.tableExists(ident) === false)
+    assert(getTestCatalog().tableExists(ident) === false)
   }
 
   test("DropTable: if exists") {
@@ -286,11 +318,85 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("Relation: basic") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
-      checkAnswer(sql(s"TABLE $t1"), spark.table("source"))
-      checkAnswer(sql(s"SELECT * FROM $t1"), spark.table("source"))
+    def checkTableScan(tblNameParts: Array[String]): Unit = {
+      val tblName = tblNameParts.mkString(".")
+      withTable(tblName) {
+        sql(s"CREATE TABLE $tblName USING json AS SELECT '1' AS a")
+        checkAnswer(sql(s"TABLE $tblName"), Row("1"))
+        checkAnswer(sql(s"SELECT * FROM $tblName"), Row("1"))
+      }
+    }
+
+    withClue("table identifier specifies catalog") {
+      checkTableScan(Array("testcat", "ns1", "ns2", "tbl"))
+    }
+
+    withClue("table identifier doesn't specify catalog") {
+      checkTableScan(Array("tbl"))
+    }
+
+    withClue("table identifier doesn't specify catalog but default catalog is set") {
+      withSQLConf(SQLConf.DEFAULT_V2_CATALOG.key -> "testcat") {
+        checkTableScan(Array("tbl"))
+      }
+    }
+  }
+
+  test("Relation: table not found") {
+    withClue("table identifier specifies catalog") {
+      val e = intercept[AnalysisException] {
+        spark.sql("SELECT * FROM testcat.tbl")
+      }
+      assert(e.message.contains("Table or view not found: testcat.tbl"))
+    }
+
+    withClue("table identifier doesn't specify catalog") {
+      val e = intercept[AnalysisException] {
+        spark.sql("SELECT * FROM tbl")
+      }
+      assert(e.message.contains("Table or view not found: tbl"))
+    }
+
+    withClue("table identifier doesn't specify catalog and has more than 2 name parts") {
+      val e = intercept[CatalogNotFoundException] {
+        spark.sql("SELECT * FROM a.b.c")
+      }
+      assert(e.getMessage.contains("Catalog 'a' plugin class not found"))
+    }
+
+    withClue("table identifier doesn't specify catalog but default catalog is set") {
+      withSQLConf(SQLConf.DEFAULT_V2_CATALOG.key -> "testcat") {
+        val e = intercept[AnalysisException] {
+          spark.sql("SELECT * FROM tbl")
+        }
+        assert(e.message.contains("Table or view not found: tbl"))
+      }
+    }
+  }
+
+  test("Relation: name conflicts with temp view") {
+    withTempView("v") {
+      spark.range(10).createOrReplaceTempView("v")
+
+      withSQLConf(SQLConf.DEFAULT_V2_CATALOG.key -> "testcat") {
+        withTable("v") {
+          spark.sql("CREATE TABLE v(i INT) USING foo")
+          checkAnswer(sql("SELECT * FROM v"), spark.range(10).toDF())
+        }
+      }
+    }
+  }
+
+  test("Relation: name conflicts with global temp view") {
+    withTempView("v") {
+      spark.range(10).createOrReplaceGlobalTempView("v")
+
+      withSQLConf(SQLConf.DEFAULT_V2_CATALOG.key -> "testcat") {
+        withTable("global_temp.v") {
+          spark.sql("CREATE TABLE global_temp.v(i INT) USING foo")
+          checkAnswer(sql("SELECT * FROM global_temp.v"), spark.range(10).toDF())
+        }
+      }
     }
   }
 
