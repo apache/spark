@@ -1023,18 +1023,50 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
          |FROM script_trans
          |WHERE d1 <= 100""".stripMargin).count())
 
+    // number as column
+    assert(0 === sql(
+      s"""SELECT TRANSFORM ( 1,2,3 )
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+    // number as column output
+    checkAnswer(sql(
+      """
+        |SELECT TRANSFORM(1,2)
+        |USING 'cat' AS (a int,b int)
+        |FROM script_trans
+        |LIMIT 1
+      """.stripMargin), Row(1, 2))
+
+    //  without aggregation with complex function
+    assert(0 === sql(
+      s"""SELECT TRANSFORM (
+         |d2 as d5,
+         |d1,
+         |case
+         |when d3 > 100 then 1
+         |when d3 < 100 then 2
+         |else 3 end )
+         |USING 'cat 1>&2' AS (a,b,c)
+         |FROM script_trans
+         |WHERE d1 <= 100""".stripMargin).count())
+
+    //  binary operator function
     assert(0 === sql(
       s"""SELECT TRANSFORM ( d2, d1, d3+1 )
          |USING 'cat 1>&2' AS (a,b,c)
          |FROM script_trans
          |WHERE d1 <= 100""".stripMargin).count())
 
+    // test all start
     assert(100 === sql(
       s"""SELECT TRANSFORM (*)
          |USING 'cat' AS (a,b,c)
          |FROM script_trans
          |WHERE d1 <= 100""".stripMargin).count())
 
+    // with aggregation and complex function
     assert(100 === sql(
       s"""SELECT TRANSFORM ( d2 as d4, max(d1) as maxd1, cast(sum(d3) as string))
          |USING 'cat' AS (a,b,c)
