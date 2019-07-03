@@ -59,14 +59,9 @@ class KafkaSourceProviderSuite
     }
 
     val expectedValue = 1000L
-    val mapToTest = Seq(
+    buildCaseInsensitiveStringMapForUpperAndLowerKey(
       KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString,
       KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER -> expectedValue.toString)
-
-    Seq(
-      mapToTest.map(entry => (entry._1.toUpperCase(Locale.ROOT), entry._2)),
-      mapToTest.map(entry => (entry._1.toLowerCase(Locale.ROOT), entry._2)))
-      .map(buildKafkaSourceCaseInsensitiveStringMap)
       .foreach(verifyFieldsInMicroBatchStream(_, expectedValue, Some(expectedValue)))
   }
 
@@ -80,13 +75,16 @@ class KafkaSourceProviderSuite
     }
 
     val expectedValue = 1000
-    val mapToTest = Seq(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString)
-
-    Seq(
-      mapToTest.map(entry => (entry._1.toUpperCase(Locale.ROOT), entry._2)),
-      mapToTest.map(entry => (entry._1.toLowerCase(Locale.ROOT), entry._2)))
-      .map(buildKafkaSourceCaseInsensitiveStringMap)
+    buildCaseInsensitiveStringMapForUpperAndLowerKey(
+      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString)
       .foreach(verifyFieldsInContinuousStream(_, expectedValue))
+  }
+
+  private def buildCaseInsensitiveStringMapForUpperAndLowerKey(
+      options: (String, String)*): Seq[CaseInsensitiveStringMap] = {
+    Seq(options.map(entry => (entry._1.toUpperCase(Locale.ROOT), entry._2)),
+      options.map(entry => (entry._1.toLowerCase(Locale.ROOT), entry._2)))
+      .map(buildKafkaSourceCaseInsensitiveStringMap)
   }
 
   private def buildKafkaSourceCaseInsensitiveStringMap(
