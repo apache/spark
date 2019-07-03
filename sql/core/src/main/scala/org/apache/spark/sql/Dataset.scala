@@ -30,7 +30,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
-import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
+import org.apache.spark.api.python.{PythonEvalType, PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -2641,6 +2641,25 @@ class Dataset[T] private[sql](
     Dataset.ofRows(
       sparkSession,
       MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, logicalPlan))
+  }
+
+  /**
+   * Applies a Scalar iterator Pandas UDF to each partition. The user-defined function
+   * defines a transformation: `iter(pandas.DataFrame)` -> `iter(pandas.DataFrame)`.
+   * Each partition is each iterator consisting of DataFrames as batches.
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def mapPartitionsInPandas(f: PythonUDF): DataFrame = {
+    Dataset.ofRows(
+      sparkSession,
+      MapPartitionsInPandas(
+        // Here, the evalType is SQL_SCALAR_PANDAS_ITER_UDF since we share the
+        // same Pandas type. To avoid conflicts, it sets SQL_MAP_PANDAS_ITER_UDF here.
+        f.copy(evalType = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF),
+        f.dataType.asInstanceOf[StructType].toAttributes,
+        logicalPlan))
   }
 
   /**

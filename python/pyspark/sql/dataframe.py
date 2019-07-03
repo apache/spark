@@ -28,7 +28,8 @@ else:
 import warnings
 
 from pyspark import copy_func, since, _NoValue
-from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket, ignore_unicode_prefix
+from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket, \
+    ignore_unicode_prefix, PythonEvalType
 from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -2191,6 +2192,51 @@ class DataFrame(object):
                     pdf[field.name] = \
                         _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
             return pdf
+
+    def mapPartitionsInPandas(self, udf):
+        """
+        Maps each partition of the current :class:`DataFrame` using a pandas udf and returns
+        the result as a `DataFrame`.
+
+        The user-defined function should take an iterator of `pandas.DataFrame`s and return another
+        iterator of `pandas.DataFrame`s. For each partition, all columns are passed together as an
+        iterator of `pandas.DataFrame`s to the user-function and the returned iterator of
+        `pandas.DataFrame`s are combined as a :class:`DataFrame`.
+        Each `pandas.DataFrame` size can be controlled by
+        `spark.sql.execution.arrow.maxRecordsPerBatch`.
+        Its schema must match the returnType of the pandas udf.
+
+        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> df = spark.createDataFrame([(1, 21), (2, 30)],
+        ...                            ("id", "age"))  # doctest: +SKIP
+        >>> @pandas_udf(df.schema, PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
+        ... def filter_func(iterator):
+        ...     for pdf in iterator:
+        ...         yield pdf[pdf.id == 1]
+        >>> df.mapPartitionsInPandas(filter_func).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
+
+        """
+        # Columns are special because hasattr always return True
+        if isinstance(udf, Column) or not hasattr(udf, 'func') \
+                or udf.evalType != PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "SCALAR_ITER.")
+
+        if not isinstance(udf.returnType, StructType):
+            raise ValueError("The returnType of the pandas_udf must be a StructType")
+
+        udf_column = udf(*[self[col] for col in self.columns])
+        jdf = self._jdf.mapPartitionsInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.sql_ctx)
 
     def _collectAsArrow(self):
         """

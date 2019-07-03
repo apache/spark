@@ -86,7 +86,7 @@ def wrap_udf(f, return_type):
         return lambda *a: f(*a)
 
 
-def wrap_scalar_pandas_udf(f, return_type, eval_type):
+def wrap_scalar_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
     def verify_result_type(result):
@@ -102,13 +102,22 @@ def wrap_scalar_pandas_udf(f, return_type, eval_type):
                                "expected %d, got %d" % (length, len(result)))
         return result
 
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        return lambda *a: (verify_result_length(
-            verify_result_type(f(*a)), len(a[0])), arrow_return_type)
-    else:
-        # The result length verification is done at the end of a partition.
-        return lambda *iterator: map(lambda res: (res, arrow_return_type),
-                                     map(verify_result_type, f(*iterator)))
+    return lambda *a: (verify_result_length(
+        verify_result_type(f(*a)), len(a[0])), arrow_return_type)
+
+
+def wrap_pandas_iter_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def verify_result_type(result):
+        if not hasattr(result, "__len__"):
+            pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
+            raise TypeError("Return type of the user-defined function should be "
+                            "{}, but is {}".format(pd_type, type(result)))
+        return result
+
+    return lambda *iterator: map(lambda res: (res, arrow_return_type),
+                                 map(verify_result_type, f(*iterator)))
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec):
@@ -226,9 +235,11 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
 
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        return arg_offsets, wrap_scalar_pandas_udf(func, return_type, eval_type)
+        return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_scalar_pandas_udf(func, return_type, eval_type)
+        return arg_offsets, wrap_pandas_iter_udf(func, return_type)
+    elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
+        return arg_offsets, wrap_pandas_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
@@ -247,6 +258,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                      PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                     PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
@@ -270,7 +282,8 @@ def read_udfs(pickleSer, infile, eval_type):
         # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
         # pandas Series. See SPARK-27240.
         df_for_struct = (eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
-                         eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)
+                         eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF or
+                         eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
         ser = ArrowStreamPandasUDFSerializer(timezone, safecheck, assign_cols_by_name,
                                              df_for_struct)
     else:
@@ -278,8 +291,11 @@ def read_udfs(pickleSer, infile, eval_type):
 
     num_udfs = read_int(infile)
 
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        assert num_udfs == 1, "One SQL_SCALAR_PANDAS_ITER_UDF expected here."
+    is_scalar_iter = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+    is_map_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+
+    if is_scalar_iter or is_map_iter:
+        assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
 
         arg_offsets, udf = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
@@ -301,20 +317,20 @@ def read_udfs(pickleSer, infile, eval_type):
             num_output_rows = 0
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
-                assert num_output_rows <= num_input_rows[0], \
+                assert is_map_iter or num_output_rows <= num_input_rows[0], \
                     "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
-            try:
-                if sys.version >= '3':
-                    iterator.__next__()
-                else:
-                    iterator.next()
-            except StopIteration:
-                pass
-            else:
-                raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input iterator.")
 
-            if num_output_rows != num_input_rows[0]:
+            if is_scalar_iter:
+                try:
+                    next(iterator)
+                except StopIteration:
+                    pass
+                else:
+                    raise RuntimeError("SQL_SCALAR_PANDAS_ITER_UDF should exhaust the input "
+                                       "iterator.")
+
+            if is_scalar_iter and num_output_rows != num_input_rows[0]:
                 raise RuntimeError("The number of output rows of pandas iterator UDF should be "
                                    "the same with input rows. The input rows number is %d but the "
                                    "output rows number is %d." %

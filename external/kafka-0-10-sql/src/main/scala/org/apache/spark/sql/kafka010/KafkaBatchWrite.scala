@@ -22,50 +22,46 @@ import java.{util => ju}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
 
 /**
- * A [[StreamingWrite]] for Kafka writing. Responsible for generating the writer factory.
+ * A [[BatchWrite]] for Kafka writing. Responsible for generating the writer factory.
  *
  * @param topic The topic this writer is responsible for. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
-private[kafka010] class KafkaStreamingWrite(
+private[kafka010] class KafkaBatchWrite(
     topic: Option[String],
     producerParams: ju.Map[String, Object],
     schema: StructType)
-  extends StreamingWrite {
+  extends BatchWrite {
 
   validateQuery(schema.toAttributes, producerParams, topic)
 
-  override def createStreamingWriterFactory(): KafkaStreamWriterFactory =
-    KafkaStreamWriterFactory(topic, producerParams, schema)
+  override def createBatchWriterFactory(): KafkaBatchWriterFactory =
+    KafkaBatchWriterFactory(topic, producerParams, schema)
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def commit(messages: Array[WriterCommitMessage]): Unit = {}
+  override def abort(messages: Array[WriterCommitMessage]): Unit = {}
 }
 
 /**
- * A [[StreamingDataWriterFactory]] for Kafka writing. Will be serialized and sent to executors to
+ * A [[DataWriterFactory]] for Kafka writing. Will be serialized and sent to executors to
  * generate the per-task data writers.
  * @param topic The topic that should be written to. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
-private case class KafkaStreamWriterFactory(
+private case class KafkaBatchWriterFactory(
     topic: Option[String],
     producerParams: ju.Map[String, Object],
     schema: StructType)
-  extends StreamingDataWriterFactory {
+  extends DataWriterFactory {
 
-  override def createWriter(
-      partitionId: Int,
-      taskId: Long,
-      epochId: Long): DataWriter[InternalRow] = {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new KafkaDataWriter(topic, producerParams, schema.toAttributes)
   }
 }
