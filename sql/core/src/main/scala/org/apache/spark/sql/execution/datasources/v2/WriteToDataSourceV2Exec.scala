@@ -78,6 +78,7 @@ case class CreateTableAsSelectExec(
 
       throw new TableAlreadyExistsException(ident)
     }
+
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       catalog.createTable(
         ident, query.schema, partitioning.toArray, properties.asJava) match {
