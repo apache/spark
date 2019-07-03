@@ -490,11 +490,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
           nonEmptyDocCount += 1
           val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
             termCounts, expElogbetaBc.value, alpha, gammaShape, k, seed + index)
-          if (ids.isEmpty) {
-            stat := stat + sstats
-          } else {
-            stat(::, ids) := stat(::, ids) + sstats
-          }
+          stat(::, ids) := stat(::, ids) + sstats
           logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
         }
         Iterator((stat, logphatPartOption, nonEmptyDocCount))
@@ -625,11 +621,7 @@ private[spark] object OnlineLDAOptimizer {
     val gammad: BDV[Double] =
       new Gamma(gammaShape, 1.0 / gammaShape)(randBasis).samplesVector(k)        // K
     val expElogthetad: BDV[Double] = exp(LDAUtils.dirichletExpectation(gammad))  // K
-    val expElogbetad = if (indices.isEmpty) {
-      expElogbeta.toDenseMatrix
-    } else {
-      expElogbeta(indices, ::).toDenseMatrix                        // ids * K
-    }
+    val expElogbetad = expElogbeta(indices, ::).toDenseMatrix                        // ids * K
 
     val phiNorm: BDV[Double] = expElogbetad * expElogthetad +:+ 1e-100           // ids
     var meanGammaChange = 1D
@@ -658,7 +650,7 @@ private[spark] object OnlineLDAOptimizer {
       k: Int,
       seed: Long): (BDV[Double], BDM[Double], List[Int]) = {
     val (ids: List[Int], cts: Array[Double]) = termCounts match {
-      case v: DenseVector => (List.empty[Int], v.values)
+      case v: DenseVector => (List.range(0, v.size), v.values)
       case v: SparseVector => (v.indices.toList, v.values)
     }
     variationalTopicInference(ids, cts, expElogbeta, alpha, gammaShape, k, seed)
