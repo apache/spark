@@ -1559,13 +1559,13 @@ object functions {
    */
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
-   /**
-    * @param e hyperbolic angle
-    * @return inverse hyperbolic sine of the given value
-    *
-    * @group math_funcs
-    * @since 3.0.0
-    */
+  /**
+   * @param e hyperbolic angle
+   * @return inverse hyperbolic sine of the given value
+   *
+   * @group math_funcs
+   * @since 3.0.0
+   */
   def acosh(e: Column): Column = withExpr { Acosh(e.expr) }
 
   /**
@@ -2030,13 +2030,13 @@ object functions {
    */
   def sinh(e: Column): Column = withExpr { Sinh(e.expr) }
 
-   /**
-    * @param e hyperbolic angle
-    * @return inverse hyperbolic sine of the given value
-    *
-    * @group math_funcs
-    * @since 3.0.0
-    */
+  /**
+   * @param e hyperbolic angle
+   * @return inverse hyperbolic sine of the given value
+   *
+   * @group math_funcs
+   * @since 3.0.0
+   */
   def asinh(e: Column): Column = withExpr { Asinh(e.expr) }
 
    /**
