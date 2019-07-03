@@ -229,7 +229,7 @@ class Analyzer(
     private def substituteCTE(
         plan: LogicalPlan,
         cteName: String,
-        ctePlan: LogicalPlan): LogicalPlan =
+        ctePlan: LogicalPlan): LogicalPlan = {
       plan resolveOperatorsUp {
         case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
           ctePlan
@@ -240,6 +240,7 @@ class Analyzer(
               e.withNewPlan(substituteCTE(e.plan, cteName, ctePlan))
           }
       }
+    }
   }
 
   /**
