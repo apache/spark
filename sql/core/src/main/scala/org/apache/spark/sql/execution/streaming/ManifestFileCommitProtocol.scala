@@ -95,9 +95,8 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
           }
         } catch {
           case e: IOException =>
-            logWarning(s"Fail to remove temporary file $file , continue removing next.", e)
+            logWarning(s"Fail to remove temporary file $file, continue removing next.", e)
         }
-
       }
       pendingCommitFiles.clear()
     }
