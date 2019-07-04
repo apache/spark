@@ -2651,10 +2651,10 @@ class Dataset[T] private[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def mapPartitionsInPandas(func: PythonUDF): DataFrame = {
+  private[sql] def mapInPandas(func: PythonUDF): DataFrame = {
     Dataset.ofRows(
       sparkSession,
-      MapPartitionsInPandas(
+      MapInPandas(
         func,
         func.dataType.asInstanceOf[StructType].toAttributes,
         logicalPlan))
