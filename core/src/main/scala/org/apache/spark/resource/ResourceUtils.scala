@@ -200,6 +200,7 @@ private[spark] object ResourceUtils extends Logging {
   private def releaseLock(lock: FileLock): Unit = {
     try {
       lock.release()
+      lock.channel().close()
       logInfo(s"Released lock on $RESOURCES_LOCK_FILE.")
     } catch {
       case e: Exception =>
