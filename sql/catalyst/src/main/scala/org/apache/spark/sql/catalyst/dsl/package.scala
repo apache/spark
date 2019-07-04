@@ -97,8 +97,9 @@ package object dsl {
       case _ => In(expr, list)
     }
 
-    def like(other: Expression): Expression = new Like(expr, other)
-    def like(other: Expression, escape: Expression): Expression = Like(expr, other, escape)
+    def like(other: Expression): Expression = Like(expr, other, None)
+    def like(other: Expression, escapeChar: Expression): Expression =
+      Like(expr, other, Option(escapeChar))
     def rlike(other: Expression): Expression = RLike(expr, other)
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)

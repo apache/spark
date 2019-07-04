@@ -367,6 +367,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "drop",
     "else",
     "end",
+    "escape",
     "escaped",
     "except",
     "exchange",

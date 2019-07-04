@@ -65,59 +65,6 @@ abstract class StringRegexExpression extends BinaryExpression
   override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
-abstract class StringRegexV2Expression extends TernaryExpression
-  with ImplicitCastInputTypes with NullIntolerant {
-
-  def escape(v: String, e: Char): String
-  def matches(regex: Pattern, str: String): Boolean
-
-  override def dataType: DataType = BooleanType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
-
-  // try cache the escape for Literal
-  private lazy val escapeChar: Char = children(2) match {
-    case Literal(value: UTF8String, StringType) =>
-      if (value.numChars() == 1) {
-        value.toString.charAt(0)
-      } else {
-        throw new IllegalArgumentException("Only a single character is allowed after ESCAPE")
-      }
-    }
-  // try cache the pattern for Literal
-  private lazy val cache: Pattern = children(1) match {
-    case x @ Literal(value: String, StringType) => compile(value, escapeChar)
-    case _ => null
-  }
-
-  protected def compile(str: String, e: Char): Pattern = if (str == null) {
-    null
-  } else {
-    // Let it raise exception if couldn't compile the regex string
-    Pattern.compile(escape(str, e))
-  }
-
-  protected def pattern(str: String, e: Char) =
-    if (cache == null) compile(str, e) else cache
-
-  protected override def nullSafeEval(input1: Any, input2: Any, input3: Any): Any = {
-    val escapeStr = input3.asInstanceOf[UTF8String]
-    val escapeChar = if (escapeStr.numChars() == 1) {
-        escapeStr.toString.charAt(0)
-      } else {
-        throw new IllegalArgumentException("Only a single character is allowed after ESCAPE")
-      }
-    val regex = pattern(input2.asInstanceOf[UTF8String].toString, escapeChar)
-    if(regex == null) {
-      null
-    } else {
-      matches(regex, input1.asInstanceOf[UTF8String].toString)
-    }
-  }
-
-  override def sql: String = s"${children(0).sql} ${prettyName.toUpperCase(Locale.ROOT)}" +
-    s" ${children(1).sql} ${children(2).sql}"
-}
-
 
 /**
  * Simple RegEx pattern matching function
@@ -160,37 +107,38 @@ abstract class StringRegexV2Expression extends TernaryExpression
   """,
   since = "1.0.0")
 case class Like(
-  inputExpr: Expression,
-  patternExpr: Expression,
-  escapeExpr: Expression) extends StringRegexV2Expression {
+  left: Expression,
+  right: Expression,
+  escapeCharOpt: Option[String] = None) extends StringRegexExpression {
 
-  def this(inputExpr: Expression, patternExpr: Expression) = {
-    this(inputExpr, patternExpr, Literal.create("\\", StringType))
-  }
+  private lazy val escapeChar = escapeCharOpt.map{ str =>
+    if (str.length() == 1) {
+      str.charAt(0)
+    } else {
+      throw new IllegalArgumentException("Only a single character is allowed after ESCAPE")
+    }
+  }.getOrElse('\\')
 
-  override def children: Seq[Expression] = inputExpr :: patternExpr :: escapeExpr :: Nil
-
-  override def escape(v: String, e: Char): String = StringUtils.escapeLikeRegex(v, e)
+  override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  override def toString: String = s"$inputExpr LIKE $patternExpr ESCAPE $escapeExpr"
+  override def toString: String = s"$left LIKE $right ESCAPE $escapeChar"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
 
-    if (patternExpr.foldable) {
-      val rVal = patternExpr.eval()
+    if (right.foldable) {
+      val rVal = right.eval()
       if (rVal != null) {
-        val escapeChar = escapeExpr.eval().asInstanceOf[UTF8String].toString().charAt(0)
         val regexStr = StringEscapeUtils.escapeJava(
-          escape(rVal.asInstanceOf[UTF8String].toString(), escapeChar))
+          escape(rVal.asInstanceOf[UTF8String].toString()))
         val pattern = ctx.addMutableState(patternClass, "patternLike",
           v => s"""$v = $patternClass.compile("$regexStr");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate pattern again.
-        val eval = inputExpr.genCode(ctx)
+        val eval = left.genCode(ctx)
         ev.copy(code = code"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
@@ -207,12 +155,10 @@ case class Like(
       }
     } else {
       val pattern = ctx.freshName("pattern")
-      val patternStr = ctx.freshName("patternStr")
-      val escapeChar = ctx.freshName("escapeChar")
-      nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
+      val rightStr = ctx.freshName("rightStr")
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String $patternStr = $eval2.toString();
-          Character $escapeChar = $eval3.toString().charAt(0);
+          String $rightStr = $eval2.toString();
           $patternClass $pattern = $patternClass.compile($escapeFunc($patternStr, $escapeChar));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
