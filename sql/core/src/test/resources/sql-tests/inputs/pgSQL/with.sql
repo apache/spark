@@ -3,7 +3,7 @@
 --
 --
 -- WITH
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/with.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/with.sql
 --
 -- This test suite contains two Cartesian products without using explicit CROSS JOIN syntax.
 -- Thus, we set spark.sql.crossJoin.enabled to true.
