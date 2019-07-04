@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
-import java.io.File
-import java.io.IOException
+import java.io.{File, IOException}
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
@@ -179,9 +178,8 @@ private[deploy] class Worker(
     masterRpcAddresses.length // Make sure we can register with all masters at the same time
   )
 
-  // would be validate after worker successfully registered with master
   // visible for tests
-  private[deploy] var resources: Map[String, ResourceInformation] = _
+  private[deploy] var resources: Map[String, ResourceInformation] = Map.empty
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -191,19 +189,8 @@ private[deploy] class Worker(
 
   private def createWorkDir() {
     workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))
-    try {
-      // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
-      // So attempting to create and then check if directory was created or not.
-      workDir.mkdirs()
-      if ( !workDir.exists() || !workDir.isDirectory) {
-        logError("Failed to create work directory " + workDir)
-        System.exit(1)
-      }
-      assert (workDir.isDirectory)
-    } catch {
-      case e: Exception =>
-        logError("Failed to create work directory " + workDir, e)
-        System.exit(1)
+    if (!Utils.createDirectory(workDir)) {
+      System.exit(1)
     }
   }
 
@@ -230,17 +217,22 @@ private[deploy] class Worker(
 
   private def setupWorkerResources(): Unit = {
     try {
-      resources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
+      val allResources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
+      val resourceRequests = makeResourceRequest()
+      resources = acquireResources(allResources, resourceRequests)
     } catch {
       case e: Exception =>
         logError("Failed to setup worker resources: ", e)
-        System.exit(1)
+        releaseResources(resources)
+        if (!Utils.isTesting) {
+          System.exit(1)
+        }
     }
   }
 
-  private def makeResourceRequest(): Map[ResourceInformation, Int] = {
+  private def makeResourceRequest(): Map[String, Int] = {
     parseAllResourceRequests(conf, SPARK_WORKER_PREFIX).map { req =>
-      resources(req.id.resourceName) -> req.amount
+      req.id.resourceName -> req.amount
     }.toMap
   }
 
@@ -370,6 +362,7 @@ private[deploy] class Worker(
               TimeUnit.SECONDS))
         }
       } else {
+        releaseResources(resources)
         logError("All masters are unresponsive! Giving up.")
         System.exit(1)
       }
@@ -427,13 +420,12 @@ private[deploy] class Worker(
       memory,
       workerWebUiUrl,
       masterEndpoint.address,
-      makeResourceRequest()))
+      resources))
   }
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
-      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress,
-            assignedResources, duplicate) =>
+      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate) =>
         val preferredMasterAddress = if (preferConfiguredMasterAddress) {
           masterAddress.toSparkURL
         } else {
@@ -449,8 +441,6 @@ private[deploy] class Worker(
 
         logInfo(s"Successfully registered with master $preferredMasterAddress")
         registered = true
-        // update the resources to what the master assigns to the worker finally
-        resources = makeResourceInformation(assignedResources)
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
         forwardMessageScheduler.scheduleAtFixedRate(
           () => Utils.tryLogNonFatalError { self.send(SendHeartbeat) },
@@ -471,6 +461,7 @@ private[deploy] class Worker(
       case RegisterWorkerFailed(message) =>
         if (!registered) {
           logError("Worker registration failed: " + message)
+          releaseResources(resources)
           System.exit(1)
         }
 
@@ -670,6 +661,9 @@ private[deploy] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
+
+    case ReleaseResources(toRelease) =>
+      releaseResources(toRelease)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -735,6 +729,7 @@ private[deploy] class Worker(
   }
 
   override def onStop() {
+    releaseResources(resources)
     cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()

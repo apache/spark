@@ -246,43 +246,27 @@ private[deploy] class Master(
 
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
-      masterAddress, resourceRequest) =>
+      masterAddress, resources) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else if (idToWorker.contains(id)) {
-        workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress,
-          idToWorker(id).assignedResources, true))
+        workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
-        // TODO(wuyi5) if master changed, and old Worker A holds address [0,1,2],
-        // before worker A re-registered with master, a new worker B comes and requests
-        // for [0,1,2]. we should avoid to assign [0,1,2] to B and keep those addresses
-        // until A re-registered.
-        val resources = assignResources(workerHost, workerPort, resourceRequest)
-        if (resources.nonEmpty) {
-          val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-            workerRef, workerWebUiUrl, resources)
-          if (registerWorker(worker)) {
-            persistenceEngine.addWorker(worker)
-            workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress,
-              worker.assignedResources, false))
-            schedule()
-          } else {
-            val workerAddress = worker.endpoint.address
-            logWarning("Worker registration failed. Attempted to re-register worker at same " +
-              "address: " + workerAddress)
-            workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
-              + workerAddress))
-          }
+        val workerResources = resources.map(r => r._1 -> WorkerResourceInfo(r._1, r._2.addresses))
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          workerRef, workerWebUiUrl, workerResources)
+        if (registerWorker(worker)) {
+          persistenceEngine.addWorker(worker)
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, false))
+          schedule()
         } else {
-          // we're sure that resources are occupied by other workers on the same host because
-          // before a worker registers to master, we've already checked its requirement for
-          // certain resource but without realizing the resource conflict at that time.
-          val errMsg = s"No more resources available since they've already assigned to other " +
-            s"workers on the same host $workerHost."
-          logWarning(s"Worker registration failed. $errMsg")
-          workerRef.send(RegisterWorkerFailed(errMsg))
+          val workerAddress = worker.endpoint.address
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress))
         }
       }
 
@@ -827,48 +811,6 @@ private[deploy] class Master(
       ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
 
-  /**
-   * Assign resources to workers from the same host to avoid address conflict.
-   * @param host the worker host, where the resources come from
-   * @param port the worker port, used to log
-   * @param resourceRequest map resource to the request amount that the worker ask for
-   * @return empty, if available resources can't meet worker's requirement; else, a map
-   *         from resource name to assigned resource represented by WorkerResourceInfo
-   */
-  private def assignResources(
-      host: String,
-      port: Int,
-      resourceRequest: Map[ResourceInformation, Int])
-  : Map[String, WorkerResourceInfo] = {
-    resourceRequest.map{ case (info, amount) =>
-      val rName = info.name
-      val assigned =
-        hostResourceToAssignedAddress.getOrElseUpdate((host, rName), ArrayBuffer())
-      val available = info.addresses.diff(assigned)
-      if (available.length < amount) {
-        logWarning(s"Worker($host:$port) asks for $amount $rName, " +
-          s"but only ${available.length} available.")
-        return Map.empty
-      } else {
-        val newAssigned = available.take(amount)
-        assigned ++= newAssigned
-        rName -> WorkerResourceInfo(rName, newAssigned)
-      }
-    }
-  }
-
-  /**
-   * Free the assigned resource of worker, and make those resources be available for other
-   * workers on the same host.
-   * @param host the worker host
-   * @param assignedResources the resources which assigned to the worker by master previously
-   */
-  private def freeResources(host: String, assignedResources: Map[String, Seq[String]]): Unit = {
-    assignedResources.foreach { case (rName, addresses) =>
-      hostResourceToAssignedAddress.get((host, rName)).foreach(_ --= addresses)
-    }
-  }
-
   private def registerWorker(worker: WorkerInfo): Boolean = {
     // There may be one or more refs to dead workers on this same node (w/ different ID's),
     // remove them.
@@ -923,8 +865,17 @@ private[deploy] class Master(
     apps.filterNot(completedApps.contains(_)).foreach { app =>
       app.driver.send(WorkerRemoved(worker.id, worker.host, msg))
     }
-    // TODO(wuyi) only free available resources of worker ?
-    freeResources(worker.host, worker.assignedResources)
+    if (worker.resourcesCanBeReleased.nonEmpty) {
+      val brothers = Random.shuffle(idToWorker.filter(_._2.host == worker.host))
+      if (brothers.nonEmpty) {
+        val delegate = brothers.head._2
+        delegate.endpoint.send(ReleaseResources(worker.resourcesCanBeReleased))
+      } else {
+        // TODO(wuyi5) cases here are hard to handle:
+        // case 1: the worker is the only one instance on the host
+        // case 2: assigned resources on that worker may be wasted
+      }
+    }
     persistenceEngine.removeWorker(worker)
   }
 

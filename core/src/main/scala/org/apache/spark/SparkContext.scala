@@ -380,6 +380,17 @@ class SparkContext(config: SparkConf) extends Logging {
 
     val resourcesFileOpt = conf.get(DRIVER_RESOURCES_FILE)
     _resources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
+    // driver submitted in client mode under Standalone may have conflict resources with
+    // workers on this host. We should sync driver's resources info into SPARK_RESOURCES
+    // to avoid collision.
+    if (deployMode == "client" && (master.startsWith("spark://")
+      || master.startsWith("local-cluster"))) {
+      val requests = parseAllResourceRequests(_conf, SPARK_DRIVER_PREFIX).map {req =>
+        req.id.resourceName -> req.amount
+      }.toMap
+      // TODO(wuyi) log driver's acquired resources separately ?
+      _resources = acquireResources(_resources, requests)
+    }
 
     // log out spark.app.name in the Spark driver logs
     logInfo(s"Submitted application: $appName")
@@ -1935,6 +1946,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _progressBar.foreach(_.stop())
     }
+    releaseResources(_resources)
     _taskScheduler = null
     // TODO: Cache.stop()?
     if (_env != null) {

@@ -44,7 +44,7 @@ private[deploy] object DeployMessages {
    * @param memory the memory size of worker
    * @param workerWebUiUrl the worker Web UI address
    * @param masterAddress the master address used by the worker to connect
-   * @param resourceRequest map the resources found by the worker to its request amount
+   * @param resources the resources of worker
    */
   case class RegisterWorker(
       id: String,
@@ -55,7 +55,7 @@ private[deploy] object DeployMessages {
       memory: Int,
       workerWebUiUrl: String,
       masterAddress: RpcAddress,
-      resourceRequest: Map[ResourceInformation, Int] = Map.empty)
+      resources: Map[String, ResourceInformation] = Map.empty)
     extends DeployMessage {
     Utils.checkHost(host)
     assert (port > 0)
@@ -101,14 +101,12 @@ private[deploy] object DeployMessages {
    * @param masterWebUiUrl the master Web UI address
    * @param masterAddress the master address used by the worker to connect. It should be
    *                      [[RegisterWorker.masterAddress]].
-   * @param assignedResources the resources assigned by master without any conflict with others
    * @param duplicate whether it is a duplicate register request from the worker
    */
   case class RegisteredWorker(
       master: RpcEndpointRef,
       masterWebUiUrl: String,
       masterAddress: RpcAddress,
-      assignedResources: Map[String, Seq[String]],
       duplicate: Boolean) extends DeployMessage with RegisterWorkerResponse
 
   case class RegisterWorkerFailed(message: String) extends DeployMessage with RegisterWorkerResponse
@@ -116,6 +114,12 @@ private[deploy] object DeployMessages {
   case object MasterInStandby extends DeployMessage with RegisterWorkerResponse
 
   case class ReconnectWorker(masterUrl: String) extends DeployMessage
+
+  /**
+   * Ask the worker to release the indicated resources in ALLOCATED_RESOURCES_JSON_FILE
+   * @param toRelease the resources expected to release
+   */
+  case class ReleaseResources(toRelease: Map[String, ResourceInformation]) extends DeployMessage
 
   case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
 

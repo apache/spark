@@ -54,8 +54,6 @@ object MockWorker {
 class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extends RpcEndpoint {
   val seq = MockWorker.counter.incrementAndGet()
   val id = seq.toString
-  var resources: Map[String, Seq[String]] = _
-  var failedMsg = ""
   override val rpcEnv: RpcEnv = RpcEnv.create("worker", "localhost", seq,
     conf, new SecurityManager(conf))
   var apps = new mutable.HashMap[String, String]()
@@ -77,11 +75,8 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   val driverResources = new mutable.HashMap[String, Map[String, Set[String]]]
   val execResources = new mutable.HashMap[String, Map[String, Set[String]]]
   override def receive: PartialFunction[Any, Unit] = {
-    case RegisteredWorker(masterRef, _, _, assignedResources, _) =>
-      resources = assignedResources
+    case RegisteredWorker(masterRef, _, _, _) =>
       masterRef.send(WorkerLatestState(id, Nil, drivers.toSeq))
-    case RegisterWorkerFailed(message) =>
-      failedMsg = message
     case LaunchExecutor(_, appId, execId, _, _, _, resources_) =>
       execResources(appId + "/" + execId) = resources_.map(r => (r._1, r._2.toSet))
     case LaunchDriver(driverId, desc, resources_) =>
@@ -640,7 +635,7 @@ class MasterSuite extends SparkFunSuite
       override val rpcEnv: RpcEnv = master.rpcEnv
 
       override def receive: PartialFunction[Any, Unit] = {
-        case RegisteredWorker(_, _, masterAddress, _, _) =>
+        case RegisteredWorker(_, _, masterAddress, _) =>
           receivedMasterAddress = masterAddress
       }
     })
@@ -773,53 +768,20 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
-  test("Master should avoid resources conflict when register workers from the same host") {
-
-    def makeSameHostWorkerAndRegister(
-        masterRef: RpcEndpointRef,
-        num: Int = 1,
-        resourceType: String = "gpu")
-    : Seq[MockWorker] = {
-      (0 until num).map { i =>
-        val worker = new MockWorker(masterRef)
-        worker.rpcEnv.setupEndpoint(s"worker$i", worker)
-        val addrs = Array(0, 1, 2).map(j => (j + i).toString)
-        val resourcesReq = Map(new ResourceInformation(resourceType, addrs) -> 2)
-        val regMsg = RegisterWorker(worker.id, "localhost", 7077, worker.self, 10, 1024,
-          "http://localhost:8080", RpcAddress("localhost", 10000 + i), resourcesReq)
-        masterRef.send(regMsg)
-        worker
-      }
-    }
-
-    val master = makeAliveMaster()
-    val workers = makeSameHostWorkerAndRegister(master.self, 3)
-    val (worker1, worker2, worker3) = (workers(0), workers(1), workers(2))
-    try {
-      eventually(timeout(10.seconds)) {
-        assert(worker1.resources === Map("gpu" -> Seq("0", "1")))
-        assert(worker2.resources === Map("gpu" -> Seq("2", "3")))
-        assert(worker3.failedMsg.contains("No more resources available"))
-      }
-    } finally {
-      workers.foreach(w => if (w != null) w.rpcEnv.shutdown())
-    }
-  }
-
   test("assign/recycle resources to/from driver") {
     val master = makeAliveMaster()
     val masterRef = master.self
-    val resourceReqs = Map(GPU -> 3, FPGA -> 3)
-    val driver = DeployTestUtils.createDriverDesc().copy(resourceReqs = resourceReqs)
-    val driverId = masterRef.askSync[SubmitDriverResponse](RequestSubmitDriver(driver)).driverId.get
+    val driver = DeployTestUtils.createDriverDesc().copy(resourceReqs = Map(GPU -> 3, FPGA -> 3))
+    val driverId = masterRef.askSync[SubmitDriverResponse](
+      RequestSubmitDriver(driver)).driverId.get
     var status = masterRef.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
     assert(status.state === Some(DriverState.SUBMITTED))
     val worker = new MockWorker(masterRef)
     worker.rpcEnv.setupEndpoint(s"worker", worker)
-    val resourcesReq = Map(new ResourceInformation(GPU, Array("0", "1", "2")) -> 3,
-      new ResourceInformation(FPGA, Array("f1", "f2", "f3")) -> 3)
+    val resources = Map(GPU -> new ResourceInformation(GPU, Array("0", "1", "2")),
+      FPGA -> new ResourceInformation(FPGA, Array("f1", "f2", "f3")))
     val regMsg = RegisterWorker(worker.id, "localhost", 7077, worker.self, 10, 1024,
-      "http://localhost:8080", RpcAddress("localhost", 10000), resourcesReq)
+      "http://localhost:8080", RpcAddress("localhost", 10000), resources)
     masterRef.send(regMsg)
     eventually(timeout(10.seconds)) {
       status = masterRef.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
@@ -855,7 +817,7 @@ class MasterSuite extends SparkFunSuite
       val resources = workerResourceReqs.map { case (rName, amount) =>
         val shortName = rName.charAt(0)
         val addresses = (0 until amount).map(i => s"$shortName$i").toArray
-        new ResourceInformation(rName, addresses) -> amount
+        rName -> new ResourceInformation(rName, addresses)
       }
       val reg = RegisterWorker(worker.id, "localhost", 8077, worker.self, 10, 2048,
         "http://localhost:8080", RpcAddress("localhost", 10000), resources)
@@ -866,7 +828,6 @@ class MasterSuite extends SparkFunSuite
     val master = makeAliveMaster()
     val masterRef = master.self
     val resourceReqs = Map(GPU -> 3, FPGA -> 3)
-    val app = DeployTestUtils.createAppDesc().copy(resourceReqsPerExecutor = resourceReqs)
     val worker = makeWorkerAndRegister(masterRef, Map(GPU -> 6, FPGA -> 6))
     worker.appDesc = worker.appDesc.copy(resourceReqsPerExecutor = resourceReqs)
     val driver = DeployTestUtils.createDriverDesc().copy(resourceReqs = resourceReqs)

@@ -71,9 +71,9 @@ private[spark] class WorkerInfo(
     }
   }
 
-  def assignedResources: Map[String, Seq[String]] = {
+  def resourcesCanBeReleased: Map[String, ResourceInformation] = {
     resources.map { case (rName, rInfo) =>
-      (rName, rInfo.addresses)
+      rName -> new ResourceInformation(rName, rInfo.availableAddrs.toArray)
     }
   }
 
@@ -146,6 +146,7 @@ private[spark] class WorkerInfo(
   def acquireResources(resourceReqs: Map[String, Int])
   : Map[String, Seq[String]] = {
     resourceReqs.map { case (rName, amount) =>
+      // TODO (wuyi) rName does not exists ?
       rName -> resources(rName).acquire(amount)
     }
   }
