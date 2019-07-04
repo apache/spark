@@ -38,7 +38,7 @@ class DecimalAggregatesSuite extends PlanTest {
     val originalQuery = testRelation.select(sum('a))
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(MakeDecimal(sum(UnscaledValue('a)), 12, 1).as("sum(a)")).analyze
+      .select(MakeDecimal(sum(UnscaledValue('a)), 38, 1).as("sum(a)")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
