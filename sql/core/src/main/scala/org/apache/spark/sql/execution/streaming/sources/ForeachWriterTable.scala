@@ -133,7 +133,7 @@ class ForeachDataWriter[T](
 
   // If open returns false, we should skip writing rows.
   private val opened = writer.open(partitionId, epochId)
-  private var closed: Boolean = false
+  private var closeCalled: Boolean = false
 
   override def write(record: InternalRow): Unit = {
     if (!opened) return
@@ -142,21 +142,27 @@ class ForeachDataWriter[T](
       writer.process(rowConverter(record))
     } catch {
       case t: Throwable =>
-        writer.close(t)
-        closed = true
+        closeWriter(t)
         throw t
     }
   }
 
   override def commit(): WriterCommitMessage = {
-    writer.close(null)
-    closed = true
+    closeWriter(null)
     ForeachWriterCommitMessage
   }
 
   override def abort(): Unit = {
-    if (!closed) {
-      writer.close(new RuntimeException("Foreach writer has been aborted"))
+    closeWriter(new RuntimeException("Foreach writer has been aborted"))
+  }
+
+  private def closeWriter(errorOrNull: Throwable): Unit = {
+    if (!closeCalled) {
+      try {
+        writer.close(errorOrNull)
+      } finally {
+        closeCalled = true
+      }
     }
   }
 }
