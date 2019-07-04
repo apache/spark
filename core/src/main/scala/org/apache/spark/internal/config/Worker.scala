@@ -20,6 +20,17 @@ package org.apache.spark.internal.config
 import java.util.concurrent.TimeUnit
 
 private[spark] object Worker {
+  val SPARK_WORKER_PREFIX = "spark.worker"
+
+  val SPARK_WORKER_RESOURCE_FILE =
+    ConfigBuilder("spark.worker.resourcesFile")
+    .internal()
+    .doc("Path to a file containing the resources allocated to the worker. " +
+      "The file should be formatted as a JSON array of ResourceAllocation objects. " +
+      "Only used internally in standalone mode.")
+    .stringConf
+    .createOptional
+
   val WORKER_TIMEOUT = ConfigBuilder("spark.worker.timeout")
     .longConf
     .createWithDefault(60)

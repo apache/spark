@@ -28,11 +28,9 @@
 
   <artifactId>spark-hadoop-cloud_2.12</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Cloud Integration through Hadoop Libraries</name>
+  <name>Spark Project Hadoop Cloud Integration</name>
   <description>
-    Contains support for cloud infrastructures, specifically the Hadoop JARs and
-    transitive dependencies needed to interact with the infrastructures,
-    making everything consistent with Spark's other dependencies.
+    Contains Hadoop JARs and transitive dependencies needed to interact with cloud infrastructures.
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -702,20 +702,74 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("TRIM function") {
-    intercept("select ltrim(both 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
-    intercept("select rtrim(trailing 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
+    def assertTrimPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
 
-    assertEqual(
+    intercept("select ltrim(both 'S' from 'SS abc S'", "mismatched input 'from' expecting {')'")
+    intercept("select rtrim(trailing 'S' from 'SS abc S'", "mismatched input 'from' expecting {')'")
+
+    assertTrimPlans(
       "SELECT TRIM(BOTH '@$%&( )abc' FROM '@ $ % & ()abc ' )",
-        OneRowRelation().select('TRIM.function("@$%&( )abc", "@ $ % & ()abc "))
+      StringTrim(Literal("@ $ % & ()abc "), Some(Literal("@$%&( )abc")))
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(LEADING 'c []' FROM '[ ccccbcc ')",
-        OneRowRelation().select('ltrim.function("c []", "[ ccccbcc "))
+      StringTrimLeft(Literal("[ ccccbcc "), Some(Literal("c []")))
     )
-    assertEqual(
+    assertTrimPlans(
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
-      OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
+      StringTrimRight(Literal("bc...,,,&&&ccc"), Some(Literal("c&^,.")))
+    )
+
+    assertTrimPlans(
+      "SELECT TRIM(BOTH FROM '  bunch o blanks  ')",
+      StringTrim(Literal("  bunch o blanks  "), None)
+    )
+    assertTrimPlans(
+      "SELECT TRIM(LEADING FROM '  bunch o blanks  ')",
+      StringTrimLeft(Literal("  bunch o blanks  "), None)
+    )
+    assertTrimPlans(
+      "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
+      StringTrimRight(Literal("  bunch o blanks  "), None)
+    )
+
+    assertTrimPlans(
+      "SELECT TRIM('xyz' FROM 'yxTomxx')",
+      StringTrim(Literal("yxTomxx"), Some(Literal("xyz")))
+    )
+  }
+
+  test("OVERLAY function") {
+    def assertOverlayPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING '_' FROM 6)",
+      new Overlay(Literal("Spark SQL"), Literal("_"), Literal(6))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'CORE' FROM 7)",
+      new Overlay(Literal("Spark SQL"), Literal("CORE"), Literal(7))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0)",
+      Overlay(Literal("Spark SQL"), Literal("ANSI "), Literal(7), Literal(0))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'tructured' FROM 2 FOR 4)",
+      Overlay(Literal("Spark SQL"), Literal("tructured"), Literal(2), Literal(4))
     )
   }
 

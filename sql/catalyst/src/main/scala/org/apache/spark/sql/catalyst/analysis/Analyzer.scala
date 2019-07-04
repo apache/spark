@@ -153,7 +153,7 @@ class Analyzer(
     Batch("Hints", fixedPoint,
       new ResolveHints.ResolveJoinStrategyHints(conf),
       ResolveHints.ResolveCoalesceHints,
-      ResolveHints.RemoveAllHints),
+      new ResolveHints.RemoveAllHints(conf)),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Substitution", fixedPoint,
@@ -197,8 +197,6 @@ class Analyzer(
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
-    Batch("View", Once,
-      AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,

@@ -26,8 +26,9 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, P
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
@@ -53,10 +54,9 @@ object YarnSparkHadoopUtil {
       confPrefix: String,
       sparkConf: SparkConf
       ): Map[String, String] = {
-    Map("gpu" -> YARN_GPU_RESOURCE_CONFIG, "fpga" -> YARN_FPGA_RESOURCE_CONFIG).map {
+    Map(GPU -> YARN_GPU_RESOURCE_CONFIG, FPGA -> YARN_FPGA_RESOURCE_CONFIG).map {
       case (rName, yarnName) =>
-        val resourceCountSparkConf = s"${confPrefix}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}"
-        (yarnName -> sparkConf.get(resourceCountSparkConf, "0"))
+        (yarnName -> sparkConf.get(ResourceID(confPrefix, rName).amountConf, "0"))
     }.filter { case (_, count) => count.toLong > 0 }
   }
 

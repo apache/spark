@@ -265,6 +265,14 @@ class ParseException(
  */
 case object PostProcessor extends SqlBaseBaseListener {
 
+  /** Throws error message when exiting a explicitly captured wrong identifier rule */
+  override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
+    val ident = ctx.getParent.getText
+
+    throw new ParseException(s"Possibly unquoted identifier $ident detected. " +
+      s"Please consider quoting it with back-quotes as `$ident`", ctx)
+  }
+
   /** Remove the back ticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: SqlBaseParser.QuotedIdentifierContext): Unit = {
     replaceTokenByIdentifier(ctx, 1) { token =>
