@@ -350,7 +350,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with
   }
 }
 
-class AvroV1LogicalTypeSuite extends AvroSuite {
+class AvroV1LogicalTypeSuite extends AvroLogicalTypeSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
@@ -358,7 +358,7 @@ class AvroV1LogicalTypeSuite extends AvroSuite {
       .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "avro")
 }
 
-class AvroV2LogicalTypeSuite extends AvroSuite {
+class AvroV2LogicalTypeSuite extends AvroLogicalTypeSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
