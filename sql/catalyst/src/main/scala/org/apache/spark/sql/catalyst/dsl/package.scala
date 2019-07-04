@@ -98,7 +98,7 @@ package object dsl {
     }
 
     def like(other: Expression): Expression = Like(expr, other, None)
-    def like(other: Expression, escapeChar: Expression): Expression =
+    def like(other: Expression, escapeChar: String): Expression =
       Like(expr, other, Option(escapeChar))
     def rlike(other: Expression): Expression = RLike(expr, other)
     def contains(other: Expression): Expression = Contains(expr, other)

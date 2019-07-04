@@ -159,7 +159,7 @@ case class Like(
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($patternStr, $escapeChar));
+          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, $escapeChar));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
