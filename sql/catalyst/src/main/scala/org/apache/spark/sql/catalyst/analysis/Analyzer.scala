@@ -224,12 +224,13 @@ class Analyzer(
       case other => other
     }
 
-    def substituteCTE(plan: LogicalPlan, cteName: String, ctePlan: LogicalPlan): LogicalPlan = {
+    private def substituteCTE(
+        plan: LogicalPlan,
+        cteName: String,
+        ctePlan: LogicalPlan): LogicalPlan = {
       plan resolveOperatorsUp {
         case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
           ctePlan
-        case u: UnresolvedRelation =>
-          u
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
