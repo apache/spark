@@ -128,12 +128,12 @@ case class Like(
     if (right.foldable) {
       val rVal = right.eval()
       if (rVal != null) {
-        val regexStr = StringEscapeUtils.escapeJava(
-          escape(rVal.asInstanceOf[UTF8String].toString()))
+        val regexStr =
+          StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
         val pattern = ctx.addMutableState(patternClass, "patternLike",
           v => s"""$v = $patternClass.compile("$regexStr");""")
 
-        // We don't use nullSafeCodeGen here because we don't want to re-evaluate pattern again.
+        // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
         ev.copy(code = code"""
           ${eval.code}
