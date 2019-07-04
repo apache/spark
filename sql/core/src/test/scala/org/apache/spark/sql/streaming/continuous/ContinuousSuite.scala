@@ -63,11 +63,12 @@ class ContinuousSuiteBase extends StreamTest {
         }.get
 
         val startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() < (startTime + maxWaitTimeMs) &&
+        val maxWait = startTime + maxWaitTimeMs
+        while (System.currentTimeMillis() < maxWait &&
           reader.highestCommittedValue.get() < desiredValue) {
           Thread.sleep(100)
         }
-        if (System.currentTimeMillis() > (startTime + maxWaitTimeMs)) {
+        if (System.currentTimeMillis() > maxWait) {
           logWarning(s"Couldn't reach desired value in $maxWaitTimeMs milliseconds!" +
             s"Current highest committed value is ${reader.highestCommittedValue}")
         }
@@ -238,9 +239,9 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .queryName("noharness")
       .trigger(Trigger.Continuous(100))
       .start()
-    val ce =
+    val continuousExecution =
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[ContinuousExecution]
-    waitForRateSourceCommittedValue(ce, 3, 20 * 1000)
+    waitForRateSourceCommittedValue(continuousExecution, 3, 20 * 1000)
     query.stop()
 
     val results = spark.read.table("noharness").collect()
