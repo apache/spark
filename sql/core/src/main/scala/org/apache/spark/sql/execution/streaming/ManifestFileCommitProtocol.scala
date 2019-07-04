@@ -44,7 +44,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   @transient private var fileLog: FileStreamSinkLog = _
   private var batchId: Long = _
 
-  @transient private var pendingCommitFiles: ArrayBuffer[String] = _
+  @transient private var pendingCommitFiles: ArrayBuffer[Path] = _
 
   /**
    * Sets up the manifest log output and the batch id for this job.
@@ -57,7 +57,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   override def setupJob(jobContext: JobContext): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
-    pendingCommitFiles = new ArrayBuffer[String]
+    pendingCommitFiles = new ArrayBuffer[Path]
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
@@ -83,11 +83,10 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     require(fileLog != null, "setupManifestOptions must be called before this function")
     // Best effort cleanup of complete files from failed job.
     // Since the file has UUID in its filename, we are safe to try deleting them
-    // as the file will not conflict with file with another attempt on same task.
+    // as the file will not conflict with file with another attempt on the same task.
     if (pendingCommitFiles.nonEmpty) {
-      pendingCommitFiles.foreach { file =>
+      pendingCommitFiles.foreach { path =>
         try {
-          val path = new Path(file)
           val fs = path.getFileSystem(jobContext.getConfiguration)
           // this is to make sure the file can be seen from driver as well
           if (fs.exists(path)) {
@@ -95,7 +94,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
           }
         } catch {
           case e: IOException =>
-            logWarning(s"Fail to remove temporary file $file, continue removing next.", e)
+            logWarning(s"Fail to remove temporary file $path, continue removing next.", e)
         }
       }
       pendingCommitFiles.clear()
@@ -103,7 +102,8 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   }
 
   override def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
-    pendingCommitFiles ++= taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]].map(_.path)
+    pendingCommitFiles ++= taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]]
+      .map(_.toFileStatus.getPath)
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {

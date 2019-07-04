@@ -482,7 +482,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
       classOf[PendingCommitFilesTrackingManifestFileCommitProtocol].getCanonicalName)) {
       withTempDir { tempDir =>
         val checkpointDir = new File(tempDir, "chk")
-        val outputDir = new File(tempDir, "output")
+        val outputDir = new File(tempDir, "output @#output")
         val inputData = MemoryStream[Int]
         inputData.addData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
         val q = inputData.toDS()
