@@ -62,8 +62,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
-   * Subclasses should override this method if they produce attributes internally as it is used by
-   * assertions designed to prevent the construction of invalid plans.
    */
   final def missingInput: AttributeSet = references -- inputSet
 
