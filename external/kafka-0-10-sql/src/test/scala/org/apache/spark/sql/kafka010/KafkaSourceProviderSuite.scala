@@ -30,52 +30,100 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
 
+  private val expected = "666"
   private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
   private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
+  private val offsetReaderMethod = PrivateMethod[KafkaOffsetReader]('offsetReader)
+  private val fetchOffsetNumRetriesMethod = PrivateMethod[Int]('fetchOffsetNumRetries)
+  private val fetchOffsetRetryIntervalMsMethod = PrivateMethod[Long]('fetchOffsetRetryIntervalMs)
 
   override protected def afterEach(): Unit = {
     SparkEnv.set(null)
     super.afterEach()
   }
 
+  test("batch mode - options should be handled as case-insensitive") {
+    verifyFieldsInBatch(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, batch => {
+      assert(expected.toLong === getField(batch, pollTimeoutMsMethod))
+    })
+  }
+
   test("micro-batch mode - options should be handled as case-insensitive") {
-    def verifyFieldsInMicroBatchStream(
-        options: CaseInsensitiveStringMap,
-        expectedPollTimeoutMs: Long,
-        expectedMaxOffsetsPerTrigger: Option[Long]): Unit = {
-      // KafkaMicroBatchStream reads Spark conf from SparkEnv for default value
-      // hence we set mock SparkEnv here before creating KafkaMicroBatchStream
-      val sparkEnv = mock(classOf[SparkEnv])
-      when(sparkEnv.conf).thenReturn(new SparkConf())
-      SparkEnv.set(sparkEnv)
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
+      assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
+    })
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER, expected, stream => {
+      assert(Some(expected.toLong) === getField(stream, maxOffsetsPerTriggerMethod))
+    })
+  }
 
-      val scan = getKafkaDataSourceScan(options)
-      val stream = scan.toMicroBatchStream("dummy").asInstanceOf[KafkaMicroBatchStream]
-
-      assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
-      assert(expectedMaxOffsetsPerTrigger === getField(stream, maxOffsetsPerTriggerMethod))
-    }
-
-    val expectedValue = 1000L
-    buildCaseInsensitiveStringMapForUpperAndLowerKey(
-      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString,
-      KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER -> expectedValue.toString)
-      .foreach(verifyFieldsInMicroBatchStream(_, expectedValue, Some(expectedValue)))
+  test("SPARK-28163 - micro-batch mode - options should be handled as case-insensitive") {
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
+      val kafkaOffsetReader = getField(stream, offsetReaderMethod)
+      assert(expected.toInt === getField(kafkaOffsetReader, fetchOffsetNumRetriesMethod))
+    })
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
+        stream => {
+      val kafkaOffsetReader = getField(stream, offsetReaderMethod)
+      assert(expected.toLong === getField(kafkaOffsetReader, fetchOffsetRetryIntervalMsMethod))
+    })
   }
 
   test("SPARK-28142 - continuous mode - options should be handled as case-insensitive") {
-    def verifyFieldsInContinuousStream(
-        options: CaseInsensitiveStringMap,
-        expectedPollTimeoutMs: Long): Unit = {
+    verifyFieldsInContinuousStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
+      assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
+    })
+  }
+
+  test("SPARK-28163 - continuous mode - options should be handled as case-insensitive") {
+    verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
+      val kafkaOffsetReader = getField(stream, offsetReaderMethod)
+      assert(expected.toInt === getField(kafkaOffsetReader, fetchOffsetNumRetriesMethod))
+    })
+    verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
+        stream => {
+      val kafkaOffsetReader = getField(stream, offsetReaderMethod)
+      assert(expected.toLong === getField(kafkaOffsetReader, fetchOffsetRetryIntervalMsMethod))
+    })
+  }
+
+  private def verifyFieldsInBatch(
+      key: String,
+      value: String,
+      validate: (KafkaBatch) => Unit): Unit = {
+    buildCaseInsensitiveStringMapForUpperAndLowerKey(key -> value).foreach { options =>
+      val scan = getKafkaDataSourceScan(options)
+      val batch = scan.toBatch().asInstanceOf[KafkaBatch]
+      validate(batch)
+    }
+  }
+
+  private def verifyFieldsInMicroBatchStream(
+      key: String,
+      value: String,
+      validate: (KafkaMicroBatchStream) => Unit): Unit = {
+    // KafkaMicroBatchStream reads Spark conf from SparkEnv for default value
+    // hence we set mock SparkEnv here before creating KafkaMicroBatchStream
+    val sparkEnv = mock(classOf[SparkEnv])
+    when(sparkEnv.conf).thenReturn(new SparkConf())
+    SparkEnv.set(sparkEnv)
+
+    buildCaseInsensitiveStringMapForUpperAndLowerKey(key -> value).foreach { options =>
+      val scan = getKafkaDataSourceScan(options)
+      val stream = scan.toMicroBatchStream("dummy").asInstanceOf[KafkaMicroBatchStream]
+      validate(stream)
+    }
+  }
+
+  private def verifyFieldsInContinuousStream(
+      key: String,
+      value: String,
+      validate: (KafkaContinuousStream) => Unit): Unit = {
+    buildCaseInsensitiveStringMapForUpperAndLowerKey(key -> value).foreach { options =>
       val scan = getKafkaDataSourceScan(options)
       val stream = scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
-      assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
+      validate(stream)
     }
-
-    val expectedValue = 1000
-    buildCaseInsensitiveStringMapForUpperAndLowerKey(
-      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString)
-      .foreach(verifyFieldsInContinuousStream(_, expectedValue))
   }
 
   private def buildCaseInsensitiveStringMapForUpperAndLowerKey(

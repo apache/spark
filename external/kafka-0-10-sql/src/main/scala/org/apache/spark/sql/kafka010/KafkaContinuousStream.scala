@@ -46,7 +46,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *                       properly read.
  */
 class KafkaContinuousStream(
-    offsetReader: KafkaOffsetReader,
+    private val offsetReader: KafkaOffsetReader,
     kafkaParams: ju.Map[String, Object],
     options: CaseInsensitiveStringMap,
     metadataPath: String,

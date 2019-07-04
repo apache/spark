@@ -78,32 +78,32 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source = {
-    validateStreamOptions(parameters)
+    val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
+    validateStreamOptions(caseInsensitiveParameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
+    val uniqueGroupId = streamingUniqueGroupId(caseInsensitiveParameters, metadataPath)
 
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
-    val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
-      STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+    val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+      caseInsensitiveParameters, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
     val kafkaOffsetReader = new KafkaOffsetReader(
-      strategy(caseInsensitiveParams),
+      strategy(caseInsensitiveParameters),
       kafkaParamsForDriver(specifiedKafkaParams),
-      parameters,
+      caseInsensitiveParameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
     new KafkaSource(
       sqlContext,
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
-      parameters,
+      caseInsensitiveParameters,
       metadataPath,
       startingStreamOffsets,
-      failOnDataLoss(caseInsensitiveParams))
+      failOnDataLoss(caseInsensitiveParameters))
   }
 
   override def getTable(options: CaseInsensitiveStringMap): KafkaTable = {
@@ -119,24 +119,24 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    validateBatchOptions(parameters)
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+    val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
+    validateBatchOptions(caseInsensitiveParameters)
     val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
     val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
+      caseInsensitiveParameters, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
     assert(startingRelationOffsets != LatestOffsetRangeLimit)
 
-    val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
-      ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+    val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+      caseInsensitiveParameters, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
     assert(endingRelationOffsets != EarliestOffsetRangeLimit)
 
     new KafkaRelation(
       sqlContext,
-      strategy(caseInsensitiveParams),
-      sourceOptions = parameters,
+      strategy(caseInsensitiveParameters),
+      sourceOptions = caseInsensitiveParameters,
       specifiedKafkaParams = specifiedKafkaParams,
-      failOnDataLoss = failOnDataLoss(caseInsensitiveParams),
+      failOnDataLoss = failOnDataLoss(caseInsensitiveParameters),
       startingOffsets = startingRelationOffsets,
       endingOffsets = endingRelationOffsets)
   }

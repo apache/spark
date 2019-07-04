@@ -30,6 +30,7 @@ import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsume
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 
@@ -47,7 +48,7 @@ import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 private[kafka010] class KafkaOffsetReader(
     consumerStrategy: ConsumerStrategy,
     val driverKafkaParams: ju.Map[String, Object],
-    readerOptions: Map[String, String],
+    readerOptions: CaseInsensitiveMap[String],
     driverGroupIdPrefix: String) extends Logging {
   /**
    * Used to ensure execute fetch operations execute in an UninterruptibleThread
@@ -88,10 +89,10 @@ private[kafka010] class KafkaOffsetReader(
     _consumer
   }
 
-  private val maxOffsetFetchAttempts =
+  private val fetchOffsetNumRetries =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
 
-  private val offsetFetchAttemptIntervalMs =
+  private val fetchOffsetRetryIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 
   private def nextGroupId(): String = {
@@ -293,12 +294,12 @@ private[kafka010] class KafkaOffsetReader(
           if (incorrectOffsets.nonEmpty) {
             logWarning("Found incorrect offsets in some partitions " +
               s"(partition, previous offset, fetched offset): $incorrectOffsets")
-            if (attempt < maxOffsetFetchAttempts) {
+            if (attempt < fetchOffsetNumRetries) {
               logWarning("Retrying to fetch latest offsets because of incorrect offsets")
-              Thread.sleep(offsetFetchAttemptIntervalMs)
+              Thread.sleep(fetchOffsetRetryIntervalMs)
             }
           }
-        } while (incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts)
+        } while (incorrectOffsets.nonEmpty && attempt < fetchOffsetNumRetries)
 
         logDebug(s"Got latest offsets for partition : $partitionOffsets")
         partitionOffsets
@@ -371,7 +372,7 @@ private[kafka010] class KafkaOffsetReader(
       var result: Option[Map[TopicPartition, Long]] = None
       var attempt = 1
       var lastException: Throwable = null
-      while (result.isEmpty && attempt <= maxOffsetFetchAttempts
+      while (result.isEmpty && attempt <= fetchOffsetNumRetries
         && !Thread.currentThread().isInterrupted) {
         Thread.currentThread match {
           case ut: UninterruptibleThread =>
@@ -389,7 +390,7 @@ private[kafka010] class KafkaOffsetReader(
                   lastException = e
                   logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
                   attempt += 1
-                  Thread.sleep(offsetFetchAttemptIntervalMs)
+                  Thread.sleep(fetchOffsetRetryIntervalMs)
                   resetConsumer()
               }
             }
@@ -402,7 +403,7 @@ private[kafka010] class KafkaOffsetReader(
         throw new InterruptedException()
       }
       if (result.isEmpty) {
-        assert(attempt > maxOffsetFetchAttempts)
+        assert(attempt > fetchOffsetNumRetries)
         assert(lastException != null)
         throw lastException
       }

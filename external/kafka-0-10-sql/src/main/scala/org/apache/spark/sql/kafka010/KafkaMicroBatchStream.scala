@@ -56,7 +56,7 @@ import org.apache.spark.util.UninterruptibleThread
  * and not use wrong broker addresses.
  */
 private[kafka010] class KafkaMicroBatchStream(
-    kafkaOffsetReader: KafkaOffsetReader,
+    private val offsetReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     options: CaseInsensitiveStringMap,
     metadataPath: String,
@@ -85,7 +85,7 @@ private[kafka010] class KafkaMicroBatchStream(
 
   override def latestOffset(start: Offset): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+    val latestPartitionOffsets = offsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
     endPartitionOffsets = KafkaSourceOffset(maxOffsetsPerTrigger.map { maxOffsets =>
       rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
     }.getOrElse {
@@ -100,7 +100,7 @@ private[kafka010] class KafkaMicroBatchStream(
 
     // Find the new partitions, and get their earliest offsets
     val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
-    val newPartitionInitialOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
+    val newPartitionInitialOffsets = offsetReader.fetchEarliestOffsets(newPartitions.toSeq)
     if (newPartitionInitialOffsets.keySet != newPartitions) {
       // We cannot get from offsets for some partitions. It means they got deleted.
       val deletedPartitions = newPartitions.diff(newPartitionInitialOffsets.keySet)
@@ -117,7 +117,7 @@ private[kafka010] class KafkaMicroBatchStream(
     val deletedPartitions = startPartitionOffsets.keySet.diff(endPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
       val message =
-        if (kafkaOffsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+        if (offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
           s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
         } else {
           s"$deletedPartitions are gone. Some data may have been missed."
@@ -172,10 +172,10 @@ private[kafka010] class KafkaMicroBatchStream(
   override def commit(end: Offset): Unit = {}
 
   override def stop(): Unit = {
-    kafkaOffsetReader.close()
+    offsetReader.close()
   }
 
-  override def toString(): String = s"KafkaV2[$kafkaOffsetReader]"
+  override def toString(): String = s"KafkaV2[$offsetReader]"
 
   /**
    * Read initial partition offsets from the checkpoint, or decide the offsets and write them to
@@ -195,11 +195,11 @@ private[kafka010] class KafkaMicroBatchStream(
     metadataLog.get(0).getOrElse {
       val offsets = startingOffsets match {
         case EarliestOffsetRangeLimit =>
-          KafkaSourceOffset(kafkaOffsetReader.fetchEarliestOffsets())
+          KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit =>
-          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets(None))
+          KafkaSourceOffset(offsetReader.fetchLatestOffsets(None))
         case SpecificOffsetRangeLimit(p) =>
-          kafkaOffsetReader.fetchSpecificOffsets(p, reportDataLoss)
+          offsetReader.fetchSpecificOffsets(p, reportDataLoss)
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")
@@ -212,7 +212,7 @@ private[kafka010] class KafkaMicroBatchStream(
       limit: Long,
       from: PartitionOffsetMap,
       until: PartitionOffsetMap): PartitionOffsetMap = {
-    val fromNew = kafkaOffsetReader.fetchEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
+    val fromNew = offsetReader.fetchEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
     val sizes = until.flatMap {
       case (tp, end) =>
         // If begin isn't defined, something's wrong, but let alert logic in getBatch handle it
