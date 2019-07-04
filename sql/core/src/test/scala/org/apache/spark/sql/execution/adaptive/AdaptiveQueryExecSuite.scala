@@ -83,7 +83,6 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
   test("Change merge join to broadcast join") {
     withSQLConf(
         SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
-        SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "false",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = '1'")
