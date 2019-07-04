@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.IOException
 import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
@@ -80,17 +81,23 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
 
   override def abortJob(jobContext: JobContext): Unit = {
     require(fileLog != null, "setupManifestOptions must be called before this function")
-    // best effort cleanup of complete files from failed job
-    // since the file has UUID in its filename, we are safe to try deleting them
-    // not deleting them doesn't help reducing cost to saving files when retrying
+    // Best effort cleanup of complete files from failed job.
+    // Since the file has UUID in its filename, we are safe to try deleting them
+    // as the file will not conflict with file with another attempt on same task.
     if (pendingCommitFiles.nonEmpty) {
       pendingCommitFiles.foreach { file =>
-        val path = new Path(file)
-        val fs = path.getFileSystem(jobContext.getConfiguration)
-        // this is to make sure the file can be seen from driver as well
-        if (fs.exists(path)) {
-          fs.delete(path, false)
+        try {
+          val path = new Path(file)
+          val fs = path.getFileSystem(jobContext.getConfiguration)
+          // this is to make sure the file can be seen from driver as well
+          if (fs.exists(path)) {
+            fs.delete(path, false)
+          }
+        } catch {
+          case e: IOException =>
+            logWarning(s"Fail to remove temporary file $file , continue removing next.", e)
         }
+
       }
       pendingCommitFiles.clear()
     }
