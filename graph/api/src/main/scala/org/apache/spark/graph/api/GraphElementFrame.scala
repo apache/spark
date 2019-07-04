@@ -17,7 +17,7 @@
 
 package org.apache.spark.graph.api
 
-import scala.collection.JavaConverters
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.DataFrame
 
@@ -111,7 +111,7 @@ object NodeFrame {
    * @since 3.0.0
    */
   def create(df: DataFrame, idColumn: String, labelSet: java.util.Set[String]): NodeFrame = {
-    create(df, idColumn, JavaConverters.asScalaSet(labelSet).toSet)
+    create(df, idColumn, labelSet.asScala.toSet)
   }
 
   /**
@@ -130,8 +130,8 @@ object NodeFrame {
       idColumn: String,
       labelSet: java.util.Set[String],
       properties: java.util.Map[String, String]): NodeFrame = {
-    val scalaLabelSet = JavaConverters.asScalaSet(labelSet).toSet
-    val scalaProperties = JavaConverters.mapAsScalaMap(properties).toMap
+    val scalaLabelSet = labelSet.asScala.toSet
+    val scalaProperties = properties.asScala.toMap
     NodeFrame(df, idColumn, scalaLabelSet, scalaProperties)
   }
 
@@ -228,7 +228,7 @@ object RelationshipFrame {
       sourceIdColumn,
       targetIdColumn,
       relationshipType,
-      JavaConverters.mapAsScalaMap(properties).toMap)
+      properties.asScala.toMap)
   }
 
 }

@@ -17,9 +17,9 @@
 
 package org.apache.spark.graph.api
 
-import scala.collection.JavaConverters
+import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{functions, DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object CypherSession {
   val ID_COLUMN = "$ID"
@@ -68,7 +68,7 @@ trait CypherSession {
   def createGraph(
       nodes: java.util.List[NodeFrame],
       relationships: java.util.List[RelationshipFrame]): PropertyGraph = {
-    createGraph(JavaConverters.asScalaBuffer(nodes), JavaConverters.asScalaBuffer(relationships))
+    createGraph(nodes.asScala, relationships.asScala)
   }
 
   /**
@@ -102,15 +102,12 @@ trait CypherSession {
       .map(col => col -> col)
       .toMap
 
-    val trueLit = functions.lit(true)
-    val falseLit = functions.lit(false)
-
     val labelSets = labelColumns.subsets().toSet + Set.empty
     val nodeFrames = labelSets.map { labelSet =>
       val predicate = labelColumns
         .map {
-          case labelColumn if labelSet.contains(labelColumn) => nodes.col(labelColumn) === trueLit
-          case labelColumn => nodes.col(labelColumn) === falseLit
+          case labelColumn if labelSet.contains(labelColumn) => nodes.col(labelColumn)
+          case labelColumn => !nodes.col(labelColumn)
         }
         .reduce(_ && _)
 
@@ -122,7 +119,7 @@ trait CypherSession {
     val propertyColumns = relColumns - idColumn - sourceIdColumn - targetIdColumn -- relTypeColumns
     val relProperties = propertyColumns.map(col => col -> col).toMap
     val relFrames = relTypeColumns.map { relTypeColumn =>
-      val predicate = relationships.col(relTypeColumn) === trueLit
+      val predicate = relationships.col(relTypeColumn)
 
       RelationshipFrame(
         relationships.filter(predicate),
