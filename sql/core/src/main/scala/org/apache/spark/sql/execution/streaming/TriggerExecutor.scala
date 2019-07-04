@@ -43,11 +43,11 @@ case class OneTimeExecutor() extends TriggerExecutor {
  * A trigger executor that runs a batch every `intervalMs` milliseconds.
  */
 case class ProcessingTimeExecutor(
-    processingTime: ProcessingTimeTrigger,
+    processingTimeTrigger: ProcessingTimeTrigger,
     clock: Clock = new SystemClock())
   extends TriggerExecutor with Logging {
 
-  private val intervalMs = processingTime.intervalMs
+  private val intervalMs = processingTimeTrigger.intervalMs
   require(intervalMs >= 0)
 
   override def execute(triggerHandler: () => Boolean): Unit = {
