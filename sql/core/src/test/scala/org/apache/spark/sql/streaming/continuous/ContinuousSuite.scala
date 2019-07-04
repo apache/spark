@@ -45,7 +45,12 @@ class ContinuousSuiteBase extends StreamTest {
           case ContinuousScanExec(_, _, r: RateStreamContinuousStream, _) => r
         }.get
 
-        val deltaMs = numTriggers * 1000 + 300
+        // Adding 3s in case of slow initialization of partition reader - rows will be committed
+        // on epoch which they're written.
+        // Since previous epochs should be committed before to commit the epoch which output rows
+        // are written, slow initialization of partition reader and tiny trigger interval leads
+        // output rows to wait long time to be committed.
+        val deltaMs = numTriggers * 1000 + 3000
         while (System.currentTimeMillis < reader.creationTime + deltaMs) {
           Thread.sleep(reader.creationTime + deltaMs - System.currentTimeMillis)
         }
