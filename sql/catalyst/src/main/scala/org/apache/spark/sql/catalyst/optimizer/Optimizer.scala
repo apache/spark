@@ -1386,7 +1386,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
       case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _), _) => af match {
         case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
-            prec + 10, scale)
+            DecimalType.MAX_PRECISION, scale)
 
         case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
           val newAggExpr =
@@ -1399,7 +1399,8 @@ object DecimalAggregates extends Rule[LogicalPlan] {
       }
       case ae @ AggregateExpression(af, _, _, _) => af match {
         case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
-          MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
+          MakeDecimal(
+            ae.copy(aggregateFunction = Sum(UnscaledValue(e))), DecimalType.MAX_PRECISION, scale)
 
         case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))

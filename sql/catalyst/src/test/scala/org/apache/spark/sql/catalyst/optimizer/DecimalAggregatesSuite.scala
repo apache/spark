@@ -75,7 +75,7 @@ class DecimalAggregatesSuite extends PlanTest {
     val correctAnswer = testRelation
       .select('a)
       .window(
-        Seq(MakeDecimal(windowExpr(sum(UnscaledValue('a)), spec), 12, 1).as('sum_a)),
+        Seq(MakeDecimal(windowExpr(sum(UnscaledValue('a)), spec), 38, 1).as('sum_a)),
         Seq('a),
         Nil)
       .select('a, 'sum_a, 'sum_a)
