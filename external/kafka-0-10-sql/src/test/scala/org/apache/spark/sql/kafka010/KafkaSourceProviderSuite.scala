@@ -28,16 +28,14 @@ import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.sql.sources.v2.reader.Scan
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class KafkaSourceProviderSuite
-  extends SparkFunSuite
-  with BeforeAndAfterEach
-  with PrivateMethodTester {
+class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
 
   private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
   private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
 
   override protected def afterEach(): Unit = {
     SparkEnv.set(null)
+    super.afterEach()
   }
 
   test("micro-batch mode - options should be handled as case-insensitive") {
