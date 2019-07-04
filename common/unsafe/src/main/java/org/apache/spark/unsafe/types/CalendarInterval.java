@@ -213,12 +213,12 @@ public final class CalendarInterval implements Serializable {
             nanos = 0;
             break;
           case "second":
-            //If `to` value is "second", will not re-calculate days, hours, minutes, seconds
+            // If `to` value is "second", will not re-calculate days, hours, minutes, seconds
             // and nanos
             break;
           default:
             throw new IllegalArgumentException(
-              String.format("Cannot support 'interval '%s' %s to %s' expression", s, from, to));
+              String.format("Cannot support (interval '%s' %s to %s) expression", s, from, to));
         }
         result = new CalendarInterval(0, sign * (
           days * MICROS_PER_DAY + hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
