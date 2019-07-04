@@ -65,7 +65,8 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
-  def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
+  def escapeLikeRegex(pattern: String, escapeStr: String): String = {
+    val escapeChar = escapeStr.charAt(0)
     val in = pattern.toIterator
     val out = new StringBuilder()
 
