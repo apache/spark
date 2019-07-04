@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
+import java.util.concurrent.atomic.AtomicLong
+
 import org.json4s.DefaultFormats
 import org.json4s.jackson.Serialization
 
@@ -35,6 +37,8 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
   val creationTime = System.currentTimeMillis()
 
   val perPartitionRate = rowsPerSecond.toDouble / numPartitions.toDouble
+
+  val highestCommittedValue = new AtomicLong(Long.MinValue)
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
     assert(offsets.length == numPartitions)
@@ -82,7 +86,15 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
     RateStreamContinuousReaderFactory
   }
 
-  override def commit(end: Offset): Unit = {}
+  override def commit(end: Offset): Unit = {
+    end.asInstanceOf[RateStreamOffset].partitionToValueAndRunTimeMs.foreach {
+      case (_, ValueRunTimeMsPair(value, _)) =>
+        if (highestCommittedValue.get() < value) {
+          highestCommittedValue.set(value)
+        }
+    }
+  }
+
   override def stop(): Unit = {}
 
   private def createInitialOffset(numPartitions: Int, creationTimeMs: Long) = {

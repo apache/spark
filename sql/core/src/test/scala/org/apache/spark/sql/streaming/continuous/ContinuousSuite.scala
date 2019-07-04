@@ -45,14 +45,31 @@ class ContinuousSuiteBase extends StreamTest {
           case ContinuousScanExec(_, _, r: RateStreamContinuousStream, _) => r
         }.get
 
-        // Adding 3s in case of slow initialization of partition reader - rows will be committed
-        // on epoch which they're written.
-        // Since previous epochs should be committed before to commit the epoch which output rows
-        // are written, slow initialization of partition reader and tiny trigger interval leads
-        // output rows to wait long time to be committed.
-        val deltaMs = numTriggers * 1000 + 3000
+        val deltaMs = numTriggers * 1000 + 300
         while (System.currentTimeMillis < reader.creationTime + deltaMs) {
           Thread.sleep(reader.creationTime + deltaMs - System.currentTimeMillis)
+        }
+    }
+  }
+
+  protected def waitForRateSourceCommittedValue(
+      query: StreamExecution,
+      desiredValue: Long,
+      maxWaitTimeMs: Long): Unit = {
+    query match {
+      case s: ContinuousExecution =>
+        val reader = s.lastExecution.executedPlan.collectFirst {
+          case ContinuousScanExec(_, _, r: RateStreamContinuousStream, _) => r
+        }.get
+
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() < (startTime + maxWaitTimeMs) &&
+          reader.highestCommittedValue.get() < desiredValue) {
+          Thread.sleep(100)
+        }
+        if (System.currentTimeMillis() > (startTime + maxWaitTimeMs)) {
+          logWarning(s"Couldn't reach desired value in $maxWaitTimeMs milliseconds!" +
+            s"Current highest committed value is ${reader.highestCommittedValue}")
         }
     }
   }
@@ -221,10 +238,9 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .queryName("noharness")
       .trigger(Trigger.Continuous(100))
       .start()
-    val continuousExecution =
+    val ce =
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[ContinuousExecution]
-    continuousExecution.awaitEpoch(0)
-    waitForRateSourceTriggers(continuousExecution, 2)
+    waitForRateSourceCommittedValue(ce, 3, 20 * 1000)
     query.stop()
 
     val results = spark.read.table("noharness").collect()
