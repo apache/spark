@@ -171,8 +171,8 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
       .select("year", "dotNET", "Java")
 
     assertResult(IntegerType)(df.schema("year").dataType)
-    assertResult(DecimalType(20, 2))(df.schema("Java").dataType)
-    assertResult(DecimalType(20, 2))(df.schema("dotNET").dataType)
+    assertResult(DecimalType(38, 2))(df.schema("Java").dataType)
+    assertResult(DecimalType(38, 2))(df.schema("dotNET").dataType)
 
     checkAnswer(df, Row(2012, BigDecimal(1500000, 2), BigDecimal(2000000, 2)) ::
       Row(2013, BigDecimal(4800000, 2), BigDecimal(3000000, 2)) :: Nil)
