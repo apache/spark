@@ -39,6 +39,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -73,13 +74,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("query global temp view") {
     val df = Seq(1).toDF("i1")
     df.createGlobalTempView("tbl1")
-    val global_temp_db = spark.conf.get("spark.sql.globalTempDatabase")
+    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE)
     checkAnswer(spark.sql(s"select * from ${global_temp_db}.tbl1"), Row(1))
     spark.sql(s"drop view ${global_temp_db}.tbl1")
   }
 
   test("non-existent global temp view") {
-    val global_temp_db = spark.conf.get("spark.sql.globalTempDatabase")
+    val global_temp_db = spark.conf.get(GLOBAL_TEMP_DATABASE)
     val message = intercept[AnalysisException] {
       spark.sql(s"select * from ${global_temp_db}.nonexistentview")
     }.getMessage

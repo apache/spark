@@ -44,7 +44,8 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StructType}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
@@ -904,6 +905,18 @@ class LDA @Since("1.6.0") (
       checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
       learningDecay, optimizer, learningOffset, seed)
 
+    val oldData = LDA.getOldDataset(dataset, $(featuresCol))
+
+    // The EM solver will transform this oldData to a graph, and use a internal graphCheckpointer
+    // to update and cache the graph, so we do not need to cache it.
+    // The Online solver directly perform sampling on the oldData and update the model.
+    // However, Online solver will not cache the dataset internally.
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE &&
+      getOptimizer.toLowerCase(Locale.ROOT) == "online"
+    if (handlePersistence) {
+      oldData.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
     val oldLDA = new OldLDA()
       .setK($(k))
       .setDocConcentration(getOldDocConcentration)
@@ -912,14 +925,16 @@ class LDA @Since("1.6.0") (
       .setSeed($(seed))
       .setCheckpointInterval($(checkpointInterval))
       .setOptimizer(getOldOptimizer)
-    // TODO: persist here, or in old LDA?
-    val oldData = LDA.getOldDataset(dataset, $(featuresCol))
+
     val oldModel = oldLDA.run(oldData)
     val newModel = oldModel match {
       case m: OldLocalLDAModel =>
         new LocalLDAModel(uid, m.vocabSize, m, dataset.sparkSession)
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sparkSession, None)
+    }
+    if (handlePersistence) {
+      oldData.unpersist()
     }
 
     instr.logNumFeatures(newModel.vocabSize)
@@ -940,8 +955,8 @@ object LDA extends MLReadable[LDA] {
        dataset: Dataset[_],
        featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
-      .withColumn("docId", monotonically_increasing_id())
-      .select(col("docId"), DatasetUtils.columnToVector(dataset, featuresCol))
+      .select(monotonically_increasing_id(),
+        DatasetUtils.columnToVector(dataset, featuresCol))
       .rdd
       .map { case Row(docId: Long, features: Vector) =>
         (docId, OldVectors.fromML(features))
