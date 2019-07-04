@@ -254,7 +254,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Tanh, DoubleType)
   }
 
-    test("atanh") {
+  test("atanh") {
     testUnary(Atanh, (x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)))
     checkConsistencyBetweenInterpretedAndCodegen(Atanh, DoubleType)
   }
