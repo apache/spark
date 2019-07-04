@@ -237,14 +237,14 @@ private[deploy] class Worker(
   }
 
   private def makeResourceInformation(resourceAddrs: Map[String, Seq[String]])
-  : Map[String, ResourceInformation] = {
+    : Map[String, ResourceInformation] = {
     resourceAddrs.map { case (rName, addresses) =>
       rName -> new ResourceInformation(rName, addresses.toArray)
     }
   }
 
   private def makeResourceAddresses(resourceInfos: Map[String, ResourceInformation])
-  : Map[String, Seq[String]] = {
+    : Map[String, Seq[String]] = {
     resourceInfos.map { case (rName, rInfo) =>
       rName -> rInfo.addresses.toSeq
     }

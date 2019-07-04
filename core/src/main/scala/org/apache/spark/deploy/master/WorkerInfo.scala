@@ -144,7 +144,7 @@ private[spark] class WorkerInfo(
    * @return
    */
   def acquireResources(resourceReqs: Map[String, Int])
-  : Map[String, Seq[String]] = {
+    : Map[String, Seq[String]] = {
     resourceReqs.map { case (rName, amount) =>
       // TODO (wuyi) rName does not exists ?
       rName -> resources(rName).acquire(amount)
@@ -165,7 +165,7 @@ private[spark] class WorkerInfo(
    * @param allocated the resources which allocated to driver/executor previously
    */
   def releaseResources(allocated: Map[String, Seq[String]])
-  : Unit = {
+    : Unit = {
     allocated.foreach { case (rName, addresses) =>
       resources(rName).release(addresses)
     }

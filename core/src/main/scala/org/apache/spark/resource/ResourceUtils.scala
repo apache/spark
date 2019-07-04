@@ -89,7 +89,7 @@ private[spark] object ResourceUtils extends Logging {
   def acquireResources(
       resources: Map[String, ResourceInformation],
       resourceRequests: Map[String, Int])
-  : Map[String, ResourceInformation] = {
+    : Map[String, ResourceInformation] = {
     if (resourceRequests.isEmpty) {
       return Map.empty
     }

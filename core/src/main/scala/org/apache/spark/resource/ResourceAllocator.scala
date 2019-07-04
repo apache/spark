@@ -29,7 +29,7 @@ import org.apache.spark.util.collection.OpenHashMap
  * @param addresses Resource addresses provided by the executor/worker
  */
 class ResourceAllocator(name: String, addresses: Seq[String]) extends Serializable {
-/**
+  /**
    * Map from an address to its availability, the value `true` means the address is available,
    * while value `false` means the address is assigned.
    * TODO Use [[OpenHashMap]] instead to gain better performance.

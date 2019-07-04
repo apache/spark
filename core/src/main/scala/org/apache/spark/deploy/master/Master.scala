@@ -742,7 +742,7 @@ private[deploy] class Master(
   }
 
   def hasEnoughResources(resourcesFree: Map[String, Int], resourceReqs: Map[String, Int])
-  : Boolean = {
+    : Boolean = {
     resourceReqs.forall { case (rName, amount) =>
       resourcesFree.getOrElse(rName, 0) >= amount
     }
