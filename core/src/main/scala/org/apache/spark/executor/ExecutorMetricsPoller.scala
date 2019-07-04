@@ -60,9 +60,9 @@ private[spark] class ExecutorMetricsPoller(
 
   private val poller =
     if (pollingInterval > 0) {
-      ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-metrics-poller")
+      Some(ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-metrics-poller"))
     } else {
-      null
+      None
     }
 
   /**
@@ -78,12 +78,9 @@ private[spark] class ExecutorMetricsPoller(
     // get the latest values for the metrics
     val latestMetrics = ExecutorMetrics.getCurrentMetrics(memoryManager)
 
-    def compareAndUpdate(current: Long, latest: Long): Long =
-      if (latest > current) latest else current
-
     def updatePeaks(metrics: AtomicLongArray): Unit = {
       (0 until metrics.length).foreach { i =>
-        metrics.getAndAccumulate(i, latestMetrics(i), compareAndUpdate)
+        metrics.getAndAccumulate(i, latestMetrics(i), math.max)
       }
     }
 
@@ -96,9 +93,9 @@ private[spark] class ExecutorMetricsPoller(
 
   /** Starts the polling thread. */
   def start(): Unit = {
-    if (poller != null) {
+    poller.foreach { exec =>
       val pollingTask: Runnable = () => Utils.logUncaughtExceptions(poll())
-      poller.scheduleAtFixedRate(pollingTask, 0L, pollingInterval, TimeUnit.MILLISECONDS)
+      exec.scheduleAtFixedRate(pollingTask, 0L, pollingInterval, TimeUnit.MILLISECONDS)
     }
   }
 
@@ -191,9 +188,9 @@ private[spark] class ExecutorMetricsPoller(
 
   /** Stops the polling thread. */
   def stop(): Unit = {
-    if (poller != null) {
-      poller.shutdown()
-      poller.awaitTermination(10, TimeUnit.SECONDS)
+    poller.foreach { exec =>
+      exec.shutdown()
+      exec.awaitTermination(10, TimeUnit.SECONDS)
     }
   }
 }

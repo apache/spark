@@ -432,9 +432,7 @@ private[spark] class Executor(
           env.mapOutputTracker.asInstanceOf[MapOutputTrackerWorker].updateEpoch(task.epoch)
         }
 
-        val stageId = task.stageId
-        val stageAttemptId = task.stageAttemptId
-        metricsPoller.onTaskStart(taskId, stageId, stageAttemptId)
+        metricsPoller.onTaskStart(taskId, task.stageId, task.stageAttemptId)
         taskStarted = true
 
         // Run the actual task and measure its runtime.
@@ -667,11 +665,9 @@ private[spark] class Executor(
       } finally {
         runningTasks.remove(taskId)
         if (taskStarted) {
-          // This means the task was successfully deserialized, the stageId and stageAttemptId
+          // This means the task was successfully deserialized, its stageId and stageAttemptId
           // are known, and metricsPoller.onTaskStart was called.
-          val stageId = task.stageId
-          val stageAttemptId = task.stageAttemptId
-          metricsPoller.onTaskCompletion(taskId, stageId, stageAttemptId)
+          metricsPoller.onTaskCompletion(taskId, task.stageId, task.stageAttemptId)
         }
       }
     }
