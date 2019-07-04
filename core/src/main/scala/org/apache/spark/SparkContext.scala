@@ -385,9 +385,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // to avoid collision.
     if (deployMode == "client" && (master.startsWith("spark://")
       || master.startsWith("local-cluster"))) {
-      val requests = parseAllResourceRequests(_conf, SPARK_DRIVER_PREFIX).map {req =>
-        req.id.resourceName -> req.amount
-      }.toMap
+      val requests = parseResourceRequirements(_conf, SPARK_DRIVER_PREFIX)
       // TODO(wuyi) log driver's acquired resources separately ?
       _resources = acquireResources(_resources, requests)
     }

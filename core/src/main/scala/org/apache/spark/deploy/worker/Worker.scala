@@ -229,7 +229,7 @@ private[deploy] class Worker(
   private def setupWorkerResources(): Unit = {
     try {
       val allResources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
-      val resourceRequests = makeResourceRequest()
+      val resourceRequests = parseResourceRequirements(conf, SPARK_WORKER_PREFIX)
       resources = acquireResources(allResources, resourceRequests)
     } catch {
       case e: Exception =>
@@ -239,12 +239,6 @@ private[deploy] class Worker(
           System.exit(1)
         }
     }
-  }
-
-  private def makeResourceRequest(): Map[String, Int] = {
-    parseAllResourceRequests(conf, SPARK_WORKER_PREFIX).map { req =>
-      req.id.resourceName -> req.amount
-    }.toMap
   }
 
   private def makeResourceInformation(resourceAddrs: Map[String, Seq[String]])
