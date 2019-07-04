@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, Table
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range, SubqueryAlias, View}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -295,6 +295,16 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       // Temporary view already exists but we override it
       catalog.createTempView("tbl1", tempTable2, overrideIfExists = true)
       assert(catalog.getTempView("tbl1") == Option(tempTable2))
+
+      val testRelation1 =
+        LocalRelation(AttributeReference("a", LongType)(), AttributeReference("a", LongType)())
+      val testRelation2 =
+        LocalRelation(AttributeReference("a", LongType)(), AttributeReference("b", LongType)())
+      val e = intercept[AnalysisException] {
+        catalog.createTempView("tbl4", testRelation1, overrideIfExists = true)
+      }
+      assert(e.getMessage.contains("Found duplicate column(s)"))
+      catalog.createTempView("tbl4", testRelation2, overrideIfExists = true)
     }
   }
 

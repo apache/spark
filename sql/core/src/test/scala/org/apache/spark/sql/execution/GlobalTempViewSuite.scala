@@ -170,4 +170,14 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
         isTemporary = true).toString)
     }
   }
+
+  test("Create global temp view with duplicate column name") {
+    withGlobalTempView("src") {
+      val e = intercept[AnalysisException]{
+        sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 as a, 2 as a")
+      }
+      assert(e.getMessage.contains("Found duplicate column(s)"))
+      sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 as a, 2 as b")
+    }
+  }
 }

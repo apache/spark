@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
@@ -192,6 +193,11 @@ class SessionCatalog(
       val db = name.database.getOrElse(currentDb)
       throw new TableAlreadyExistsException(db = db, table = name.table)
     }
+  }
+
+  private def requireColumnNameNonDuplicate(name: String, plan: LogicalPlan): Unit = {
+    SchemaUtils.checkColumnNameDuplication(plan.schema.fieldNames,
+      "in the local/global temp view definition of " + name, conf.caseSensitiveAnalysis)
   }
 
   // ----------------------------------------------------------------------------
@@ -519,6 +525,7 @@ class SessionCatalog(
       name: String,
       tableDefinition: LogicalPlan,
       overrideIfExists: Boolean): Unit = synchronized {
+    requireColumnNameNonDuplicate(name, tableDefinition)
     val table = formatTableName(name)
     if (tempViews.contains(table) && !overrideIfExists) {
       throw new TempTableAlreadyExistsException(name)
@@ -533,6 +540,7 @@ class SessionCatalog(
       name: String,
       viewDefinition: LogicalPlan,
       overrideIfExists: Boolean): Unit = {
+    requireColumnNameNonDuplicate(name, viewDefinition)
     globalTempViewManager.create(formatTableName(name), viewDefinition, overrideIfExists)
   }
 
