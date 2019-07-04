@@ -3,7 +3,7 @@
 --
 --
 -- DATE
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/date.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/date.sql
 
 CREATE TABLE DATE_TBL (f1 date) USING parquet;
 
@@ -191,9 +191,9 @@ SELECT date '1999 01 08';
 -- SELECT date '99 08 01';
 SELECT date '1999 08 01';
 
+-- [SPARK-28253] Date type have different low value and high value
 -- Check upper and lower limits of date range
 SELECT date '4714-11-24 BC';
--- Spark SQL support '5874897-12-31'
 SELECT date '4714-11-23 BC';  -- out of range
 SELECT date '5874897-12-31';
 SELECT date '5874898-01-01';  -- out of range
@@ -291,68 +291,72 @@ SELECT date '5874898-01-01';  -- out of range
 -- SELECT DATE_TRUNC('DECADE', DATE '0004-12-25'); -- 0001-01-01 BC
 -- SELECT DATE_TRUNC('DECADE', DATE '0002-12-31 BC'); -- 0011-01-01 BC
 
+-- [SPARK-28141] Date type can not accept special values
 --
 -- test infinity
 --
-select 'infinity'::date, '-infinity'::date;
-select 'infinity'::date > 'today'::date as t;
-select '-infinity'::date < 'today'::date as t;
-select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
+-- select 'infinity'::date, '-infinity'::date;
+-- select 'infinity'::date > 'today'::date as t;
+-- select '-infinity'::date < 'today'::date as t;
+-- select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
 --
 -- oscillating fields from non-finite date/timestamptz:
 --
-SELECT EXTRACT(HOUR FROM DATE 'infinity');      -- NULL
-SELECT EXTRACT(HOUR FROM DATE '-infinity');     -- NULL
-SELECT EXTRACT(HOUR FROM TIMESTAMP   'infinity');      -- NULL
-SELECT EXTRACT(HOUR FROM TIMESTAMP   '-infinity');     -- NULL
-SELECT EXTRACT(HOUR FROM TIMESTAMPTZ 'infinity');      -- NULL
-SELECT EXTRACT(HOUR FROM TIMESTAMPTZ '-infinity');     -- NULL
+-- SELECT EXTRACT(HOUR FROM DATE 'infinity');      -- NULL
+-- SELECT EXTRACT(HOUR FROM DATE '-infinity');     -- NULL
+-- SELECT EXTRACT(HOUR FROM TIMESTAMP   'infinity');      -- NULL
+-- SELECT EXTRACT(HOUR FROM TIMESTAMP   '-infinity');     -- NULL
+-- SELECT EXTRACT(HOUR FROM TIMESTAMPTZ 'infinity');      -- NULL
+-- SELECT EXTRACT(HOUR FROM TIMESTAMPTZ '-infinity');     -- NULL
 -- all possible fields
-SELECT EXTRACT(MICROSECONDS  FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(MILLISECONDS  FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(SECOND        FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(MINUTE        FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(HOUR          FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(DAY           FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(MONTH         FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(QUARTER       FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(WEEK          FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(DOW           FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(ISODOW        FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(DOY           FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(TIMEZONE      FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(TIMEZONE_M    FROM DATE 'infinity');    -- NULL
-SELECT EXTRACT(TIMEZONE_H    FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(MICROSECONDS  FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(MILLISECONDS  FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(SECOND        FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(MINUTE        FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(HOUR          FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(DAY           FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(MONTH         FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(QUARTER       FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(WEEK          FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(DOW           FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(ISODOW        FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(DOY           FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(TIMEZONE      FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(TIMEZONE_M    FROM DATE 'infinity');    -- NULL
+-- SELECT EXTRACT(TIMEZONE_H    FROM DATE 'infinity');    -- NULL
 --
 -- monotonic fields from non-finite date/timestamptz:
 --
-SELECT EXTRACT(EPOCH FROM DATE 'infinity');         --  Infinity
-SELECT EXTRACT(EPOCH FROM DATE '-infinity');        -- -Infinity
-SELECT EXTRACT(EPOCH FROM TIMESTAMP   'infinity');  --  Infinity
-SELECT EXTRACT(EPOCH FROM TIMESTAMP   '-infinity'); -- -Infinity
-SELECT EXTRACT(EPOCH FROM TIMESTAMPTZ 'infinity');  --  Infinity
-SELECT EXTRACT(EPOCH FROM TIMESTAMPTZ '-infinity'); -- -Infinity
+-- SELECT EXTRACT(EPOCH FROM DATE 'infinity');         --  Infinity
+-- SELECT EXTRACT(EPOCH FROM DATE '-infinity');        -- -Infinity
+-- SELECT EXTRACT(EPOCH FROM TIMESTAMP   'infinity');  --  Infinity
+-- SELECT EXTRACT(EPOCH FROM TIMESTAMP   '-infinity'); -- -Infinity
+-- SELECT EXTRACT(EPOCH FROM TIMESTAMPTZ 'infinity');  --  Infinity
+-- SELECT EXTRACT(EPOCH FROM TIMESTAMPTZ '-infinity'); -- -Infinity
 -- all possible fields
-SELECT EXTRACT(YEAR       FROM DATE 'infinity');    --  Infinity
-SELECT EXTRACT(DECADE     FROM DATE 'infinity');    --  Infinity
-SELECT EXTRACT(CENTURY    FROM DATE 'infinity');    --  Infinity
-SELECT EXTRACT(MILLENNIUM FROM DATE 'infinity');    --  Infinity
-SELECT EXTRACT(JULIAN     FROM DATE 'infinity');    --  Infinity
-SELECT EXTRACT(ISOYEAR    FROM DATE 'infinity');    --  Infinity
-SELECT EXTRACT(EPOCH      FROM DATE 'infinity');    --  Infinity
+-- SELECT EXTRACT(YEAR       FROM DATE 'infinity');    --  Infinity
+-- SELECT EXTRACT(DECADE     FROM DATE 'infinity');    --  Infinity
+-- SELECT EXTRACT(CENTURY    FROM DATE 'infinity');    --  Infinity
+-- SELECT EXTRACT(MILLENNIUM FROM DATE 'infinity');    --  Infinity
+-- SELECT EXTRACT(JULIAN     FROM DATE 'infinity');    --  Infinity
+-- SELECT EXTRACT(ISOYEAR    FROM DATE 'infinity');    --  Infinity
+-- SELECT EXTRACT(EPOCH      FROM DATE 'infinity');    --  Infinity
 --
 -- wrong fields from non-finite date:
 --
-SELECT EXTRACT(MICROSEC  FROM DATE 'infinity');     -- ERROR:  timestamp units "microsec" not recognized
-SELECT EXTRACT(UNDEFINED FROM DATE 'infinity');     -- ERROR:  timestamp units "undefined" not supported
+-- SELECT EXTRACT(MICROSEC  FROM DATE 'infinity');     -- ERROR:  timestamp units "microsec" not recognized
+-- SELECT EXTRACT(UNDEFINED FROM DATE 'infinity');     -- ERROR:  timestamp units "undefined" not supported
 
+-- skip test constructors
 -- test constructors
-select make_date(2013, 7, 15);
-select make_date(-44, 3, 15);
-select make_time(8, 20, 0.0);
+-- select make_date(2013, 7, 15);
+-- select make_date(-44, 3, 15);
+-- select make_time(8, 20, 0.0);
 -- should fail
-select make_date(2013, 2, 30);
-select make_date(2013, 13, 1);
-select make_date(2013, 11, -1);
-select make_time(10, 55, 100.1);
-select make_time(24, 0, 2.1);
+-- select make_date(2013, 2, 30);
+-- select make_date(2013, 13, 1);
+-- select make_date(2013, 11, -1);
+-- select make_time(10, 55, 100.1);
+-- select make_time(24, 0, 2.1);
+
+DROP TABLE DATE_TBL;
