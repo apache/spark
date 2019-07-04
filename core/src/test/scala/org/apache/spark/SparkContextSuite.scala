@@ -745,7 +745,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val conf = new SparkConf()
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
-      conf.set(DRIVER_GPU_ID.amountConf, "1")
+      conf.set(DRIVER_GPU_ID.amountConf, "2")
       conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
       sc = new SparkContext(conf)
 
@@ -772,7 +772,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(DRIVER_RESOURCES_FILE, resourcesFile)
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
-      conf.set(DRIVER_GPU_ID.amountConf, "1")
+      conf.set(DRIVER_GPU_ID.amountConf, "3")
       conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
 
       sc = new SparkContext(conf)
