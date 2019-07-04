@@ -645,4 +645,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
         "2; number of columns: 1."))
   }
+
+  test("SPARK-28251: Insert into non-existing table error message is user friendly") {
+    assertAnalysisError(parsePlan("INSERT INTO test VALUES (1)"),
+      Seq("Table not found: test"))
+  }
 }
