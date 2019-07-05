@@ -1838,7 +1838,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_CTE_SUBSTITUTION_ENABLED = buildConf("spark.sql.legacy.cte.substitution.enabled")
+  val LEGACY_CTE_SUBSTITUTION_ENABLED = buildConf("spark.sql.legacy.outerCTEHasPriority")
     .internal()
     .doc("When true, outer CTE definitions takes precedence over inner definitions.")
     .booleanConf
