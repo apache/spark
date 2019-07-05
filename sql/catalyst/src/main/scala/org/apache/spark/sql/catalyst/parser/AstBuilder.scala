@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.random.RandomSampler
@@ -2294,9 +2295,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[DropViewStatement]] command.
    */
   override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
-    DropViewStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier()),
-      ctx.EXISTS != null)
+    val identifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val viewName = if (ctx.GLOBAL != null && identifier.size == 1) {
+      conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE) +: identifier
+    } else {
+      identifier
+    }
+    DropViewStatement(viewName, ctx.EXISTS != null)
   }
 
   /**

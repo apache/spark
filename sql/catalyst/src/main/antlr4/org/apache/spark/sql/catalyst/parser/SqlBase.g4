@@ -157,7 +157,7 @@ statement
     | ALTER TABLE tableIdentifier partitionSpec SET locationSpec       #setPartitionLocation
     | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
     | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
-    | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
+    | DROP (GLOBAL? TEMPORARY)? VIEW (IF EXISTS)? multipartIdentifier  #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList?

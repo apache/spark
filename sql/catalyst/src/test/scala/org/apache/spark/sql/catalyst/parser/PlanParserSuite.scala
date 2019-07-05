@@ -22,7 +22,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, Un
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.DropViewStatement
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -883,5 +885,18 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
       cte(table("t").select(star()), "t" -> ((table("a").select('c), Seq("x")))))
+  }
+
+  test("drop view") {
+    val globalTempDB = conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    assertEqual("DROP VIEW v1", DropViewStatement(Seq("v1"), false))
+    assertEqual("DROP TEMPORARY VIEW v1", DropViewStatement(Seq("v1"), false))
+    assertEqual("DROP TEMP VIEW v1", DropViewStatement(Seq("v1"), false))
+    assertEqual("DROP GLOBAL TEMPORARY VIEW v1", DropViewStatement(Seq(globalTempDB, "v1"), false))
+    assertEqual("DROP GLOBAL TEMPORARY VIEW db1.v1", DropViewStatement(Seq("db1", "v1"), false))
+    assertEqual("DROP GLOBAL TEMP VIEW db2.v1", DropViewStatement(Seq("db2", "v1"), false))
+    intercept[ParseException] {
+      assertEqual("DROP GLOBAL VIEW v1", DropViewStatement(Seq(globalTempDB, "v1"), false))
+    }
   }
 }
