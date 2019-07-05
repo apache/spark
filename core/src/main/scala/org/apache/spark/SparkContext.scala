@@ -1898,8 +1898,10 @@ class SparkContext(config: SparkConf) extends Logging {
       ShutdownHookManager.removeShutdownHook(_shutdownHookRef)
     }
 
-    Utils.tryLogNonFatalError {
-      postApplicationEnd()
+    if (listenerBus != null) {
+      Utils.tryLogNonFatalError {
+        postApplicationEnd()
+      }
     }
     Utils.tryLogNonFatalError {
       _driverLogger.foreach(_.stop())
