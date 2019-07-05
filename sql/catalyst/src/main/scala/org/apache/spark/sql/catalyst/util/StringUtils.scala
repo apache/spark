@@ -39,32 +39,9 @@ object StringUtils extends Logging {
    * throw an [[AnalysisException]].
    *
    * @param pattern the SQL pattern to convert
+   * @param escapeStr the escape string contains one character.
    * @return the equivalent Java regular expression of the pattern
    */
-  def escapeLikeRegex(pattern: String): String = {
-    val in = pattern.toIterator
-    val out = new StringBuilder()
-
-    def fail(message: String) = throw new AnalysisException(
-      s"the pattern '$pattern' is invalid, $message")
-
-    while (in.hasNext) {
-      in.next match {
-        case '\\' if in.hasNext =>
-          val c = in.next
-          c match {
-            case '_' | '%' | '\\' => out ++= Pattern.quote(Character.toString(c))
-            case _ => fail(s"the escape character is not allowed to precede '$c'")
-          }
-        case '\\' => fail("it is not allowed to end with the escape character")
-        case '_' => out ++= "."
-        case '%' => out ++= ".*"
-        case c => out ++= Pattern.quote(Character.toString(c))
-      }
-    }
-    "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
-  }
-
   def escapeLikeRegex(pattern: String, escapeStr: String): String = {
     val escapeChar = escapeStr.charAt(0)
     val in = pattern.toIterator

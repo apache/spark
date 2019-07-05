@@ -1241,6 +1241,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
         val escapeOpt = Option(ctx.escapeChar).map(_.getText)
+        escapeOpt.map{ str =>
+          if (str.length() > 1) {
+            throw new ParseException("Invalid escape string." +
+              "Escape string must be empty or one character.")
+          }
+        }
         val like = Like(e, expression(ctx.pattern), escapeOpt)
         invertIfNotDefined(like)
       case SqlBaseParser.RLIKE =>

@@ -103,7 +103,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>DROP</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ELSE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>END</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>ESCAPE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>ESCAPE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>ESCAPED</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>EXCEPT</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>EXCHANGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
