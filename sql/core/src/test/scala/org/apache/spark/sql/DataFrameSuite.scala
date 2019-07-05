@@ -572,20 +572,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("value"))
   }
 
-  test("drop column using drop with column reference with case-insensitive names") {
-    val col1 = testData("KEY")
-    val df1 = testData.drop(col1)
-    checkAnswer(
-      df1,
-      testData.collect().map(x => Row(x.getString(1))).toSeq)
-    assert(df1.schema.map(_.name) === Seq("value"))
+  test("SPARK-28189 drop column using drop with column reference with case-insensitive names") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val col1 = testData("KEY")
+      val df1 = testData.drop(col1)
+      checkAnswer(df1, testData.selectExpr("value"))
+      assert(df1.schema.map(_.name) === Seq("value"))
 
-    val col2 = testData("Key")
-    val df2 = testData.drop(col2)
-    checkAnswer(
-      df2,
-      testData.collect().map(x => Row(x.getString(1))).toSeq)
-    assert(df2.schema.map(_.name) === Seq("value"))
+      val col2 = testData("Key")
+      val df2 = testData.drop(col2)
+      checkAnswer(df2, testData.selectExpr("value"))
+      assert(df2.schema.map(_.name) === Seq("value"))
+    }
   }
 
   test("drop unknown column (no-op) with column reference") {
