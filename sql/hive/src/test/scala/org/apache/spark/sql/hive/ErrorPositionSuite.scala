@@ -34,26 +34,15 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
       spark.catalog.dropTempView("src")
     }
     Seq((1, "")).toDF("key", "value").createOrReplaceTempView("src")
-    Seq((1, 1, 1)).toDF("a", "a", "b").createOrReplaceTempView("dupAttributes")
   }
 
   override protected def afterEach(): Unit = {
     try {
       spark.catalog.dropTempView("src")
-      spark.catalog.dropTempView("dupAttributes")
     } finally {
       super.afterEach()
     }
   }
-
-  positionTest("ambiguous attribute reference 1",
-    "SELECT a from dupAttributes", "a")
-
-  positionTest("ambiguous attribute reference 2",
-    "SELECT a, b from dupAttributes", "a")
-
-  positionTest("ambiguous attribute reference 3",
-    "SELECT b, a from dupAttributes", "a")
 
   positionTest("unresolved attribute 1",
     "SELECT x FROM src", "x")
