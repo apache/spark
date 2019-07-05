@@ -250,13 +250,16 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .queryName("noharness")
       .trigger(Trigger.Continuous(100))
       .start()
+
+    val expected = Set(0, 1, 2, 3)
     val continuousExecution =
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[ContinuousExecution]
-    waitForRateSourceCommittedValue(continuousExecution, 3, 20 * 1000)
+    waitForRateSourceCommittedValue(continuousExecution, expected.max, 20 * 1000)
     query.stop()
 
     val results = spark.read.table("noharness").collect()
-    assert(Set(0, 1, 2, 3).map(Row(_)).subsetOf(results.toSet))
+    assert(expected.map(Row(_)).subsetOf(results.toSet),
+    s"Result set ${results.toSet} are not a superset of $expected!")
   }
 }
 
