@@ -282,7 +282,7 @@ public class CalendarIntervalSuite {
     assertEquals(interval2.multiply(negMultiplier),
             new CalendarInterval(-375, -1000 * MICROS_PER_HOUR));
    }
-    
+
   private static void testSingleUnit(String unit, int number, int months, long microseconds) {
     String input1 = "interval " + number + " " + unit;
     String input2 = "interval " + number + " " + unit + "s";
