@@ -163,7 +163,7 @@ Pandas UDFs can be used with
 [`pyspark.sql.DataFrame.mapInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
 It defines a map function that transforms an iterator of `pandas.DataFrame` to another.
 
-It can return the output of arbitrary length in contrast to the scalar Pandas UDF. It maps an iterator of Pandas DataFrames,
+It can return the output of arbitrary length in contrast to the scalar Pandas UDF. It maps an iterator of `pandas.DataFrame`s,
 that represents the current `DataFrame`, using the map iterator UDF and returns the result as a `DataFrame`.
 
 The following example shows how to create map iterator Pandas UDFs:
