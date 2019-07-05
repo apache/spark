@@ -129,7 +129,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       (namedQuery.alias, namedQuery)
     }
     // Check for duplicate names.
-    checkDuplicateKeys(ctes, ctx)
+    val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
+    if (duplicates.nonEmpty) {
+      throw new ParseException(
+        s"CTE definition can't have duplicate names: ${duplicates.mkString("'", "', '", "'")}.",
+        ctx)
+    }
     With(plan, ctes)
   }
 
