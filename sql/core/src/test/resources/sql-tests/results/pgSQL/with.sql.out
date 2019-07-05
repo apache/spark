@@ -379,7 +379,7 @@ WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 struct<>
 -- !query 41 output
 org.apache.spark.sql.AnalysisException
-unresolved operator 'InsertIntoTable 'UnresolvedRelation [test], false, false;
+Table not found: test;
 
 
 -- !query 42
