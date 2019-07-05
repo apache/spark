@@ -2651,14 +2651,12 @@ class Dataset[T] private[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def mapPartitionsInPandas(f: PythonUDF): DataFrame = {
+  private[sql] def mapInPandas(func: PythonUDF): DataFrame = {
     Dataset.ofRows(
       sparkSession,
-      MapPartitionsInPandas(
-        // Here, the evalType is SQL_SCALAR_PANDAS_ITER_UDF since we share the
-        // same Pandas type. To avoid conflicts, it sets SQL_MAP_PANDAS_ITER_UDF here.
-        f.copy(evalType = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF),
-        f.dataType.asInstanceOf[StructType].toAttributes,
+      MapInPandas(
+        func,
+        func.dataType.asInstanceOf[StructType].toAttributes,
         logicalPlan))
   }
 

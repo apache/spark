@@ -38,7 +38,7 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
  * `org.apache.spark.sql.catalyst.plans.logical.MapPartitionsInRWithArrow`
  *
  */
-case class MapPartitionsInPandasExec(
+case class MapInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
