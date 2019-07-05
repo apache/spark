@@ -8,6 +8,8 @@
 -- This test suite contains two Cartesian products without using explicit CROSS JOIN syntax.
 -- Thus, we set spark.sql.crossJoin.enabled to true.
 set spark.sql.crossJoin.enabled=true;
+-- This test uses the generate_series(...) function which is rewritten to EXPLODE(SEQUENCE(...)) as
+-- it's feature tracking ticket SPARK-27767 is closed as Won't Do.
 
 --
 -- Tests for common table expressions (WITH query, ... SELECT ...)
@@ -18,13 +20,20 @@ WITH q1(x,y) AS (SELECT 1,2)
 SELECT * FROM q1, q1 AS q2;
 
 -- Multiple uses are evaluated only once
--- [SPARK-19799] Support recursive SQL query
+-- [SPARK-28299] Evaluation of multiple CTE uses
+-- [ORIGINAL SQL]
 --SELECT count(*) FROM (
 --  WITH q1(x) AS (SELECT random() FROM generate_series(1, 5))
 --    SELECT * FROM q1
 --  UNION
 --    SELECT * FROM q1
 --) ss;
+SELECT count(*) FROM (
+  WITH q1(x) AS (SELECT rand() FROM (SELECT EXPLODE(SEQUENCE(1, 5))))
+    SELECT * FROM q1
+  UNION
+    SELECT * FROM q1
+) ss;
 
 -- WITH RECURSIVE
 
@@ -200,7 +209,6 @@ INSERT INTO department VALUES (7, 5, 'G');
 --SELECT * FROM subdepartment ORDER BY name;
 
 -- inside subqueries
--- [SPARK-19799] Support WITH clause in subqueries
 -- [SPARK-24497] Support recursive SQL query
 --SELECT count(*) FROM (
 --    WITH RECURSIVE t(n) AS (
@@ -441,7 +449,7 @@ insert into graph values
 --
 
 -- [ORIGINAL SQL]
---CREATE TEMPORARY TABLE y (a INTEGER) USING parquet;
+--CREATE TEMPORARY TABLE y (a INTEGER);
 CREATE TABLE y (a INTEGER) USING parquet;
 -- [ORIGINAL SQL]
 --INSERT INTO y SELECT generate_series(1, 10);
@@ -644,18 +652,20 @@ INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 10));
 --
 -- test for bug #4902
 --
--- [SPARK-19799] Support recursive SQL query
+-- [SPARK-28296] Improved VALUES support
 --with cte(foo) as ( values(42) ) values((select foo from cte));
 with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q;
 
 -- test CTE referencing an outer-level variable (to see that changed-parameter
 -- signaling still works properly after fixing this bug)
--- [SPARK-19799] Support WITH clause in subqueries
+-- [SPARK-28296] Improved VALUES support
+-- [SPARK-28297] Handling outer links in CTE subquery expressions
 --select ( with cte(foo) as ( values(f1) )
 --         select (select foo from cte) )
 --from int4_tbl;
 
--- [SPARK-19799] Support WITH clause in subqueries
+-- [SPARK-28296] Improved VALUES support
+-- [SPARK-28297] Handling outer links in CTE subquery expressions
 --select ( with cte(foo) as ( values(f1) )
 --          values((select foo from cte)) )
 --from int4_tbl;
@@ -680,23 +690,21 @@ with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q;
 -- test WITH attached to intermediate-level set operation
 --
 
--- [SPARK-19799] Support recursive SQL query
---WITH outermost(x) AS (
---  SELECT 1
---  UNION (WITH innermost as (SELECT 2)
---         SELECT * FROM innermost
---         UNION SELECT 3)
---)
---SELECT * FROM outermost ORDER BY 1;
+WITH outermost(x) AS (
+  SELECT 1
+  UNION (WITH innermost as (SELECT 2)
+         SELECT * FROM innermost
+         UNION SELECT 3)
+)
+SELECT * FROM outermost ORDER BY 1;
 
--- [SPARK-19799] Support recursive SQL query
---WITH outermost(x) AS (
---  SELECT 1
---  UNION (WITH innermost as (SELECT 2)
---         SELECT * FROM outermost  -- fail
---         UNION SELECT * FROM innermost)
---)
---SELECT * FROM outermost ORDER BY 1;
+WITH outermost(x) AS (
+  SELECT 1
+  UNION (WITH innermost as (SELECT 2)
+         SELECT * FROM outermost  -- fail
+         UNION SELECT * FROM innermost)
+)
+SELECT * FROM outermost ORDER BY 1;
 
 -- [SPARK-24497] Support recursive SQL query
 --WITH RECURSIVE outermost(x) AS (
@@ -723,22 +731,12 @@ with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q;
 -- lifespans of the two parameters overlap, thanks to B also reading A.
 --
 
--- [NOTE] INT8_TBL is created in int8.sql originally
---CREATE TABLE INT8_TBL(q1 bigint, q2 bigint) USING parquet;
---INSERT INTO INT8_TBL VALUES(trim('  123   '),trim('  456'));
---INSERT INTO INT8_TBL VALUES(trim('123   '),'4567890123456789');
---INSERT INTO INT8_TBL VALUES('4567890123456789','123');
---INSERT INTO INT8_TBL VALUES(+4567890123456789,'4567890123456789');
---INSERT INTO INT8_TBL VALUES('+4567890123456789','-4567890123456789');
-
 -- [SPARK-27878] Support ARRAY(sub-SELECT) expressions
 --with
 --A as ( select q2 as id, (select q1) as x from int8_tbl ),
 --B as ( select id, row_number() over (partition by id) as r from A ),
 --C as ( select A.id, array(select B.id from B where B.id = A.id) from A )
 --select * from C;
-
---DROP TABLE INT8_TBL;
 
 --
 -- Test CTEs read in non-initialization orders
@@ -876,13 +874,10 @@ with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q;
 --DROP RULE y_rule ON y;
 
 -- check merging of outer CTE with CTE in a rule action
--- [ORIGINAL SQL]
 --CREATE TEMP TABLE bug6051 AS
 --  select i from generate_series(1,3) as t(i);
-CREATE TABLE bug6051 USING parquet AS
-  SELECT EXPLODE(SEQUENCE(1,3)) AS i;
 
-SELECT * FROM bug6051;
+--SELECT * FROM bug6051;
 
 -- [NOTE] Spark SQL doesn't support DELETE statement
 --WITH t1 AS ( DELETE FROM bug6051 RETURNING * )
@@ -890,9 +885,7 @@ SELECT * FROM bug6051;
 --
 --SELECT * FROM bug6051;
 
--- [ORIGINAL SQL]
 --CREATE TEMP TABLE bug6051_2 (i int);
-CREATE TABLE bug6051_2 (i int) USING parquet;
 
 --CREATE RULE bug6051_ins AS ON INSERT TO bug6051 DO INSTEAD
 -- INSERT INTO bug6051_2
@@ -1190,7 +1183,9 @@ SELECT * FROM parent;
 --DROP RULE y_rule ON y;
 
 -- check that parser lookahead for WITH doesn't cause any odd behavior
+-- [TODO] WITH should be a reserved keyword?
 create table foo (with baz);  -- fail, WITH is a reserved word
+-- [TODO] WITH should be a reserved keyword?
 create table foo (with ordinality);  -- fail, WITH is a reserved word
 with ordinality as (select 1 as x) select * from ordinality;
 
@@ -1215,8 +1210,5 @@ DROP TABLE department;
 DROP TABLE tree;
 DROP TABLE graph;
 DROP TABLE y;
-DROP TABLE bug6051;
-DROP TABLE bug6051_2;
 DROP TABLE yy;
 DROP TABLE parent;
-set spark.sql.crossJoin.enabled=false;
