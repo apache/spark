@@ -46,6 +46,8 @@ private[spark] object PythonEvalType {
   val SQL_GROUPED_MAP_PANDAS_UDF = 201
   val SQL_GROUPED_AGG_PANDAS_UDF = 202
   val SQL_WINDOW_AGG_PANDAS_UDF = 203
+  val SQL_SCALAR_PANDAS_ITER_UDF = 204
+  val SQL_MAP_PANDAS_ITER_UDF = 205
 
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
@@ -54,6 +56,8 @@ private[spark] object PythonEvalType {
     case SQL_GROUPED_MAP_PANDAS_UDF => "SQL_GROUPED_MAP_PANDAS_UDF"
     case SQL_GROUPED_AGG_PANDAS_UDF => "SQL_GROUPED_AGG_PANDAS_UDF"
     case SQL_WINDOW_AGG_PANDAS_UDF => "SQL_WINDOW_AGG_PANDAS_UDF"
+    case SQL_SCALAR_PANDAS_ITER_UDF => "SQL_SCALAR_PANDAS_ITER_UDF"
+    case SQL_MAP_PANDAS_ITER_UDF => "SQL_MAP_PANDAS_ITER_UDF"
   }
 }
 
@@ -72,7 +76,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
 
   private val conf = SparkEnv.get.conf
-  private val bufferSize = conf.get(BUFFER_SIZE)
+  protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
   // each python worker gets an equal part of the allocation. the worker pool will grow to the
   // number of concurrent tasks, which is determined by the number of cores in this executor.
@@ -109,6 +113,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (memoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", memoryMb.get.toString)
     }
+    envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make

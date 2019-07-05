@@ -30,6 +30,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // Single column of images named "image"
   private lazy val imagePath = "../data/mllib/images/partitioned"
+  private lazy val recursiveImagePath = "../data/mllib/images"
 
   test("image datasource count test") {
     val df1 = spark.read.format("image").load(imagePath)

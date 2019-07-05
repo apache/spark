@@ -136,7 +136,7 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.2.0</kafka.version>
+    <kafka.version>2.3.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
     <orc.version>1.5.5</orc.version>
@@ -189,6 +189,7 @@
     <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
+    <htmlunit.version>2.22</htmlunit.version>
     <!--
     Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
     -->
@@ -330,7 +331,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.13</version>
+        <version>4.14</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -547,6 +548,19 @@
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>selenium-htmlunit-driver</artifactId>
         <version>${selenium.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- Update htmlunit dependency that selenium uses for better JS support -->
+      <dependency>
+        <groupId>net.sourceforge.htmlunit</groupId>
+        <artifactId>htmlunit</artifactId>
+        <version>${htmlunit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.sourceforge.htmlunit</groupId>
+        <artifactId>htmlunit-core-js</artifactId>
+        <version>${htmlunit.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- Added for selenium only, and should match its dependent version: -->
@@ -882,7 +896,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>9.4.1207.jre7</version>
+        <version>42.2.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2417,7 +2431,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.1.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2427,7 +2441,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-source-plugin</artifactId>
-          <version>3.0.1</version>
+          <version>3.1.0</version>
           <configuration>
             <attach>true</attach>
           </configuration>
@@ -2586,7 +2600,7 @@
                   <pluginExecutionFilter>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
-                    <versionRange>3.1.0</versionRange>
+                    <versionRange>3.1.2</versionRange>
                     <goals>
                       <goal>test-jar</goal>
                     </goals>

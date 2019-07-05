@@ -176,7 +176,7 @@ case class FileSourceScanExec(
       metrics.filter(e => driverMetrics.contains(e._1)).values.toSeq)
   }
 
-  @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
+  @transient private lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
@@ -185,7 +185,7 @@ case class FileSourceScanExec(
       (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
     driverMetrics("metadataTime") = timeTakenMs
     ret
-  }
+  }.toArray
 
   /**
    * [[partitionFilters]] can contain subqueries whose results are available only at runtime so
@@ -377,7 +377,7 @@ case class FileSourceScanExec(
   private def createBucketedReadRDD(
       bucketSpec: BucketSpec,
       readFile: (PartitionedFile) => Iterator[InternalRow],
-      selectedPartitions: Seq[PartitionDirectory],
+      selectedPartitions: Array[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
@@ -401,7 +401,7 @@ case class FileSourceScanExec(
     }
 
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Nil))
+      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
@@ -417,7 +417,7 @@ case class FileSourceScanExec(
    */
   private def createNonBucketedReadRDD(
       readFile: (PartitionedFile) => Iterator[InternalRow],
-      selectedPartitions: Seq[PartitionDirectory],
+      selectedPartitions: Array[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
     val maxSplitBytes =
@@ -440,7 +440,7 @@ case class FileSourceScanExec(
           partitionValues = partition.values
         )
       }
-    }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+    }.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 
     val partitions =
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)

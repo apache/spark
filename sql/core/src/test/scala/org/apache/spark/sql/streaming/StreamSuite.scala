@@ -219,8 +219,12 @@ class StreamSuite extends StreamTest {
     }
 
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
-    assertDF(df)
-    assertDF(df)
+    Seq("", "parquet").foreach { useV1SourceReader =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReader) {
+        assertDF(df)
+        assertDF(df)
+      }
+    }
   }
 
   test("Within the same streaming query, one StreamingRelation should only be transformed to one " +

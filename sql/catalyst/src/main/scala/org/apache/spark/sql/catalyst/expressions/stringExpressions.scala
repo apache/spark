@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -454,6 +455,69 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   override def prettyName: String = "replace"
 }
 
+object Overlay {
+
+  def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
+    val builder = new UTF8StringBuilder
+    builder.append(input.substringSQL(1, pos - 1))
+    builder.append(replace)
+    // If you specify length, it must be a positive whole number or zero.
+    // Otherwise it will be ignored.
+    // The default value for length is the length of replace.
+    val length = if (len >= 0) {
+      len
+    } else {
+      replace.numChars
+    }
+    builder.append(input.substringSQL(pos + length, Int.MaxValue))
+    builder.build()
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(input, replace, pos[, len]) - Replace `input` with `replace` that starts at `pos` and is of length `len`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL' PLACING '_' FROM 6);
+       Spark_SQL
+      > SELECT _FUNC_('Spark SQL' PLACING 'CORE' FROM 7);
+       Spark CORE
+      > SELECT _FUNC_('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0);
+       Spark ANSI SQL
+      > SELECT _FUNC_('Spark SQL' PLACING 'tructured' FROM 2 FOR 4);
+       Structured SQL
+  """)
+// scalastyle:on line.size.limit
+case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(str: Expression, replace: Expression, pos: Expression) = {
+    this(str, replace, pos, Literal.create(-1, IntegerType))
+  }
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringType, StringType, IntegerType, IntegerType)
+
+  override def children: Seq[Expression] = input :: replace :: pos :: len :: Nil
+
+  override def nullSafeEval(inputEval: Any, replaceEval: Any, posEval: Any, lenEval: Any): Any = {
+    val inputStr = inputEval.asInstanceOf[UTF8String]
+    val replaceStr = replaceEval.asInstanceOf[UTF8String]
+    val position = posEval.asInstanceOf[Int]
+    val length = lenEval.asInstanceOf[Int]
+    Overlay.calculate(inputStr, replaceStr, position, length)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (input, replace, pos, len) =>
+      "org.apache.spark.sql.catalyst.expressions.Overlay" +
+        s".calculate($input, $replace, $pos, $len);")
+  }
+}
+
 object StringTranslate {
 
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)
@@ -605,11 +669,21 @@ object StringTrim {
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
 
-    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`
+    _FUNC_(BOTH FROM str) - Removes the leading and trailing space characters from `str`.
 
-    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`
+    _FUNC_(LEADING FROM str) - Removes the leading space characters from `str`.
 
-    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`
+    _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
+
+    _FUNC_(trimStr, str) - Remove the leading and trailing `trimStr` characters from `str`.
+
+    _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
+
+    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
+
+    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`.
+
+    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`.
   """,
   arguments = """
     Arguments:
@@ -626,7 +700,15 @@ object StringTrim {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
+      > SELECT _FUNC_(BOTH FROM '    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(LEADING FROM '    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
+           SparkSQL
       > SELECT _FUNC_('SL', 'SSparkSQLS');
+       parkSQ
+      > SELECT _FUNC_('SL' FROM '    SparkSQL   ');
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
        parkSQ
@@ -641,7 +723,7 @@ case class StringTrim(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -741,7 +823,7 @@ case class StringTrimLeft(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -844,7 +926,7 @@ case class StringTrimRight(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -1076,8 +1158,9 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, len, pad) - Returns `str`, left-padded with `pad` to a length of `len`.
+    _FUNC_(str, len[, pad]) - Returns `str`, left-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters.
+      If `pad` is not specified, `str` will be padded to the left with space characters.
   """,
   examples = """
     Examples:
@@ -1085,10 +1168,16 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
        ???hi
       > SELECT _FUNC_('hi', 1, '??');
        h
+      > SELECT _FUNC_('hi', 5);
+          hi
   """,
   since = "1.5.0")
-case class StringLPad(str: Expression, len: Expression, pad: Expression)
+case class StringLPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
   extends TernaryExpression with ImplicitCastInputTypes {
+
+  def this(str: Expression, len: Expression) = {
+    this(str, len, Literal(" "))
+  }
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def dataType: DataType = StringType
@@ -1110,8 +1199,9 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, len, pad) - Returns `str`, right-padded with `pad` to a length of `len`.
+    _FUNC_(str, len[, pad]) - Returns `str`, right-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters.
+      If `pad` is not specified, `str` will be padded to the right with space characters.
   """,
   examples = """
     Examples:
@@ -1119,10 +1209,16 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
        hi???
       > SELECT _FUNC_('hi', 1, '??');
        h
+      > SELECT _FUNC_('hi', 5);
+       hi
   """,
   since = "1.5.0")
-case class StringRPad(str: Expression, len: Expression, pad: Expression)
+case class StringRPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
   extends TernaryExpression with ImplicitCastInputTypes {
+
+  def this(str: Expression, len: Expression) = {
+    this(str, len, Literal(" "))
+  }
 
   override def children: Seq[Expression] = str :: len :: pad :: Nil
   override def dataType: DataType = StringType

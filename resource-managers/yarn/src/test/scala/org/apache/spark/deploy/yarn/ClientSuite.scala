@@ -23,7 +23,6 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -42,6 +41,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceID
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers {
@@ -400,7 +400,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnName}", "2")
     }
     resources.values.foreach { rName =>
-      conf.set(s"${SPARK_DRIVER_RESOURCE_PREFIX}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+      conf.set(ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
     }
 
     val error = intercept[SparkException] {
@@ -423,7 +423,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}", "2")
     }
     resources.values.foreach { rName =>
-      conf.set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+      conf.set(ResourceID(SPARK_EXECUTOR_PREFIX, rName).amountConf, "3")
     }
 
     val error = intercept[SparkException] {
@@ -447,7 +447,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     resources.values.foreach { rName =>
-      conf.set(s"${SPARK_DRIVER_RESOURCE_PREFIX}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+      conf.set(ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
     }
     // also just set yarn one that we don't convert
     conf.set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + yarnMadeupResource, "5")

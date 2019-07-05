@@ -19,13 +19,14 @@ package org.apache.spark.sql.internal
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.catalog.v2.CatalogPlugin
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -185,6 +186,8 @@ abstract class BaseSessionStateBuilder(
         V2WriteSupportCheck +:
         V2StreamingScanSupportCheck +:
         customCheckRules
+
+    override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
   }
 
   /**
@@ -261,6 +264,10 @@ abstract class BaseSessionStateBuilder(
     extensions.buildPlannerStrategies(session)
   }
 
+  protected def columnarRules: Seq[ColumnarRule] = {
+    extensions.buildColumnarRules(session)
+  }
+
   /**
    * Create a query execution object.
    */
@@ -311,7 +318,8 @@ abstract class BaseSessionStateBuilder(
       listenerManager,
       () => resourceLoader,
       createQueryExecution,
-      createClone)
+      createClone,
+      columnarRules)
   }
 }
 

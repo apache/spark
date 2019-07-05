@@ -21,7 +21,7 @@ import java.io.{File, FilenameFilter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
-import java.util.UUID
+import java.util.{Locale, UUID}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -820,7 +820,12 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
       statements.zip(fs).foreach { case (s, f) => f(s) }
     } finally {
       tableNames.foreach { name =>
-        statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        // TODO: Need a better way to drop the view.
+        if (name.toUpperCase(Locale.ROOT).startsWith("VIEW")) {
+          statements(0).execute(s"DROP VIEW IF EXISTS $name")
+        } else {
+          statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        }
       }
       statements.foreach(_.close())
       connections.foreach(_.close())

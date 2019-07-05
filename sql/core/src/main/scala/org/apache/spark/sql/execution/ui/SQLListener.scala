@@ -28,6 +28,13 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlanInfo}
 
 @DeveloperApi
+case class SparkListenerSQLAdaptiveExecutionUpdate(
+  executionId: Long,
+  physicalPlanDescription: String,
+  sparkPlanInfo: SparkPlanInfo)
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerSQLExecutionStart(
     executionId: Long,
     description: String,

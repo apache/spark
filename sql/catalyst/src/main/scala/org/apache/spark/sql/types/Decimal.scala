@@ -76,7 +76,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   def set(unscaled: Long, precision: Int, scale: Int): Decimal = {
     if (setOrNull(unscaled, precision, scale) == null) {
-      throw new IllegalArgumentException("Unscaled value too large for precision")
+      throw new ArithmeticException("Unscaled value too large for precision")
     }
     this
   }
@@ -111,9 +111,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   def set(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
     this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
-    require(
-      decimalVal.precision <= precision,
-      s"Decimal precision ${decimalVal.precision} exceeds max precision $precision")
+    if (decimalVal.precision > precision) {
+      throw new ArithmeticException(
+        s"Decimal precision ${decimalVal.precision} exceeds max precision $precision")
+    }
     this.longVal = 0L
     this._precision = precision
     this._scale = scale
@@ -249,14 +250,25 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   /**
    * Create new `Decimal` with given precision and scale.
    *
-   * @return a non-null `Decimal` value if successful or `null` if overflow would occur.
+   * @return a non-null `Decimal` value if successful. Otherwise, if `nullOnOverflow` is true, null
+   *         is returned; if `nullOnOverflow` is false, an `ArithmeticException` is thrown.
    */
   private[sql] def toPrecision(
       precision: Int,
       scale: Int,
-      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP): Decimal = {
+      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
+      nullOnOverflow: Boolean = true): Decimal = {
     val copy = clone()
-    if (copy.changePrecision(precision, scale, roundMode)) copy else null
+    if (copy.changePrecision(precision, scale, roundMode)) {
+      copy
+    } else {
+      if (nullOnOverflow) {
+        null
+      } else {
+        throw new ArithmeticException(
+          s"$toDebugString cannot be represented as Decimal($precision, $scale).")
+      }
+    }
   }
 
   /**
