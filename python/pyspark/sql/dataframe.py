@@ -408,7 +408,7 @@ class DataFrame(object):
         """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
         logical plan of this DataFrame, which is especially useful in iterative algorithms where the
         plan may grow exponentially. It will be saved to files inside the checkpoint
-        directory set with L{SparkContext.setCheckpointDir()}.
+        directory set with :meth:`SparkContext.setCheckpointDir`.
 
         :param eager: Whether to checkpoint this DataFrame immediately
 
@@ -581,9 +581,9 @@ class DataFrame(object):
 
     @since(1.3)
     def cache(self):
-        """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
+        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK`).
 
-        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
@@ -594,9 +594,9 @@ class DataFrame(object):
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
+        If no storage level is specified defaults to (`MEMORY_AND_DISK`).
 
-        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
