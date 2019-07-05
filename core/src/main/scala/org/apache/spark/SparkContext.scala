@@ -244,6 +244,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   def isLocal: Boolean = Utils.isLocalMaster(_conf)
 
+  private def isClientStandalone: Boolean = {
+    deployMode == "client" && (master.startsWith("spark://") || master.startsWith("local-cluster"))
+  }
+
   /**
    * @return true if context is stopped or in the midst of stopping.
    */
@@ -383,8 +387,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // driver submitted in client mode under Standalone may have conflict resources with
     // workers on this host. We should sync driver's resources info into SPARK_RESOURCES
     // to avoid collision.
-    if (deployMode == "client" && (master.startsWith("spark://")
-      || master.startsWith("local-cluster"))) {
+    if (isClientStandalone) {
       val requests = parseResourceRequirements(_conf, SPARK_DRIVER_PREFIX)
       // TODO(wuyi) log driver's acquired resources separately ?
       _resources = acquireResources(_resources, requests)
@@ -1944,7 +1947,9 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _progressBar.foreach(_.stop())
     }
-    releaseResources(_resources)
+    if (isClientStandalone) {
+      releaseResources(_resources)
+    }
     _taskScheduler = null
     // TODO: Cache.stop()?
     if (_env != null) {
