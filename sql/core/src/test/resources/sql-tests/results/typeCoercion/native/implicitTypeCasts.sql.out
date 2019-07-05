@@ -317,7 +317,7 @@ struct<second(CAST(10:11:12 AS TIMESTAMP)):int>
 -- !query 39
 select 1 like '%' FROM t
 -- !query 39 schema
-struct<CAST(1 AS STRING) LIKE % \:boolean>
+struct<CAST(1 AS STRING) LIKE %:boolean>
 -- !query 39 output
 true
 
@@ -325,7 +325,7 @@ true
 -- !query 40
 select date('1996-09-10') like '19%' FROM t
 -- !query 40 schema
-struct<CAST(CAST(1996-09-10 AS DATE) AS STRING) LIKE 19% \:boolean>
+struct<CAST(CAST(1996-09-10 AS DATE) AS STRING) LIKE 19%:boolean>
 -- !query 40 output
 true
 
@@ -333,7 +333,7 @@ true
 -- !query 41
 select '1' like 1 FROM t
 -- !query 41 schema
-struct<1 LIKE CAST(1 AS STRING) \:boolean>
+struct<1 LIKE CAST(1 AS STRING):boolean>
 -- !query 41 output
 true
 
@@ -341,7 +341,7 @@ true
 -- !query 42
 select '1 ' like 1 FROM t
 -- !query 42 schema
-struct<1  LIKE CAST(1 AS STRING) \:boolean>
+struct<1  LIKE CAST(1 AS STRING):boolean>
 -- !query 42 output
 false
 
@@ -349,6 +349,6 @@ false
 -- !query 43
 select '1996-09-10' like date('1996-09-10') FROM t
 -- !query 43 schema
-struct<1996-09-10 LIKE CAST(CAST(1996-09-10 AS DATE) AS STRING) \:boolean>
+struct<1996-09-10 LIKE CAST(CAST(1996-09-10 AS DATE) AS STRING):boolean>
 -- !query 43 output
 true
