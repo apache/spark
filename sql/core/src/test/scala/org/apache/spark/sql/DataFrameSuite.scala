@@ -1672,7 +1672,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reuse exchange") {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2") {
       val df = spark.range(100).toDF()
       val join = df.join(df, "id")
       val plan = join.queryExecution.executedPlan
