@@ -87,6 +87,9 @@ private[sql] class SharedState(
   // to load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
   // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
   private val (conf, hadoopConf) = {
+    if (sparkContext.conf.getBoolean("spark.sql.thriftserver.hdfs.disable.cache", false)) {
+      sparkContext.hadoopConfiguration.setBoolean("fs.hdfs.impl.disable.cache", true)
+    }
     val confClone = sparkContext.conf.clone()
     val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
     // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
