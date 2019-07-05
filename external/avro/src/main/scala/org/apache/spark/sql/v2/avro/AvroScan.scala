@@ -39,13 +39,14 @@ case class AvroScan(
     override def isSplitable(path: Path): Boolean = true
 
     override def createReaderFactory(): PartitionReaderFactory = {
-      val optionsAsScala = options.asScala.toMap
-      val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(optionsAsScala)
+      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+      // Hadoop Configurations are case sensitive.
+      val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
       val broadcastedConf = sparkSession.sparkContext.broadcast(
         new SerializableConfiguration(hadoopConf))
       // The partition values are already truncated in `FileScan.partitions`.
       // We should use `readPartitionSchema` as the partition schema here.
       AvroPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-        dataSchema, readDataSchema, readPartitionSchema, optionsAsScala)
+        dataSchema, readDataSchema, readPartitionSchema, caseSensitiveMap)
     }
   }

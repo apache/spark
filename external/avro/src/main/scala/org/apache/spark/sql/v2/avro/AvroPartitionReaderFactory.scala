@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.PartitionedFile
-import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.execution.datasources.v2.{EmptyPartitionReader, FilePartitionReaderFactory, PartitionReaderWithPartitionValues}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.PartitionReader
 import org.apache.spark.sql.types.StructType
@@ -44,7 +44,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param sqlConf SQL configuration.
  * @param broadcastedConf Broadcast serializable Hadoop Configuration.
  * @param dataSchema Schema of AVRO files.
- * @param readDataSchema Required schema of AVRO files.
+ * @param readDataSchema Required data schema of AVRO files.
  * @param partitionSchema Schema of partitions.
  * @param options Options for parsing AVRO files.
  */
@@ -91,7 +91,6 @@ case class AvroPartitionReaderFactory(
 
       val deserializer =
         new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), readDataSchema)
-
 
       val fileReader = new PartitionReader[InternalRow] {
         private[this] var completed = false
