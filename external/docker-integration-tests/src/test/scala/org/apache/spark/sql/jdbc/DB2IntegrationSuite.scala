@@ -32,7 +32,7 @@ import org.apache.spark.tags.DockerTest
 @Ignore // AMPLab Jenkins needs to be updated before shared memory works on docker
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "ibmcom/db2:11.5.0.0"
+    override val imageName = "lresende/db2express-c:10.5.0.5-3.10.0"
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
       "LICENSE" -> "accept"
