@@ -15,12 +15,12 @@
 * limitations under the License.
 */
 
-package org.apache.spark.unsafe.types;
+package org.apache.spark.sql.types;
 
 import org.junit.Test;
 
 import static org.junit.Assert.*;
-import static org.apache.spark.unsafe.types.CalendarInterval.*;
+import static org.apache.spark.sql.types.CalendarInterval.*;
 
 public class CalendarIntervalSuite {
 
