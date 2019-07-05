@@ -89,7 +89,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // we also need to lowercase the column names in written partition paths.
     // scalastyle:off caselocale
     val hiveCompatiblePartitionColumns = partitionAttributes.map { attr =>
-     attr.withName(attr.name.toLowerCase)
+      attr.withName(attr.name.toLowerCase)
     }
     // scalastyle:on caselocale
 

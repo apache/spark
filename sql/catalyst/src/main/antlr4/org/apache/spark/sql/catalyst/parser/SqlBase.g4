@@ -278,7 +278,7 @@ locationSpec
     ;
 
 query
-    : ctes? queryNoWith
+    : ctes? queryTerm queryOrganization
     ;
 
 insertInto
@@ -380,10 +380,6 @@ dmlStatementNoWith
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     ;
 
-queryNoWith
-    : queryTerm queryOrganization
-    ;
-
 queryOrganization
     : (ORDER BY order+=sortItem (',' order+=sortItem)*)?
       (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
@@ -412,7 +408,7 @@ queryPrimary
     | fromStatement                                                         #fromStmt
     | TABLE multipartIdentifier                                             #table
     | inlineTable                                                           #inlineTableDefault1
-    | '(' queryNoWith  ')'                                                  #subquery
+    | '(' query ')'                                                         #subquery
     ;
 
 sortItem
@@ -583,7 +579,7 @@ identifierComment
 
 relationPrimary
     : multipartIdentifier sample? tableAlias  #tableName
-    | '(' queryNoWith ')' sample? tableAlias  #aliasedQuery
+    | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
     | functionTable                           #tableValuedFunction
@@ -705,6 +701,8 @@ primaryExpression
       ((FOR | ',') len=valueExpression)? ')'                                                   #substring
     | TRIM '(' trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
        FROM srcStr=valueExpression ')'                                                         #trim
+    | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
+      FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
     ;
 
 constant
@@ -1002,12 +1000,14 @@ ansiNonReserved
     | OUT
     | OUTPUTFORMAT
     | OVER
+    | OVERLAY
     | OVERWRITE
     | PARTITION
     | PARTITIONED
     | PARTITIONS
     | PERCENTLIT
     | PIVOT
+    | PLACING
     | POSITION
     | PRECEDING
     | PRINCIPALS
@@ -1253,12 +1253,14 @@ nonReserved
     | OUTPUTFORMAT
     | OVER
     | OVERLAPS
+    | OVERLAY
     | OVERWRITE
     | PARTITION
     | PARTITIONED
     | PARTITIONS
     | PERCENTLIT
     | PIVOT
+    | PLACING
     | POSITION
     | PRECEDING
     | PRIMARY
@@ -1509,12 +1511,14 @@ OUTER: 'OUTER';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
 OVER: 'OVER';
 OVERLAPS: 'OVERLAPS';
+OVERLAY: 'OVERLAY';
 OVERWRITE: 'OVERWRITE';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';
 PERCENTLIT: 'PERCENT';
 PIVOT: 'PIVOT';
+PLACING: 'PLACING';
 POSITION: 'POSITION';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
