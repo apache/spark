@@ -81,12 +81,14 @@ private[spark] object ResourceUtils extends Logging {
 
   /**
    * Assign resources to workers from the same host to avoid address conflict.
+   * @param componentName spark.driver / spark.worker
    * @param resources the resources found by worker on the host
    * @param resourceRequests map resource name to the request amount by the worker
    * @return allocated resources for the worker/driver or throws exception if can't
    *         meet worker/driver's requirement
    */
   def acquireResources(
+      componentName: String,
       resources: Map[String, ResourceInformation],
       resourceRequests: Map[String, Int])
     : Map[String, ResourceInformation] = {
@@ -132,6 +134,9 @@ private[spark] object ResourceUtils extends Logging {
       }.toMap
     }
     writeResourceAllocationJson(SPARK_WORKER_PREFIX, newAllocated, resourcesFile)
+    logInfo("==============================================================")
+    logInfo(s"Acquired isolated resources for $componentName:\n${newAssigned.mkString("\n")}")
+    logInfo("==============================================================")
     releaseLock(lock)
     newAssigned
   }

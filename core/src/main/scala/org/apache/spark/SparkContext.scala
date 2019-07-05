@@ -389,8 +389,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // to avoid collision.
     if (isClientStandalone) {
       val requests = parseResourceRequirements(_conf, SPARK_DRIVER_PREFIX)
-      // TODO(wuyi) log driver's acquired resources separately ?
-      _resources = acquireResources(_resources, requests)
+      _resources = acquireResources(SPARK_DRIVER_PREFIX, _resources, requests)
     }
 
     // log out spark.app.name in the Spark driver logs
