@@ -679,12 +679,14 @@ SELECT rank() OVER (ORDER BY length('abc'));
 -- [SPARK-28086] Adds `random()` to Spark
 -- [ERROR] SELECT * FROM rank() OVER (ORDER BY random());
 
-SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
+-- The output is not truncated?
+-- [ERROR] SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
 
 -- It does not work. Maybe it is related to not defining a window?
 -- [ERROR] SELECT rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1;
 
-SELECT count() OVER () FROM tenk1;
+-- The output is not truncated?
+-- [ERROR] SELECT count() OVER () FROM tenk1;
 
 
 -- Ok, first I migrated a call to `generate_series()`, given by Postgres, to
