@@ -1223,6 +1223,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case c: CreateNamedStruct => c.valExprs
       case other => Seq(other)
     }
+    // Check the argument of boolean test is valid.
+    def checkBooleanTestArgs(e: Expression): Unit = e.dataType match {
+      case BooleanType =>
+      case other => throw new ParseException("argument of IS TRUE must be type boolean, " +
+        s"not type $other", ctx)
+    }
 
     // Create the predicate.
     ctx.kind.getType match {
@@ -1243,6 +1249,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         IsNotNull(e)
       case SqlBaseParser.NULL =>
         IsNull(e)
+      case SqlBaseParser.TRUE | SqlBaseParser.FALSE | SqlBaseParser.UNKNOWN if ctx.NOT != null =>
+        checkBooleanTestArgs(e)
+        Not(BooleanTest(e))
+      case SqlBaseParser.TRUE | SqlBaseParser.FALSE | SqlBaseParser.UNKNOWN =>
+        checkBooleanTestArgs(e)
+        BooleanTest(e)
       case SqlBaseParser.DISTINCT if ctx.NOT != null =>
         EqualNullSafe(e, expression(ctx.right))
       case SqlBaseParser.DISTINCT =>
