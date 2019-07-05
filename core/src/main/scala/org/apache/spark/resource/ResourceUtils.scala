@@ -112,6 +112,7 @@ private[spark] object ResourceUtils extends Logging {
           if (available.length >= amount) {
             available.take(amount)
           } else {
+            releaseLock(lock)
             throw new SparkException(s"No more resources available since they've already" +
               s" assigned to other workers/drivers.")
           }
