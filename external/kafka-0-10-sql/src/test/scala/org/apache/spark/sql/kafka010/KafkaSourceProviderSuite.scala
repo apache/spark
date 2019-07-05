@@ -30,7 +30,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
 
-  private val expected = "666"
+  private val expected = "1111"
   private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
   private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
   private val offsetReaderMethod = PrivateMethod[KafkaOffsetReader]('offsetReader)
