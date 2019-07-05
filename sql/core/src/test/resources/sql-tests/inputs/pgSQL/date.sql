@@ -201,14 +201,14 @@ SELECT date '5874898-01-01';  -- out of range
 
 -- RESET datestyle;
 
--- [SPARK-27898] Support 4 date operators(date + integer, integer + date, date - integer and date - date)
 --
 -- Simple math
 -- Leave most of it for the horology tests
 --
 
--- SELECT f1 - date '2000-01-01' AS "Days From 2K" FROM DATE_TBL;
+SELECT f1 - date '2000-01-01' AS `Days From 2K` FROM DATE_TBL;
 
+-- [SPARK-28141] Date type can not accept special values
 -- SELECT f1 - date 'epoch' AS "Days From Epoch" FROM DATE_TBL;
 
 -- SELECT date 'yesterday' - date 'today' AS "One day";
