@@ -38,8 +38,8 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
 
   val perPartitionRate = rowsPerSecond.toDouble / numPartitions.toDouble
 
-  val highestCommittedValue = new AtomicLong(Long.MinValue)
-  val firstCommittedTime = new AtomicLong(Long.MinValue)
+  private[sql] val highestCommittedValue = new AtomicLong(Long.MinValue)
+  private[sql] val firstCommittedTime = new AtomicLong(Long.MinValue)
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
     assert(offsets.length == numPartitions)

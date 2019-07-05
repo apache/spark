@@ -39,8 +39,18 @@ class ContinuousSuiteBase extends StreamTest {
 
   protected def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
     findRateStreamContinuousStream(query).foreach { reader =>
+      // Make sure epoch 0 is completed.
+      query.asInstanceOf[ContinuousExecution].awaitEpoch(0)
+
+      // This is called after waiting first epoch to be committed, but there might be
+      // a gap between committing epoch to commit log and committing epoch to source.
+      // If epoch 0 is not reported to rate source yet, use current time instead.
+      var firstCommittedTime = reader.firstCommittedTime.longValue()
+      if (firstCommittedTime < 0) {
+        firstCommittedTime = System.currentTimeMillis()
+      }
+
       val deltaMs = numTriggers * 1000 + 300
-      val firstCommittedTime = reader.firstCommittedTime.longValue()
       while (System.currentTimeMillis < firstCommittedTime + deltaMs) {
         Thread.sleep(firstCommittedTime + deltaMs - System.currentTimeMillis)
       }
