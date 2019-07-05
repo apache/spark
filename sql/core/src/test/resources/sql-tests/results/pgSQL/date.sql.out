@@ -425,6 +425,7 @@ SELECT date '5874898-01-01'
 
 
 
+
 DROP TABLE DATE_TBL
 -- !query 46 schema
 struct<>

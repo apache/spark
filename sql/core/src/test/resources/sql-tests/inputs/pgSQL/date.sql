@@ -36,6 +36,7 @@ SELECT f1 AS `Three` FROM DATE_TBL
 --
 -- Check all the documented input formats
 --
+-- [SPARK-28259] Date/Time Output Styles and Date Order Conventions
 -- SET datestyle TO iso;  -- display results in ISO
 
 -- SET datestyle TO ymd;
@@ -276,6 +277,7 @@ SELECT date '5874898-01-01';  -- out of range
 -- SELECT EXTRACT(CENTURY FROM INTERVAL '99 y');   -- 0
 -- SELECT EXTRACT(CENTURY FROM INTERVAL '-99 y');  -- 0
 -- SELECT EXTRACT(CENTURY FROM INTERVAL '-100 y'); -- -1
+
 -- [SPARK-28017] Enhance date DATE_TRUNC
 --
 -- test trunc function!
