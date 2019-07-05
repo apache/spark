@@ -2193,7 +2193,7 @@ class DataFrame(object):
                         _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
             return pdf
 
-    def mapPartitionsInPandas(self, udf):
+    def mapInPandas(self, udf):
         """
         Maps each partition of the current :class:`DataFrame` using a pandas udf and returns
         the result as a `DataFrame`.
@@ -2215,7 +2215,7 @@ class DataFrame(object):
         ... def filter_func(iterator):
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
-        >>> df.mapPartitionsInPandas(filter_func).show()  # doctest: +SKIP
+        >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
@@ -2227,15 +2227,12 @@ class DataFrame(object):
         """
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-                or udf.evalType != PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+                or udf.evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
             raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "SCALAR_ITER.")
-
-        if not isinstance(udf.returnType, StructType):
-            raise ValueError("The returnType of the pandas_udf must be a StructType")
+                             "MAP_ITER.")
 
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapPartitionsInPandas(udf_column._jc.expr())
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
 
     def _collectAsArrow(self):

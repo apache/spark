@@ -57,7 +57,7 @@ class ScalarPandasIterUDFTests(ReusedSQLTestCase):
         ReusedSQLTestCase.tearDownClass()
 
     def test_map_partitions_in_pandas(self):
-        @pandas_udf('id long', PandasUDFType.SCALAR_ITER)
+        @pandas_udf('id long', PandasUDFType.MAP_ITER)
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
@@ -65,7 +65,7 @@ class ScalarPandasIterUDFTests(ReusedSQLTestCase):
                 yield pdf
 
         df = self.spark.range(10)
-        actual = df.mapPartitionsInPandas(func).collect()
+        actual = df.mapInPandas(func).collect()
         expected = df.collect()
         self.assertEquals(actual, expected)
 
@@ -73,45 +73,45 @@ class ScalarPandasIterUDFTests(ReusedSQLTestCase):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
         df = self.spark.createDataFrame(data, "a int, b string")
 
-        @pandas_udf(df.schema, PandasUDFType.SCALAR_ITER)
+        @pandas_udf(df.schema, PandasUDFType.MAP_ITER)
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
                 assert [d.name for d in list(pdf.dtypes)] == ['int32', 'object']
                 yield pdf
 
-        actual = df.mapPartitionsInPandas(func).collect()
+        actual = df.mapInPandas(func).collect()
         expected = df.collect()
         self.assertEquals(actual, expected)
 
     def test_different_output_length(self):
-        @pandas_udf('a long', PandasUDFType.SCALAR_ITER)
+        @pandas_udf('a long', PandasUDFType.MAP_ITER)
         def func(iterator):
             for _ in iterator:
                 yield pd.DataFrame({'a': list(range(100))})
 
         df = self.spark.range(10)
-        actual = df.repartition(1).mapPartitionsInPandas(func).collect()
+        actual = df.repartition(1).mapInPandas(func).collect()
         self.assertEquals(set((r.a for r in actual)), set(range(100)))
 
     def test_empty_iterator(self):
-        @pandas_udf('a int, b string', PandasUDFType.SCALAR_ITER)
+        @pandas_udf('a int, b string', PandasUDFType.MAP_ITER)
         def empty_iter(_):
             return iter([])
 
         self.assertEqual(
-            self.spark.range(10).mapPartitionsInPandas(empty_iter).count(), 0)
+            self.spark.range(10).mapInPandas(empty_iter).count(), 0)
 
     def test_empty_rows(self):
-        @pandas_udf('a int', PandasUDFType.SCALAR_ITER)
+        @pandas_udf('a int', PandasUDFType.MAP_ITER)
         def empty_rows(_):
             return iter([pd.DataFrame({'a': []})])
 
         self.assertEqual(
-            self.spark.range(10).mapPartitionsInPandas(empty_rows).count(), 0)
+            self.spark.range(10).mapInPandas(empty_rows).count(), 0)
 
     def test_chain_map_partitions_in_pandas(self):
-        @pandas_udf('id long', PandasUDFType.SCALAR_ITER)
+        @pandas_udf('id long', PandasUDFType.MAP_ITER)
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
@@ -119,7 +119,7 @@ class ScalarPandasIterUDFTests(ReusedSQLTestCase):
                 yield pdf
 
         df = self.spark.range(10)
-        actual = df.mapPartitionsInPandas(func).mapPartitionsInPandas(func).collect()
+        actual = df.mapInPandas(func).mapInPandas(func).collect()
         expected = df.collect()
         self.assertEquals(actual, expected)
 
