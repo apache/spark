@@ -1406,6 +1406,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val timestamp = Literal(new Timestamp(0L))
     val interval = Literal(new CalendarInterval(0, 0))
     val str = Literal("2015-01-01")
+    val intValue = Literal(0, IntegerType)
 
     ruleTest(dateTimeOperations, Add(date, interval), Cast(TimeAdd(date, interval), DateType))
     ruleTest(dateTimeOperations, Add(interval, date), Cast(TimeAdd(date, interval), DateType))
@@ -1424,6 +1425,11 @@ class TypeCoercionSuite extends AnalysisTest {
     // interval operations should not be effected
     ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
     ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
+
+    ruleTest(dateTimeOperations, Add(date, intValue), DateAdd(date, intValue))
+    ruleTest(dateTimeOperations, Add(intValue, date), DateAdd(date, intValue))
+    ruleTest(dateTimeOperations, Subtract(date, intValue), DateSub(date, intValue))
+    ruleTest(dateTimeOperations, Subtract(date, date), DateDiff(date, date))
   }
 
   /**
