@@ -303,9 +303,9 @@ public final class CalendarInterval implements Serializable {
     return new CalendarInterval(months, microseconds);
   }
 
-  public CalendarInterval multiply(Integer multiplier) {
-    int months = this.months * multiplier.intValue();
-    long microseconds = this.microseconds * multiplier.intValue();
+  public CalendarInterval multiply(int multiplier) {
+    int months = this.months * multiplier;
+    long microseconds = this.microseconds * multiplier;
     return new CalendarInterval(months, microseconds);
   }
 

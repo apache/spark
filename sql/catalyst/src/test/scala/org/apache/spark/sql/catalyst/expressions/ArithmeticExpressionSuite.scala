@@ -123,10 +123,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, tpe)
     }
-    DataTypeTestUtils.integralType.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(MultiplyInterval, CalendarIntervalType, tpe)
-      checkConsistencyBetweenInterpretedAndCodegen(MultiplyInterval, tpe, CalendarIntervalType)
-    }
 
     // Type checking error
     assert(

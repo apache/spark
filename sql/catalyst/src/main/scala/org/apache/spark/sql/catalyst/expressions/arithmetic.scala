@@ -222,36 +222,6 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
-@ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
-  examples = """
-    Examples:
-      > interval '1' day * 3
-        interval 3 days
-  """)
-case class MultiplyInterval(interval: Expression, multiplier: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-
-  override def left: Expression = interval
-  override def right: Expression = multiplier
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, IntegerType)
-
-  override def dataType: DataType = CalendarIntervalType
-
-  override def nullSafeEval(interval: Any, multiplier: Any): Any = {
-    interval.asInstanceOf[CalendarInterval].multiply(multiplier.asInstanceOf[Integer])
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev,
-      (eval1, eval2) => s"$eval1.multiply((${CodeGenerator.javaType(dataType)})$eval2)")
-  }
-
-  override def prettyName: String = "multiply_interval"
-}
-
-
 // Common base trait for Divide and Remainder, since these two classes are almost identical
 trait DivModLike extends BinaryArithmetic {
 

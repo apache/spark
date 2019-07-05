@@ -1123,6 +1123,36 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
   }
 }
 
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
+  examples = """
+    Examples:
+      > interval '1' day * 3
+        interval 3 days
+  """)
+case class MultiplyInterval(interval: Expression, multiplier: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = interval
+  override def right: Expression = multiplier
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, IntegerType)
+
+  override def dataType: DataType = CalendarIntervalType
+
+  override def nullSafeEval(interval: Any, multiplier: Any): Any = {
+    interval.asInstanceOf[CalendarInterval].multiply(multiplier.asInstanceOf[Int])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev,
+      (interval, multiplier) => s"$interval.multiply($multiplier)")
+  }
+
+  override def prettyName: String = "multiply_interval"
+}
+
+
 /**
  * Returns the date that is num_months after start_date.
  */

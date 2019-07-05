@@ -451,6 +451,37 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("multiply_interval") {
+    checkEvaluation(
+      MultiplyInterval(
+        Literal(new CalendarInterval(1, 0)),
+        Literal(2)
+      ), new CalendarInterval(2, 0))
+    checkEvaluation(
+      MultiplyInterval(
+        Literal(new CalendarInterval(1, 2000000.toLong)),
+        Literal(20)),
+      new CalendarInterval(20, 40000000.toLong))
+    checkEvaluation(
+      MultiplyInterval(
+        Literal(new CalendarInterval(1, 123000L)),
+        Literal(2)),
+      new CalendarInterval(2, 246000L)
+    )
+    checkEvaluation(
+      MultiplyInterval(
+        Literal.create(null, CalendarIntervalType),
+        Literal(2)),
+      null)
+    checkEvaluation(
+      MultiplyInterval(
+        Literal.create(null, CalendarIntervalType),
+        Literal.create(null, IntegerType)),
+      null)
+    checkConsistencyBetweenInterpretedAndCodegen(
+      MultiplyInterval, CalendarIntervalType, IntegerType)
+  }
+
   test("add_months") {
     checkEvaluation(AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))

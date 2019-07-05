@@ -1434,10 +1434,6 @@ class Analyzer(
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
-                case multiply: Multiply if multiply.left.dataType == CalendarIntervalType =>
-                  MultiplyInterval(multiply.left, multiply.right)
-                case multiply: Multiply if multiply.right.dataType == CalendarIntervalType =>
-                  MultiplyInterval(multiply.right, multiply.left)
                 case other =>
                   if (isDistinct) {
                     failAnalysis(s"${other.prettyName} does not support the modifier DISTINCT")
