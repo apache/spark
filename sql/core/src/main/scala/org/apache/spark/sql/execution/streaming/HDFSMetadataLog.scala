@@ -57,7 +57,11 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   require(implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
     "Should not create a log with type Seq, use Arrays instead - see SPARK-17372")
 
-  val metadataPath = new Path(path)
+  val metadataPath = {
+    val p = new Path(path)
+    val fs = p.getFileSystem(sparkSession.sessionState.newHadoopConf)
+    p.makeQualified(fs.getUri, fs.getWorkingDirectory)
+  }
 
   protected val fileManager =
     CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf)
