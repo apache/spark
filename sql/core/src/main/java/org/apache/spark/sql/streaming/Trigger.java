@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
 import scala.concurrent.duration.Duration;
 
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger;
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 
 /**

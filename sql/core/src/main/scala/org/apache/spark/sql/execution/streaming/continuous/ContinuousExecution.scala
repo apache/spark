@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousTrigger => LegacyContTrigger}
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
@@ -93,6 +94,7 @@ class ContinuousExecution(
   }
 
   private val triggerExecutor = trigger match {
+    case LegacyContTrigger(t) => ProcessingTimeExecutor(ProcessingTimeTrigger(t), triggerClock)
     case ContinuousTrigger(t) => ProcessingTimeExecutor(ProcessingTimeTrigger(t), triggerClock)
     case _ => throw new IllegalStateException(s"Unsupported type of trigger: $trigger")
   }

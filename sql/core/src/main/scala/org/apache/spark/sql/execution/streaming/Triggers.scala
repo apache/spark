@@ -25,12 +25,32 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.CalendarInterval
 
+private[sql] object TriggerIntervalUtils {
+  def validate(intervalMs: Long): Unit = {
+    require(intervalMs >= 0, "the interval of trigger should not be negative")
+  }
+
+  def convert(interval: String): Long = {
+    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
+    if (cal.months > 0) {
+      throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
+    }
+    TimeUnit.MICROSECONDS.toMillis(cal.microseconds)
+  }
+
+  def convert(interval: Duration): Long = interval.toMillis
+
+  def convert(interval: Long, unit: TimeUnit): Long = unit.toMillis(interval)
+}
+
 /**
  * A [[Trigger]] that processes only one batch of data in a streaming query then terminates
  * the query.
  */
 @Experimental
 @Evolving
+@deprecated("use Trigger.Once()", "3.0.0")
+// NOTE: In later release, we can change this to `private[sql]` and remove deprecated.
 case object OneTimeTrigger extends Trigger
 
 /**
@@ -39,20 +59,18 @@ case object OneTimeTrigger extends Trigger
  */
 @Evolving
 private[sql] case class ProcessingTimeTrigger(intervalMs: Long) extends Trigger {
-  require(intervalMs >= 0, "the interval of trigger should not be negative")
+  TriggerIntervalUtils.validate(intervalMs)
 }
 
 private[sql] object ProcessingTimeTrigger {
+  import TriggerIntervalUtils._
+
   def apply(interval: String): ProcessingTimeTrigger = {
-    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
-    if (cal.months > 0) {
-      throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
-    }
-    new ProcessingTimeTrigger(TimeUnit.MICROSECONDS.toMillis(cal.microseconds))
+    ProcessingTimeTrigger(convert(interval))
   }
 
   def apply(interval: Duration): ProcessingTimeTrigger = {
-    ProcessingTimeTrigger(interval.toMillis)
+    ProcessingTimeTrigger(convert(interval))
   }
 
   def create(interval: String): ProcessingTimeTrigger = {
@@ -60,6 +78,35 @@ private[sql] object ProcessingTimeTrigger {
   }
 
   def create(interval: Long, unit: TimeUnit): ProcessingTimeTrigger = {
-    ProcessingTimeTrigger(unit.toMillis(interval))
+    ProcessingTimeTrigger(convert(interval, unit))
+  }
+}
+
+/**
+ * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at
+ * the specified interval.
+ */
+@Evolving
+private[sql] case class ContinuousTrigger(intervalMs: Long) extends Trigger {
+  TriggerIntervalUtils.validate(intervalMs)
+}
+
+private[sql] object ContinuousTrigger {
+  import TriggerIntervalUtils._
+
+  def apply(interval: String): ContinuousTrigger = {
+    ContinuousTrigger(convert(interval))
+  }
+
+  def apply(interval: Duration): ContinuousTrigger = {
+    ContinuousTrigger(convert(interval))
+  }
+
+  def create(interval: String): ContinuousTrigger = {
+    apply(interval)
+  }
+
+  def create(interval: Long, unit: TimeUnit): ContinuousTrigger = {
+    ContinuousTrigger(convert(interval, unit))
   }
 }

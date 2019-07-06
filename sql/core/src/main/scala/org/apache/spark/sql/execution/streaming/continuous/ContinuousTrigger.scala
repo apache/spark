@@ -17,41 +17,17 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.TimeUnit
-
-import scala.concurrent.duration.Duration
-
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.sql.execution.streaming.TriggerIntervalUtils
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at
  * the specified interval.
  */
 @Evolving
+@deprecated("use Trigger.Continuous(intervalMs)", "3.0.0")
+// NOTE: In later release, we can remove this.
 case class ContinuousTrigger(intervalMs: Long) extends Trigger {
-  require(intervalMs >= 0, "the interval of trigger should not be negative")
-}
-
-private[sql] object ContinuousTrigger {
-  def apply(interval: String): ContinuousTrigger = {
-    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
-    if (cal.months > 0) {
-      throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
-    }
-    new ContinuousTrigger(TimeUnit.MICROSECONDS.toMillis(cal.microseconds))
-  }
-
-  def apply(interval: Duration): ContinuousTrigger = {
-    ContinuousTrigger(interval.toMillis)
-  }
-
-  def create(interval: String): ContinuousTrigger = {
-    apply(interval)
-  }
-
-  def create(interval: Long, unit: TimeUnit): ContinuousTrigger = {
-    ContinuousTrigger(unit.toMillis(interval))
-  }
+  TriggerIntervalUtils.validate(intervalMs)
 }
