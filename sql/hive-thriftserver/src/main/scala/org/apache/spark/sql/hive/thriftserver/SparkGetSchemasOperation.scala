@@ -28,6 +28,7 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.listener
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -45,8 +46,15 @@ private[hive] class SparkGetSchemasOperation(
     schemaName: String)
   extends GetSchemasOperation(parentSession, catalogName, schemaName) with Logging {
 
+  private var statementId: String = _
+
+  override def close(): Unit = {
+    super.close()
+    listener.onOperationClosed(statementId)
+  }
+
   override def runInternal(): Unit = {
-    val statementId = UUID.randomUUID().toString
+    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"
@@ -60,7 +68,7 @@ private[hive] class SparkGetSchemasOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
+    listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -82,10 +90,9 @@ private[hive] class SparkGetSchemasOperation(
     } catch {
       case e: HiveSQLException =>
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
+        listener.onStatementError(statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    listener.onStatementFinish(statementId)
   }
 }

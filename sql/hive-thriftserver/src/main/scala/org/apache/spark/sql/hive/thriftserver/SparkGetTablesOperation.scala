@@ -33,6 +33,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.listener
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -55,8 +56,15 @@ private[hive] class SparkGetTablesOperation(
   extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
     with Logging{
 
+  private var statementId: String = _
+
+  override def close(): Unit = {
+    super.close()
+    listener.onOperationClosed(statementId)
+  }
+
   override def runInternal(): Unit = {
-    val statementId = UUID.randomUUID().toString
+    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
@@ -78,7 +86,7 @@ private[hive] class SparkGetTablesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
+    listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -114,11 +122,10 @@ private[hive] class SparkGetTablesOperation(
     } catch {
       case e: HiveSQLException =>
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
+        listener.onStatementError(statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    listener.onStatementFinish(statementId)
   }
 
   private def addToRowSet(
