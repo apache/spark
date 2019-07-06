@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
+import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -57,9 +57,9 @@ object TestHive
       new SparkConf()
         .set("spark.sql.test", "")
         .set(SQLConf.CODEGEN_FALLBACK.key, "false")
-        .set("spark.sql.hive.metastore.barrierPrefixes",
+        .set(HiveUtils.HIVE_METASTORE_BARRIER_PREFIXES.key,
           "org.apache.spark.sql.hive.execution.PairSerDe")
-        .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
+        .set(StaticSQLConf.WAREHOUSE_PATH.key, TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
         .set(UI_ENABLED, false)
         .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
@@ -534,7 +534,8 @@ private[hive] class TestHiveSparkSession(
       }
 
       // Clean out the Hive warehouse between each suite
-      val warehouseDir = new File(new URI(sparkContext.conf.get("spark.sql.warehouse.dir")).getPath)
+      val warehouseDir = new File(new URI(
+        sparkContext.conf.get(StaticSQLConf.WAREHOUSE_PATH.key)).getPath)
       Utils.deleteRecursively(warehouseDir)
       warehouseDir.mkdir()
 
