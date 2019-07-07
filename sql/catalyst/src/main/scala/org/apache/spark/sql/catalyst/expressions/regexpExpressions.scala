@@ -90,8 +90,8 @@ abstract class StringRegexExpression extends BinaryExpression
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
       * escape - a optional string. The default escape character is the '\' but a different one
-          can be selected by using the ESCAPE clause. If an escape character precedes a special symbol
-          or another escape character, the following character is matched literally. It is
+          can be selected by using the ESCAPE clause. If an escape character precedes a special
+          symbol or another escape character, the following character is matched literally. It is
           invalid to escape any other character.
   """,
   examples = """
