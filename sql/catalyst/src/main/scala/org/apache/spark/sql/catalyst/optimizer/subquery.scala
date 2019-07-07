@@ -92,10 +92,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  def hasInOrCorrelatedExists(expression: Expression): Boolean = {
+    expression.find {
+      case _: InSubquery => true
+      case e @ Exists(_, children, _) if children.nonEmpty => true
+      case _ => false
+    }.isDefined
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(condition, child) =>
       val (withSubquery, withoutSubquery) =
-        splitConjunctivePredicates(condition).partition(SubqueryExpression.hasInOrExistsSubquery)
+        splitConjunctivePredicates(condition).partition(hasInOrCorrelatedExists)
 
       // Construct the pruned filter condition.
       val newFilter: LogicalPlan = withoutSubquery match {
@@ -161,7 +169,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     var newPlan = plan
     val newExprs = exprs.map { e =>
       e transformUp {
-        case Exists(sub, conditions, _) =>
+        case Exists(sub, conditions, _) if conditions.nonEmpty =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           newPlan =
             buildJoin(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))

@@ -779,7 +779,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         """
           |SELECT * FROM t1
           |WHERE
-          |NOT EXISTS (SELECT * FROM t1)
+          |NOT EXISTS (SELECT * FROM t1 AS t2 WHERE t1.c1 = t2.c1)
         """.stripMargin
       val ds = sql(sqlText)
       assert(getNumInMemoryRelations(ds) == 2)

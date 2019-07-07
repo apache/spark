@@ -187,6 +187,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :+
+    Batch("ReplaceSemiAntiJoinWithFilter", Once,
+      ReplaceLeftSemiAntiJoinWithFilter) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
   }

@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ExecSubqueryExpression, FileSourceScanExec, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -893,7 +893,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           """
             |SELECT * FROM t1
             |WHERE
-            |NOT EXISTS (SELECT * FROM t1)
+            |NOT EXISTS (SELECT * FROM t1 AS t2 WHERE t1.i = t2.i)
           """.stripMargin
         val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
         val join = optimizedPlan.collectFirst { case j: Join => j }.get
@@ -1382,5 +1382,28 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
     assert(subqueryExecs.forall(_.name.startsWith("scalar-subquery#")),
           "SubqueryExec name should start with scalar-subquery#")
+  }
+
+  test("Non-correlated Exists/InSubquery should use a physical plan") {
+    def extractSubqueries(df: DataFrame): Seq[SparkPlan] = {
+      df.queryExecution.executedPlan.collect {
+        case p => p.subqueries
+      }.flatten
+    }
+
+    val plan1 = sql("SELECT a FROM l WHERE EXISTS(SELECT * FROM r WHERE c = 1)")
+    assert(extractSubqueries(plan1).length == 1)
+
+    val plan2 = sql("SELECT a FROM l WHERE 3 IN (SELECT c FROM r)")
+    assert(extractSubqueries(plan2).length == 1)
+
+    val plan3 = sql(
+      """
+        |SELECT a
+        |FROM l
+        |WHERE EXISTS(SELECT * FROM r WHERE c = 1)
+        |OR EXISTS(SELECT * FROM r WHERE a = c)
+      """.stripMargin)
+    assert(extractSubqueries(plan3).length == 1)
   }
 }
