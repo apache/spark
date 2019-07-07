@@ -1576,7 +1576,8 @@ object SQLConf {
       .doc("Prune nested fields from a logical relation's output which are unnecessary in " +
         "satisfying a query. This optimization allows columnar file format readers to avoid " +
         "reading unnecessary nested column data. Currently Parquet and ORC are the " +
-        "data sources that implement this optimization.")
+        "data sources that implement this optimization. This optimization also allows pruning " +
+        "unnecessary nested fields in expressions of operator.")
       .booleanConf
       .createWithDefault(false)
 

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
 class ColumnPruningSuite extends PlanTest {
@@ -102,29 +103,31 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("Nested column pruning for Generate") {
-    val strcutType = StructType.fromDDL("d string, e array<string>")
-    val input = LocalRelation('a.int, 'b.int, 'c.struct(strcutType))
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      val strcutType = StructType.fromDDL("d string, e array<string>")
+      val input = LocalRelation('a.int, 'b.int, 'c.struct(strcutType))
 
-    val query =
-      input
-        .generate(Explode('c.getField("e")), outputNames = "explode" :: Nil)
-        .select('a, 'c.getField("d"), 'explode)
-        .analyze
+      val query =
+        input
+          .generate(Explode('c.getField("e")), outputNames = "explode" :: Nil)
+          .select('a, 'c.getField("d"), 'explode)
+          .analyze
 
-    val optimized = Optimize.execute(query)
+      val optimized = Optimize.execute(query)
 
-    val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
+      val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
 
-    val correctAnswer =
-      input
-        .select('a, 'c, 'c.getField("d").as(aliases(0)))
-        .generate(Explode('c.getField("e")),
-          unrequiredChildIndex = Seq(1),
-          outputNames = "explode" :: Nil)
-        .select('a, $"${aliases(0)}".as("c.d"), 'explode)
-        .analyze
+      val correctAnswer =
+        input
+          .select('a, 'c, 'c.getField("d").as(aliases(0)))
+          .generate(Explode('c.getField("e")),
+            unrequiredChildIndex = Seq(1),
+            outputNames = "explode" :: Nil)
+          .select('a, $"${aliases(0)}".as("c.d"), 'explode)
+          .analyze
 
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("Column pruning for Project on Sort") {

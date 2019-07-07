@@ -77,7 +77,7 @@ object NestedColumnAliasing {
   /**
    * Returns true for those operators that project can be pushed through.
    */
-  def canProjectPushThrough(plan: LogicalPlan): Boolean = plan match {
+  private def canProjectPushThrough(plan: LogicalPlan) = plan match {
     case _: GlobalLimit => true
     case _: LocalLimit => true
     case _: Repartition => true

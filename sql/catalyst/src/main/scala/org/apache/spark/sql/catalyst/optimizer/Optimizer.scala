@@ -589,7 +589,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // prune unrequired nested fields
-    case p @ Project(projectList, g: Generate) =>
+    case p @ Project(projectList, g: Generate) if SQLConf.get.nestedSchemaPruningEnabled =>
       NestedColumnAliasing.getAliasSubMap(projectList).map {
         case (nestedFieldToAlias, attrToAliases) =>
           val newChild = g.withNewChildren(g.children.map { child =>
