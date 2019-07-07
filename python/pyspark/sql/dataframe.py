@@ -2195,25 +2195,25 @@ class DataFrame(object):
 
     def mapInPandas(self, udf):
         """
-        Maps each partition of the current :class:`DataFrame` using a pandas udf and returns
-        the result as a `DataFrame`.
+        Maps an iterator of batches in the current :class:`DataFrame` using a Pandas user-defined
+        function and returns the result as a :class:`DataFrame`.
 
-        The user-defined function should take an iterator of `pandas.DataFrame`s and return another
-        iterator of `pandas.DataFrame`s. For each partition, all columns are passed together as an
-        iterator of `pandas.DataFrame`s to the user-function and the returned iterator of
-        `pandas.DataFrame`s are combined as a :class:`DataFrame`.
+        The user-defined function should take an iterator of `pandas.DataFrame`\\s and return
+        another iterator of `pandas.DataFrame`\\s. All columns are passed
+        together as an iterator of `pandas.DataFrame`\\s to the user-defined function and the
+        returned iterator of `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
         Each `pandas.DataFrame` size can be controlled by
         `spark.sql.execution.arrow.maxRecordsPerBatch`.
-        Its schema must match the returnType of the pandas udf.
+        Its schema must match the returnType of the Pandas user-defined function.
 
         :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame([(1, 21), (2, 30)],
         ...                            ("id", "age"))  # doctest: +SKIP
-        >>> @pandas_udf(df.schema, PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
-        ... def filter_func(iterator):
-        ...     for pdf in iterator:
+        >>> @pandas_udf(df.schema, PandasUDFType.MAP_ITER)  # doctest: +SKIP
+        ... def filter_func(batch_iter):
+        ...     for pdf in batch_iter:
         ...         yield pdf[pdf.id == 1]
         >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
         +---+---+

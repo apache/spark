@@ -2915,7 +2915,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        :class:`MapType`, nested :class:`StructType` are currently not supported as output types.
 
-       Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       Scalar UDFs can be used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -3190,6 +3190,33 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             For the same reason, users should also not rely on the index of the input series.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
+
+    5. MAP_ITER
+
+       A map iterator Pandas UDFs are used to transform data with an iterator of batches.
+       It can be used with :meth:`pyspark.sql.DataFrame.mapInPandas`.
+
+       It can return the output of arbitrary length in contrast to the scalar Pandas UDF.
+       It maps an iterator of batches in the current :class:`DataFrame` using a Pandas user-defined
+       function and returns the result as a :class:`DataFrame`.
+
+       The user-defined function should take an iterator of `pandas.DataFrame`\\s and return another
+       iterator of `pandas.DataFrame`\\s. All columns are passed together as an
+       iterator of `pandas.DataFrame`\\s to the user-defined function and the returned iterator of
+       `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
+
+       >>> df = spark.createDataFrame([(1, 21), (2, 30)],
+       ...                            ("id", "age"))  # doctest: +SKIP
+       >>> @pandas_udf(df.schema, PandasUDFType.MAP_ITER)  # doctest: +SKIP
+       ... def filter_func(batch_iter):
+       ...     for pdf in batch_iter:
+       ...         yield pdf[pdf.id == 1]
+       >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
+       +---+---+
+       | id|age|
+       +---+---+
+       |  1| 21|
+       +---+---+
 
     .. note:: The user-defined functions are considered deterministic by default. Due to
         optimization, duplicate invocations may be eliminated or the function may even be invoked
