@@ -83,8 +83,6 @@ abstract class StringRegexExpression extends BinaryExpression
           % matches zero or more characters in the input (similar to .* in posix regular
           expressions)
 
-          The default escape character is '\'. 
-
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
           to match "\abc", the pattern should be "\\abc".
 
