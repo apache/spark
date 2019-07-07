@@ -70,6 +70,8 @@ This will build Spark distribution along with Python pip and R packages. For mor
 
 ## Specifying the Hadoop Version and Enabling YARN
 
+You can enable the exact profile of Hadoop to compile against through `-Phadoop-2.7`(default) and `-Phadoop-3.2`.
+
 You can specify the exact version of Hadoop to compile against through the `hadoop.version` property. 
 
 You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different 
@@ -79,14 +81,22 @@ Example:
 
     ./build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
 
+    ./build/mvn -Pyarn -Phadoop-3.2 -Dhadoop.version=3.1.2 -DskipTests clean package
+
 ## Building With Hive and JDBC Support
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 1.2.1 bindings.
+By default, Spark will build hadoop-2.7 with Hive 1.2.1 and hadoop-3.2 with Hive 2.3.5.
 
     # With Hive 1.2.1 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
+
+    # With Hive 2.3.5 support
+    ./build/mvn -Pyarn -Phive -Phive-thriftserver -Phadoop-3.2 -DskipTests clean package
+
+    # Hadoop 2.7 with Hive 2.3.5 support
+    ./build/mvn -Pyarn -Phive -Phive-thriftserver -Phadoop-3.2 -Dhadoop.version=2.7.4 -Dcurator.version=2.7.1 -Dzookeeper.version=3.4.6 -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
 
