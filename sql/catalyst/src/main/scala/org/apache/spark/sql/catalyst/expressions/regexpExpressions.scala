@@ -70,7 +70,7 @@ abstract class StringRegexExpression extends BinaryExpression
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern - Returns true if str matches pattern, " +
+  usage = "str _FUNC_ pattern escape - Returns true if str matches pattern with escape, " +
     "null if any arguments are null, false otherwise.",
   arguments = """
     Arguments:
@@ -83,9 +83,7 @@ abstract class StringRegexExpression extends BinaryExpression
           % matches zero or more characters in the input (similar to .* in posix regular
           expressions)
 
-          The default escape character is '\'. If an escape character precedes a special symbol
-          or another escape character, the following character is matched literally. It is
-          invalid to escape any other character.
+          The default escape character is '\'. 
 
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
           to match "\abc", the pattern should be "\\abc".
@@ -94,8 +92,9 @@ abstract class StringRegexExpression extends BinaryExpression
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
       * escape - a optional string. The default escape character is the '\' but a different one
-          can be selected by using the ESCAPE clause. To match the escape character itself, write
-          two escape characters.
+          can be selected by using the ESCAPE clause. If an escape character precedes a special symbol
+          or another escape character, the following character is matched literally. It is
+          invalid to escape any other character.
   """,
   examples = """
     Examples:
