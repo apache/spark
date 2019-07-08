@@ -166,4 +166,20 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       checkResult(metaData.getColumns(null, "%", "table_not_exist", null), Seq.empty)
     }
   }
+
+  test("Spark's own GetTableTypesOperation(SparkGetTableTypesOperation)") {
+    def checkResult(rs: ResultSet, dbNames: Seq[String]): Unit = {
+      for (i <- dbNames.indices) {
+        assert(rs.next())
+        assert(rs.getString("TABLE_TYPE") === dbNames(i))
+      }
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      checkResult(metaData.getTableTypes, Seq("TABLE", "VIEW"))
+    }
+  }
 }
