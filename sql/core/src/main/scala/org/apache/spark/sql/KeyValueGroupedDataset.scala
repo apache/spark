@@ -524,7 +524,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    *
-   * @since 1.6.0
+   * @since 3.0.0
    */
   def agg[U1, U2, U3, U4, U5](
       col1: TypedColumn[V, U1],
@@ -538,7 +538,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    *
-   * @since 1.6.0
+   * @since 3.0.0
    */
   def agg[U1, U2, U3, U4, U5, U6](
       col1: TypedColumn[V, U1],
@@ -554,7 +554,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    *
-   * @since 2.4.0
+   * @since 3.0.0
    */
   def agg[U1, U2, U3, U4, U5, U6, U7](
       col1: TypedColumn[V, U1],
@@ -571,7 +571,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    *
-   * @since 2.4.0
+   * @since 3.0.0
    */
   def agg[U1, U2, U3, U4, U5, U6, U7, U8](
       col1: TypedColumn[V, U1],
