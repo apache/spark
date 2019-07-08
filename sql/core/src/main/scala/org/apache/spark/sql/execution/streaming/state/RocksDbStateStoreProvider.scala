@@ -139,11 +139,11 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
         s"Current state of the store is $state " +
           s"Cannot commit after already committed or aborted")
       try {
-        state = COMMITTED
         synchronized {
           rocksDbWriteInstance.commit(Some(getBackupPath(newVersion)))
           finalizeDeltaFile(compressedStream)
         }
+        state = COMMITTED
         numEntriesInDb = rocksDbWriteInstance.otdb.getLongProperty("rocksdb.estimate-num-keys")
         bytesUsedByDb = numEntriesInDb * (keySchema.defaultSize + valueSchema.defaultSize)
         newVersion
@@ -479,7 +479,6 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
         val dbPath = getBackupPath(lastVersion)
         val snapShotFileName = s"{getTempPath(lastVersion)}.snapshot"
         val f = new File(snapShotFileName)
-        f.delete() // delete any existing tarball
         try {
           val (_, t1) = Utils.timeTakenMs {
             FileUtility.createTarFile(dbPath, snapShotFileName)
@@ -536,7 +535,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
       if (files.nonEmpty) {
         val earliestVersionToRetain = files.last.version - storeConf.minVersionsToRetain
         if (earliestVersionToRetain > 0) {
-          for (v <- (earliestVersionToRetain - 1) to 1) {
+          for (v <- (earliestVersionToRetain - 1) to 1 by -1) {
             // Destroy the backup path
             logDebug(s"Destroying backup version = $v")
             RocksDbInstance.destroyDB(getBackupPath(v))
@@ -571,7 +570,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   }
 
   // making it public for unit tests
-  lazy val rocksDbPath: String = {
+  private[sql] lazy val rocksDbPath: String = {
     val checkpointRootLocationPath = new Path(stateStoreId.checkpointRootLocation)
     val basePath = new Path(
       localDirectory,

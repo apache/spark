@@ -21,14 +21,9 @@ import org.apache.commons.compress.utils.IOUtils;
 import java.io.*;
 
 public class FileUtility {
-
   /**
    * Extract an input tar file into an output files and directories.
-   * @param inputTarFileLoc the input file location for the tar file
-   * @param destDirLoc destination for the extracted files
-   *
-   * @throws IOException
-   * @throws IllegalStateException
+   * throws IllegalStateException on error
    */
   public static final String ENCODING = "utf-8";
 
@@ -80,11 +75,7 @@ public class FileUtility {
 
   /**
    * create a tar file for input source directory location .
-   * @param source the source directory location
-   * @param destFileLoc destination of the created tarball
-   *
-   * @throws IOException
-   * @throws IllegalStateException
+   * throws IOException on error
    */
   public static void createTarFile(String source, String destFileLoc)
           throws IllegalStateException, IOException {

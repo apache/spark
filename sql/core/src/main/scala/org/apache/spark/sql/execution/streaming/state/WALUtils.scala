@@ -35,6 +35,7 @@ import org.apache.spark.sql.types.StructType
 object WALUtils {
 
   case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
+  val EOF_MARKER = -1
 
   /** Files needed to recover the given version of the store */
   def filesForVersion(allFiles: Seq[StoreFile], version: Long): Seq[StoreFile] = {
@@ -115,11 +116,11 @@ object WALUtils {
     val keyBytes = key.getBytes()
     output.writeInt(keyBytes.size)
     output.write(keyBytes)
-    output.writeInt(-1)
+    output.writeInt(EOF_MARKER)
   }
 
   def finalizeDeltaFile(output: DataOutputStream): Unit = {
-    output.writeInt(-1) // Write this magic number to signify end of file
+    output.writeInt(EOF_MARKER) // Write this magic number to signify end of file
     output.close()
   }
 
@@ -145,7 +146,7 @@ object WALUtils {
 
       while (!eof) {
         val keySize = input.readInt()
-        if (keySize == -1) {
+        if (keySize == EOF_MARKER) {
           eof = true
         } else if (keySize < 0) {
           newRocksDb.abort

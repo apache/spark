@@ -288,7 +288,7 @@ class RocksDbStateStoreSuite
       val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
       val sqlConf = new SQLConf
       sqlConf.setConfString(
-        "spark.sql.streaming.stateStore.providerClass",
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key,
         "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
       val localdir = Utils.createTempDir().getAbsoluteFile.toString
       sqlConf.setConfString("spark.sql.streaming.stateStore.rocksDb.localDirectory", localdir)
@@ -353,7 +353,7 @@ class RocksDbStateStoreSuite
     val storeProviderId = StateStoreProviderId(StateStoreId(dir, opId, 0), UUID.randomUUID)
     val sqlConf = new SQLConf()
     sqlConf.setConfString(
-      "spark.sql.streaming.stateStore.providerClass",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     sqlConf.setConfString(
@@ -470,7 +470,7 @@ class RocksDbStateStoreSuite
       implicit val sqlContext = spark.sqlContext
       spark.conf.set("spark.sql.shuffle.partitions", "1")
       spark.conf.set(
-        "spark.sql.streaming.stateStore.providerClass",
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key,
         "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
       spark.conf.set(
         "spark.sql.streaming.stateStore.rocksDb.localDirectory",
@@ -546,7 +546,6 @@ class RocksDbStateStoreSuite
       version: Int = -1): Set[(String, Int)] = {
     val reloadedProvider = newStoreProvider(provider.stateStoreId, provider.getLocalDirectory)
     if (version < 0) {
-      // TODO find out last version from rocksDB
       reloadedProvider.latestIterator().map(rowsToStringInt).toSet
     } else {
       reloadedProvider.getStore(version).iterator().map(rowsToStringInt).toSet
