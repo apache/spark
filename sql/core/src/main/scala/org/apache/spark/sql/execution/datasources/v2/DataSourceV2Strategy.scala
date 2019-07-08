@@ -178,9 +178,9 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicReplaceTableExec(staging, ident, schema, parts, props, orCreate) :: Nil
+          AtomicReplaceTableExec(staging, ident, schema, parts, props, orCreate = orCreate) :: Nil
         case _ =>
-          ReplaceTableExec(catalog, ident, schema, parts, props, orCreate) :: Nil
+          ReplaceTableExec(catalog, ident, schema, parts, props, orCreate = orCreate) :: Nil
       }
 
     case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
@@ -188,10 +188,22 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
-            staging, ident, parts, planLater(query), props, writeOptions, orCreate) :: Nil
+            staging,
+            ident,
+            parts,
+            planLater(query),
+            props,
+            writeOptions,
+            orCreate = orCreate) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
-            catalog, ident, parts, planLater(query), props, writeOptions, orCreate) :: Nil
+            catalog,
+            ident,
+            parts,
+            planLater(query),
+            props,
+            writeOptions,
+            orCreate = orCreate) :: Nil
       }
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
