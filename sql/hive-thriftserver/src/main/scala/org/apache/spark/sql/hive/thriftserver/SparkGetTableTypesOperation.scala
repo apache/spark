@@ -27,8 +27,6 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.listener
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -40,7 +38,7 @@ import org.apache.spark.util.{Utils => SparkUtils}
 private[hive] class SparkGetTableTypesOperation(
     sqlContext: SQLContext,
     parentSession: HiveSession)
-  extends GetTableTypesOperation(parentSession) with Logging {
+  extends GetTableTypesOperation(parentSession) with SparkMetadataOperationUtils with Logging {
 
   override def runInternal(): Unit = {
     val statementId = UUID.randomUUID().toString
@@ -55,7 +53,7 @@ private[hive] class SparkGetTableTypesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLETYPES, null)
     }
 
-    listener.onStatementStart(
+    HiveThriftServer2.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -63,22 +61,18 @@ private[hive] class SparkGetTableTypesOperation(
       parentSession.getUsername)
 
     try {
-      CatalogTableType.tableTypes.foreach { tableType =>
-        if (tableType == EXTERNAL || tableType == EXTERNAL) {
-          rowSet.addRow(Array[AnyRef]("TABLE"))
-        } else if (tableType == VIEW) {
-          rowSet.addRow(Array[AnyRef](tableType.name))
-        } else {
-          logError(s"Unknown table type: ${tableType.name}")
-        }
+      val tableTypes = CatalogTableType.tableTypes.map(tableTypeString).toSet
+      tableTypes.foreach { tableType =>
+        rowSet.addRow(Array[AnyRef](tableType))
       }
       setState(OperationState.FINISHED)
     } catch {
       case e: HiveSQLException =>
         setState(OperationState.ERROR)
-        listener.onStatementError(statementId, e.getMessage, SparkUtils.exceptionString(e))
+        HiveThriftServer2.listener.onStatementError(
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
-    listener.onStatementFinish(statementId)
+    HiveThriftServer2.listener.onStatementFinish(statementId)
   }
 }

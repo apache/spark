@@ -53,7 +53,7 @@ private[hive] class SparkGetTablesOperation(
     tableName: String,
     tableTypes: JList[String])
   extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
-    with Logging{
+    with SparkMetadataOperationUtils with Logging {
 
   override def runInternal(): Unit = {
     val statementId = UUID.randomUUID().toString
@@ -138,12 +138,5 @@ private[hive] class SparkGetTablesOperation(
     } else {
       rowSet.addRow(rowData)
     }
-  }
-
-  private def tableTypeString(tableType: CatalogTableType): String = tableType match {
-    case EXTERNAL | MANAGED => "TABLE"
-    case VIEW => "VIEW"
-    case t =>
-      throw new IllegalArgumentException(s"Unknown table type is found at showCreateHiveTable: $t")
   }
 }

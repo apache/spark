@@ -100,7 +100,7 @@ private[thriftserver] class SparkSQLOperationManager()
       columnName: String): GetColumnsOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
-      s" initialized or had already closed.")
+      " initialized or had already closed.")
     val operation = new SparkGetColumnsOperation(sqlContext, parentSession,
       catalogName, schemaName, tableName, columnName)
     handleToOperation.put(operation.getHandle, operation)
@@ -112,7 +112,7 @@ private[thriftserver] class SparkSQLOperationManager()
       parentSession: HiveSession): GetTableTypesOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
-      s" initialized or had already closed.")
+      " initialized or had already closed.")
     val operation = new SparkGetTableTypesOperation(sqlContext, parentSession)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetTableTypesOperation with session=$parentSession.")
