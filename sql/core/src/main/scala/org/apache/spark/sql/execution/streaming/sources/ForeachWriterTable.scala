@@ -21,6 +21,7 @@ import java.util
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -129,7 +130,7 @@ class ForeachDataWriter[T](
     rowConverter: InternalRow => T,
     partitionId: Int,
     epochId: Long)
-  extends DataWriter[InternalRow] {
+  extends DataWriter[InternalRow] with Logging{
 
   // If open returns false, we should skip writing rows.
   private val opened = writer.open(partitionId, epochId)
@@ -160,6 +161,10 @@ class ForeachDataWriter[T](
     if (!closeCalled) {
       try {
         writer.close(errorOrNull)
+      } catch {
+        case t: Throwable =>
+          logWarning("Failed closing Foreach writer", t)
+          throw t
       } finally {
         closeCalled = true
       }
