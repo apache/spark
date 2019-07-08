@@ -1105,6 +1105,9 @@ class SparkContext(object):
         conf.setAll(self._conf.getAll())
         return conf
 
+    def resources(self):
+        return self._jsc.sc().resources()
+
 
 def _test():
     import atexit

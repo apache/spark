@@ -432,6 +432,16 @@ def main(infile, outfile):
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)
         taskContext._taskAttemptId = read_long(infile)
+        taskContext._resources = {}
+        numResources = read_int(infile)
+        for r in range(read_int(infile)):
+            key = utf8_deserializer.loads(infile)
+            name = utf8_deserializer.loads(infile)
+            addresses = []
+            for a in range(read_int(infile)):
+                addressses.append(utf8_deserializer.loads_infile)
+            taskContext._resources[key] = ResourceInformation(name, addresses)
+
         taskContext._localProperties = dict()
         for i in range(read_int(infile)):
             k = utf8_deserializer.loads(infile)
