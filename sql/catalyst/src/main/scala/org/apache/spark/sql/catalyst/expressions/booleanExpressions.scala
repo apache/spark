@@ -49,15 +49,19 @@ object BooleanTest {
 @ExpressionDescription(
   usage = "_FUNC_(expr, booleanValue) - Returns true if `expr` equals booleanValue, " +
     "or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr - a boolean expression
+      * booleanValue - a boolean value represented by a string. booleanValue must be one
+          of TRUE, FALSE and UNKNOWN.
+  """,
   examples = """
     Examples:
-      > SELECT _FUNC_(1);
+      > SELECT _FUNC_(1, true);
        false
   """)
-case class BooleanTest(child: Expression, booleanOpt: Option[String] = None)
+case class BooleanTest(child: Expression, booleanValue: String)
   extends UnaryExpression with Predicate {
-
-  private lazy val booleanValue = booleanOpt.getOrElse(BooleanTest.UNKNOWN)
 
   override def eval(input: InternalRow): Any = {
     BooleanTest.calculate(child.eval(input), booleanValue)
