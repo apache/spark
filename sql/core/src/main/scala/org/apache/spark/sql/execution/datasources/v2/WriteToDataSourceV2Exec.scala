@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -149,7 +149,8 @@ case class ReplaceTableAsSelectExec(
     partitioning: Seq[Transform],
     query: SparkPlan,
     properties: Map[String, String],
-    writeOptions: CaseInsensitiveStringMap) extends AtomicTableWriteExec {
+    writeOptions: CaseInsensitiveStringMap,
+    orCreate: Boolean) extends AtomicTableWriteExec {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
@@ -163,7 +164,9 @@ case class ReplaceTableAsSelectExec(
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
     if (catalog.tableExists(ident)) {
-        catalog.dropTable(ident)
+      catalog.dropTable(ident)
+    } else if (!orCreate) {
+      throw new CannotReplaceMissingTableException(ident)
     }
     val createdTable = catalog.createTable(
       ident, query.schema, partitioning.toArray, properties.asJava)
@@ -206,11 +209,19 @@ case class AtomicReplaceTableAsSelectExec(
     partitioning: Seq[Transform],
     query: SparkPlan,
     properties: Map[String, String],
-    writeOptions: CaseInsensitiveStringMap) extends AtomicTableWriteExec {
+    writeOptions: CaseInsensitiveStringMap,
+    orCreate: Boolean) extends AtomicTableWriteExec {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val stagedTable = catalog.stageReplace(
-      ident, query.schema, partitioning.toArray, properties.asJava)
+    val stagedTable = if (catalog.tableExists(ident)) {
+      catalog.stageReplace(
+        ident, query.schema, partitioning.toArray, properties.asJava)
+    } else if (orCreate) {
+      catalog.stageCreate(
+        ident, query.schema, partitioning.toArray, properties.asJava)
+    } else {
+      throw new CannotReplaceMissingTableException(ident)
+    }
     writeToStagedTable(stagedTable, writeOptions, ident)
   }
 }

@@ -451,7 +451,8 @@ case class ReplaceTable(
     tableName: Identifier,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    properties: Map[String, String]) extends Command
+    properties: Map[String, String],
+    orCreate: Boolean) extends Command
 
 /**
  * Replaces a table from a select query with a v2 catalog.
@@ -464,7 +465,8 @@ case class ReplaceTableAsSelect(
     partitioning: Seq[Transform],
     query: LogicalPlan,
     properties: Map[String, String],
-    writeOptions: Map[String, String]) extends Command {
+    writeOptions: Map[String, String],
+    orCreate: Boolean) extends Command {
 
   override def children: Seq[LogicalPlan] = Seq(query)
 

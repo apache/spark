@@ -2339,6 +2339,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val provider = ctx.tableProvider.qualifiedName.getText
     val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
     val comment = Option(ctx.comment).map(string)
+    val orCreate = ctx.replaceTableHeader().CREATE() != null
 
     Option(ctx.query).map(plan) match {
       case Some(_) if temp =>
@@ -2350,8 +2351,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           ctx)
 
       case Some(query) =>
-        ReplaceTableAsSelectStatement(
-          table, query, partitioning, bucketSpec, properties, provider, options, location, comment)
+        ReplaceTableAsSelectStatement(table, query, partitioning, bucketSpec, properties,
+          provider, options, location, comment, orCreate = orCreate)
 
       case None if temp =>
         // REPLACE TEMPORARY TABLE ... USING ... is not supported by the catalyst parser.
@@ -2359,8 +2360,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         operationNotAllowed("REPLACE TEMPORARY TABLE IF NOT EXISTS", ctx)
 
       case _ =>
-        ReplaceTableStatement(table, schema.getOrElse(new StructType), partitioning, bucketSpec,
-          properties, provider, options, location, comment)
+        ReplaceTableStatement(table, schema.getOrElse(new StructType), partitioning,
+          bucketSpec, properties, provider, options, location, comment, orCreate = orCreate)
     }
   }
 

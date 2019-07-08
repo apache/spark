@@ -175,23 +175,23 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
             catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
       }
 
-    case ReplaceTable(catalog, ident, schema, parts, props) =>
+    case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       catalog match {
         case staging: StagingTableCatalog =>
-          ReplaceTableStagingExec(staging, ident, schema, parts, props) :: Nil
+          AtomicReplaceTableExec(staging, ident, schema, parts, props, orCreate) :: Nil
         case _ =>
-          ReplaceTableExec(catalog, ident, schema, parts, props) :: Nil
+          ReplaceTableExec(catalog, ident, schema, parts, props, orCreate) :: Nil
       }
 
-    case ReplaceTableAsSelect(catalog, ident, parts, query, props, options) =>
+    case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
-            staging, ident, parts, planLater(query), props, writeOptions) :: Nil
+            staging, ident, parts, planLater(query), props, writeOptions, orCreate) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
-            catalog, ident, parts, planLater(query), props, writeOptions) :: Nil
+            catalog, ident, parts, planLater(query), props, writeOptions, orCreate) :: Nil
       }
 
     case AppendData(r: DataSourceV2Relation, query, _) =>

@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalog.v2.Identifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
@@ -287,10 +287,11 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       "Replaced table should have new schema.")
   }
 
-  test("ReplaceTableAsSelect: New table has same behavior as CTAS.") {
+  test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
     Seq("testcat", "testcat_atomic").foreach { catalog =>
       spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
-      spark.sql(s"REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
+      spark.sql(
+        s"CREATE OR REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
 
       val testCatalog = spark.catalog(catalog).asTableCatalog
       val createdTable = testCatalog.loadTable(Identifier.of(Array(), "created"))
@@ -299,6 +300,15 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       assert(createdTable.asInstanceOf[InMemoryTable].rows ===
         replacedTable.asInstanceOf[InMemoryTable].rows)
       assert(createdTable.schema === replacedTable.schema)
+    }
+  }
+
+  test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table does not exist.") {
+    Seq("testcat", "testcat_atomic").foreach { catalog =>
+      spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
+      intercept[CannotReplaceMissingTableException] {
+        spark.sql(s"REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
+      }
     }
   }
 

@@ -23,8 +23,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.sources.v2.StagedTable
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -33,11 +35,14 @@ case class ReplaceTableExec(
     identifier: Identifier,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    tableProperties: Map[String, String]) extends LeafExecNode {
+    tableProperties: Map[String, String],
+    orCreate: Boolean) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (catalog.tableExists(identifier)) {
       catalog.dropTable(identifier)
+    } else if (!orCreate) {
+      throw new CannotReplaceMissingTableException(identifier)
     }
     catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
     sqlContext.sparkContext.parallelize(Seq.empty, 1)
@@ -46,27 +51,42 @@ case class ReplaceTableExec(
   override def output: Seq[Attribute] = Seq.empty
 }
 
-case class ReplaceTableStagingExec(
+case class AtomicReplaceTableExec(
     catalog: StagingTableCatalog,
     identifier: Identifier,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    tableProperties: Map[String, String]) extends LeafExecNode {
+    tableProperties: Map[String, String],
+    orCreate: Boolean) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val stagedReplace = catalog.stageReplace(
-      identifier,
-      tableSchema,
-      partitioning.toArray,
-      tableProperties.asJava)
-    Utils.tryWithSafeFinallyAndFailureCallbacks({
-      stagedReplace.commitStagedChanges()
-    })(catchBlock = {
-      stagedReplace.abortStagedChanges()
-    })
+    val staged = if (catalog.tableExists(identifier)) {
+      catalog.stageReplace(
+        identifier,
+        tableSchema,
+        partitioning.toArray,
+        tableProperties.asJava)
+    } else if (orCreate) {
+      catalog.stageCreate(
+        identifier,
+        tableSchema,
+        partitioning.toArray,
+        tableProperties.asJava)
+    } else {
+      throw new CannotReplaceMissingTableException(identifier)
+    }
+    commitOrAbortStagedChanges(staged)
 
     sqlContext.sparkContext.parallelize(Seq.empty, 1)
   }
 
   override def output: Seq[Attribute] = Seq.empty
+
+  private def commitOrAbortStagedChanges(staged: StagedTable): Unit = {
+    Utils.tryWithSafeFinallyAndFailureCallbacks({
+      staged.commitStagedChanges()
+    })(catchBlock = {
+      staged.abortStagedChanges()
+    })
+  }
 }

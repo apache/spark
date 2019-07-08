@@ -87,14 +87,14 @@ case class DataSourceResolution(
 
     case ReplaceTableStatement(
         AsTableIdentifier(table), schema, partitionCols, bucketSpec, properties,
-        V1WriteProvider(provider), options, location, comment) =>
+        V1WriteProvider(provider), options, location, comment, orCreate) =>
         throw new AnalysisException(
           s"Replacing tables is not supported using the legacy / v1 Spark external catalog" +
             s" API. Write provider name: $provider, identifier: $table.")
 
     case ReplaceTableAsSelectStatement(
         AsTableIdentifier(table), query, partitionCols, bucketSpec, properties,
-        V1WriteProvider(provider), options, location, comment) =>
+        V1WriteProvider(provider), options, location, comment, orCreate) =>
       throw new AnalysisException(
         s"Replacing tables is not supported using the legacy / v1 Spark external catalog" +
           s" API. Write provider name: $provider, identifier: $table.")
@@ -261,7 +261,8 @@ case class DataSourceResolution(
       partitioning,
       rtas.asSelect,
       properties,
-      writeOptions = rtas.options.filterKeys(_ != "path"))
+      writeOptions = rtas.options.filterKeys(_ != "path"),
+      orCreate = rtas.orCreate)
   }
 
   private def convertReplaceTable(
@@ -278,7 +279,8 @@ case class DataSourceResolution(
       identifier,
       replace.tableSchema,
       partitioning,
-      properties)
+      properties,
+      orCreate = replace.orCreate)
   }
 
   private def convertTableProperties(
