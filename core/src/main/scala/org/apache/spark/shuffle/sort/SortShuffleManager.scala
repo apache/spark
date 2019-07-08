@@ -20,8 +20,6 @@ package org.apache.spark.shuffle.sort
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark._
-
-import org.apache.spark.api.shuffle.ShuffleExecutorComponents
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleExecutorComponents}

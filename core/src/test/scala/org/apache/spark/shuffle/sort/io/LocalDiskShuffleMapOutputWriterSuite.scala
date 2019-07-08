@@ -20,7 +20,6 @@ package org.apache.spark.shuffle.sort.io
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.math.BigInteger
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, WritableByteChannel}
 
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
@@ -30,13 +29,12 @@ import org.mockito.MockitoAnnotations
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
-import org.apache.spark.{SparkConf, SparkFunSuite}
 
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.api.SupportsTransferTo
-import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 

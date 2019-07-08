@@ -32,7 +32,6 @@ import org.scalatest.BeforeAndAfterEach
 import scala.util.Random
 
 import org.apache.spark._
-
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
