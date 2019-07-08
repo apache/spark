@@ -313,7 +313,8 @@ private[spark] class TaskSetManager(
   private def dequeueTask(execId: String, host: String, maxLocality: TaskLocality.Value)
   : Option[(Int, TaskLocality.Value, Boolean)] = {
     // if we didn't schedule a regular task, try to schedule a speculative one
-    dequeueTaskHelper(execId, host, maxLocality, false).orElse(dequeueTaskHelper(execId, host, maxLocality, true))
+    dequeueTaskHelper(execId, host, maxLocality, false).orElse(
+      dequeueTaskHelper(execId, host, maxLocality, true))
   }
 
   private def dequeueTaskHelper(
