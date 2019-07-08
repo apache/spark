@@ -24,51 +24,51 @@ import org.apache.spark.sql.types._
 class BooleanExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("istrue and isnottrue") {
-    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), Option(TRUE)), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), Option(TRUE))), true)
-    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), Option(TRUE)), true)
-    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), Option(TRUE))), false)
+    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), Some(TRUE)), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), Some(TRUE))), true)
+    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), Some(TRUE)), true)
+    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), Some(TRUE))), false)
   }
 
   test("isfalse and isnotfalse") {
-    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), Option(FALSE)), true)
-    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), Option(FALSE))), false)
-    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), Option(FALSE)), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), Option(FALSE))), true)
+    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), Some(FALSE)), true)
+    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), Some(FALSE))), false)
+    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), Some(FALSE)), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), Some(FALSE))), true)
   }
 
   test("isunknown and isnotunknown") {
-    checkEvaluation(BooleanTest(Literal.create(1.toByte, ByteType), Option(UNKNOWN)), true)
-    checkEvaluation(BooleanTest(Literal.create(1.toShort, ByteType), Option(UNKNOWN)), true)
-    checkEvaluation(BooleanTest(Literal.create(1, IntegerType), Option(UNKNOWN)), true)
-    checkEvaluation(BooleanTest(Literal.create(1L, LongType), Option(UNKNOWN)), true)
-    checkEvaluation(BooleanTest(Literal.create(1.0F, FloatType), Option(UNKNOWN)), true)
-    checkEvaluation(BooleanTest(Literal.create(1.0, DoubleType), Option(UNKNOWN)), true)
+    checkEvaluation(BooleanTest(Literal.create(1.toByte, ByteType), Some(UNKNOWN)), true)
+    checkEvaluation(BooleanTest(Literal.create(1.toShort, ShortType), Some(UNKNOWN)), true)
+    checkEvaluation(BooleanTest(Literal.create(1, IntegerType), Some(UNKNOWN)), true)
+    checkEvaluation(BooleanTest(Literal.create(1L, LongType), Some(UNKNOWN)), true)
+    checkEvaluation(BooleanTest(Literal.create(1.0F, FloatType), Some(UNKNOWN)), true)
+    checkEvaluation(BooleanTest(Literal.create(1.0, DoubleType), Some(UNKNOWN)), true)
     checkEvaluation(
-      BooleanTest(Literal.create(Decimal(1.5), DecimalType(2, 1)), Option(UNKNOWN)), true)
+      BooleanTest(Literal.create(Decimal(1.5), DecimalType(2, 1)), Some(UNKNOWN)), true)
     checkEvaluation(
-      BooleanTest(Literal.create(new java.sql.Date(10), DateType), Option(UNKNOWN)), true)
+      BooleanTest(Literal.create(new java.sql.Date(10), DateType), Some(UNKNOWN)), true)
     checkEvaluation(
-      BooleanTest(Literal.create(new java.sql.Timestamp(10), TimestampType), Option(UNKNOWN)), true)
-    checkEvaluation(BooleanTest(Literal.create("abc", StringType), Option(UNKNOWN)), true)
-    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), Option(UNKNOWN)), false)
-    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), Option(UNKNOWN)), false)
+      BooleanTest(Literal.create(new java.sql.Timestamp(10), TimestampType), Some(UNKNOWN)), true)
+    checkEvaluation(BooleanTest(Literal.create("abc", StringType), Some(UNKNOWN)), true)
+    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), Some(UNKNOWN)), false)
+    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), Some(UNKNOWN)), false)
 
-    checkEvaluation(Not(BooleanTest(Literal.create(1.toByte, ByteType), Option(UNKNOWN))), false)
-      checkEvaluation(Not(BooleanTest(Literal.create(1.toShort, ByteType), Option(UNKNOWN))), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(1, IntegerType), Option(UNKNOWN))), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(1L, LongType), Option(UNKNOWN))), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(1.0F, FloatType), Option(UNKNOWN))), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(1.0, DoubleType), Option(UNKNOWN))), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(1.toByte, ByteType), Some(UNKNOWN))), false)
+      checkEvaluation(Not(BooleanTest(Literal.create(1.toShort, ByteType), Some(UNKNOWN))), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(1, IntegerType), Some(UNKNOWN))), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(1L, LongType), Some(UNKNOWN))), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(1.0F, FloatType), Some(UNKNOWN))), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(1.0, DoubleType), Some(UNKNOWN))), false)
     checkEvaluation(Not(
-      BooleanTest(Literal.create(Decimal(1.5), DecimalType(2, 1)), Option(UNKNOWN))), false)
+      BooleanTest(Literal.create(Decimal(1.5), DecimalType(2, 1)), Some(UNKNOWN))), false)
     checkEvaluation(Not(
-      BooleanTest(Literal.create(new java.sql.Date(10), DateType), Option(UNKNOWN))), false)
+      BooleanTest(Literal.create(new java.sql.Date(10), DateType), Some(UNKNOWN))), false)
     checkEvaluation(Not(BooleanTest(
-      Literal.create(new java.sql.Timestamp(10), TimestampType), Option(UNKNOWN))), false)
-    checkEvaluation(Not(BooleanTest(Literal.create("abc", StringType), Option(UNKNOWN))), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), Option(UNKNOWN))), true)
-    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), Option(UNKNOWN))), true)
+      Literal.create(new java.sql.Timestamp(10), TimestampType), Some(UNKNOWN))), false)
+    checkEvaluation(Not(BooleanTest(Literal.create("abc", StringType), Some(UNKNOWN))), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), Some(UNKNOWN))), true)
+    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), Some(UNKNOWN))), true)
   }
 
 }
