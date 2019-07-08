@@ -18,11 +18,13 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean}
 import javax.servlet.DispatcherType
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
@@ -66,6 +68,10 @@ private[spark] abstract class YarnSchedulerBackend(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
+
+  private val canRecoverAskTimeout = new RpcTimeout(
+    FiniteDuration((askTimeout.duration * 0.95).toNanos, TimeUnit.NANOSECONDS),
+    askTimeout.timeoutProp)
 
   /** Application ID. */
   protected var appId: Option[ApplicationId] = None
@@ -248,7 +254,7 @@ private[spark] abstract class YarnSchedulerBackend(
       val removeExecutorMessage = amEndpoint match {
         case Some(am) =>
           val lossReasonRequest = GetExecutorLossReason(executorId)
-          am.ask[ExecutorLossReason](lossReasonRequest, askTimeout)
+          am.ask[ExecutorLossReason](lossReasonRequest, canRecoverAskTimeout)
             .map { reason => RemoveExecutor(executorId, reason) }(ThreadUtils.sameThread)
             .recover {
               case NonFatal(e) =>
