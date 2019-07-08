@@ -846,7 +846,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val oldAttempts = listing.view(classOf[ApplicationInfoWrapper])
         .index("oldestAttempt")
         .asScala
-        .toList
       oldAttempts.foreach { app =>
         if (count > 0) {
           // Applications may have multiple attempts, some of which may not be completed yet.
