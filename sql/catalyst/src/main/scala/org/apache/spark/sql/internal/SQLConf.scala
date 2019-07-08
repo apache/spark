@@ -311,16 +311,30 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.reducePostShufflePartitions.enabled")
+    .doc("When true and adaptive execution is enabled, this enables reducing the number of " +
+      "post-shuffle partitions based on map output statistics.")
+    .booleanConf
+    .createWithDefault(true)
+
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.minNumPostShufflePartitions")
-      .internal()
-      .doc("The advisory minimal number of post-shuffle partitions provided to " +
-        "ExchangeCoordinator. This setting is used in our test to make sure we " +
-        "have enough parallelism to expose issues that will not be exposed with a " +
-        "single partition. When the value is a non-positive value, this setting will " +
-        "not be provided to ExchangeCoordinator.")
+      .doc("The advisory minimum number of post-shuffle partitions used in adaptive execution.")
       .intConf
-      .createWithDefault(-1)
+      .checkValue(_ > 0, "The minimum shuffle partition number " +
+        "must be a positive integer.")
+      .createWithDefault(1)
+
+  val SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS =
+    buildConf("spark.sql.adaptive.maxNumPostShufflePartitions")
+      .doc("The advisory maximum number of post-shuffle partitions used in adaptive execution. " +
+        "This is used as the initial number of pre-shuffle partitions. By default it equals to " +
+        "spark.sql.shuffle.partitions")
+      .intConf
+      .checkValue(_ > 0, "The maximum shuffle partition number " +
+        "must be a positive integer.")
+      .createOptional
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -565,6 +579,12 @@ object SQLConf {
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
     .createWithDefault(true)
+
+  val ORC_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.orc.mergeSchema")
+    .doc("When true, the Orc data source merges schemas collected from all data files, " +
+      "otherwise the schema is picked from a random data file.")
+    .booleanConf
+    .createWithDefault(false)
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
@@ -1933,8 +1953,13 @@ class SQLConf extends Serializable with Logging {
   def adaptiveExecutionEnabled: Boolean =
     getConf(ADAPTIVE_EXECUTION_ENABLED) && !getConf(RUNTIME_REOPTIMIZATION_ENABLED)
 
+  def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
+
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
+
+  def maxNumPostShufflePartitions: Int =
+    getConf(SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS).getOrElse(numShufflePartitions)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
@@ -1955,6 +1980,8 @@ class SQLConf extends Serializable with Logging {
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+
+  def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
 
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 

@@ -616,7 +616,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-25691: AliasViewChild with different nullabilities") {
     object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
-      val batches = Batch("View", Once, AliasViewChild(conf), EliminateView) :: Nil
+      val batches = Batch("View", Once, EliminateView) :: Nil
     }
     val relation = LocalRelation('a.int.notNull, 'b.string)
     val view = View(CatalogTable(
@@ -644,5 +644,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisError(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
       Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
         "2; number of columns: 1."))
+  }
+
+  test("SPARK-28251: Insert into non-existing table error message is user friendly") {
+    assertAnalysisError(parsePlan("INSERT INTO test VALUES (1)"),
+      Seq("Table not found: test"))
   }
 }

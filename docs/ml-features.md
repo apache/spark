@@ -923,6 +923,14 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaInteractionExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Interaction Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Interaction)
+for more details on the API.
+
+{% include_example python/ml/interaction_example.py %}
+</div>
 </div>
 
 ## Normalizer

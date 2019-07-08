@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -89,6 +90,30 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+    }
+  }
+
+  test("Change merge join to broadcast join and reduce number of shuffle partitions") {
+    withSQLConf(
+      SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key -> "true",
+      SQLConf.REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "150") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+
+      val shuffleReaders = adaptivePlan.collect {
+        case reader: CoalescedShuffleReaderExec => reader
+      }
+      assert(shuffleReaders.length === 1)
+      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
+      shuffleReaders.foreach { reader =>
+        assert(reader.outputPartitioning.numPartitions === 2)
+      }
     }
   }
 

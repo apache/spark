@@ -278,7 +278,7 @@ locationSpec
     ;
 
 query
-    : ctes? queryNoWith
+    : ctes? queryTerm queryOrganization
     ;
 
 insertInto
@@ -380,10 +380,6 @@ dmlStatementNoWith
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     ;
 
-queryNoWith
-    : queryTerm queryOrganization
-    ;
-
 queryOrganization
     : (ORDER BY order+=sortItem (',' order+=sortItem)*)?
       (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
@@ -412,7 +408,7 @@ queryPrimary
     | fromStatement                                                         #fromStmt
     | TABLE multipartIdentifier                                             #table
     | inlineTable                                                           #inlineTableDefault1
-    | '(' queryNoWith  ')'                                                  #subquery
+    | '(' query ')'                                                         #subquery
     ;
 
 sortItem
@@ -583,7 +579,7 @@ identifierComment
 
 relationPrimary
     : multipartIdentifier sample? tableAlias  #tableName
-    | '(' queryNoWith ')' sample? tableAlias  #aliasedQuery
+    | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
     | functionTable                           #tableValuedFunction
@@ -1011,6 +1007,7 @@ ansiNonReserved
     | PARTITIONS
     | PERCENTLIT
     | PIVOT
+    | PLACING
     | POSITION
     | PRECEDING
     | PRINCIPALS
