@@ -297,10 +297,10 @@ case class LoadDataCommand(
           s"do not match number of partitioned columns in table " +
           s"(${targetTable.partitionColumnNames.size})")
       }
-      val resolverFunc = resolver(sparkSession.sessionState.conf)
+      val resolverFunc = sparkSession.sessionState.conf.resolver
       partition.get.keys.foreach { colName =>
-        if (!targetTable.partitionColumnNames
-          .exists(fieldName => resolverFunc(fieldName, colName))) {
+        if (!targetTable
+          .partitionColumnNames.exists(fieldName => resolverFunc(fieldName, colName))) {
           throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
             s"but the specified partition spec refers to a column that is not partitioned: " +
             s"'$colName'")
@@ -373,8 +373,6 @@ case class LoadDataCommand(
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
   }
-
-  private def resolver (conf: SQLConf) : Resolver = conf.resolver
 }
 
 object LoadDataCommand {

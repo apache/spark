@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -290,6 +291,13 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
         sql("SELECT * FROM non_part_table").collect())
+
+      // check for case insensitive of partition columns while querying.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        checkAnswer(
+          sql("SELECT employeeID, employeeName FROM part_table WHERE C = '2' AND D = '1'"),
+          sql("SELECT * FROM non_part_table").collect())
+      }
     }
   }
 
