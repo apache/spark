@@ -839,7 +839,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // If the number of files is bigger than MAX_LOG_NUM,
     // clean up all completed attempts per application one by one.
-    val num = listing.view(classOf[LogInfo]).index("lastProcessed").asScala.count(_ => true)
+    val num = listing.view(classOf[LogInfo]).index("lastProcessed").asScala.size
     var count = num - maxNum
     if (count > 0) {
       logInfo(s"Try to delete $count old event logs to keep $maxNum logs in total.")
@@ -850,9 +850,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       oldAttempts.foreach { app =>
         if (count > 0) {
           // Applications may have multiple attempts, some of which may not be completed yet.
-          val (toDelete, remaining) = app.attempts.partition { attempt =>
-            attempt.info.completed
-          }
+          val (toDelete, remaining) = app.attempts.partition(_.info.completed)
           count -= deleteAttemptLogs(app, remaining, toDelete)
         }
       }
