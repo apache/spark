@@ -1181,9 +1181,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("select interval '10-9' year to month"),
       Row(CalendarInterval.fromString("interval 10 years 9 months")))
     checkAnswer(sql("select interval '20 15:40:32.99899999' day to hour"),
-        Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours")))
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours")))
     checkAnswer(sql("select interval '20 15:40:32.99899999' day to minute"),
-        Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes")))
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes")))
     checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
       Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
         "32 seconds 99 milliseconds 899 microseconds")))
@@ -1200,9 +1200,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("select interval '20 40:32.99899999' minute to second"),
       Row(CalendarInterval.fromString("interval 2 weeks 6 days 40 minutes 32 seconds " +
         "99 milliseconds 899 microseconds")))
-    checkAnswer(sql("select interval '40:32.99899999' minute to second"),
-      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds 99 milliseconds " +
-        "899 microseconds")))
     checkAnswer(sql("select interval '40:32.99899999' minute to second"),
       Row(CalendarInterval.fromString("interval 40 minutes 32 seconds 99 milliseconds " +
         "899 microseconds")))

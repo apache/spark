@@ -159,10 +159,22 @@ public final class CalendarInterval implements Serializable {
    *
    * adapted from HiveIntervalDayTime.valueOf
    */
-  public static CalendarInterval fromDayTimeString(String s) {
+  public static CalendarInterval fromDayTimeString(String s) throws IllegalArgumentException {
     return fromDayTimeString(s, "day", "second");
   }
 
+  /**
+   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
+   *
+   * adapted from HiveIntervalDayTime.valueOf.
+   * Below interval conversion patterns are supported:
+   * - DAY TO HOUR
+   * - DAY TO MINUTE
+   * - DAY TO SECOND
+   * - HOUR to MINUTE
+   * - HOUR to SECOND
+   * - MINUTE to SECOND
+   */
   public static CalendarInterval fromDayTimeString(String s, String from, String to)
       throws IllegalArgumentException {
 
