@@ -55,9 +55,6 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER, expected, stream => {
       assert(Some(expected.toLong) === getField(stream, maxOffsetsPerTriggerMethod))
     })
-  }
-
-  test("SPARK-28163 - micro-batch mode - options should be handled as case-insensitive") {
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
       val kafkaOffsetReader = getField(stream, offsetReaderMethod)
       assert(expected.toInt === getField(kafkaOffsetReader, fetchOffsetNumRetriesMethod))
@@ -69,13 +66,10 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     })
   }
 
-  test("SPARK-28142 - continuous mode - options should be handled as case-insensitive") {
+  test("continuous mode - options should be handled as case-insensitive") {
     verifyFieldsInContinuousStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
       assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
     })
-  }
-
-  test("SPARK-28163 - continuous mode - options should be handled as case-insensitive") {
     verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
       val kafkaOffsetReader = getField(stream, offsetReaderMethod)
       assert(expected.toInt === getField(kafkaOffsetReader, fetchOffsetNumRetriesMethod))
