@@ -49,6 +49,13 @@ private[spark] object History {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("7d")
 
+  // This is designed to be smaller than the default value of
+  // `dfs.namenode.fs-limits.max-directory-items` (1024 * 1024).
+  val MAX_LOG_NUM = ConfigBuilder("spark.history.fs.cleaner.maxNum")
+    .doc("The maximum number of log files in the event log directory.")
+    .intConf
+    .createWithDefault(1000000)
+
   val LOCAL_STORE_DIR = ConfigBuilder("spark.history.store.path")
     .doc("Local directory where to cache application history information. By default this is " +
       "not set, meaning all history information will be kept in memory.")
