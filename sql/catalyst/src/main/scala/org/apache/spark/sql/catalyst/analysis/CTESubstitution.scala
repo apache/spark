@@ -84,12 +84,12 @@ object CTESubstitution extends Rule[LogicalPlan] {
    * @param plan  the plan to be traversed
    * @param inTraverse whether the current traverse is called from another traverse, only in this
    *                   case name collision can occur
-   * @return then plan where CTE substitution is applied
+   * @return the plan where CTE substitution is applied
    */
   private def traverseAndSubstituteCTE(plan: LogicalPlan, inTraverse: Boolean): LogicalPlan = {
     plan.resolveOperatorsUp {
       case With(child: LogicalPlan, relations) =>
-        val traversedChild = child transformExpressions {
+        val traversedChild: LogicalPlan = child transformExpressions {
           case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
         }
 
