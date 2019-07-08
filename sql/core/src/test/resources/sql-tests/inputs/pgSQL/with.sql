@@ -885,8 +885,9 @@ SELECT * FROM outermost ORDER BY 1;
 --
 --SELECT * FROM bug6051;
 
+-- [NOTE] Spark SQL doesn't support RULEs
 --CREATE TEMP TABLE bug6051_2 (i int);
-
+--
 --CREATE RULE bug6051_ins AS ON INSERT TO bug6051 DO INSTEAD
 -- INSERT INTO bug6051_2
 -- SELECT NEW.i;
