@@ -1292,7 +1292,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       val df = sql("SELECT * FROM a WHERE p <= (SELECT MIN(id) FROM b)")
       checkAnswer(df, Seq(Row(0, 0), Row(2, 0)))
       // need to execute the query before we can examine fs.inputRDDs()
-      df.explain
       assert(df.queryExecution.executedPlan match {
         case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
             fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _), _))) =>

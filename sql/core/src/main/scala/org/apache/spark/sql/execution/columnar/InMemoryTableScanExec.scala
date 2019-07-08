@@ -163,8 +163,6 @@ case class InMemoryTableScanExec(
     }
   }
 
-  // override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
-
   override def output: Seq[Attribute] = attributes
 
   private def updateAttribute(expr: Expression): Expression = {

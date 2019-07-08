@@ -485,16 +485,13 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     // Push predicate to the cached table.
     val df2 = df1.where("y = 3")
 
-    logWarning(s"ORIG QUERY PLAN:\n${df2.queryExecution.executedPlan}")
     val planBeforeFilter = df2.queryExecution.executedPlan.collect {
       case FilterExec(_, c: ColumnarToRowExec) => c.child
       case WholeStageCodegenExec(FilterExec(_, ColumnarToRowExec(i: InputAdapter))) => i.child
     }
-    logWarning(s"MOD QUERY PLAN: ${planBeforeFilter(0).getClass}\n${planBeforeFilter}")
     assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
     val execPlan = planBeforeFilter.head
-    logWarning(s"EXEC PLAN:\n${execPlan}")
     assert(execPlan.executeCollectPublic().length == 0)
   }
 
