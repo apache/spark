@@ -107,7 +107,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       val taskSet = invoke.getArguments()(0).asInstanceOf[TaskSet]
       new TaskSetManager(mockTaskScheduler, taskSet, 4) {
         private var hasDequeuedSpeculatedTask = false
-        override def dequeueSpeculativeTask(execId: String,
+        def dequeueSpeculativeTask(execId: String,
             host: String,
             locality: TaskLocality.Value): Option[(Int, TaskLocality.Value)] = {
           if (hasDequeuedSpeculatedTask) {

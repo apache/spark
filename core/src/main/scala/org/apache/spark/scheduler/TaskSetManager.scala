@@ -145,24 +145,14 @@ private[spark] class TaskSetManager(
   // Duplicates are handled in dequeueTaskFromList, which ensures that a
   // task hasn't already started running before launching it.
 
-  private[scheduler] val pendingTasks = PendingTasksByLocality(
-    forExecutor = new HashMap[String, ArrayBuffer[Int]],
-    forHost = new HashMap[String, ArrayBuffer[Int]],
-    noPrefs = new ArrayBuffer[Int],
-    forRack = new HashMap[String, ArrayBuffer[Int]],
-    anyPrefs = new ArrayBuffer[Int])
+  private[scheduler] val pendingTasks = new PendingTasksByLocality()
 
   // The HashSet here ensures that we do not add duplicate speculative tasks
   private[scheduler] val speculatableTasks = new HashSet[Int]
 
   // Set of pending tasks marked as speculative for various levels of locality: executor, host,
   // rack, noPrefs and anyPrefs
-  private[scheduler] val pendingSpeculatableTasks = PendingTasksByLocality(
-    forExecutor = new HashMap[String, ArrayBuffer[Int]],
-    forHost = new HashMap[String, ArrayBuffer[Int]],
-    noPrefs = new ArrayBuffer[Int],
-    forRack = new HashMap[String, ArrayBuffer[Int]],
-    anyPrefs = new ArrayBuffer[Int])
+  private[scheduler] val pendingSpeculatableTasks = new PendingTasksByLocality()
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
   private[scheduler] val taskInfos = new HashMap[Long, TaskInfo]
@@ -238,84 +228,41 @@ private[spark] class TaskSetManager(
       index: Int,
       resolveRacks: Boolean = true,
       speculative: Boolean = false): Unit = {
-    if (speculative) {
-      for (loc <- tasks(index).preferredLocations) {
-        loc match {
-          case e: ExecutorCacheTaskLocation =>
-            pendingSpeculatableTasks.forExecutor.getOrElseUpdate(
-              e.executorId, new ArrayBuffer) += index
-          case _ =>
-        }
-        pendingSpeculatableTasks.forHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
-        for (rack <- sched.getRackForHost(loc.host)) {
-          pendingSpeculatableTasks.forRack.getOrElseUpdate(rack, new ArrayBuffer) += index
-        }
-      }
-
-      if (tasks(index).preferredLocations == Nil) {
-        pendingSpeculatableTasks.noPrefs += index
-      }
-
-      pendingSpeculatableTasks.anyPrefs += index
-    } else {
-
-      for (loc <- tasks(index).preferredLocations) {
-        loc match {
-          case e: ExecutorCacheTaskLocation =>
-            pendingTasks.forExecutor.getOrElseUpdate(e.executorId, new ArrayBuffer) += index
-          case e: HDFSCacheTaskLocation =>
-            val exe = sched.getExecutorsAliveOnHost(loc.host)
-            exe match {
-              case Some(set) =>
-                for (e <- set) {
-                  pendingTasks.forExecutor.getOrElseUpdate(e, new ArrayBuffer) += index
-                }
-                logInfo(s"Pending task $index has a cached location at ${e.host} " +
-                  ", where there are executors " + set.mkString(","))
-              case None => logDebug(s"Pending task $index has a cached location at ${e.host} " +
-                ", but there are no executors alive there.")
-            }
-          case _ =>
-        }
-        pendingTasks.forHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
-
-        if (resolveRacks) {
-          sched.getRackForHost(loc.host).foreach { rack =>
-            pendingTasks.forRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+    val pendingTaskSetToAddTo = if (speculative) pendingSpeculatableTasks else pendingTasks
+    // ... mostly the original code from `addPendingTask` here, just adding
+    // into pendingTaskSetToAddTo
+    for (loc <- tasks(index).preferredLocations) {
+      loc match {
+        case e: ExecutorCacheTaskLocation =>
+          pendingTaskSetToAddTo.forExecutor.getOrElseUpdate(e.executorId, new ArrayBuffer) += index
+        case e: HDFSCacheTaskLocation =>
+          val exe = sched.getExecutorsAliveOnHost(loc.host)
+          exe match {
+            case Some(set) =>
+              for (e <- set) {
+                pendingTaskSetToAddTo.forExecutor.getOrElseUpdate(e, new ArrayBuffer) += index
+              }
+              logInfo(s"Pending task $index has a cached location at ${e.host} " +
+                ", where there are executors " + set.mkString(","))
+            case None => logDebug(s"Pending task $index has a cached location at ${e.host} " +
+              ", but there are no executors alive there.")
           }
+        case _ =>
+      }
+      pendingTaskSetToAddTo.forHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
+
+      if (resolveRacks) {
+        sched.getRackForHost(loc.host).foreach { rack =>
+          pendingTaskSetToAddTo.forRack.getOrElseUpdate(rack, new ArrayBuffer) += index
         }
       }
-
-      if (tasks(index).preferredLocations == Nil) {
-        pendingTasks.noPrefs += index
-      }
-
-      pendingTasks.anyPrefs += index
     }
-  }
 
-  /**
-   * Return the pending tasks list for a given executor ID, or an empty list if
-   * there is no map entry for that host
-   */
-  private def getPendingTasksForExecutor(executorId: String): ArrayBuffer[Int] = {
-    pendingTasks.forExecutor.getOrElse(executorId, ArrayBuffer())
-  }
+    if (tasks(index).preferredLocations == Nil) {
+      pendingTaskSetToAddTo.noPrefs += index
+    }
 
-  /**
-   * Return the pending tasks list for a given host, or an empty list if
-   * there is no map entry for that host
-   */
-  private def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
-    pendingTasks.forHost.getOrElse(host, ArrayBuffer())
-  }
-
-  /**
-   * Return the pending rack-local task list for a given rack, or an empty list if
-   * there is no map entry for that rack
-   */
-  private def getPendingTasksForRack(rack: String): ArrayBuffer[Int] = {
-    pendingTasks.forRack.getOrElse(rack, ArrayBuffer())
+    pendingTaskSetToAddTo.anyPrefs += index
   }
 
   /**
@@ -329,30 +276,16 @@ private[spark] class TaskSetManager(
       host: String,
       list: ArrayBuffer[Int],
       speculative: Boolean = false): Option[Int] = {
-    if (speculative) {
-      if (!list.isEmpty) {
-        for (index <- list) {
-          if (!isTaskBlacklistedOnExecOrNode(index, execId, host) &&
-            !hasAttemptOnHost(index, host)) {
-            // This should almost always be list.trimEnd(1) to remove tail
-            list -= index
-            if (!successful(index)) {
-              return Some(index)
-            }
-          }
-        }
-      }
-    } else {
-      var indexOffset = list.size
-      while (indexOffset > 0) {
-        indexOffset -= 1
-        val index = list(indexOffset)
-        if (!isTaskBlacklistedOnExecOrNode(index, execId, host)) {
-          // This should almost always be list.trimEnd(1) to remove tail
-          list.remove(indexOffset)
-          if (copiesRunning(index) == 0 && !successful(index)) {
-            return Some(index)
-          }
+    var indexOffset = list.size
+    while (indexOffset > 0) {
+      indexOffset -= 1
+      val index = list(indexOffset)
+      if (!isTaskBlacklistedOnExecOrNode(index, execId, host) &&
+        !(speculative && hasAttemptOnHost(index, host))) {
+        // This should almost always be list.trimEnd(1) to remove tail
+        list.remove(indexOffset)
+        if ((copiesRunning(index) == 0 || speculative) && !successful(index)) {
+          return Some(index)
         }
       }
     }
@@ -372,106 +305,62 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Return a speculative task for a given executor if any are available. The task should not have
-   * an attempt running on this host, in case the host is slow. In addition, the task should meet
-   * the given locality constraint.
-   */
-  // Labeled as protected to allow tests to override providing speculative tasks if necessary
-  protected def dequeueSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
-    : Option[(Int, TaskLocality.Value)] =
-  {
-      // Check for process-local tasks; note that tasks can be process-local
-      // on multiple nodes when we replicate cached blocks, as in Spark Streaming
-    for (index <- dequeueTaskFromList(
-      execId, host, pendingSpeculatableTasks.forExecutor.getOrElse(execId, ArrayBuffer()),
-      speculative = true)) {
-      return Some((index, TaskLocality.PROCESS_LOCAL))
-    }
-
-    // Check for node-local tasks
-    if (TaskLocality.isAllowed(locality, TaskLocality.NODE_LOCAL)) {
-      for (index <- dequeueTaskFromList(
-        execId, host, pendingSpeculatableTasks.forHost.getOrElse(host, ArrayBuffer()),
-        speculative = true)) {
-        return Some((index, TaskLocality.NODE_LOCAL))
-      }
-    }
-
-    // Check for no-preference tasks
-    if (TaskLocality.isAllowed(locality, TaskLocality.NO_PREF)) {
-      for (index <- dequeueTaskFromList(
-        execId, host, pendingSpeculatableTasks.noPrefs, speculative = true)) {
-        return Some((index, TaskLocality.PROCESS_LOCAL))
-      }
-    }
-
-    // Check for rack-local tasks
-    if (TaskLocality.isAllowed(locality, TaskLocality.RACK_LOCAL)) {
-      for {
-        rack <- sched.getRackForHost(host)
-        index <- dequeueTaskFromList(
-          execId, host, pendingSpeculatableTasks.forRack.getOrElse(rack, ArrayBuffer()),
-          speculative = true)
-      } {
-        return Some((index, TaskLocality.RACK_LOCAL))
-      }
-    }
-
-    // Check for non-local tasks
-    if (TaskLocality.isAllowed(locality, TaskLocality.ANY)) {
-      for (index <- dequeueTaskFromList(execId, host, pendingSpeculatableTasks.anyPrefs,
-        speculative = true)) {
-        return Some((index, TaskLocality.ANY))
-      }
-    }
-
-    None
-  }
-
-  /**
    * Dequeue a pending task for a given node and return its index and locality level.
    * Only search for tasks matching the given locality constraint.
    *
    * @return An option containing (task index within the task set, locality, is speculative?)
    */
   private def dequeueTask(execId: String, host: String, maxLocality: TaskLocality.Value)
-    : Option[(Int, TaskLocality.Value, Boolean)] =
-  {
-    for (index <- dequeueTaskFromList(execId, host, getPendingTasksForExecutor(execId))) {
-      return Some((index, TaskLocality.PROCESS_LOCAL, false))
+  : Option[(Int, TaskLocality.Value, Boolean)] = {
+    // if we didn't schedule a regular task, try to schedule a speculative one
+    dequeueTaskHelper(execId, host, maxLocality, false).orElse(dequeueTaskHelper(execId, host, maxLocality, true))
+  }
+
+  private def dequeueTaskHelper(
+    execId: String,
+    host: String,
+    maxLocality: TaskLocality.Value,
+    speculative: Boolean): Option[(Int, TaskLocality.Value, Boolean)] = {
+    if (speculative && speculatableTasks.isEmpty) {
+      return None
+    }
+    val pendingTaskSetToUse = if (speculative) pendingSpeculatableTasks else pendingTasks
+    def dequeue(list: ArrayBuffer[Int]): Option[Int] = {
+      dequeueTaskFromList(execId, host, list, speculative)
+    }
+
+    dequeue(pendingTaskSetToUse.forExecutor.getOrElse(execId, ArrayBuffer())).foreach { index =>
+      return Some((index, TaskLocality.PROCESS_LOCAL, speculative))
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NODE_LOCAL)) {
-      for (index <- dequeueTaskFromList(execId, host, getPendingTasksForHost(host))) {
-        return Some((index, TaskLocality.NODE_LOCAL, false))
+      dequeue(pendingTaskSetToUse.forHost.getOrElse(host, ArrayBuffer())).foreach { index =>
+        return Some((index, TaskLocality.NODE_LOCAL, speculative))
       }
     }
 
+    // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NO_PREF)) {
-      // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
-      for (index <- dequeueTaskFromList(execId, host, pendingTasks.noPrefs)) {
-        return Some((index, TaskLocality.PROCESS_LOCAL, false))
+      dequeue(pendingTaskSetToUse.noPrefs).foreach { index =>
+        return Some((index, TaskLocality.NO_PREF, speculative))
       }
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.RACK_LOCAL)) {
       for {
         rack <- sched.getRackForHost(host)
-        index <- dequeueTaskFromList(execId, host, getPendingTasksForRack(rack))
+        index <- dequeue(pendingTaskSetToUse.forRack.getOrElse(rack, ArrayBuffer()))
       } {
-        return Some((index, TaskLocality.RACK_LOCAL, false))
+        return Some((index, TaskLocality.RACK_LOCAL, speculative))
       }
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.ANY)) {
-      for (index <- dequeueTaskFromList(execId, host, pendingTasks.anyPrefs)) {
-        return Some((index, TaskLocality.ANY, false))
+      dequeue(pendingTaskSetToUse.anyPrefs).foreach { index =>
+        return Some((index, TaskLocality.ANY, speculative))
       }
     }
-
-    // find a speculative task if all others tasks have been scheduled
-    dequeueSpeculativeTask(execId, host, maxLocality).map {
-      case (taskIndex, allowedLocality) => (taskIndex, allowedLocality, true)}
+    None
   }
 
   /**
@@ -1084,7 +973,7 @@ private[spark] class TaskSetManager(
         val info = taskInfos(tid)
         val index = info.index
         if (!successful(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
-          !speculatableTasks.contains(index)) {
+            !speculatableTasks.contains(index)) {
           addPendingTask(index, speculative = true)
           logInfo(
             "Marking task %d in stage %s (on %s) as speculatable because it ran more than %.0f ms"
@@ -1159,9 +1048,11 @@ private[spark] object TaskSetManager {
   val TASK_SIZE_TO_WARN_KIB = 1000
 }
 
-case class PendingTasksByLocality(
-    forExecutor: HashMap[String, ArrayBuffer[Int]],
-    forHost: HashMap[String, ArrayBuffer[Int]],
-    noPrefs: ArrayBuffer[Int],
-    forRack: HashMap[String, ArrayBuffer[Int]],
-    anyPrefs: ArrayBuffer[Int])
+private[scheduler] class PendingTasksByLocality {
+
+  val forExecutor: HashMap[String, ArrayBuffer[Int]] = new HashMap[String, ArrayBuffer[Int]]
+  val forHost: HashMap[String, ArrayBuffer[Int]] = new HashMap[String, ArrayBuffer[Int]]
+  val noPrefs: ArrayBuffer[Int] = new ArrayBuffer[Int]
+  val forRack: HashMap[String, ArrayBuffer[Int]] = new HashMap[String, ArrayBuffer[Int]]
+  val anyPrefs: ArrayBuffer[Int] = new ArrayBuffer[Int]
+}
