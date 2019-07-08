@@ -130,7 +130,7 @@ class ForeachDataWriter[T](
     rowConverter: InternalRow => T,
     partitionId: Int,
     epochId: Long)
-  extends DataWriter[InternalRow] with Logging{
+  extends DataWriter[InternalRow] with Logging {
 
   // If open returns false, we should skip writing rows.
   private val opened = writer.open(partitionId, epochId)
