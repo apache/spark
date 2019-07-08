@@ -855,7 +855,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       }
       if (count > 0) {
-        logError(s"Fail to clean up according to MAX_LOG_NUM policy ($maxNum).")
+        logWarning(s"Fail to clean up according to MAX_LOG_NUM policy ($maxNum).")
       }
     }
 
