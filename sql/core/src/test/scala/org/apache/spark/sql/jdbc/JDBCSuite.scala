@@ -906,12 +906,12 @@ class JDBCSuite extends QueryTest
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
 
-    assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT,"TINYINT",1,metadata).get ==
-          ByteType)
-    assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT,"SMALLINT",1,metadata).get ==
-      ShortType)
-    assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL,"REAL",1,metadata).get ==
-      FloatType)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+      metadata).get == ByteType)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
+      metadata).get == ShortType)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
+      metadata).get == FloatType)
 
   }
 
