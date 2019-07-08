@@ -208,7 +208,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.cleaner.maxNum</td>
     <td>Int.MaxValue</td>
     <td>
-      The number of maximum files in the event log directory.
+      The maximum number of files in the event log directory.
       Spark tries to clean up the completed attempt logs to maintain the log directory under this limit.
       This should be smaller than the underlying file system limit like
       `dfs.namenode.fs-limits.max-directory-items` in HDFS.
