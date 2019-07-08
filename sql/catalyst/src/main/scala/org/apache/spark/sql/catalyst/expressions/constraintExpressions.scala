@@ -33,3 +33,16 @@ case class KnownNotNull(child: Expression) extends UnaryExpression {
     child.eval(input)
   }
 }
+
+case class KnownFloatingPointNormalized(child: Expression) extends UnaryExpression {
+  override def nullable: Boolean = false
+  override def dataType: DataType = child.dataType
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.genCode(ctx).copy(isNull = FalseLiteral)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    child.eval(input)
+  }
+}
