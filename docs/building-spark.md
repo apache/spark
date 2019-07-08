@@ -70,8 +70,6 @@ This will build Spark distribution along with Python pip and R packages. For mor
 
 ## Specifying the Hadoop Version and Enabling YARN
 
-You can enable the exact profile of Hadoop to compile against through `-Phadoop-2.7`(default) and `-Phadoop-3.2`.
-
 You can specify the exact version of Hadoop to compile against through the `hadoop.version` property. 
 
 You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different 
