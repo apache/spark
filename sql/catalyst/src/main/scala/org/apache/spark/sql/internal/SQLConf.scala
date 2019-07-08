@@ -1576,8 +1576,7 @@ object SQLConf {
       .doc("Prune nested fields from a logical relation's output which are unnecessary in " +
         "satisfying a query. This optimization allows columnar file format readers to avoid " +
         "reading unnecessary nested column data. Currently Parquet and ORC are the " +
-        "data sources that implement this optimization. This optimization also allows pruning " +
-        "unnecessary nested fields in expressions of operator.")
+        "data sources that implement this optimization.")
       .booleanConf
       .createWithDefault(false)
 
@@ -1589,6 +1588,16 @@ object SQLConf {
         "executing unnecessary nested expressions.")
       .booleanConf
       .createWithDefault(false)
+
+  val NESTED_PRUNING_ON_EXPRESSIONS =
+    buildConf("spark.sql.optimizer.expression.nestedPruning.enabled")
+    .internal()
+    .doc("Prune nested fields from expressions in an operator which are unnecessary in " +
+      "satisfying a query. Note that this optimization doesn't prune nested fields from " +
+      "physical data source scanning. For pruning nested fields from scanning, please use " +
+      "`spark.sql.optimizer.nestedSchemaPruning.enabled` config.")
+    .booleanConf
+    .createWithDefault(false)
 
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
@@ -2209,6 +2218,8 @@ class SQLConf extends Serializable with Logging {
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def nestedPruningOnExpressions: Boolean = getConf(NESTED_PRUNING_ON_EXPRESSIONS)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 

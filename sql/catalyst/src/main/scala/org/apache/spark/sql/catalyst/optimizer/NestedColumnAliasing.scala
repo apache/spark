@@ -66,7 +66,7 @@ object NestedColumnAliasing {
   /**
    * Return a plan with new children replaced with aliases.
    */
-  private def replaceChildrenWithAliases(
+  def replaceChildrenWithAliases(
       plan: LogicalPlan,
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
@@ -107,10 +107,10 @@ object NestedColumnAliasing {
    * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
-  def getAliasSubMap(projectList: Seq[NamedExpression])
+  def getAliasSubMap(exprList: Seq[Expression])
     : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
-      projectList.flatMap(collectRootReferenceAndExtractValue).partition {
+      exprList.flatMap(collectRootReferenceAndExtractValue).partition {
         case _: ExtractValue => true
         case _ => false
       }

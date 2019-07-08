@@ -103,8 +103,8 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("Nested column pruning for Generate") {
-    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val strcutType = StructType.fromDDL("d string, e array<string>")
+    withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
+      val strcutType = StructType.fromDDL("d string, e array<string>, f double")
       val input = LocalRelation('a.int, 'b.int, 'c.struct(strcutType))
 
       val query =
@@ -119,9 +119,9 @@ class ColumnPruningSuite extends PlanTest {
 
       val correctAnswer =
         input
-          .select('a, 'c, 'c.getField("d").as(aliases(0)))
-          .generate(Explode('c.getField("e")),
-            unrequiredChildIndex = Seq(1),
+          .select('a, 'c.getField("d").as(aliases(0)), 'c.getField("e").as(aliases(1)))
+          .generate(Explode($"${aliases(1)}".as("c.e")),
+            unrequiredChildIndex = Seq(2),
             outputNames = "explode" :: Nil)
           .select('a, $"${aliases(0)}".as("c.d"), 'explode)
           .analyze

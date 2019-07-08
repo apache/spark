@@ -589,12 +589,19 @@ object ColumnPruning extends Rule[LogicalPlan] {
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
     // prune unrequired nested fields
-    case p @ Project(projectList, g: Generate) if SQLConf.get.nestedSchemaPruningEnabled =>
-      NestedColumnAliasing.getAliasSubMap(projectList).map {
+    case p @ Project(projectList, g: Generate) if SQLConf.get.nestedPruningOnExpressions =>
+      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
         case (nestedFieldToAlias, attrToAliases) =>
-          val newChild = g.withNewChildren(g.children.map { child =>
-            Project(child.output ++ attrToAliases.values.flatten, child)
-          })
+          val newGenerator = g.generator.transform {
+            case f: ExtractValue if nestedFieldToAlias.contains(f) =>
+              nestedFieldToAlias(f).toAttribute
+          }.asInstanceOf[Generator]
+
+          // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
+          val newGenerate = g.copy(generator = newGenerator)
+
+          val newChild = NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
+
           Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
       }.getOrElse(p)
 
