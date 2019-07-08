@@ -95,9 +95,6 @@ By default, Spark will build hadoop-2.7 with Hive 1.2.1 and hadoop-3.2 with Hive
     # With Hive 2.3.5 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -Phadoop-3.2 -DskipTests clean package
 
-    # Hadoop 2.7 with Hive 2.3.5 support
-    ./build/mvn -Pyarn -Phive -Phive-thriftserver -Phadoop-3.2 -Dhadoop.version=2.7.4 -Dcurator.version=2.7.1 -Dzookeeper.version=3.4.6 -DskipTests clean package
-
 ## Packaging without Hadoop Dependencies for YARN
 
 The assembly directory produced by `mvn package` will, by default, include all of Spark's
