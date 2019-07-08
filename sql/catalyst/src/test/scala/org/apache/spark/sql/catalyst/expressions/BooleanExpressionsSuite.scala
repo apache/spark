@@ -55,7 +55,7 @@ class BooleanExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BooleanTest(Literal.create(true, BooleanType), Some(UNKNOWN)), false)
 
     checkEvaluation(Not(BooleanTest(Literal.create(1.toByte, ByteType), Some(UNKNOWN))), false)
-      checkEvaluation(Not(BooleanTest(Literal.create(1.toShort, ByteType), Some(UNKNOWN))), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(1.toShort, ShortType), Some(UNKNOWN))), false)
     checkEvaluation(Not(BooleanTest(Literal.create(1, IntegerType), Some(UNKNOWN))), false)
     checkEvaluation(Not(BooleanTest(Literal.create(1L, LongType), Some(UNKNOWN))), false)
     checkEvaluation(Not(BooleanTest(Literal.create(1.0F, FloatType), Some(UNKNOWN))), false)
