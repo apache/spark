@@ -21,8 +21,8 @@ import java.util.Arrays
 
 import scala.collection.mutable.ListBuffer
 
-import breeze.linalg.{MatrixSingularException, inv, DenseMatrix => BDM, DenseVector => BDV,
-  SparseVector => BSV, axpy => brzAxpy, svd => brzSvd}
+import breeze.linalg.{axpy => brzAxpy, inv, svd => brzSvd, DenseMatrix => BDM, DenseVector => BDV,
+  MatrixSingularException, SparseVector => BSV}
 import breeze.numerics.{sqrt => brzSqrt}
 
 import org.apache.spark.annotation.Since
