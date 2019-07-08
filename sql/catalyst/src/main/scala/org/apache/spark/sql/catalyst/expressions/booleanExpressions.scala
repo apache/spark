@@ -33,12 +33,8 @@ object BooleanTest {
     booleanValue match {
       case TRUE => input == true
       case FALSE => input == false
-      case UNKNOWN =>
-        if (input == true || input == false) {
-          false
-        } else {
-          true
-        }
+      case UNKNOWN => input == null
+      case _ => false
     }
   }
 }
