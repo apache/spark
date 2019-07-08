@@ -59,6 +59,8 @@ object BooleanTest {
 case class BooleanTest(child: Expression, booleanValue: String)
   extends UnaryExpression with Predicate {
 
+  override def nullable: Boolean = false
+
   override def eval(input: InternalRow): Any = {
     BooleanTest.calculate(child.eval(input), booleanValue)
   }

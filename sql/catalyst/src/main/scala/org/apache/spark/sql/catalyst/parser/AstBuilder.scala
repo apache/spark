@@ -1225,7 +1225,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     // Check the argument of boolean test is valid.
     def checkBooleanTestArgs(e: Expression): Unit = e.dataType match {
-      case BooleanType | NullType =>
+      case BooleanType =>
       case other => throw new ParseException("argument of boolean test must be boolean or null, " +
         s"not type $other", ctx)
     }

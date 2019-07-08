@@ -24,8 +24,8 @@ import org.apache.spark.sql.types._
 class BooleanExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("istrue and isnottrue") {
-    checkEvaluation(BooleanTest(Literal.create(null, NullType), TRUE), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), TRUE)), true)
+    checkEvaluation(BooleanTest(Literal.create(null, BooleanType), TRUE), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(null, BooleanType), TRUE)), true)
     checkEvaluation(BooleanTest(Literal.create(false, BooleanType), TRUE), false)
     checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), TRUE)), true)
     checkEvaluation(BooleanTest(Literal.create(true, BooleanType), TRUE), true)
@@ -33,8 +33,8 @@ class BooleanExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("isfalse and isnotfalse") {
-    checkEvaluation(BooleanTest(Literal.create(null, NullType), FALSE), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), FALSE)), true)
+    checkEvaluation(BooleanTest(Literal.create(null, BooleanType), FALSE), false)
+    checkEvaluation(Not(BooleanTest(Literal.create(null, BooleanType), FALSE)), true)
     checkEvaluation(BooleanTest(Literal.create(false, BooleanType), FALSE), true)
     checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), FALSE)), false)
     checkEvaluation(BooleanTest(Literal.create(true, BooleanType), FALSE), false)
@@ -42,8 +42,8 @@ class BooleanExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("isunknown and isnotunknown") {
-    checkEvaluation(BooleanTest(Literal.create(null, NullType), UNKNOWN), true)
-    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), UNKNOWN)), false)
+    checkEvaluation(BooleanTest(Literal.create(null, BooleanType), UNKNOWN), true)
+    checkEvaluation(Not(BooleanTest(Literal.create(null, BooleanType), UNKNOWN)), false)
   }
 
 }
