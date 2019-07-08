@@ -13,8 +13,6 @@
  */
 package org.apache.spark.io;
 
-import org.apache.commons.compress.archivers.ArchiveException;
-import org.apache.commons.compress.archivers.ArchiveStreamFactory;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
@@ -24,79 +22,104 @@ import java.io.*;
 
 public class FileUtility {
 
-    /**
-     * Untar an input file into an output file.
-     *
-     * The output file is created in the output folder, having the same name as
-     * the input file, minus the '.tar' extension.
-     *
-     * @param inputFile the input .tar file
-     * @throws IOException
-     *
-     * @throws ArchiveException
-     */
-    public static void unTar(final File inputFile)
-            throws IOException, ArchiveException {
+  /**
+   * Extract an input tar file into an output files and directories.
+   * @param inputTarFileLoc the input file location for the tar file
+   * @param destDirLoc destination for the extracted files
+   *
+   * @throws IOException
+   * @throws IllegalStateException
+   */
+  public static final String ENCODING = "utf-8";
 
-        String outputDir = inputFile.getAbsolutePath().split(".tar")[0];
-        File outputTarDir = new File(outputDir);
-        outputTarDir.mkdir();
-        final InputStream is = new FileInputStream(inputFile);
-        final TarArchiveInputStream debInputStream = (TarArchiveInputStream) new ArchiveStreamFactory().createArchiveInputStream(
-                "tar", is);
-        TarArchiveEntry entry = null;
-        while ((entry = (TarArchiveEntry) debInputStream.getNextEntry()) != null) {
-            final File outputFile = new File(outputDir, entry.getName());
-            if (entry.isDirectory()) {
-                if (!outputFile.exists()) {
-                    if (!outputFile.mkdirs()) {
-                        throw new IllegalStateException(String.format(
-                                "Couldn't create directory %s.", outputFile.getAbsolutePath()));
-                    }
-                }
-            } else {
-                final OutputStream outputFileStream = new FileOutputStream(outputFile);
-                IOUtils.copy(debInputStream, outputFileStream);
-                outputFileStream.close();
-            }
-        }
-        debInputStream.close();
+  public static void extractTarFile(String inputTarFileLoc, String destDirLoc)
+          throws IOException, IllegalStateException {
+    File inputFile = new File(inputTarFileLoc);
+    if (!inputTarFileLoc.endsWith("tar")) {
+      throw new IllegalStateException(String.format(
+              "Input File %s should end with tar extension.", inputTarFileLoc));
+    }
+    File destDir = new File(destDirLoc);
+    if (destDir.exists() && !destDir.delete()) {
+      throw new IllegalStateException(String.format(
+              "Couldn't delete the existing destination directory  %s ", destDirLoc));
+    } else if (!destDir.mkdir()) {
+      throw new IllegalStateException(String.format(
+              "Couldn't create directory  %s ", destDirLoc));
     }
 
-    public static void createTarFile(String source, String destFileName) throws Exception {
-        TarArchiveOutputStream tarOs = null;
-        File f = new File(destFileName);
-        if (f.exists()) {
-            f.delete();
-        }
-        try {
-            FileOutputStream fos = new FileOutputStream(destFileName);
-            tarOs = (TarArchiveOutputStream) new ArchiveStreamFactory().createArchiveOutputStream("tar", fos);
-            tarOs = new TarArchiveOutputStream(fos);
-            File folder = new File(source);
-            File[] fileNames = folder.listFiles();
-            for(File file : fileNames){
-                TarArchiveEntry tar_file = new TarArchiveEntry(file.getName());
-                tar_file.setSize(file.length());
-                tarOs.putArchiveEntry(tar_file);
-                BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-                IOUtils.copy(bis, tarOs);
-                bis.close();
-                tarOs.closeArchiveEntry();
-            }
-        } catch (IOException e) {
+    final InputStream is = new FileInputStream(inputFile);
+    final TarArchiveInputStream debInputStream = new TarArchiveInputStream(is, ENCODING);
+    OutputStream outputFileStream = null;
+    try {
+      TarArchiveEntry entry;
+      while ((entry = (TarArchiveEntry) debInputStream.getNextEntry()) != null) {
+        final File outputFile = new File(destDirLoc, entry.getName());
+        if (entry.isDirectory()) {
+          if (!outputFile.exists() && !outputFile.mkdirs()) {
             throw new IllegalStateException(String.format(
-                    "createTarFile failed with exception %s.", e.getMessage()));
-        } finally {
-            try {
-                tarOs.finish();
-                tarOs.close();
-            } catch (IOException e) {
-                throw new IllegalStateException(String.format(
-                        "createTarFile failed with exception %s.", e.getMessage()));
-            }
+                    "Couldn't create directory %s.", outputFile.getAbsolutePath()));
+          }
+        } else {
+          outputFileStream = new FileOutputStream(outputFile);
+          IOUtils.copy(debInputStream, outputFileStream);
+          outputFileStream.close();
+          outputFileStream = null;
         }
+      }
+    } catch (IOException e){
+      throw new IllegalStateException(String.format(
+              "extractTarFile failed with exception %s.", e.getMessage()));
+    } finally {
+      debInputStream.close();
+      if (outputFileStream != null) {
+        outputFileStream.close();
+      }
     }
+  }
 
+  /**
+   * create a tar file for input source directory location .
+   * @param source the source directory location
+   * @param destFileLoc destination of the created tarball
+   *
+   * @throws IOException
+   * @throws IllegalStateException
+   */
+  public static void createTarFile(String source, String destFileLoc)
+          throws IllegalStateException, IOException {
+    TarArchiveOutputStream tarOs = null;
+    File f = new File(destFileLoc);
+    if (f.exists() && !f.delete()) {
+      throw new IllegalStateException(String.format(
+              "Couldn't delete the destination file location %s", destFileLoc));
+    }
+    BufferedInputStream bis = null;
+    try {
+      FileOutputStream fos = new FileOutputStream(destFileLoc);
+      tarOs = new TarArchiveOutputStream(fos, ENCODING);
+      File folder = new File(source);
+      File[] fileNames = folder.listFiles();
+      for(File file : fileNames){
+        TarArchiveEntry tar_file = new TarArchiveEntry(file.getName());
+        tar_file.setSize(file.length());
+        tarOs.putArchiveEntry(tar_file);
+        bis = new BufferedInputStream(new FileInputStream(file));
+        IOUtils.copy(bis, tarOs);
+        bis.close();
+        bis = null;
+        tarOs.closeArchiveEntry();
+      }
+    } catch (IOException e) {
+      throw new IllegalStateException(String.format(
+              "createTarFile failed with exception %s.", e.getMessage()));
+    } finally {
+      tarOs.finish();
+      tarOs.close();
+      if (bis != null) {
+        bis.close();
+      }
+    }
+  }
 
 }

@@ -48,16 +48,15 @@ class RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier
   }
 
   def open(path: String, conf: Map[String, String], readOnly: Boolean): Unit = {
-    verify(db == null, "Another rocksDb instance is already actve")
+    require(db == null, "Another rocksDb instance is already active")
     try {
       setOptions(conf)
-      db = readOnly match {
-        case true =>
-          options.setCreateIfMissing(false)
-          RocksDB.openReadOnly(options, path)
-        case false =>
-          options.setCreateIfMissing(true)
-          RocksDB.open(options, path)
+      db = if (readOnly) {
+        options.setCreateIfMissing(false)
+        RocksDB.openReadOnly(options, path)
+      } else {
+        options.setCreateIfMissing(true)
+        RocksDB.open(options, path)
       }
       dbPath = path
     } catch {
@@ -69,7 +68,7 @@ class RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier
   }
 
   def get(key: UnsafeRow): UnsafeRow = {
-    verify(isOpen(), "Open rocksDb instance before any operation")
+    require(isOpen(), "Open rocksDb instance before any operation")
     Option(db.get(readOptions, key.getBytes)) match {
       case Some(valueInBytes) =>
         val value = new UnsafeRow(valueSchema.fields.length)
@@ -80,12 +79,12 @@ class RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier
   }
 
   def put(key: UnsafeRow, value: UnsafeRow): Unit = {
-    verify(isOpen(), "Open rocksDb instance before any operation")
+    require(isOpen(), "Open rocksDb instance before any operation")
     db.put(key.getBytes, value.getBytes)
   }
 
   def remove(key: UnsafeRow): Unit = {
-    verify(isOpen(), "Open rocksDb instance before any operation")
+    require(isOpen(), "Open rocksDb instance before any operation")
     db.delete(key.getBytes)
   }
 
@@ -106,7 +105,7 @@ class RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier
   }
 
   def iterator(closeDbOnCompletion: Boolean): Iterator[UnsafeRowPair] = {
-    verify(isOpen(), "Open rocksDb instance before any operation")
+    require(isOpen(), "Open rocksDb instance before any operation")
     Option(db.getSnapshot) match {
       case Some(snapshot) =>
         logDebug(s"Inside rockdDB iterator function")
@@ -153,7 +152,7 @@ class RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier
   }
 
   def printStats: Unit = {
-    verify(isOpen(), "Open rocksDb instance before any operation")
+    require(isOpen(), "Open rocksDb instance before any operation")
     try {
       val stats = db.getProperty("rocksdb.stats")
       logInfo(s"Stats = $stats")
@@ -235,7 +234,7 @@ class RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier
   }
 
   def createCheckpoint(rocksDb: RocksDB, dir: String): Unit = {
-    verify(isOpen(), "Open rocksDb instance before any operation")
+    require(isOpen(), "Open rocksDb instance before any operation")
     val (result, elapsedMs) = Utils.timeTakenMs {
       val c = Checkpoint.create(rocksDb)
       val f: File = new File(dir)
@@ -249,7 +248,7 @@ class RocksDbInstance(keySchema: StructType, valueSchema: StructType, identifier
   }
 
   def createBackup(dir: String): Unit = {
-    verify(isOpen(), "Open rocksDb instance before any operation")
+    require(isOpen(), "Open rocksDb instance before any operation")
     val (result, elapsedMs) = Utils.timeTakenMs {
       val backupableDBOptions = new BackupableDBOptions(dir)
       backupableDBOptions.setDestroyOldData(true)
@@ -286,8 +285,8 @@ class OptimisticTransactionDbInstance(
   }
 
   override def open(path: String, conf: Map[String, String], readOnly: Boolean): Unit = {
-    verify(otdb == null, "Another OptimisticTransactionDbInstance instance is already actve")
-    verify(readOnly == false, "Cannot open OptimisticTransactionDbInstance in Readonly mode")
+    require(otdb == null, "Another OptimisticTransactionDbInstance instance is already actve")
+    require(readOnly == false, "Cannot open OptimisticTransactionDbInstance in Readonly mode")
     try {
       setOptions(conf)
       options.setCreateIfMissing(true)
@@ -303,7 +302,7 @@ class OptimisticTransactionDbInstance(
   }
 
   def startTransactions(): Unit = {
-    verify(isOpen(), "Open OptimisticTransactionDbInstance before performing any operation")
+    require(isOpen(), "Open OptimisticTransactionDbInstance before performing any operation")
     Option(txn) match {
       case None =>
         val optimisticTransactionOptions = new OptimisticTransactionOptions()
@@ -315,17 +314,17 @@ class OptimisticTransactionDbInstance(
   }
 
   override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
-    verify(txn != null, "Start Transaction before inserting any key")
+    require(txn != null, "Start Transaction before inserting any key")
     txn.put(key.getBytes, value.getBytes)
   }
 
   override def remove(key: UnsafeRow): Unit = {
-    verify(txn != null, "Start Transaction before deleting any key")
+    require(txn != null, "Start Transaction before deleting any key")
     txn.delete(key.getBytes)
   }
 
   override def get(key: UnsafeRow): UnsafeRow = {
-    verify(txn != null, "Start Transaction before fetching any key-value")
+    require(txn != null, "Start Transaction before fetching any key-value")
     Option(txn.get(readOptions, key.getBytes)) match {
       case Some(valueInBytes) =>
         val value = new UnsafeRow(valueSchema.fields.length)
@@ -337,7 +336,7 @@ class OptimisticTransactionDbInstance(
   }
 
   override def commit(backupPath: Option[String] = None): Unit = {
-    verify(txn != null, "Start Transaction before fetching any key-value")
+    require(txn != null, "Start Transaction before fetching any key-value")
     // printTrxStats
     try {
       val file = new File(dbPath, identifier.toUpperCase(Locale.ROOT))
@@ -354,24 +353,24 @@ class OptimisticTransactionDbInstance(
   }
 
   def printTrxStats(): Unit = {
-    verify(txn != null, "No open Transaction")
+    require(txn != null, "No open Transaction")
     logInfo(s"""
-         | deletes = ${txn.getNumDeletes}
-         | numKeys = ${txn.getNumKeys}
-         | puts =  ${txn.getNumPuts}
-         | time =  ${txn.getElapsedTime}
+               | deletes = ${txn.getNumDeletes}
+               | numKeys = ${txn.getNumKeys}
+               | puts =  ${txn.getNumPuts}
+               | time =  ${txn.getElapsedTime}
        """.stripMargin)
   }
 
   override def abort(): Unit = {
-    verify(txn != null, "No Transaction to abort")
+    require(txn != null, "No Transaction to abort")
     txn.rollbackToSavePoint()
     txn.close()
     txn = null
   }
 
   override def close(): Unit = {
-    verify(isOpen(), "No DB to close")
+    require(isOpen(), "No DB to close")
     readOptions.close()
     writeOptions.close()
     logDebug("Closing the transaction db")
@@ -380,8 +379,8 @@ class OptimisticTransactionDbInstance(
   }
 
   override def iterator(closeDbOnCompletion: Boolean): Iterator[UnsafeRowPair] = {
-    verify(txn != null, "Transaction is not set")
-    verify(
+    require(txn != null, "Transaction is not set")
+    require(
       closeDbOnCompletion == false,
       "Cannot close a DB without aborting/commiting the transactions")
     val readOptions = new ReadOptions()
@@ -422,12 +421,6 @@ object RocksDbInstance {
       restoreOptions.close()
       backupableDBOptions.close()
       be.close()
-    }
-  }
-
-  def verify(condition: => Boolean, msg: String): Unit = {
-    if (!condition) {
-      throw new IllegalStateException(msg)
     }
   }
 

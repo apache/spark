@@ -21,11 +21,12 @@ import java.io._
 import java.util
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
+
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -59,7 +60,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
 
   import WALUtils._
 
-  /** Implementation of [[StateStore]] API which is backed by RocksDb and HDFS */
+  /** Implementation of [[StateStore]] API which is backed by RocksDB and HDFS */
   class RocksDbStateStore(val version: Long) extends StateStore with Logging {
 
     /** Trait and classes representing the internal state of the store */
@@ -78,6 +79,12 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     override def id: StateStoreId = RocksDbStateStoreProvider.this.stateStoreId
 
     var rocksDbWriteInstance: OptimisticTransactionDbInstance = null
+
+    /*
+     * numEntriesInDb and bytesUsedByDb are estimated value
+     * due to the nature of RocksDB implementation.
+     * see https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ for more details
+     */
     var numEntriesInDb: Long = 0L
     var bytesUsedByDb: Long = 0L
 
@@ -93,12 +100,12 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     }
 
     override def get(key: UnsafeRow): UnsafeRow = {
-      initTransaction
+      initTransaction()
       rocksDbWriteInstance.get(key)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
-      initTransaction
+      initTransaction()
       verify(
         state == UPDATING,
         s"Current state of the store is $state. " +
@@ -110,7 +117,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     }
 
     override def remove(key: UnsafeRow): Unit = {
-      initTransaction
+      initTransaction()
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       rocksDbWriteInstance.remove(key)
       // TODO check if removed value is null
@@ -126,7 +133,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
 
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
-      initTransaction
+      initTransaction()
       verify(
         state == UPDATING,
         s"Current state of the store is $state " +
@@ -225,10 +232,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
           // just allow searching from list cause the list is small enough
           supportedCustomMetrics.find(_.name == name).map(_ -> value)
       }
-      return StateStoreMetrics(
-        Math.max(numEntriesInDb, 0),
-        Math.max(bytesUsedByDb, 0),
-        customMetrics)
+      StateStoreMetrics(Math.max(numEntriesInDb, 0), Math.max(bytesUsedByDb, 0), customMetrics)
     }
 
     /*
@@ -245,7 +249,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   }
 
   /*
-   * Initialize the provide with more contextual information from the SQL operator.
+   * Initialize the provider with more contextual information from the SQL operator.
    * This method will be called first after creating an instance of the StateStoreProvider by
    * reflection.
    *
@@ -270,7 +274,6 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     this.valueSchema = valueSchema
     this.storeConf = storeConfs
     this.hadoopConf = hadoopConf
-    // TODO add new conf for `maxVersionsToRetainInMemory`
     this.numberOfVersionsToRetain = storeConfs.maxVersionsToRetainInMemory
     fm.mkdirs(baseDir)
     this.rocksDbConf = storeConf.confs
@@ -335,7 +338,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     }
   }
 
-  def createStore(version: Long): RocksDbStateStore = {
+  private def createStore(version: Long): RocksDbStateStore = {
     val newStore = new RocksDbStateStore(version)
     logInfo(
       s"Creating a new Store for version $version and partition ${stateStoreId_.partitionId}")
@@ -348,9 +351,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   }
 
   def checkIfStateExists(version: Long): Boolean = {
-    val dbPath: Path = new Path(rocksDbPath, version.toString.toUpperCase(Locale.ROOT))
-    val f: File = new File(dbPath.toString)
-    f.exists()
+    new File(rocksDbPath, version.toString).exists()
   }
 
   def loadState(version: Long): Unit = {
@@ -358,31 +359,29 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     var rocksDbWriteInstance: OptimisticTransactionDbInstance = null
     var lastAvailableVersion = version
     var found = false
-    val (result, elapsedMs) = Utils.timeTakenMs {
+    val (_, elapsedMs) = Utils.timeTakenMs {
       try {
         if (checkIfStateExists(version - 1)) {
           found = true
           lastAvailableVersion = version - 1
         } else {
-          // Destroy DB so that we can recontruct it using snapshot and delta files
+          // Destroy DB so that we can reconstruct it using snapshot and delta files
           RocksDbInstance.destroyDB(rocksDbPath)
         }
 
         // Check for snapshot files starting from "version"
         while (!found && lastAvailableVersion > 0) {
-          found = {
-            try {
-              loadSnapshotFile(lastAvailableVersion)
-            } catch {
-              case e: Exception =>
-                logError(s"$e while reading snapshot file")
-                throw e
-            }
+          try {
+            found = loadSnapshotFile(lastAvailableVersion)
+          } catch {
+            case e: Exception =>
+              logError(s"$e while reading snapshot file")
+              throw e
           }
           if (!found) {
             lastAvailableVersion = lastAvailableVersion - 1
           }
-          logInfo(
+          logDebug(
             s"Snapshot for $lastAvailableVersion for " +
               s"partition ${stateStoreId_.partitionId} found = $found")
         }
@@ -425,17 +424,18 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
 
   private def loadSnapshotFile(version: Long): Boolean = {
     val fileToRead = snapshotFile(baseDir, version)
-    val tmpLocDir: File = new File(getTempPath(version))
-    val tmpLocFile: File = new File(getTempPath(version).concat(".tar"))
+    if (!fm.exists(fileToRead)) {
+      return false
+    }
+    val versionTempPath = getTempPath(version)
+    val tmpLocDir: File = new File(versionTempPath)
+    val tmpLocFile: File = new File(s"${versionTempPath}.tar")
     try {
-      if (!fm.exists(fileToRead)) {
-        return false
-      }
       logInfo(s"Will download $fileToRead at location ${tmpLocFile.toString()}")
       if (downloadFile(fm, fileToRead, new Path(tmpLocFile.getAbsolutePath), sparkConf)) {
-        FileUtility.unTar(tmpLocFile)
+        FileUtility.extractTarFile(s"{versionTempPath}.tar", versionTempPath)
         if (!tmpLocDir.list().exists(_.endsWith(".sst"))) {
-          logWarning("Snaphot files are corrupted")
+          logWarning("Snapshot files are corrupted")
           throw new IOException(
             s"Error reading snapshot file $fileToRead of $this:" +
               s" No SST files found")
@@ -477,7 +477,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
         filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
       if (deltaFilesForLastVersion.size > storeConf.minDeltasForSnapshot) {
         val dbPath = getBackupPath(lastVersion)
-        val snapShotFileName = getTempPath(lastVersion).concat(".snapshot")
+        val snapShotFileName = s"{getTempPath(lastVersion)}.snapshot"
         val f = new File(snapShotFileName)
         f.delete() // delete any existing tarball
         try {
@@ -486,12 +486,10 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
             val targetFile = snapshotFile(baseDir, lastVersion)
             uploadFile(fm, new Path(snapShotFileName), targetFile, sparkConf)
           }
-          logInfo(
-            s"Creating snapshot file for" +
-              s" ${stateStoreId_.partitionId} took $t1 ms.")
+          logInfo(s"Creating snapshot file for ${stateStoreId_.partitionId} took $t1 ms.")
         } catch {
           case e: Exception =>
-            logError(s"Exception while creating snapshot $e} ")
+            logError(s"Exception while creating snapshot $e")
             throw e
         } finally {
           f.delete() // delete the tarball
@@ -515,7 +513,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
           val (_, e2) = Utils.timeTakenMs {
             filesToDelete.foreach { f =>
               fm.delete(f.path)
-              val file = new File(rocksDbPath, f.version.toString.toUpperCase(Locale.ROOT))
+              val file = new File(rocksDbPath, f.version.toString)
               if (file.exists()) {
                 file.delete()
               }
@@ -540,7 +538,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
         if (earliestVersionToRetain > 0) {
           for (v <- (earliestVersionToRetain - 1) to 1) {
             // Destroy the backup path
-            logDebug((s"Destroying backup version = $v"))
+            logDebug(s"Destroying backup version = $v")
             RocksDbInstance.destroyDB(getBackupPath(v))
           }
         }
@@ -553,7 +551,6 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   // Used only for unit tests
   private[sql] def latestIterator(): Iterator[UnsafeRowPair] = synchronized {
     val versionsInFiles = fetchFiles(fm, baseDir).map(_.version).toSet
-    var itr = Iterator.empty
     if (versionsInFiles.nonEmpty) {
       val maxVersion = versionsInFiles.max
       if (maxVersion == 0) {
