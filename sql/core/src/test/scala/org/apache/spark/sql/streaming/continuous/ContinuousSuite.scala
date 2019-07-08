@@ -38,22 +38,17 @@ class ContinuousSuiteBase extends StreamTest {
       sparkConf.set("spark.sql.testkey", "true")))
 
   protected def waitForRateSourceTriggers(query: StreamExecution, numTriggers: Int): Unit = {
-    findRateStreamContinuousStream(query).foreach { reader =>
-      // Make sure epoch 0 is completed.
-      query.asInstanceOf[ContinuousExecution].awaitEpoch(0)
+    query match {
+      case s: ContinuousExecution =>
+        s.awaitEpoch(0)
 
-      // This is called after waiting first epoch to be committed, but there might be
-      // a gap between committing epoch to commit log and committing epoch to source.
-      // If epoch 0 is not reported to rate source yet, use current time instead.
-      var firstCommittedTime = reader.firstCommittedTime.longValue()
-      if (firstCommittedTime < 0) {
-        firstCommittedTime = System.currentTimeMillis()
-      }
-
-      val deltaMs = numTriggers * 1000 + 300
-      while (System.currentTimeMillis < firstCommittedTime + deltaMs) {
-        Thread.sleep(firstCommittedTime + deltaMs - System.currentTimeMillis)
-      }
+        // This is called after waiting first epoch to be committed, so we can just treat
+        // it as partition readers for rate source are already initialized.
+        val firstCommittedTime = System.currentTimeMillis()
+        val deltaMs = numTriggers * 1000 + 300
+        while (System.currentTimeMillis < firstCommittedTime + deltaMs) {
+          Thread.sleep(firstCommittedTime + deltaMs - System.currentTimeMillis)
+        }
     }
   }
 
@@ -61,29 +56,29 @@ class ContinuousSuiteBase extends StreamTest {
       query: StreamExecution,
       desiredValue: Long,
       maxWaitTimeMs: Long): Unit = {
-    findRateStreamContinuousStream(query).foreach { reader =>
-      val startTime = System.currentTimeMillis()
-      val maxWait = startTime + maxWaitTimeMs
-      while (System.currentTimeMillis() < maxWait &&
-        reader.highestCommittedValue.get() < desiredValue) {
-        Thread.sleep(100)
-      }
-      if (System.currentTimeMillis() > maxWait) {
-        logWarning(s"Couldn't reach desired value in $maxWaitTimeMs milliseconds!" +
-          s"Current highest committed value is ${reader.highestCommittedValue}")
+    def readHighestCommittedValue(c: ContinuousExecution): Option[Long] = {
+      c.committedOffsets.lastOption.map { case (_, offset) =>
+        offset match {
+          case o: RateStreamOffset =>
+            o.partitionToValueAndRunTimeMs.map {
+              case (_, ValueRunTimeMsPair(value, _)) => value
+            }.max
+        }
       }
     }
-  }
 
-  private def findRateStreamContinuousStream(
-      query: StreamExecution): Option[RateStreamContinuousStream] = query match {
-
-      case s: ContinuousExecution =>
-        s.lastExecution.executedPlan.collectFirst {
-          case ContinuousScanExec(_, _, r: RateStreamContinuousStream, _) => r
+    query match {
+      case c: ContinuousExecution =>
+        val maxWait = System.currentTimeMillis() + maxWaitTimeMs
+        while (System.currentTimeMillis() < maxWait &&
+          readHighestCommittedValue(c).getOrElse(Long.MinValue) < desiredValue) {
+          Thread.sleep(100)
         }
-
-      case _ => None
+        if (System.currentTimeMillis() > maxWait) {
+          logWarning(s"Couldn't reach desired value in $maxWaitTimeMs milliseconds!" +
+            s"Current highest committed value is ${readHighestCommittedValue(c)}")
+        }
+    }
   }
 
   // A continuous trigger that will only fire the initial time for the duration of a test.
