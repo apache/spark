@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.shuffle;
+package org.apache.spark.shuffle.api;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -43,6 +43,9 @@ public interface TransferrableWritableByteChannel extends Closeable {
 
   /**
    * Copy all bytes from the source readable byte channel into this byte channel.
+   * <p>
+   * This method should block until all of the bytes from the source (that is, up until
+   * numBytesToTransfer) are available in the output storage layer.
    *
    * @param source File to transfer bytes from. Do not call anything on this channel other than
    *               {@link FileChannel#transferTo(long, long, WritableByteChannel)}.

@@ -15,23 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.shuffle;
-
-import java.io.IOException;
+package org.apache.spark.shuffle.api;
 
 import org.apache.spark.annotation.Experimental;
 
 /**
  * :: Experimental ::
- * An interface for deploying a shuffle map output writer
+ * An interface for building shuffle support for Executors.
+ * <p>
+ * At present, submodules returned by this plugin are responsible for managing the
+ * writing of shuffle bytes (via {@link ShuffleWriteSupport} and the reading of
+ * shuffle bytes (to be added in subsequent patches).
  *
  * @since 3.0.0
  */
 @Experimental
-public interface ShuffleWriteSupport {
-  ShuffleMapOutputWriter createMapOutputWriter(
-    int shuffleId,
-    int mapId,
-    long mapTaskAttemptId,
-    int numPartitions) throws IOException;
+public interface ShuffleExecutorComponents {
+
+  /**
+   * Called once per executor to bootstrap this module with state that is specific to
+   * that executor, specifically the application ID and executor ID.
+   */
+  void initializeExecutor(String appId, String execId);
+
+  /**
+   * Returns the modules that are responsible for persisting shuffle data to the backing
+   * store.
+   * <p>
+   * This may be called multiple times on each executor. Implementations should not make
+   * any assumptions about the lifetime of the returned module.
+   */
+  ShuffleWriteSupport writes();
 }

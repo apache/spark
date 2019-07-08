@@ -18,36 +18,37 @@
 package org.apache.spark.shuffle.sort.io;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
-import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
-import org.apache.spark.api.shuffle.ShuffleWriteSupport;
+import org.apache.spark.SparkEnv;
+import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
+import org.apache.spark.shuffle.api.ShuffleWriteSupport;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.storage.BlockManager;
 
-public class DefaultShuffleWriteSupport implements ShuffleWriteSupport {
+public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorComponents {
 
   private final SparkConf sparkConf;
-  private final IndexShuffleBlockResolver blockResolver;
+  private BlockManager blockManager;
+  private IndexShuffleBlockResolver blockResolver;
 
-  public DefaultShuffleWriteSupport(
-      SparkConf sparkConf,
-      IndexShuffleBlockResolver blockResolver) {
+  public LocalDiskShuffleExecutorComponents(SparkConf sparkConf) {
     this.sparkConf = sparkConf;
-    this.blockResolver = blockResolver;
   }
 
   @Override
-  public ShuffleMapOutputWriter createMapOutputWriter(
-      int shuffleId,
-      int mapId,
-      long mapTaskAttemptId,
-      int numPartitions) {
-    TaskContext taskContext = TaskContext.get();
-    if (taskContext == null) {
-      throw new IllegalStateException(
-          "Task context must be set before creating a map output writer.");
+  public void initializeExecutor(String appId, String execId) {
+    blockManager = SparkEnv.get().blockManager();
+    if (blockManager == null) {
+      throw new IllegalStateException("No blockManager available from the SparkEnv.");
     }
-    return new DefaultShuffleMapOutputWriter(
-      shuffleId, mapId, numPartitions,
-        taskContext.taskMetrics().shuffleWriteMetrics(), blockResolver, sparkConf);
+    blockResolver = new IndexShuffleBlockResolver(sparkConf, blockManager);
+  }
+
+  @Override
+  public ShuffleWriteSupport writes() {
+    if (blockResolver == null) {
+      throw new IllegalStateException(
+        "Executor components must be initialized before getting writers.");
+    }
+    return new LocalDiskShuffleWriteSupport(sparkConf, blockResolver);
   }
 }

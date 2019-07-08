@@ -20,12 +20,13 @@ package org.apache.spark.shuffle.sort;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
-import org.apache.spark.api.shuffle.TransferrableWritableByteChannel;
+import org.apache.spark.shuffle.api.TransferrableWritableByteChannel;
+import org.apache.spark.shuffle.api.SupportsTransferTo;
 import org.apache.spark.util.Utils;
 
 /**
  * This is used when transferTo is enabled but the shuffle plugin hasn't implemented
- * {@link org.apache.spark.api.shuffle.SupportsTransferTo}.
+ * {@link SupportsTransferTo}.
  * <p>
  * This default implementation exists as a convenience to the unsafe shuffle writer and
  * the bypass merge sort shuffle writers.

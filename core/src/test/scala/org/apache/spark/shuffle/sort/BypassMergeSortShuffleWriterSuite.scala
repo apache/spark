@@ -32,12 +32,13 @@ import org.scalatest.BeforeAndAfterEach
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.api.shuffle.ShuffleWriteSupport
+
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
-import org.apache.spark.shuffle.sort.io.DefaultShuffleWriteSupport
+import org.apache.spark.shuffle.api.ShuffleWriteSupport
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleWriteSupport
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -129,7 +130,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       metricsSystem = null,
       taskMetrics = taskMetrics))
 
-    writeSupport = new DefaultShuffleWriteSupport(conf, blockResolver)
+    writeSupport = new LocalDiskShuffleWriteSupport(conf, blockResolver)
   }
 
   override def afterEach(): Unit = {

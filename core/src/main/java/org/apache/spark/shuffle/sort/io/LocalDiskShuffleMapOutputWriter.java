@@ -28,10 +28,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
-import org.apache.spark.api.shuffle.ShufflePartitionWriter;
-import org.apache.spark.api.shuffle.SupportsTransferTo;
-import org.apache.spark.api.shuffle.TransferrableWritableByteChannel;
+import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
+import org.apache.spark.shuffle.api.ShufflePartitionWriter;
+import org.apache.spark.shuffle.api.SupportsTransferTo;
+import org.apache.spark.shuffle.api.TransferrableWritableByteChannel;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.shuffle.sort.DefaultTransferrableWritableByteChannel;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
@@ -39,10 +39,15 @@ import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.util.Utils;
 
-public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
+/**
+ * Implementation of {@link ShuffleMapOutputWriter} that replicates the functionality of shuffle
+ * persisting shuffle data to local disk alongside index files, identical to Spark's shuffle
+ * storage mechanism from Spark 2.4 and earlier.
+ */
+public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
   private static final Logger log =
-    LoggerFactory.getLogger(DefaultShuffleMapOutputWriter.class);
+    LoggerFactory.getLogger(LocalDiskShuffleMapOutputWriter.class);
 
   private final int shuffleId;
   private final int mapId;
@@ -60,7 +65,7 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   private TimeTrackingOutputStream ts;
   private BufferedOutputStream outputBufferedFileStream;
 
-  public DefaultShuffleMapOutputWriter(
+  public LocalDiskShuffleMapOutputWriter(
       int shuffleId,
       int mapId,
       int numPartitions,
@@ -93,7 +98,7 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     } else {
       currChannelPosition = 0L;
     }
-    return new DefaultShufflePartitionWriter(partitionId);
+    return new LocalDiskShufflePartitionWriter(partitionId);
   }
 
   @Override
@@ -146,13 +151,13 @@ public class DefaultShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
   }
 
-  private class DefaultShufflePartitionWriter implements SupportsTransferTo {
+  private class LocalDiskShufflePartitionWriter implements SupportsTransferTo {
 
     private final int partitionId;
     private PartitionWriterStream partStream = null;
     private PartitionWriterChannel partChannel = null;
 
-    private DefaultShufflePartitionWriter(int partitionId) {
+    private LocalDiskShufflePartitionWriter(int partitionId) {
       this.partitionId = partitionId;
     }
 

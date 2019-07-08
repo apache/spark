@@ -15,30 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.shuffle;
+package org.apache.spark.shuffle.sort.io;
 
-import java.io.IOException;
-import java.io.OutputStream;
-
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.SparkConf;
+import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
+import org.apache.spark.shuffle.api.ShuffleDataIO;
 
 /**
- * :: Experimental ::
- * An interface for giving streams / channels for shuffle writes.
- *
- * @since 3.0.0
+ * Implementation of the {@link ShuffleDataIO} plugin system that replicates the local shuffle
+ * storage and index file functionality that has historically been used from Spark 2.4 and earlier.
  */
-@Experimental
-public interface ShufflePartitionWriter {
+public class LocalDiskShuffleDataIO implements ShuffleDataIO {
 
-  /**
-   * Opens and returns an underlying {@link OutputStream} that can write bytes to the underlying
-   * data store.
-   */
-  OutputStream openStream() throws IOException;
+  private final SparkConf sparkConf;
 
-  /**
-   * Get the number of bytes written by this writer's stream returned by {@link #openStream()}.
-   */
-  long getNumBytesWritten();
+  public LocalDiskShuffleDataIO(SparkConf sparkConf) {
+    this.sparkConf = sparkConf;
+  }
+
+  @Override
+  public ShuffleExecutorComponents executor() {
+    return new LocalDiskShuffleExecutorComponents(sparkConf);
+  }
 }

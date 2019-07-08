@@ -15,19 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.shuffle;
+package org.apache.spark.shuffle.api;
+
+import java.io.IOException;
+import java.io.OutputStream;
 
 import org.apache.spark.annotation.Experimental;
 
 /**
  * :: Experimental ::
- * An interface for building shuffle support for Executors
+ * An interface for opening streams to persist partition bytes to a backing data store.
  *
  * @since 3.0.0
  */
 @Experimental
-public interface ShuffleExecutorComponents {
-  void initializeExecutor(String appId, String execId);
+public interface ShufflePartitionWriter {
 
-  ShuffleWriteSupport writes();
+  /**
+   * Opens and returns an underlying {@link OutputStream} that can write bytes to the underlying
+   * data store.
+   * <p>
+   * The same caller that invokes this method will also close the returned output stream.
+   */
+  OutputStream openStream() throws IOException;
+
+  /**
+   * Get the number of bytes written by this writer's stream returned by {@link #openStream()}.
+   */
+  long getNumBytesWritten();
 }

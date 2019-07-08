@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.shuffle;
+package org.apache.spark.shuffle.api;
 
 import java.io.IOException;
 
@@ -23,15 +23,24 @@ import org.apache.spark.annotation.Experimental;
 
 /**
  * :: Experimental ::
- * An interface for creating and managing shuffle partition writers
+ * A module that returns shuffle writers to persist data that is written by shuffle map tasks.
  *
  * @since 3.0.0
  */
 @Experimental
-public interface ShuffleMapOutputWriter {
-  ShufflePartitionWriter getPartitionWriter(int partitionId) throws IOException;
+public interface ShuffleWriteSupport {
 
-  void commitAllPartitions() throws IOException;
-
-  void abort(Throwable error) throws IOException;
+  /**
+   * Called once per map task to create a writer that will be responsible for persisting all the
+   * partitioned bytes written by that map task.
+   * <p>
+   * The caller of this method will also call either
+   * {@link ShuffleMapOutputWriter#commitAllPartitions()} upon successful completion of the map
+   * task, or {@link ShuffleMapOutputWriter#abort(Throwable)} if the map task fails.
+   */
+  ShuffleMapOutputWriter createMapOutputWriter(
+    int shuffleId,
+    int mapId,
+    long mapTaskAttemptId,
+    int numPartitions) throws IOException;
 }

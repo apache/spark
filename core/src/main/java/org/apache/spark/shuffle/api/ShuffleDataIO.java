@@ -15,17 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.shuffle;
+package org.apache.spark.shuffle.api;
 
 import org.apache.spark.annotation.Experimental;
 
 /**
  * :: Experimental ::
- * An interface for launching Shuffle related components
- *
+ * An interface for launching Shuffle related components.
+ * <p>
+ * A single instance of this module is loaded per process in the Spark application.
+ * The default implementation reads and writes shuffle data from the local disks of
+ * the executor, and is the implementation of shuffle file storage that has remained
+ * consistent throughout most of Spark's history.
+ * <p>
+ * Alternative implementations of shuffle data storage can be loaded via setting
+ * spark.shuffle.io.plugin.class.
  * @since 3.0.0
  */
 @Experimental
 public interface ShuffleDataIO {
+
+  /**
+   * Called once on executor processes to bootstrap the shuffle data storage modules that
+   * are only invoked on the executors.
+   * <p>
+   * At this point, this module is responsible for reading and writing shuffle data bytes
+   * from the backing store.
+   */
   ShuffleExecutorComponents executor();
 }

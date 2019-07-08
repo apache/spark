@@ -30,17 +30,17 @@ import org.mockito.MockitoAnnotations
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.api.shuffle.SupportsTransferTo
+
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
+import org.apache.spark.shuffle.api.SupportsTransferTo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 
-class DefaultShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockResolver: IndexShuffleBlockResolver = _
   @Mock(answer = RETURNS_SMART_NULLS) private var shuffleWriteMetrics: ShuffleWriteMetrics = _
@@ -55,7 +55,7 @@ class DefaultShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAft
   private var tempDir: File = _
   private var partitionSizesInMergedFile: Array[Long] = _
   private var conf: SparkConf = _
-  private var mapOutputWriter: DefaultShuffleMapOutputWriter = _
+  private var mapOutputWriter: LocalDiskShuffleMapOutputWriter = _
 
   override def afterEach(): Unit = {
     try {
@@ -90,7 +90,7 @@ class DefaultShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAft
       }
     }).when(blockResolver)
       .writeIndexFileAndCommit(anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File]))
-    mapOutputWriter = new DefaultShuffleMapOutputWriter(
+    mapOutputWriter = new LocalDiskShuffleMapOutputWriter(
       0,
       0,
       NUM_PARTITIONS,

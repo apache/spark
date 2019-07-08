@@ -39,11 +39,11 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.shuffle.SupportsTransferTo;
-import org.apache.spark.api.shuffle.ShuffleMapOutputWriter;
-import org.apache.spark.api.shuffle.ShufflePartitionWriter;
-import org.apache.spark.api.shuffle.ShuffleWriteSupport;
-import org.apache.spark.api.shuffle.TransferrableWritableByteChannel;
+import org.apache.spark.shuffle.api.SupportsTransferTo;
+import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
+import org.apache.spark.shuffle.api.ShufflePartitionWriter;
+import org.apache.spark.shuffle.api.ShuffleWriteSupport;
+import org.apache.spark.shuffle.api.TransferrableWritableByteChannel;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -172,14 +172,13 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
       partitionLengths = writePartitionedData(mapOutputWriter);
       mapOutputWriter.commitAllPartitions();
-      mapStatus = MapStatus$.MODULE$.apply(
-          blockManager.shuffleServerId(),
-          partitionLengths);
+      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
     } catch (Exception e) {
       try {
         mapOutputWriter.abort(e);
       } catch (Exception e2) {
         logger.error("Failed to abort the writer after failing to write map output.", e2);
+        e.addSuppressed(e2);
       }
       throw e;
     }
@@ -211,6 +210,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           boolean copyThrewException = true;
           if (transferToEnabled) {
             FileInputStream in = new FileInputStream(file);
+            // Using TransferrableWritableByteChannel to make resource closing consistent between
+            // this implementation and UnsafeShuffleWriter.
             TransferrableWritableByteChannel outputChannel = null;
             try (FileChannel inputChannel = in.getChannel()) {
               if (writer instanceof SupportsTransferTo) {

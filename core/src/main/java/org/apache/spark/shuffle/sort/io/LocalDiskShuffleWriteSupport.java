@@ -18,37 +18,36 @@
 package org.apache.spark.shuffle.sort.io;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkEnv;
-import org.apache.spark.api.shuffle.ShuffleExecutorComponents;
-import org.apache.spark.api.shuffle.ShuffleWriteSupport;
+import org.apache.spark.TaskContext;
+import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
+import org.apache.spark.shuffle.api.ShuffleWriteSupport;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.storage.BlockManager;
 
-public class DefaultShuffleExecutorComponents implements ShuffleExecutorComponents {
+public class LocalDiskShuffleWriteSupport implements ShuffleWriteSupport {
 
   private final SparkConf sparkConf;
-  private BlockManager blockManager;
-  private IndexShuffleBlockResolver blockResolver;
+  private final IndexShuffleBlockResolver blockResolver;
 
-  public DefaultShuffleExecutorComponents(SparkConf sparkConf) {
+  public LocalDiskShuffleWriteSupport(
+      SparkConf sparkConf,
+      IndexShuffleBlockResolver blockResolver) {
     this.sparkConf = sparkConf;
+    this.blockResolver = blockResolver;
   }
 
   @Override
-  public void initializeExecutor(String appId, String execId) {
-    blockManager = SparkEnv.get().blockManager();
-    if (blockManager == null) {
-      throw new IllegalStateException("No blockManager available from the SparkEnv.");
-    }
-    blockResolver = new IndexShuffleBlockResolver(sparkConf, blockManager);
-  }
-
-  @Override
-  public ShuffleWriteSupport writes() {
-    if (blockResolver == null) {
+  public ShuffleMapOutputWriter createMapOutputWriter(
+      int shuffleId,
+      int mapId,
+      long mapTaskAttemptId,
+      int numPartitions) {
+    TaskContext taskContext = TaskContext.get();
+    if (taskContext == null) {
       throw new IllegalStateException(
-        "Executor components must be initialized before getting writers.");
+          "Task context must be set before creating a map output writer.");
     }
-    return new DefaultShuffleWriteSupport(sparkConf, blockResolver);
+    return new LocalDiskShuffleMapOutputWriter(
+      shuffleId, mapId, numPartitions,
+        taskContext.taskMetrics().shuffleWriteMetrics(), blockResolver, sparkConf);
   }
 }
