@@ -65,7 +65,7 @@ case class BooleanTest(child: Expression, booleanOpt: Option[String] = None)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, input =>
-      s"org.apache.spark.sql.catalyst.expressions.BooleanTest.calculate($input)"
+      s"org.apache.spark.sql.catalyst.expressions.BooleanTest.calculate($input, $booleanValue)"
     )
   }
 
