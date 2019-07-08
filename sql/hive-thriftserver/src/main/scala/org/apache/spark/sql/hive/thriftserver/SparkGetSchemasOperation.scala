@@ -28,7 +28,6 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.listener
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -50,7 +49,7 @@ private[hive] class SparkGetSchemasOperation(
 
   override def close(): Unit = {
     super.close()
-    listener.onOperationClosed(statementId)
+    HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
   override def runInternal(): Unit = {
@@ -68,7 +67,7 @@ private[hive] class SparkGetSchemasOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
     }
 
-    listener.onStatementStart(
+    HiveThriftServer2.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -90,9 +89,10 @@ private[hive] class SparkGetSchemasOperation(
     } catch {
       case e: HiveSQLException =>
         setState(OperationState.ERROR)
-        listener.onStatementError(statementId, e.getMessage, SparkUtils.exceptionString(e))
+        HiveThriftServer2.listener.onStatementError(
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
-    listener.onStatementFinish(statementId)
+    HiveThriftServer2.listener.onStatementFinish(statementId)
   }
 }

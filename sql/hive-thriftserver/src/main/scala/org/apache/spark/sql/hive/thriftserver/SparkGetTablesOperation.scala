@@ -33,7 +33,6 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.listener
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -60,7 +59,7 @@ private[hive] class SparkGetTablesOperation(
 
   override def close(): Unit = {
     super.close()
-    listener.onOperationClosed(statementId)
+    HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
   override def runInternal(): Unit = {
@@ -86,7 +85,7 @@ private[hive] class SparkGetTablesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
     }
 
-    listener.onStatementStart(
+    HiveThriftServer2.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
@@ -122,10 +121,11 @@ private[hive] class SparkGetTablesOperation(
     } catch {
       case e: HiveSQLException =>
         setState(OperationState.ERROR)
-        listener.onStatementError(statementId, e.getMessage, SparkUtils.exceptionString(e))
+        HiveThriftServer2.listener.onStatementError(
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
-    listener.onStatementFinish(statementId)
+    HiveThriftServer2.listener.onStatementFinish(statementId)
   }
 
   private def addToRowSet(

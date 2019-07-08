@@ -147,16 +147,17 @@ object HiveThriftServer2 extends Logging {
       val startTimestamp: Long,
       val userName: String) {
     var finishTimestamp: Long = 0L
+    var closeTimestamp: Long = 0L
     var executePlan: String = ""
     var detail: String = ""
     var state: ExecutionState.Value = ExecutionState.STARTED
     val jobId: ArrayBuffer[String] = ArrayBuffer[String]()
     var groupId: String = ""
-    def totalTime: Long = {
-      if (finishTimestamp == 0L) {
+    def totalTime(endTime: Long): Long = {
+      if (endTime == 0L) {
         System.currentTimeMillis - startTimestamp
       } else {
-        finishTimestamp - startTimestamp
+        endTime - startTimestamp
       }
     }
   }
@@ -255,7 +256,7 @@ object HiveThriftServer2 extends Logging {
     }
 
     def onOperationClosed(id: String): Unit = synchronized {
-      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).closeTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.CLOSED
     }
 

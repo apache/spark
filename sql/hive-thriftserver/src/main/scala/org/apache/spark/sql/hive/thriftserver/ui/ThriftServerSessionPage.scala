@@ -79,8 +79,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
       .filter(_.sessionId == sessionID)
     val numStatement = executionList.size
     val table = if (numStatement > 0) {
-      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
-        "Statement", "State", "Detail")
+      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Close Time",
+        "Execution Time", "Duration", "Statement", "State", "Detail")
       val dataRows = executionList.sortBy(_.startTimestamp).reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
@@ -99,7 +99,9 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
           <td>{info.groupId}</td>
           <td>{formatDate(info.startTimestamp)}</td>
           <td>{formatDate(info.finishTimestamp)}</td>
-          <td>{formatDurationOption(Some(info.totalTime))}</td>
+          <td>{formatDate(info.closeTimestamp)}</td>
+          <td>{formatDurationOption(Some(info.totalTime(info.finishTimestamp)))}</td>
+          <td>{formatDurationOption(Some(info.totalTime(info.closeTimestamp)))}</td>
           <td>{info.statement}</td>
           <td>{info.state}</td>
           {errorMessageCell(detail)}

@@ -37,7 +37,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.listener
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -76,7 +75,7 @@ private[hive] class SparkExecuteStatementOperation(
     logDebug(s"CLOSING $statementId")
     cleanup(OperationState.CLOSED)
     sqlContext.sparkContext.clearJobGroup()
-    listener.onOperationClosed(statementId)
+    HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
@@ -221,7 +220,7 @@ private[hive] class SparkExecuteStatementOperation(
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    listener.onStatementStart(
+    HiveThriftServer2.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       statement,
@@ -238,7 +237,7 @@ private[hive] class SparkExecuteStatementOperation(
             "in this session.")
         case _ =>
       }
-      listener.onStatementParsed(statementId, result.queryExecution.toString())
+      HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
         if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
           resultList = None
@@ -255,7 +254,8 @@ private[hive] class SparkExecuteStatementOperation(
           return
         } else {
           setState(OperationState.ERROR)
-          listener.onStatementError(statementId, e.getMessage, SparkUtils.exceptionString(e))
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
           throw e
         }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
@@ -264,11 +264,12 @@ private[hive] class SparkExecuteStatementOperation(
         val currentState = getStatus().getState()
         logError(s"Error executing query, currentState $currentState, ", e)
         setState(OperationState.ERROR)
-        listener.onStatementError(statementId, e.getMessage, SparkUtils.exceptionString(e))
+        HiveThriftServer2.listener.onStatementError(
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw new HiveSQLException(e.toString)
     }
     setState(OperationState.FINISHED)
-    listener.onStatementFinish(statementId)
+    HiveThriftServer2.listener.onStatementFinish(statementId)
   }
 
   override def cancel(): Unit = {
