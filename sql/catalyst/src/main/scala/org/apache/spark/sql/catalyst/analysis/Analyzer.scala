@@ -138,6 +138,11 @@ class Analyzer(
   protected val fixedPoint = FixedPoint(maxIterations)
 
   /**
+    * Override to provide additional hint rules for the "Hints" batch.
+    */
+  val extendedResolutionHints: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Override to provide additional rules for the "Resolution" batch.
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
@@ -151,9 +156,10 @@ class Analyzer(
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Hints", fixedPoint,
-      new ResolveHints.ResolveJoinStrategyHints(conf),
-      ResolveHints.ResolveCoalesceHints,
-      new ResolveHints.RemoveAllHints(conf)),
+      new ResolveHints.ResolveJoinStrategyHints(conf) +:
+        ResolveHints.ResolveCoalesceHints +:
+        extendedResolutionHints :+
+        new ResolveHints.RemoveAllHints(conf): _*),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Substitution", fixedPoint,

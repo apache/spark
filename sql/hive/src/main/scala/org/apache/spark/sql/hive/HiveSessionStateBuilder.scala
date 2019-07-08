@@ -69,6 +69,9 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
   override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
+    override val extendedResolutionHints: Seq[Rule[LogicalPlan]] =
+      customResolutionHints
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
