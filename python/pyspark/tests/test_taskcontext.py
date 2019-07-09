@@ -184,6 +184,7 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
     def tearDown(self):
         self.sc.stop()
 
+
 class TaskContextTestsWithResources(unittest.TestCase):
 
     def setUp(self):
@@ -191,7 +192,8 @@ class TaskContextTestsWithResources(unittest.TestCase):
         self.tempFile = tempfile.NamedTemporaryFile(delete=False)
         self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
         self.tempFile.close()
-        os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH)
+        os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
+                 stat.S_IROTH | stat.S_IXOTH)
         conf = SparkConf().set("spark.task.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.discoveryScript", self.tempFile.name)
