@@ -229,8 +229,6 @@ private[spark] class TaskSetManager(
       resolveRacks: Boolean = true,
       speculative: Boolean = false): Unit = {
     val pendingTaskSetToAddTo = if (speculative) pendingSpeculatableTasks else pendingTasks
-    // ... mostly the original code from `addPendingTask` here, just adding
-    // into pendingTaskSetToAddTo
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -284,7 +282,8 @@ private[spark] class TaskSetManager(
         !(speculative && hasAttemptOnHost(index, host))) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
-        if ((copiesRunning(index) == 0 || speculative) && !successful(index)) {
+        if (((copiesRunning(index) < 2 && speculative) ||
+          (!speculative && copiesRunning(index) == 0)) && !successful(index)) {
           return Some(index)
         }
       }
@@ -312,16 +311,17 @@ private[spark] class TaskSetManager(
    */
   private def dequeueTask(execId: String, host: String, maxLocality: TaskLocality.Value)
   : Option[(Int, TaskLocality.Value, Boolean)] = {
-    // if we didn't schedule a regular task, try to schedule a speculative one
+    // Tries to schedule a regular task first; if it returns None, then schedules
+    // a speculative task
     dequeueTaskHelper(execId, host, maxLocality, false).orElse(
       dequeueTaskHelper(execId, host, maxLocality, true))
   }
 
   private def dequeueTaskHelper(
-    execId: String,
-    host: String,
-    maxLocality: TaskLocality.Value,
-    speculative: Boolean): Option[(Int, TaskLocality.Value, Boolean)] = {
+      execId: String,
+      host: String,
+      maxLocality: TaskLocality.Value,
+      speculative: Boolean): Option[(Int, TaskLocality.Value, Boolean)] = {
     if (speculative && speculatableTasks.isEmpty) {
       return None
     }

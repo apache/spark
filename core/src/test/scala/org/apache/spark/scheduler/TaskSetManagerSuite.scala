@@ -1695,11 +1695,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     clock.advance(1)
     assert(manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.toSet === Set(2, 3))
-    assert(manager.pendingSpeculatableTasks.forExecutor.size === 0)
-    assert(manager.pendingSpeculatableTasks.forHost.size === 0)
-    assert(manager.pendingSpeculatableTasks.forRack.size === 0)
-    assert(manager.pendingSpeculatableTasks.anyPrefs.size === 2)
-    assert(manager.pendingSpeculatableTasks.noPrefs.size === 2)
+    assert(manager.copiesRunning(2) === 1)
+    assert(manager.copiesRunning(3) === 1)
 
     // Offer resource to start the speculative attempt for the running task
     val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
@@ -1716,22 +1713,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(task6.taskId === 5)
     assert(task6.executorId === "exec1")
     assert(task6.attemptNumber === 1)
-    sched.initialize(new FakeSchedulerBackend() {
-      override def killTask(
-        taskId: Long,
-        executorId: String,
-        interruptThread: Boolean,
-        reason: String): Unit = {}
-    })
     clock.advance(1)
     // Running checkSpeculatableTasks again should return false
     assert(!manager.checkSpeculatableTasks(0))
-    assert(manager.pendingSpeculatableTasks.forExecutor.size === 0)
-    assert(manager.pendingSpeculatableTasks.forHost.size === 0)
-    assert(manager.pendingSpeculatableTasks.forRack.size === 0)
-    // allPendingSpeculativeTasks will still have two pending tasks but
-    // pendingSpeculatableTasksWithNoPrefs should have none
-    assert(manager.pendingSpeculatableTasks.anyPrefs.size === 2)
-    assert(manager.pendingSpeculatableTasks.noPrefs.size === 0)
+    assert(manager.copiesRunning(2) === 2)
+    assert(manager.copiesRunning(3) === 2)
+    // Offering additional resources should not lead to any speculative tasks being respawned
+    assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+    assert(manager.resourceOffer("exec2", "host2", ANY).isEmpty)
+    assert(manager.resourceOffer("exec3", "host3", ANY).isEmpty)
   }
 }
