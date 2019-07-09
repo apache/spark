@@ -3,7 +3,7 @@
 --
 --
 -- INT2
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/int2.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/int2.sql
 
 CREATE TABLE INT2_TBL(f1 smallint) USING parquet;
 
