@@ -177,8 +177,7 @@ public final class CalendarInterval implements Serializable {
    */
   public static CalendarInterval fromDayTimeString(String s, String from, String to)
       throws IllegalArgumentException {
-
-    CalendarInterval result;
+    CalendarInterval result = null;
     if (s == null) {
       throw new IllegalArgumentException("Interval day-time string was null");
     }
@@ -213,7 +212,8 @@ public final class CalendarInterval implements Serializable {
           }
         }
         // Hive allow nanosecond precision interval
-        long nanos = toLongWithRange("nanosecond", m.group(9), 0L, 999999999L);
+        String nanoStr = m.group(8) == null ? null : (m.group(9) + "000000000").substring(0, 9);
+        long nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L);
         switch (to) {
           case "hour":
             minutes = 0;

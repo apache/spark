@@ -38,7 +38,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer}
+import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFuncServer}
 import org.apache.spark.util._
 
 
@@ -137,8 +137,9 @@ private[spark] object PythonRDD extends Logging {
    * (effectively a collect()), but allows you to run on a certain subset of partitions,
    * or to enable local execution.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def runJob(
       sc: SparkContext,
@@ -156,8 +157,9 @@ private[spark] object PythonRDD extends Logging {
   /**
    * A helper function to collect an RDD as an iterator, then serve it via socket.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def collectAndServe[T](rdd: RDD[T]): Array[Any] = {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
@@ -168,58 +170,59 @@ private[spark] object PythonRDD extends Logging {
    * are collected as separate jobs, by order of index. Partition data is first requested by a
    * non-zero integer to start a collection job. The response is prefaced by an integer with 1
    * meaning partition data will be served, 0 meaning the local iterator has been consumed,
-   * and -1 meaining an error occurred during collection. This function is used by
+   * and -1 meaning an error occurred during collection. This function is used by
    * pyspark.rdd._local_iterator_from_socket().
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from these jobs, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
-    val (port, secret) = SocketAuthServer.setupOneConnectionServer(
-        authHelper, "serve toLocalIterator") { s =>
-      val out = new DataOutputStream(s.getOutputStream)
-      val in = new DataInputStream(s.getInputStream)
-      Utils.tryWithSafeFinally {
-
+    val handleFunc = (sock: Socket) => {
+      val out = new DataOutputStream(sock.getOutputStream)
+      val in = new DataInputStream(sock.getInputStream)
+      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Collects a partition on each iteration
         val collectPartitionIter = rdd.partitions.indices.iterator.map { i =>
           rdd.sparkContext.runJob(rdd, (iter: Iterator[Any]) => iter.toArray, Seq(i)).head
         }
 
-        // Read request for data and send next partition if nonzero
+        // Write data until iteration is complete, client stops iteration, or error occurs
         var complete = false
-        while (!complete && in.readInt() != 0) {
-          if (collectPartitionIter.hasNext) {
-            try {
-              // Attempt to collect the next partition
-              val partitionArray = collectPartitionIter.next()
+        while (!complete) {
 
-              // Send response there is a partition to read
-              out.writeInt(1)
+          // Read request for data, value of zero will stop iteration or non-zero to continue
+          if (in.readInt() == 0) {
+            complete = true
+          } else if (collectPartitionIter.hasNext) {
 
-              // Write the next object and signal end of data for this iteration
-              writeIteratorToStream(partitionArray.toIterator, out)
-              out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
-              out.flush()
-            } catch {
-              case e: SparkException =>
-                // Send response that an error occurred followed by error message
-                out.writeInt(-1)
-                writeUTF(e.getMessage, out)
-                complete = true
-            }
+            // Client requested more data, attempt to collect the next partition
+            val partitionArray = collectPartitionIter.next()
+
+            // Send response there is a partition to read
+            out.writeInt(1)
+
+            // Write the next object and signal end of data for this iteration
+            writeIteratorToStream(partitionArray.toIterator, out)
+            out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+            out.flush()
           } else {
             // Send response there are no more partitions to read and close
             out.writeInt(0)
             complete = true
           }
         }
-      } {
+      })(catchBlock = {
+        // Send response that an error occurred, original exception is re-thrown
+        out.writeInt(-1)
+      }, finallyBlock = {
         out.close()
         in.close()
-      }
+      })
     }
-    Array(port, secret)
+
+    val server = new SocketFuncServer(authHelper, "serve toLocalIterator", handleFunc)
+    Array(server.port, server.secret, server)
   }
 
   def readRDDFromFile(
@@ -443,8 +446,9 @@ private[spark] object PythonRDD extends Logging {
    *
    * The thread will terminate after all the data are sent or any exceptions happen.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
     serveToStream(threadName) { out =>
@@ -464,10 +468,14 @@ private[spark] object PythonRDD extends Logging {
    *
    * The thread will terminate after the block of code is executed or any
    * exceptions happen.
+   *
+   * @return 3-tuple (as a Java array) with the port number of a local socket which serves the
+   *         data collected from this job, the secret for authentication, and a socket auth
+   *         server object that can be used to join the JVM serving thread in Python.
    */
   private[spark] def serveToStream(
       threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
-    SocketAuthHelper.serveToStream(threadName, authHelper)(writeFunc)
+    SocketAuthServer.serveToStream(threadName, authHelper)(writeFunc)
   }
 
   private def getMergedConf(confAsMap: java.util.HashMap[String, String],

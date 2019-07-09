@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.util.UUID
-
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
@@ -40,7 +38,7 @@ private[kafka010] class KafkaRelation(
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
     endingOffsets: KafkaOffsetRangeLimit)
-    extends BaseRelation with TableScan with Logging {
+  extends BaseRelation with TableScan with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
   assert(endingOffsets != EarliestOffsetRangeLimit,
@@ -57,7 +55,7 @@ private[kafka010] class KafkaRelation(
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-relation-${UUID.randomUUID}"
+    val uniqueGroupId = KafkaSourceProvider.batchUniqueGroupId(sourceOptions)
 
     val kafkaOffsetReader = new KafkaOffsetReader(
       strategy,
@@ -68,8 +66,8 @@ private[kafka010] class KafkaRelation(
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val (fromPartitionOffsets, untilPartitionOffsets) = {
       try {
-        (getPartitionOffsets(kafkaOffsetReader, startingOffsets),
-          getPartitionOffsets(kafkaOffsetReader, endingOffsets))
+        (kafkaOffsetReader.fetchPartitionOffsets(startingOffsets),
+          kafkaOffsetReader.fetchPartitionOffsets(endingOffsets))
       } finally {
         kafkaOffsetReader.close()
       }
@@ -115,32 +113,6 @@ private[kafka010] class KafkaRelation(
         cr.timestampType.id)
     }
     sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema).rdd
-  }
-
-  private def getPartitionOffsets(
-      kafkaReader: KafkaOffsetReader,
-      kafkaOffsets: KafkaOffsetRangeLimit): Map[TopicPartition, Long] = {
-    def validateTopicPartitions(partitions: Set[TopicPartition],
-      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
-      assert(partitions == partitionOffsets.keySet,
-        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
-          "Use -1 for latest, -2 for earliest, if you don't care.\n" +
-          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions}")
-      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
-      partitionOffsets
-    }
-    val partitions = kafkaReader.fetchTopicPartitions()
-    // Obtain TopicPartition offsets with late binding support
-    kafkaOffsets match {
-      case EarliestOffsetRangeLimit => partitions.map {
-        case tp => tp -> KafkaOffsetRangeLimit.EARLIEST
-      }.toMap
-      case LatestOffsetRangeLimit => partitions.map {
-        case tp => tp -> KafkaOffsetRangeLimit.LATEST
-      }.toMap
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        validateTopicPartitions(partitions, partitionOffsets)
-    }
   }
 
   override def toString: String =

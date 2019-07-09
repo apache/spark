@@ -251,9 +251,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
    */
   case class TestScalaUDF(name: String) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = SparkUserDefinedFunction(
-      (input: Any) => input.toString,
+      (input: Any) => String.valueOf(input),
       StringType,
-      inputSchemas = Seq.fill(1)(None))
+      inputSchemas = Seq.fill(1)(None),
+      name = Some(name))
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
