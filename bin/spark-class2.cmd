@@ -66,8 +66,8 @@ rem executed by the batch interpreter. So read all the output of the launcher in
 :gen
 set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM%.txt
 rem SPARK-28302: %RANDOM% would return the same number if we call it instantly after last call,
-rem so we should make sure to generate unique file to avoid process collision of writing into a
-rem same file concurrently.
+rem so we should make it sure to generate unique file to avoid process collision of writing into
+rem the same file concurrently.
 if exist %LAUNCHER_OUTPUT% goto :gen
 "%RUNNER%" -Xmx128m -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
 for /f "tokens=*" %%i in (%LAUNCHER_OUTPUT%) do (
