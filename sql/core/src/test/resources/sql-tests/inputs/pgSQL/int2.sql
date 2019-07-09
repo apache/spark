@@ -65,7 +65,7 @@ SELECT '' AS one, i.* FROM INT2_TBL i WHERE (i.f1 % smallint('2')) = smallint('1
 SELECT '' AS three, i.* FROM INT2_TBL i WHERE (i.f1 % int('2')) = smallint('0');
 
 -- [SPARK-28024] Incorrect value when out of range
-SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT2_TBL i;
+-- SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT2_TBL i;
 
 SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT2_TBL i
 WHERE abs(f1) < 16384;
@@ -73,7 +73,7 @@ WHERE abs(f1) < 16384;
 SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT2_TBL i;
 
 -- [SPARK-28024] Incorrect value when out of range
-SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT2_TBL i;
+-- SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT2_TBL i;
 
 SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT2_TBL i
 WHERE f1 < 32766;
@@ -81,18 +81,18 @@ WHERE f1 < 32766;
 SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT2_TBL i;
 
 -- [SPARK-28024] Incorrect value when out of range
-SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT2_TBL i;
+-- SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT2_TBL i;
 
 SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT2_TBL i
 WHERE f1 > -32767;
 
 SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT2_TBL i;
 
--- The result is different because [SPARK-2659]
-SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT2_TBL i;
+-- PostgreSQL `/` is the same with Spark `div` since SPARK-2659.
+SELECT '' AS five, i.f1, i.f1 div smallint('2') AS x FROM INT2_TBL i;
 
--- The result is different because [SPARK-2659]
-SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT2_TBL i;
+-- PostgreSQL `/` is the same with Spark `div` since SPARK-2659.
+SELECT '' AS five, i.f1, i.f1 div int('2') AS x FROM INT2_TBL i;
 
 -- corner cases
 SELECT string(shiftleft(smallint(-1), 15));
