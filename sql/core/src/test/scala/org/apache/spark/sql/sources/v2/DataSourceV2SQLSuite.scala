@@ -41,7 +41,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   private def getTestCatalog() = {
-    spark.sessionState.catalog.catalogManager.getCatalog("testcat")
+    spark.sessionState.analyzer.catalogManager.getCatalog("testcat")
       .asInstanceOf[TestInMemoryTableCatalog]
   }
 
@@ -361,7 +361,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       val e = intercept[CatalogNotFoundException] {
         spark.sql("SELECT * FROM a.b.c")
       }
-      assert(e.getMessage.contains("Catalog 'a' plugin class not found"))
+      assert(e.getMessage.contains("Catalog 'a' not found"))
     }
 
     withClue("table identifier doesn't specify catalog but default catalog is set") {

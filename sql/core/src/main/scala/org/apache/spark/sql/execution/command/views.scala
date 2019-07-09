@@ -193,11 +193,7 @@ case class CreateViewCommand(
         case UnresolvedRelation(parts) =>
           // The `DataSourceResolution` rule guarantees this.
           assert(parts.nonEmpty && parts.length <= 2)
-          val tblIdent = if (parts.length == 1) {
-            TableIdentifier(parts.head)
-          } else {
-            TableIdentifier(parts.last, Some(parts.head))
-          }
+          val tblIdent = TableIdentifier(parts)
           if (sparkSession.sessionState.catalog.isTemporaryTable(tblIdent)) {
             // temporary views are only stored in the session catalog
             throw new AnalysisException(s"Not allowed to create a permanent view $name by " +

@@ -956,7 +956,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         override def run(): Unit = {
           val tableName = s"SPARK_6618_table_$i"
           sql(s"CREATE TABLE $tableName (col1 string)")
-          sessionState.catalog.lookupRelation(Seq(tableName))
+          sessionState.catalog.lookupRelation(TableIdentifier(tableName))
           table(tableName)
           tables()
           sql(s"DROP TABLE $tableName")

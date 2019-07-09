@@ -85,6 +85,15 @@ case class QualifiedTableName(database: String, name: String) {
 
 object TableIdentifier {
   def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)
+
+  def apply(nameParts: Seq[String]): TableIdentifier = {
+    assert(nameParts.nonEmpty && nameParts.length <= 2)
+    if (nameParts.length == 1) {
+      TableIdentifier(nameParts.last)
+    } else {
+      TableIdentifier(nameParts.last, Some(nameParts.head))
+    }
+  }
 }
 
 

@@ -606,14 +606,14 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
       catalog.setCurrentDatabase("db2")
       // If we explicitly specify the database, we'll look up the relation in that database
-      assert(catalog.lookupRelation(Seq("db2", "tbl1")).children.head
+      assert(catalog.lookupRelation(TableIdentifier("tbl1", Some("db2"))).children.head
         .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
       // Otherwise, we'll first look up a temporary table with the same name
-      assert(catalog.lookupRelation(Seq("tbl1"))
+      assert(catalog.lookupRelation(TableIdentifier("tbl1"))
         == SubqueryAlias("tbl1", tempTable1))
       // Then, if that does not exist, look up the relation in the current database
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
-      assert(catalog.lookupRelation(Seq("tbl1")).children.head
+      assert(catalog.lookupRelation(TableIdentifier("tbl1")).children.head
         .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
     }
   }
@@ -626,11 +626,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(metadata.viewText.isDefined)
       val view = View(desc = metadata, output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
-      comparePlans(catalog.lookupRelation(Seq("db3", "view1")),
+      comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
         SubqueryAlias("view1", "db3", view))
       // Look up a view using current database of the session catalog.
       catalog.setCurrentDatabase("db3")
-      comparePlans(catalog.lookupRelation(Seq("view1")),
+      comparePlans(catalog.lookupRelation(TableIdentifier("view1")),
         SubqueryAlias("view1", "db3", view))
     }
   }

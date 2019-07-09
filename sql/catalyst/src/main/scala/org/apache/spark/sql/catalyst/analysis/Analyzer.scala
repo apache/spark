@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, LookupCatalog}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -96,11 +98,13 @@ class Analyzer(
     catalog: SessionCatalog,
     conf: SQLConf,
     maxIterations: Int)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
+
+  override lazy val catalogManager: CatalogManager = new CatalogManager(conf)
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
@@ -732,19 +736,46 @@ class Analyzer(
     //    and the default database is only used to look up a view);
     // 3. Use the currentDb of the SessionCatalog.
     private def lookupTableFromCatalog(
-        ident: Seq[String],
+        nameParts: Seq[String],
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
-      val identWithDb = if (ident.length == 1) {
-        defaultDatabase.toSeq ++ ident
+      import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.CatalogHelper
+
+      val namePartsWithDb = if (nameParts.length == 1) {
+        defaultDatabase.toSeq ++ nameParts
       } else {
-        ident
+        nameParts
       }
+
       try {
-        catalog.lookupRelation(identWithDb)
+        namePartsWithDb match {
+          case AsTempViewIdentifier(ident) => catalog.lookupRelation(ident)
+
+          case CatalogObjectIdentifier(v2Catalog, ident) =>
+            val table = v2Catalog.asTableCatalog.loadTable(ident)
+            DataSourceV2Relation.create(table)
+
+          case _ =>
+            // The builtin hive catalog doesn't support more than 2 table name parts. Here we assume
+            // the first name part is a catalog which doesn't exist.
+            if (namePartsWithDb.length > 2) {
+              throw new CatalogNotFoundException(s"Catalog '${namePartsWithDb.head}' not found.")
+            }
+            catalog.lookupRelation(TableIdentifier(namePartsWithDb))
+        }
       } catch {
         case _: NoSuchTableException | _: NoSuchDatabaseException =>
           u
+      }
+    }
+
+    object AsTempViewIdentifier {
+      def unapply(parts: Seq[String]): Option[TableIdentifier] = {
+        if (parts.nonEmpty && parts.length <= 2) {
+          Some(TableIdentifier(parts)).filter(catalog.isTemporaryTable)
+        } else {
+          None
+        }
       }
     }
   }

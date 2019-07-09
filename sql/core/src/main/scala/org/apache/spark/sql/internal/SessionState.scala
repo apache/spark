@@ -77,6 +77,8 @@ private[sql] class SessionState(
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
 
+  lazy val catalogManager: CatalogManager = new CatalogManager(conf)
+
   lazy val analyzer: Analyzer = analyzerBuilder()
 
   lazy val optimizer: Optimizer = optimizerBuilder()

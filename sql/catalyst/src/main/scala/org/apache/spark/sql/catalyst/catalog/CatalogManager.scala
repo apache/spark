@@ -25,11 +25,8 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * A thread-safe manager for [[CatalogPlugin]]s. It tracks all the registered catalogs, and allow
  * the caller to look up a catalog by name.
- *
- * TODO: it keeps an [[ExternalCatalog]] because we haven't migrated it to the new
- * catalog API.
  */
-class CatalogManager(conf: SQLConf, val externalCatalog: ExternalCatalog) {
+class CatalogManager(conf: SQLConf) {
 
   /**
    * Tracks all the registered catalogs.
