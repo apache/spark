@@ -797,7 +797,6 @@ object JdbcUtils extends Logging {
       tableSchema: StructType,
       customSchema: String,
       nameEquality: Resolver): StructType = {
-
     if (null != customSchema && customSchema.nonEmpty) {
       val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 

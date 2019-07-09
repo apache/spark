@@ -30,11 +30,11 @@ private object MsSqlServerDialect extends JdbcDialect {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
       Option(StringType)
     } else {
-        sqlType match {
-          case java.sql.Types.TINYINT => Some(ByteType)
-          case java.sql.Types.SMALLINT => Some(ShortType)
-          case java.sql.Types.REAL => Some(FloatType)
-          case _ => None
+      sqlType match {
+        case java.sql.Types.TINYINT => Some(ByteType)
+        case java.sql.Types.SMALLINT => Some(ShortType)
+        case java.sql.Types.REAL => Some(FloatType)
+        case _ => None
       }
     }
   }

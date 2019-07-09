@@ -897,22 +897,19 @@ class JDBCSuite extends QueryTest
       "VARBINARY(MAX)")
     assert(msSqlServerDialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get ==
       "TINYINT")
-
     assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
       "SMALLINT")
   }
 
-  test("MsSqlServerDialect catalyst type mapping") {
+  test("SPARK-28151 MsSqlServerDialect catalyst type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
-
     assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
       metadata).get == ByteType)
     assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
       metadata).get == ShortType)
     assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
       metadata).get == FloatType)
-
   }
 
   test("table exists query by jdbc dialect") {
