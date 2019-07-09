@@ -316,9 +316,9 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val udf2Name = "myUdf2"
     val udf1 = spark.udf.register(udf1Name, (n: Int) => n + 1)
     val udf2 = spark.udf.register(udf2Name, (n: Int) => n * 1)
-    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"$udf1Name($udf2Name(1))"))
     assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
-      .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+      .contains(s"$udf1Name($udf2Name(1))"))
   }
 
   test("SPARK-23666 Do not display exprId in argument names") {
@@ -329,7 +329,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       Console.withOut(outputStream) {
         spark.sql("SELECT f(a._1) FROM x").show
       }
-      assert(outputStream.toString.contains("UDF:f(a._1 AS `_1`)"))
+      assert(outputStream.toString.contains("f(a._1 AS `_1`)"))
     }
   }
 

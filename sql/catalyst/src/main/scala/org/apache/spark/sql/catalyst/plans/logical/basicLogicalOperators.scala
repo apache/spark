@@ -586,8 +586,7 @@ case class View(
     output: Seq[Attribute],
     child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
 
-  @transient
-  override lazy val references: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = outputSet
 
   override lazy val resolved: Boolean = child.resolved
 
