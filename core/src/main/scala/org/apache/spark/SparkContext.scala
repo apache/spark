@@ -1764,9 +1764,6 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
   }
 
-  def addJar(path: String) {
-    addJar(path, false)
-  }
 
   /**
    * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
@@ -1778,7 +1775,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param check when true, check jar file exists
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String, check: Boolean) {
+  def addJar(path: String) {
     def addJarFile(file: File): String = {
       try {
         if (!file.exists()) {
@@ -1821,7 +1818,7 @@ class SparkContext(config: SparkConf) extends Logging {
       if (key != null) {
         val hadoopPath = new Path(key)
         val scheme = new URI(key).getScheme
-        if (check && !Array("http", "https", "ftp", "spark").contains(scheme)) {
+        if (!Array("http", "https", "ftp", "spark").contains(scheme)) {
           val fs = hadoopPath.getFileSystem(hadoopConfiguration)
           if (!fs.exists(hadoopPath)) {
             throw new SparkException(s"Jar ${key} not found")

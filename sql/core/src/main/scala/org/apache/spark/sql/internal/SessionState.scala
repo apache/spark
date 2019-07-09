@@ -156,7 +156,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
-    session.sparkContext.addJar(path, true)
+    session.sparkContext.addJar(path)
     val uri = new Path(path).toUri
     val jarURL = if (uri.getScheme == null) {
       // `path` is a local file path without a URL scheme
