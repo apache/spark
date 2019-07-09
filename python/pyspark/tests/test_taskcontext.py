@@ -195,7 +195,6 @@ class TaskContextTestsWithResources(unittest.TestCase):
         conf = SparkConf().set("spark.task.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.discoveryScript", self.tempFile.name)
-        #conf = conf.set("spark.executor.resource.gpu.discoveryScript", "/home/tgraves/getGpus")
         self.sc = SparkContext('local-cluster[2,1,1024]', class_name, conf=conf)
 
     def test_resources(self):
