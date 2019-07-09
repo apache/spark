@@ -37,6 +37,7 @@ from pyspark.java_gateway import launch_gateway, local_connect_and_auth
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
     PairDeserializer, AutoBatchedSerializer, NoOpSerializer, ChunkedStream
 from pyspark.storagelevel import StorageLevel
+from pyspark.resourceinformation import ResourceInformation
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
@@ -1106,7 +1107,16 @@ class SparkContext(object):
         return conf
 
     def resources(self):
-        return self._jsc.sc().resources()
+        resources = {}
+        jresources = self._jsc.resources()
+        for x in jresources:
+            name = jresources[x].name()
+            jaddresses = jresources[x].addresses()
+            addrs = []
+            for addr in jaddresses:
+                addrs.append(addr)
+            resources[name] = ResourceInformation(name, addrs)
+        return resources
 
 
 def _test():
