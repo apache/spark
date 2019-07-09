@@ -36,7 +36,6 @@ class ResourceInformation(object):
     """
 
     _name = None
-
     _addresses = None
 
     def __init__(self, name, addresses):
@@ -44,7 +43,7 @@ class ResourceInformation(object):
       self._addresses = addresses
 
     def name(self):
-        return _name
+        return self._name
 
     def addresses(self):
-        return _addresses
+        return self._addresses
