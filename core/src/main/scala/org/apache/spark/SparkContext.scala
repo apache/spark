@@ -1764,7 +1764,6 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
   }
 
-
   /**
    * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
    *
