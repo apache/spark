@@ -4,7 +4,7 @@
 --
 -- INT8
 -- Test int8 64-bit integers.
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/int8.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/int8.sql
 --
 CREATE TABLE INT8_TBL(q1 bigint, q2 bigint) USING parquet;
 
