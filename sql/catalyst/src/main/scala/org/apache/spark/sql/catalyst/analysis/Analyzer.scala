@@ -669,6 +669,10 @@ class Analyzer(
     import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
+          if catalog.isTemporaryTable(ident) =>
+        u // temporary views take precedence over catalog table names
+
       case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
         loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
     }
@@ -706,6 +710,10 @@ class Analyzer(
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
+      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
+        if catalog.isTemporaryTable(ident) =>
+        resolveRelation(lookupTableFromCatalog(ident, u, AnalysisContext.get.defaultDatabase))
+
       case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)
@@ -714,10 +722,6 @@ class Analyzer(
         } else {
           u
         }
-
-      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
-          if catalog.isTemporaryTable(ident) =>
-        resolveRelation(lookupTableFromCatalog(ident, u, AnalysisContext.get.defaultDatabase))
 
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View

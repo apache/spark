@@ -106,7 +106,7 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
         .foreach { sqlIdent =>
           inside(parseMultipartIdentifier(sqlIdent)) {
             case AsTemporaryViewIdentifier(_) =>
-              fail("AsTemporaryTableIdentifier should not match when " +
+              fail("AsTemporaryViewIdentifier should not match when " +
                   "the catalog is set or the namespace has multiple parts")
             case _ =>
               // expected
@@ -185,7 +185,7 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
         .foreach { sqlIdent =>
           inside(parseMultipartIdentifier(sqlIdent)) {
             case AsTemporaryViewIdentifier(_) =>
-              fail("AsTemporaryTableIdentifier should not match when " +
+              fail("AsTemporaryViewIdentifier should not match when " +
                   "the catalog is set or the namespace has multiple parts")
             case _ =>
             // expected
