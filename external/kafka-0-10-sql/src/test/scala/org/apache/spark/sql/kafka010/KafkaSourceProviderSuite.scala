@@ -33,7 +33,6 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   private val expected = "1111"
   private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
   private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
-  private val offsetReaderMethod = PrivateMethod[KafkaOffsetReader]('offsetReader)
   private val maxOffsetFetchAttemptsMethod = PrivateMethod[Int]('maxOffsetFetchAttempts)
   private val offsetFetchAttemptIntervalMsMethod =
     PrivateMethod[Long]('offsetFetchAttemptIntervalMs)
@@ -50,6 +49,8 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("micro-batch mode - options should be handled as case-insensitive") {
+    val offsetReaderMethod = PrivateMethod[KafkaOffsetReader]('kafkaOffsetReader)
+
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
       assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
     })
@@ -68,6 +69,8 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("continuous mode - options should be handled as case-insensitive") {
+    val offsetReaderMethod = PrivateMethod[KafkaOffsetReader]('offsetReader)
+
     verifyFieldsInContinuousStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
       assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
     })
