@@ -132,4 +132,18 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val projection2 = cached.select("_1", "_3").queryExecution.executedPlan
     assert(!projection1.sameResult(projection2))
   }
+
+  test("SPARK-28314: Use the same MemoryManager when building HashedRelation") {
+    val hashMode = HashedRelationBroadcastMode(Literal("k") :: Nil)
+    import org.apache.spark.memory.SparkOutOfMemoryError
+    //  numRows*1.5+1 < BytesToBytesMap.MAX_CAPACITY
+    val numRows: Long = (((1 << 29) - 1) / 1.5).toLong
+    try {
+      hashMode.transform(Iterator.empty, Some(numRows))
+    }
+    catch {
+      case oom: SparkOutOfMemoryError =>
+      // as expected
+    }
+  }
 }
