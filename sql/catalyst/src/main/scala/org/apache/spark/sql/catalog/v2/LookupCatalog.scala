@@ -60,10 +60,10 @@ trait LookupCatalog {
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case Seq(tblName) => Some(TableIdentifier(tblName))
-      case Seq(dbName, tblName) => Some(TableIdentifier(tblName, Some(dbName)))
       case CatalogObjectIdentifier(_, _) =>
         throw new IllegalStateException(parts.mkString(".") + " is not a TableIdentifier.")
+      case Seq(tblName) => Some(TableIdentifier(tblName))
+      case Seq(dbName, tblName) => Some(TableIdentifier(tblName, Some(dbName)))
       case _ => None
     }
   }
