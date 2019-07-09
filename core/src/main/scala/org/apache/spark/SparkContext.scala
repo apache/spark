@@ -1771,6 +1771,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
    * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addJar(path: String) {
