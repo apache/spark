@@ -451,8 +451,6 @@ case class FlatMapGroupsInRExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
-
   override def requiredChildDistribution: Seq[Distribution] =
     if (groupingAttributes.isEmpty) {
       AllTuples :: Nil
