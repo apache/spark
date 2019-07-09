@@ -22,7 +22,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Result of a Cypher query.
  *
- * Wraps a [[DataFrame]] that contains the result rows.
+ * Wraps a DataFrame that contains the result rows.
  *
  * @since 3.0.0
  */

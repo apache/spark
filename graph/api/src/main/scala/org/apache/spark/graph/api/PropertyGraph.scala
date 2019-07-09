@@ -45,7 +45,7 @@ abstract class PropertyGraph {
   def cypherSession: CypherSession
 
   /**
-   * Executes a Cypher query in the [[CypherSession]] that manages this graph, using this graph as
+   * Executes a Cypher query in the session that manages this graph, using this graph as
    * the input graph.
    *
    * @param query Cypher query to execute
@@ -54,7 +54,7 @@ abstract class PropertyGraph {
   def cypher(query: String): CypherResult = cypher(query, Map.empty[String, Any])
 
   /**
-   * Executes a Cypher query in the [[CypherSession]] that manages this graph, using this graph as
+   * Executes a Cypher query in the session that manages this graph, using this graph as
    * the input graph.
    *
    * @param query      Cypher query to execute
