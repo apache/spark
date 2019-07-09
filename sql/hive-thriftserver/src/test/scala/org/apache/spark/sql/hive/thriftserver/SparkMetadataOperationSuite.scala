@@ -182,4 +182,14 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       checkResult(metaData.getTableTypes, Seq("TABLE", "VIEW"))
     }
   }
+
+  test("Spark's own GetFunctionsOperation(SparkGetFunctionsOperation)") {
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      // Hive does not have an overlay function, we use overlay to test.
+      val rs = metaData.getFunctions(null, "", "overlay")
+      assert(rs.next())
+      assert(rs.getString("FUNCTION_NAME") === "overlay")
+    }
+  }
 }

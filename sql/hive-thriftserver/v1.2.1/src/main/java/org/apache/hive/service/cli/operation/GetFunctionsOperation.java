@@ -63,7 +63,7 @@ public class GetFunctionsOperation extends MetadataOperation {
   private final String schemaName;
   private final String functionName;
 
-  private final RowSet rowSet;
+  protected final RowSet rowSet;
 
   public GetFunctionsOperation(HiveSession parentSession,
       String catalogName, String schemaName, String functionName) {
