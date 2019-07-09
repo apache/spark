@@ -257,6 +257,12 @@ class ContextTests(unittest.TestCase):
             SparkContext(gateway=mock_insecure_gateway)
         self.assertIn("insecure Py4j gateway", str(context.exception))
 
+    def test_resources(self):
+        """Test the resources are empty by default."""
+        with SparkContext() as sc:
+            resources = sc.resources()
+            self.assertEqual(len(resources), 0)
+
 
 class ContextTestsWithResources(unittest.TestCase):
 

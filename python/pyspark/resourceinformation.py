@@ -15,12 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
-from pyspark.java_gateway import local_connect_and_auth
-from pyspark.serializers import write_int, UTF8Deserializer
-
-
 class ResourceInformation(object):
 
     """

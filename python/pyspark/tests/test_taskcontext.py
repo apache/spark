@@ -46,7 +46,7 @@ class TaskContextTests(PySparkTestCase):
         self.assertEqual(stage2 + 1, stage3)
 
     def test_resources(self):
-        """Test the resources are available."""
+        """Test the resources are empty by default."""
         rdd = self.sc.parallelize(range(10))
         resources1 = rdd.map(lambda x: TaskContext.get().resources()).take(1)[0]
         # Test using the constructor directly rather than the get()
