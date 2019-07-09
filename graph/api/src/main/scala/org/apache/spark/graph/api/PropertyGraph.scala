@@ -51,7 +51,7 @@ abstract class PropertyGraph {
    * @param query Cypher query to execute
    * @since 3.0.0
    */
-  def cypher(query: String): CypherResult = cypher(query, Map.empty)
+  def cypher(query: String): CypherResult = cypher(query, Map.empty[String, Any])
 
   /**
    * Executes a Cypher query in the [[CypherSession]] that manages this graph, using this graph as
@@ -62,6 +62,17 @@ abstract class PropertyGraph {
    * @since 3.0.0
    */
   def cypher(query: String, parameters: Map[String, Any]): CypherResult =
+    cypherSession.cypher(this, query, parameters)
+
+  /**
+   * Executes a Cypher query in the [[CypherSession]] that manages this graph, using this graph as
+   * the input graph.
+   *
+   * @param query      Cypher query to execute
+   * @param parameters parameters used by the Cypher query
+   * @since 3.0.0
+   */
+  def cypher(query: String, parameters: java.util.Map[String, Object]): CypherResult =
     cypherSession.cypher(this, query, parameters)
 
   /**

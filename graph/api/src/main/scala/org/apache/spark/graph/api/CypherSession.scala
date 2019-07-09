@@ -61,6 +61,20 @@ trait CypherSession {
   def cypher(graph: PropertyGraph, query: String, parameters: Map[String, Any]): CypherResult
 
   /**
+   * Executes a Cypher query on the given input graph.
+   *
+   * @param graph      [[PropertyGraph]] on which the query is executed
+   * @param query      Cypher query to execute
+   * @param parameters parameters used by the Cypher query
+   * @since 3.0.0
+   */
+  def cypher(graph: PropertyGraph,
+             query: String,
+             parameters: java.util.Map[String, Object]): CypherResult = {
+    cypher(graph, query, parameters.asScala.toMap)
+  }
+
+  /**
    * Creates a [[PropertyGraph]] from a sequence of [[NodeFrame]]s and [[RelationshipFrame]]s.
    * At least one [[NodeFrame]] has to be provided.
    *
