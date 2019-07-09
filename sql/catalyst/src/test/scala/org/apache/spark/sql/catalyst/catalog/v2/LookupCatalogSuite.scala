@@ -65,8 +65,9 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       case (sql, expectedCatalog, namespace, name) =>
         inside(parseMultipartIdentifier(sql)) {
           case CatalogObjectIdentifier(catalog, ident) =>
-            catalog shouldEqual expectedCatalog
+            Some(catalog) shouldEqual expectedCatalog
             ident shouldEqual Identifier.of(namespace.toArray, name)
+          case _ => assert(expectedCatalog.isEmpty)
         }
     }
   }
@@ -89,10 +90,11 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       "prod.func",
       "prod.db.tbl",
       "ns1.ns2.tbl").foreach { sql =>
-      parseMultipartIdentifier(sql) match {
-        case AsTableIdentifier(_) =>
-          fail(s"$sql should not be resolved as TableIdentifier")
-        case _ =>
+      val nameParts = parseMultipartIdentifier(sql)
+      if (nameParts.head == "prod") {
+        intercept[IllegalStateException](AsTableIdentifier.unapply(nameParts))
+      } else {
+        assert(AsTableIdentifier.unapply(nameParts).isEmpty)
       }
     }
   }
