@@ -162,7 +162,8 @@ public class CalendarIntervalSuite {
     assertEquals(fromDayTimeString(input), i);
 
     input = "10 0:12:0.888";
-    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE);
+    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE +
+      888 * MICROS_PER_MILLI);
     assertEquals(fromDayTimeString(input), i);
 
     input = "-3 0:0:0";
