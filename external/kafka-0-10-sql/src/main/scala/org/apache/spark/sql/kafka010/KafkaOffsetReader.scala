@@ -89,10 +89,10 @@ private[kafka010] class KafkaOffsetReader(
     _consumer
   }
 
-  private val fetchOffsetNumRetries =
+  private val maxOffsetFetchAttempts =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
 
-  private val fetchOffsetRetryIntervalMs =
+  private val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 
   private def nextGroupId(): String = {
@@ -294,12 +294,12 @@ private[kafka010] class KafkaOffsetReader(
           if (incorrectOffsets.nonEmpty) {
             logWarning("Found incorrect offsets in some partitions " +
               s"(partition, previous offset, fetched offset): $incorrectOffsets")
-            if (attempt < fetchOffsetNumRetries) {
+            if (attempt < maxOffsetFetchAttempts) {
               logWarning("Retrying to fetch latest offsets because of incorrect offsets")
-              Thread.sleep(fetchOffsetRetryIntervalMs)
+              Thread.sleep(offsetFetchAttemptIntervalMs)
             }
           }
-        } while (incorrectOffsets.nonEmpty && attempt < fetchOffsetNumRetries)
+        } while (incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts)
 
         logDebug(s"Got latest offsets for partition : $partitionOffsets")
         partitionOffsets
@@ -372,7 +372,7 @@ private[kafka010] class KafkaOffsetReader(
       var result: Option[Map[TopicPartition, Long]] = None
       var attempt = 1
       var lastException: Throwable = null
-      while (result.isEmpty && attempt <= fetchOffsetNumRetries
+      while (result.isEmpty && attempt <= maxOffsetFetchAttempts
         && !Thread.currentThread().isInterrupted) {
         Thread.currentThread match {
           case ut: UninterruptibleThread =>
@@ -390,7 +390,7 @@ private[kafka010] class KafkaOffsetReader(
                   lastException = e
                   logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
                   attempt += 1
-                  Thread.sleep(fetchOffsetRetryIntervalMs)
+                  Thread.sleep(offsetFetchAttemptIntervalMs)
                   resetConsumer()
               }
             }
@@ -403,7 +403,7 @@ private[kafka010] class KafkaOffsetReader(
         throw new InterruptedException()
       }
       if (result.isEmpty) {
-        assert(attempt > fetchOffsetNumRetries)
+        assert(attempt > maxOffsetFetchAttempts)
         assert(lastException != null)
         throw lastException
       }

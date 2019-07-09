@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.{PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.sql.sources.v2.reader.Scan
@@ -34,8 +34,9 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
   private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
   private val offsetReaderMethod = PrivateMethod[KafkaOffsetReader]('offsetReader)
-  private val fetchOffsetNumRetriesMethod = PrivateMethod[Int]('fetchOffsetNumRetries)
-  private val fetchOffsetRetryIntervalMsMethod = PrivateMethod[Long]('fetchOffsetRetryIntervalMs)
+  private val maxOffsetFetchAttemptsMethod = PrivateMethod[Int]('maxOffsetFetchAttempts)
+  private val offsetFetchAttemptIntervalMsMethod =
+    PrivateMethod[Long]('offsetFetchAttemptIntervalMs)
 
   override protected def afterEach(): Unit = {
     SparkEnv.set(null)
@@ -57,12 +58,12 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
       val kafkaOffsetReader = getField(stream, offsetReaderMethod)
-      assert(expected.toInt === getField(kafkaOffsetReader, fetchOffsetNumRetriesMethod))
+      assert(expected.toInt === getField(kafkaOffsetReader, maxOffsetFetchAttemptsMethod))
     })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
         stream => {
       val kafkaOffsetReader = getField(stream, offsetReaderMethod)
-      assert(expected.toLong === getField(kafkaOffsetReader, fetchOffsetRetryIntervalMsMethod))
+      assert(expected.toLong === getField(kafkaOffsetReader, offsetFetchAttemptIntervalMsMethod))
     })
   }
 
@@ -72,12 +73,12 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     })
     verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
       val kafkaOffsetReader = getField(stream, offsetReaderMethod)
-      assert(expected.toInt === getField(kafkaOffsetReader, fetchOffsetNumRetriesMethod))
+      assert(expected.toInt === getField(kafkaOffsetReader, maxOffsetFetchAttemptsMethod))
     })
     verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
         stream => {
       val kafkaOffsetReader = getField(stream, offsetReaderMethod)
-      assert(expected.toLong === getField(kafkaOffsetReader, fetchOffsetRetryIntervalMsMethod))
+      assert(expected.toLong === getField(kafkaOffsetReader, offsetFetchAttemptIntervalMsMethod))
     })
   }
 
