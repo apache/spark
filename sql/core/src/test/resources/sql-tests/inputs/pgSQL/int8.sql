@@ -128,7 +128,7 @@ SELECT max(q1), max(q2) FROM INT8_TBL;
 -- SELECT '' AS to_char_16, to_char(q2, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM INT8_TBL;
 -- SELECT '' AS to_char_17, to_char(q2, '999999SG9999999999')     FROM INT8_TBL;
 
--- [SPARK-28024] Incorrect value when out of range
+-- [SPARK-26218] Throw exception on overflow for integers
 -- check min/max values and overflow behavior
 
 -- select bigint('-9223372036854775808');
@@ -203,7 +203,7 @@ SELECT * FROM range(bigint('+4567890123456789'), bigint('+4567890123456799'), 2)
 SELECT string(shiftleft(bigint(-1), 63));
 SELECT string(int(shiftleft(bigint(-1), 63))+1);
 
--- [SPARK-28024] Incorrect value when out of range
+-- [SPARK-26218] Throw exception on overflow for integers
 -- check sane handling of INT64_MIN overflow cases
 SELECT bigint((-9223372036854775808)) * bigint((-1));
 SELECT bigint((-9223372036854775808)) / bigint((-1));
