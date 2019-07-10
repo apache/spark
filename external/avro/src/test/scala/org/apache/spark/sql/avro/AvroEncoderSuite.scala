@@ -317,6 +317,7 @@ class AvroEncoderSuite extends SharedSQLContext {
 
   test("create Dataset from GenericRecord") {
     // need a spark context with kryo as serializer
+    spark.stop()
     val conf = new SparkConf()
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.driver.allowMultipleContexts", "true")
