@@ -49,9 +49,7 @@ private[sql] object TriggerIntervalUtils {
  */
 @Experimental
 @Evolving
-@deprecated("use Trigger.Once()", "3.0.0")
-// NOTE: In later release, we can change this to `private[sql]` and remove deprecated.
-case object OneTimeTrigger extends Trigger
+private[sql] case object OneTimeTrigger extends Trigger
 
 /**
  * A [[Trigger]] that runs a query periodically based on the processing time. If `interval` is 0,
