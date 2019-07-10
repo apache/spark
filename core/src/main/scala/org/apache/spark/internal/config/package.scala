@@ -35,6 +35,16 @@ package object config {
   private[spark] val SPARK_EXECUTOR_PREFIX = "spark.executor"
   private[spark] val SPARK_TASK_PREFIX = "spark.task"
 
+  private[spark] val SPARK_RESOURCES_DIR =
+    ConfigBuilder("spark.resources.dir")
+      .doc("Directory used to create spark-resources directory under it. If user does not" +
+        "config it explicitly, SPARK_HOME will be used by default. And since spark-resources" +
+        "is used to coordinate resources among workers/drivers(client only) in Standalone," +
+        "so that user shouldn't clean up this directory while workers/drivers are still" +
+        "alive to avoid the most likely resources conflict.")
+      .stringConf
+      .createOptional
+
   private[spark] val DRIVER_RESOURCES_FILE =
     ConfigBuilder("spark.driver.resourcesFile")
       .internal()

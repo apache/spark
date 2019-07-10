@@ -81,6 +81,7 @@ private[spark] object ResourceUtils extends Logging {
 
   /**
    * Assign resources to workers from the same host to avoid address conflict.
+   * @param conf SparkConf
    * @param componentName spark.driver / spark.worker
    * @param resources the resources found by worker on the host
    * @param resourceRequests map resource name to the request amount by the worker
@@ -88,6 +89,7 @@ private[spark] object ResourceUtils extends Logging {
    *         meet worker/driver's requirement
    */
   def acquireResources(
+      conf: SparkConf,
       componentName: String,
       resources: Map[String, ResourceInformation],
       resourceRequests: Map[String, Int])
@@ -95,8 +97,8 @@ private[spark] object ResourceUtils extends Logging {
     if (resourceRequests.isEmpty) {
       return Map.empty
     }
-    val lock = acquireLock()
-    val resourcesFile = new File(getOrCreateResourcesDir(), ALLOCATED_RESOURCES_FILE)
+    val lock = acquireLock(conf)
+    val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
     val allocated = {
       if (resourcesFile.exists()) {
         val allocated = parseAllocatedFromJsonFile(resourcesFile.getPath)
@@ -144,12 +146,13 @@ private[spark] object ResourceUtils extends Logging {
   /**
    * Free the indicated resources to make those resources be available for other
    * workers on the same host.
+   * @param conf SparkConf
    * @param toRelease the resources expected to release
    */
-  def releaseResources(toRelease: Map[String, ResourceInformation]): Unit = {
+  def releaseResources(conf: SparkConf, toRelease: Map[String, ResourceInformation]): Unit = {
     if (toRelease.nonEmpty) {
-      val lock = acquireLock()
-      val resourcesFile = new File(getOrCreateResourcesDir(), ALLOCATED_RESOURCES_FILE)
+      val lock = acquireLock(conf)
+      val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
       if (resourcesFile.exists()) {
         val allocated = {
           val allocated = parseAllocatedFromJsonFile(resourcesFile.getPath)
@@ -174,8 +177,8 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
-  private def acquireLock(): FileLock = {
-    val resourcesDir = getOrCreateResourcesDir()
+  private def acquireLock(conf: SparkConf): FileLock = {
+    val resourcesDir = getOrCreateResourcesDir(conf)
     val lockFile = new File(resourcesDir, RESOURCES_LOCK_FILE)
     val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel
     var keepTry = true
@@ -214,14 +217,17 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
-  private def getOrCreateResourcesDir(): File = {
-    val sparkHome = if (Utils.isTesting) {
-      assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
-      new File(sys.props("spark.test.home"))
-    } else {
-      new File(sys.env.getOrElse("SPARK_HOME", "."))
-    }
-    val resourceDir = new File(sparkHome, SPARK_RESOURCES_DIRECTORY)
+  private def getOrCreateResourcesDir(conf: SparkConf): File = {
+    val coordinateDir = new File(conf.get(SPARK_RESOURCES_DIR).getOrElse {
+      val sparkHome = if (Utils.isTesting) {
+        assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
+        sys.props("spark.test.home")
+      } else {
+        sys.env.getOrElse("SPARK_HOME", ".")
+      }
+      sparkHome
+    })
+    val resourceDir = new File(coordinateDir, SPARK_RESOURCES_DIRECTORY)
     if (!resourceDir.exists()) {
       Utils.createDirectory(resourceDir)
     }

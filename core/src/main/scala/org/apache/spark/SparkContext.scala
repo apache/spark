@@ -390,7 +390,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (isClientStandalone) {
       val requests = parseResourceRequirements(_conf, SPARK_DRIVER_PREFIX)
       try {
-        _resources = acquireResources(SPARK_DRIVER_PREFIX, _resources, requests)
+        _resources = acquireResources(_conf, SPARK_DRIVER_PREFIX, _resources, requests)
       } catch {
         case NonFatal(e) =>
           // set _resources to empty to avoid driver releases
@@ -1957,7 +1957,7 @@ class SparkContext(config: SparkConf) extends Logging {
       _progressBar.foreach(_.stop())
     }
     if (isClientStandalone) {
-      releaseResources(_resources)
+      releaseResources(_conf, _resources)
     }
     _taskScheduler = null
     // TODO: Cache.stop()?

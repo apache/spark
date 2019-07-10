@@ -222,7 +222,7 @@ private[deploy] class Worker(
    */
   private def releaseResourcesOnInterrupt(): Unit = {
     SignalUtils.register("TERM") {
-      releaseResources(resources)
+      releaseResources(conf, resources)
       false
     }
   }
@@ -231,11 +231,11 @@ private[deploy] class Worker(
     try {
       val allResources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
       val resourceRequests = parseResourceRequirements(conf, SPARK_WORKER_PREFIX)
-      resources = acquireResources(SPARK_WORKER_PREFIX, allResources, resourceRequests)
+      resources = acquireResources(conf, SPARK_WORKER_PREFIX, allResources, resourceRequests)
     } catch {
       case e: Exception =>
         logError("Failed to setup worker resources: ", e)
-        releaseResources(resources)
+        releaseResources(conf, resources)
         if (!Utils.isTesting) {
           System.exit(1)
         }
@@ -354,7 +354,7 @@ private[deploy] class Worker(
               TimeUnit.SECONDS))
         }
       } else {
-        releaseResources(resources)
+        releaseResources(conf, resources)
         logError("All masters are unresponsive! Giving up.")
         System.exit(1)
       }
@@ -453,7 +453,7 @@ private[deploy] class Worker(
       case RegisterWorkerFailed(message) =>
         if (!registered) {
           logError("Worker registration failed: " + message)
-          releaseResources(resources)
+          releaseResources(conf, resources)
           System.exit(1)
         }
 
@@ -651,7 +651,7 @@ private[deploy] class Worker(
       maybeCleanupApplication(id)
 
     case ReleaseResources(toRelease) =>
-      releaseResources(toRelease)
+      releaseResources(conf, toRelease)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -717,7 +717,7 @@ private[deploy] class Worker(
   }
 
   override def onStop() {
-    releaseResources(resources)
+    releaseResources(conf, resources)
     cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()
