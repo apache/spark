@@ -211,49 +211,10 @@ class SparkSqlParserSuite extends AnalysisTest {
       "no viable alternative at input")
   }
 
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    assertEqual("describe t",
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
-    assertEqual("describe table t",
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
-    assertEqual("describe table extended t",
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
-    assertEqual("describe table formatted t",
-      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
-  }
-
   test("describe query") {
     val query = "SELECT * FROM t"
     assertEqual("DESCRIBE QUERY " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
     assertEqual("DESCRIBE " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
-  }
-
-  test("describe table column") {
-    assertEqual("DESCRIBE t col",
-      DescribeColumnStatement(
-        Seq("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE t `abc.xyz`",
-      DescribeColumnStatement(
-        Seq("t"), Seq("abc.xyz"), isExtended = false))
-    assertEqual("DESCRIBE t abc.xyz",
-      DescribeColumnStatement(
-        Seq("t"), Seq("abc", "xyz"), isExtended = false))
-    assertEqual("DESCRIBE t `a.b`.`x.y`",
-      DescribeColumnStatement(
-        Seq("t"), Seq("a.b", "x.y"), isExtended = false))
-
-    assertEqual("DESCRIBE TABLE t col",
-      DescribeColumnStatement(
-        Seq("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE TABLE EXTENDED t col",
-      DescribeColumnStatement(
-        Seq("t"), Seq("col"), isExtended = true))
-    assertEqual("DESCRIBE TABLE FORMATTED t col",
-      DescribeColumnStatement(
-        Seq("t"), Seq("col"), isExtended = true))
-
-    intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
-      "DESC TABLE COLUMN for a specific partition is not supported")
   }
 
   test("analyze table statistics") {
