@@ -131,45 +131,45 @@ SELECT max(q1), max(q2) FROM INT8_TBL;
 -- [SPARK-28024] Incorrect value when out of range
 -- check min/max values and overflow behavior
 
-select bigint('-9223372036854775808');
-select bigint('-9223372036854775809');
-select bigint('9223372036854775807');
-select bigint('9223372036854775808');
+-- select bigint('-9223372036854775808');
+-- select bigint('-9223372036854775809');
+-- select bigint('9223372036854775807');
+-- select bigint('9223372036854775808');
 
-select bigint('9223372036854775808');
+-- select bigint('9223372036854775808');
 
-select -(bigint('-9223372036854775807'));
-select -(bigint('-9223372036854775808'));
+-- select -(bigint('-9223372036854775807'));
+-- select -(bigint('-9223372036854775808'));
 
-select bigint('9223372036854775800') + bigint('9223372036854775800');
-select bigint('-9223372036854775800') + bigint('-9223372036854775800');
+-- select bigint('9223372036854775800') + bigint('9223372036854775800');
+-- select bigint('-9223372036854775800') + bigint('-9223372036854775800');
 
-select bigint('9223372036854775800') - bigint('-9223372036854775800');
-select bigint('-9223372036854775800') - bigint('9223372036854775800');
+-- select bigint('9223372036854775800') - bigint('-9223372036854775800');
+-- select bigint('-9223372036854775800') - bigint('9223372036854775800');
 
-select bigint('9223372036854775800') * bigint('9223372036854775800');
+-- select bigint('9223372036854775800') * bigint('9223372036854775800');
 
 select bigint('9223372036854775800') / bigint('0');
-select bigint('9223372036854775800') % bigint('0');
+-- select bigint('9223372036854775800') % bigint('0');
 
-select abs(bigint('-9223372036854775808'));
+-- select abs(bigint('-9223372036854775808'));
 
-select bigint('9223372036854775800') + int('100');
-select bigint('-9223372036854775800') - int('100');
-select bigint('9223372036854775800') * int('100');
+-- select bigint('9223372036854775800') + int('100');
+-- select bigint('-9223372036854775800') - int('100');
+-- select bigint('9223372036854775800') * int('100');
 
-select int('100') + bigint('9223372036854775800');
-select int('-100') - bigint('9223372036854775800');
-select int('100') * bigint('9223372036854775800');
+-- select int('100') + bigint('9223372036854775800');
+-- select int('-100') - bigint('9223372036854775800');
+-- select int('100') * bigint('9223372036854775800');
 
-select bigint('9223372036854775800') + smallint('100');
-select bigint('-9223372036854775800') - smallint('100');
-select bigint('9223372036854775800') * smallint('100');
+-- select bigint('9223372036854775800') + smallint('100');
+-- select bigint('-9223372036854775800') - smallint('100');
+-- select bigint('9223372036854775800') * smallint('100');
 select bigint('-9223372036854775808') / smallint('0');
 
-select smallint('100') + bigint('9223372036854775800');
-select smallint('-100') - bigint('9223372036854775800');
-select smallint('100') * bigint('9223372036854775800');
+-- select smallint('100') + bigint('9223372036854775800');
+-- select smallint('-100') - bigint('9223372036854775800');
+-- select smallint('100') * bigint('9223372036854775800');
 select smallint('100') / bigint('0');
 
 SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 = 456;
