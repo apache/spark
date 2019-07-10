@@ -254,7 +254,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
 
     val results = spark.read.table("noharness").collect()
     assert(expected.map(Row(_)).subsetOf(results.toSet),
-    s"Result set ${results.toSet} are not a superset of $expected!")
+      s"Result set ${results.toSet} are not a superset of $expected!")
   }
 }
 
