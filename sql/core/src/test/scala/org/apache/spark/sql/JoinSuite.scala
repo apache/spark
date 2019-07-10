@@ -26,8 +26,10 @@ import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.execution.{BinaryExecNode, SortExec}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec}
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
@@ -968,5 +970,29 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(0.0d, 0.0/0.0),
           Seq(Row(0.0d, 0.0/0.0)))))
     }
+  }
+
+  test("PythonUDF predicate should be able to pushdown to join") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+
+    val left = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val right = Seq((1, 2), (3, 4)).toDF("c", "d")
+    val df = left.crossJoin(right).where(pythonTestUDF($"a") === pythonTestUDF($"c"))
+
+    val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])
+    assert(filterInAnalysis.isDefined)
+
+    // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
+    val filterExec = df.queryExecution.executedPlan.find(_.isInstanceOf[FilterExec])
+    assert(filterExec.isEmpty)
+
+    val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
+    assert(joinNode.isDefined)
+
+    df.show()
   }
 }
