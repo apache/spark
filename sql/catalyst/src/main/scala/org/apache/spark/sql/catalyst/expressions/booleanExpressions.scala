@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.BooleanType
@@ -34,7 +35,8 @@ object BooleanTest {
       case TRUE => input == true
       case FALSE => input == false
       case UNKNOWN => input == null
-      case _ => false
+      case _ => throw new AnalysisException("Boolean test value must be one of TRUE, " +
+        "FALSE and UNKNOWN.")
     }
   }
 }
@@ -53,8 +55,10 @@ object BooleanTest {
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(1, true);
+    > SELECT _FUNC_(1 > 2, true);
        false
+    > SELECT _FUNC_(2 > 1, true);
+       true
   """)
 case class BooleanTest(child: Expression, booleanValue: String)
   extends UnaryExpression with Predicate {
