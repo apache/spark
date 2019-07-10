@@ -194,11 +194,11 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
-    * Custom resolution hints to add to the Analyzer. Prefer overriding this instead of creating
-    * your own Analyzer.
-    *
-    * Note that this may NOT depend on the `analyzer` function.
-    */
+   * Custom resolution hints to add to the Analyzer. Prefer overriding this instead of creating
+   * your own Analyzer.
+   *
+   * Note that this may NOT depend on the `analyzer` function.
+   */
   protected def customResolutionHints: Seq[Rule[LogicalPlan]] = {
     extensions.buildResolutionHint(session)
   }

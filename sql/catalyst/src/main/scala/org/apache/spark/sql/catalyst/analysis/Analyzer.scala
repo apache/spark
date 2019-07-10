@@ -138,8 +138,8 @@ class Analyzer(
   protected val fixedPoint = FixedPoint(maxIterations)
 
   /**
-    * Override to provide additional hint rules for the "Hints" batch.
-    */
+   * Override to provide additional hint rules for the "Hints" batch.
+   */
   val extendedResolutionHints: Seq[Rule[LogicalPlan]] = Nil
 
   /**
