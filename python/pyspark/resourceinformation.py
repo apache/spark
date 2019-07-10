@@ -30,15 +30,14 @@ class ResourceInformation(object):
     @param addresses an array of strings describing the addresses of the resource
     """
 
-    _name = None
-    _addresses = None
-
     def __init__(self, name, addresses):
         self._name = name
         self._addresses = addresses
 
+    @property
     def name(self):
         return self._name
 
+    @property
     def addresses(self):
         return self._addresses

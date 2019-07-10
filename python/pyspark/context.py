@@ -1106,15 +1106,14 @@ class SparkContext(object):
         conf.setAll(self._conf.getAll())
         return conf
 
+    @property
     def resources(self):
         resources = {}
         jresources = self._jsc.resources()
         for x in jresources:
             name = jresources[x].name()
             jaddresses = jresources[x].addresses()
-            addrs = []
-            for addr in jaddresses:
-                addrs.append(addr)
+            addrs = [addr for addr in jaddresses]
             resources[name] = ResourceInformation(name, addrs)
         return resources
 
