@@ -33,6 +33,8 @@ import org.apache.spark.sql.types._
  */
 trait CheckAnalysis extends PredicateHelper {
 
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
   /**
    * Override to provide additional checks for correct analysis.
    * These rules will be evaluated after our built-in check rules.
@@ -88,7 +90,7 @@ trait CheckAnalysis extends PredicateHelper {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -107,7 +109,7 @@ trait CheckAnalysis extends PredicateHelper {
 
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
-            val from = operator.inputSet.map(_.qualifiedName).mkString(", ")
+            val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
@@ -296,6 +298,61 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
+          case CreateTableAsSelect(_, _, partitioning, query, _, _, _) =>
+            val references = partitioning.flatMap(_.references).toSet
+            val badReferences = references.map(_.fieldNames).flatMap { column =>
+              query.schema.findNestedField(column) match {
+                case Some(_) =>
+                  None
+                case _ =>
+                  Some(s"${column.quoted} is missing or is in a map or array")
+              }
+            }
+
+            if (badReferences.nonEmpty) {
+              failAnalysis(s"Invalid partitioning: ${badReferences.mkString(", ")}")
+            }
+
+          // If the view output doesn't have the same number of columns neither with the child
+          // output, nor with the query column names, throw an AnalysisException.
+          // If the view's child output can't up cast to the view output,
+          // throw an AnalysisException, too.
+          case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
+            val queryColumnNames = desc.viewQueryColumnNames
+            val queryOutput = if (queryColumnNames.nonEmpty) {
+              if (output.length != queryColumnNames.length) {
+                // If the view output doesn't have the same number of columns with the query column
+                // names, throw an AnalysisException.
+                throw new AnalysisException(
+                  s"The view output ${output.mkString("[", ",", "]")} doesn't have the same" +
+                    "number of columns with the query column names " +
+                    s"${queryColumnNames.mkString("[", ",", "]")}")
+              }
+              val resolver = SQLConf.get.resolver
+              queryColumnNames.map { colName =>
+                child.output.find { attr =>
+                  resolver(attr.name, colName)
+                }.getOrElse(throw new AnalysisException(
+                  s"Attribute with name '$colName' is not found in " +
+                    s"'${child.output.map(_.name).mkString("(", ",", ")")}'"))
+              }
+            } else {
+              child.output
+            }
+
+            output.zip(queryOutput).foreach {
+              case (attr, originAttr) if !attr.dataType.sameType(originAttr.dataType) =>
+                // The dataType of the output attributes may be not the same with that of the view
+                // output, so we should cast the attribute to the dataType of the view output
+                // attribute. Will throw an AnalysisException if the cast is not a up-cast.
+                if (!Cast.canUpCast(originAttr.dataType, attr.dataType)) {
+                  throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
+                    s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} " +
+                    "as it may truncate\n")
+                }
+              case _ =>
+            }
+
           case _ => // Fallbacks to the following checks
         }
 
@@ -375,6 +432,9 @@ trait CheckAnalysis extends PredicateHelper {
           case _: UnresolvedHint =>
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
+
+          case InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
+            failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>

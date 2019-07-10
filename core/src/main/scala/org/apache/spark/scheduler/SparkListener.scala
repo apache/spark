@@ -24,12 +24,11 @@ import scala.collection.Map
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
-import org.apache.spark.{SparkConf, TaskEndReason}
+import org.apache.spark.TaskEndReason
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
-import org.apache.spark.ui.SparkUI
 
 @DeveloperApi
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
@@ -53,7 +52,10 @@ case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: T
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerSpeculativeTaskSubmitted(stageId: Int) extends SparkListenerEvent
+case class SparkListenerSpeculativeTaskSubmitted(
+    stageId: Int,
+    stageAttemptId: Int = 0)
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerTaskEnd(

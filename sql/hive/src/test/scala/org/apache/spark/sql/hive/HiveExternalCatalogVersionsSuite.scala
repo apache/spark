@@ -186,6 +186,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--master", "local[2]",
         "--conf", "spark.ui.enabled=false",
         "--conf", "spark.master.rest.enabled=false",
+        "--conf", "spark.sql.hive.metastore.version=1.2.1",
+        "--conf", "spark.sql.hive.metastore.jars=maven",
         "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
@@ -203,6 +205,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--master", "local[2]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--conf", "spark.sql.hive.metastore.version=1.2.1",
+      "--conf", "spark.sql.hive.metastore.jars=maven",
       "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
       unusedJar.toString)

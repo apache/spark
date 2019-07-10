@@ -87,6 +87,20 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     testEventLogging()
   }
 
+  test("spark.eventLog.compression.codec overrides spark.io.compression.codec") {
+    val conf = new SparkConf
+    conf.set(EVENT_LOG_COMPRESS, true)
+
+    // The default value is `spark.io.compression.codec`.
+    val e = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    assert(e.compressionCodecName.contains("lz4"))
+
+    // `spark.eventLog.compression.codec` overrides `spark.io.compression.codec`.
+    conf.set(EVENT_LOG_COMPRESSION_CODEC, "zstd")
+    val e2 = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    assert(e2.compressionCodecName.contains("zstd"))
+  }
+
   test("Basic event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
       testEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
@@ -535,7 +549,7 @@ object EventLoggingListenerSuite {
     conf.set(EVENT_LOG_DIR, logDir.toString)
     compressionCodec.foreach { codec =>
       conf.set(EVENT_LOG_COMPRESS, true)
-      conf.set(IO_COMPRESSION_CODEC, codec)
+      conf.set(EVENT_LOG_COMPRESSION_CODEC, codec)
     }
     conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
     conf

@@ -38,17 +38,22 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
- * @param tableIdentifier table name
+ * @param multipartIdentifier table name
  */
-case class UnresolvedRelation(tableIdentifier: TableIdentifier)
-  extends LeafNode {
+case class UnresolvedRelation(multipartIdentifier: Seq[String]) extends LeafNode {
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
-  def tableName: String = tableIdentifier.unquotedString
+  def tableName: String = multipartIdentifier.quoted
 
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+}
+
+object UnresolvedRelation {
+  def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =
+    UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table)
 }
 
 /**

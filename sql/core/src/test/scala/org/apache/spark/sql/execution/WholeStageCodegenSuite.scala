@@ -295,7 +295,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     import testImplicits._
 
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> "true") {
-      val bytecodeSizeHisto = CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE
+      val bytecodeSizeHisto = CodegenMetrics.METRIC_COMPILATION_TIME
 
       // the same query run twice should hit the codegen cache
       spark.range(3).select('id + 2).collect

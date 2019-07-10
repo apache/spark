@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType
  * @param catalystSchema Catalyst schema of input data.
  * @param avroSchemaAsJsonString Avro schema of output result, in JSON string format.
  */
-private[avro] class AvroOutputWriterFactory(
+private[sql] class AvroOutputWriterFactory(
     catalystSchema: StructType,
     avroSchemaAsJsonString: String) extends OutputWriterFactory {
 

@@ -62,7 +62,8 @@ trait ObjectConsumerExec extends UnaryExecNode {
   assert(child.output.length == 1)
 
   // This operator always need all columns of its child, even it doesn't reference to.
-  override def references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = child.outputSet
 
   def inputObjectType: DataType = child.output.head.dataType
 }
@@ -243,28 +244,11 @@ case class MapPartitionsInRWithArrowExec(
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
       val columnarBatchIter = runner.compute(batchIter, -1)
       val outputProject = UnsafeProjection.create(output, output)
-      new Iterator[InternalRow] {
-
-        private var currentIter = if (columnarBatchIter.hasNext) {
-          val batch = columnarBatchIter.next()
-          val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-          assert(outputTypes == actualDataTypes, "Invalid schema from dapply(): " +
-            s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
-          batch.rowIterator.asScala
-        } else {
-          Iterator.empty
-        }
-
-        override def hasNext: Boolean = currentIter.hasNext || {
-          if (columnarBatchIter.hasNext) {
-            currentIter = columnarBatchIter.next().rowIterator.asScala
-            hasNext
-          } else {
-            false
-          }
-        }
-
-        override def next(): InternalRow = currentIter.next()
+      columnarBatchIter.flatMap { batch =>
+        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+        assert(outputTypes == actualDataTypes, "Invalid schema from dapply(): " +
+          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+        batch.rowIterator.asScala
       }.map(outputProject)
     }
   }
@@ -466,8 +450,6 @@ case class FlatMapGroupsInRExec(
   override def output: Seq[Attribute] = outputObjAttr :: Nil
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def requiredChildDistribution: Seq[Distribution] =
     if (groupingAttributes.isEmpty) {

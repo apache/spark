@@ -572,6 +572,29 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("value"))
   }
 
+  test("SPARK-28189 drop column using drop with column reference with case-insensitive names") {
+    // With SQL config caseSensitive OFF, case insensitive column name should work
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val col1 = testData("KEY")
+      val df1 = testData.drop(col1)
+      checkAnswer(df1, testData.selectExpr("value"))
+      assert(df1.schema.map(_.name) === Seq("value"))
+
+      val col2 = testData("Key")
+      val df2 = testData.drop(col2)
+      checkAnswer(df2, testData.selectExpr("value"))
+      assert(df2.schema.map(_.name) === Seq("value"))
+    }
+
+    // With SQL config caseSensitive ON, AnalysisException should be thrown
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val e = intercept[AnalysisException] {
+        testData("KEY")
+      }.getMessage
+      assert(e.contains("Cannot resolve column name"))
+    }
+  }
+
   test("drop unknown column (no-op) with column reference") {
     val col = Column("random")
     val df = testData.drop(col)
@@ -2134,6 +2157,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-27671: Fix analysis exception when casting null in nested field in struct") {
+    val df = sql("SELECT * FROM VALUES (('a', (10, null))), (('b', (10, 50))), " +
+      "(('c', null)) AS tab(x, y)")
+    checkAnswer(df, Row("a", Row(10, null)) :: Row("b", Row(10, 50)) :: Row("c", null) :: Nil)
+
+    val cast = sql("SELECT cast(struct(1, null) AS struct<a:int,b:int>)")
+    checkAnswer(cast, Row(Row(1, null)) :: Nil)
+  }
+
   test("SPARK-27439: Explain result should match collected result after view change") {
     withTempView("test", "test2", "tmp") {
       spark.range(10).createOrReplaceTempView("test")
@@ -2151,7 +2183,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(output.contains(
         """== Parsed Logical Plan ==
           |'Project [*]
-          |+- 'UnresolvedRelation `tmp`""".stripMargin))
+          |+- 'UnresolvedRelation [tmp]""".stripMargin))
       assert(output.contains(
         """== Physical Plan ==
           |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))

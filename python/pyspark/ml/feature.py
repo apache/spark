@@ -2560,7 +2560,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     corresponding string values.
     The index-string mapping is either from the ML attributes of the input column,
     or from user-supplied labels (which take precedence over ML attributes).
-    See L{StringIndexer} for converting strings into indices.
+    See :class:`StringIndexer` for converting strings into indices.
 
     .. versionadded:: 1.6.0
     """
@@ -3423,7 +3423,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
 
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
-    operators, including '~', '.', ':', '+', and '-'. Also see the `R formula docs
+    operators, including '~', '.', ':', '+', '-', '*', and '^'.
+    Also see the `R formula docs
     <http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html>`_.
 
     >>> df = spark.createDataFrame([

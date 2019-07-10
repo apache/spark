@@ -355,11 +355,10 @@ The following configurations are optional:
   <td>failOnDataLoss</td>
   <td>true or false</td>
   <td>true</td>
-  <td>streaming query</td>
+  <td>streaming and batch</td>
   <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or
   offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
-  as you expected. Batch queries will always fail if it fails to read any data from the provided
-  offsets due to lost data.</td>
+  as you expected.</td>
 </tr>
 <tr>
   <td>kafkaConsumer.pollTimeoutMs</td>
@@ -415,6 +414,24 @@ The following configurations are optional:
   be very small. When this is set, option "groupIdPrefix" will be ignored. </td>
 </tr>
 </table>
+
+### Consumer Caching
+
+It's time-consuming to initialize Kafka consumers, especially in streaming scenarios where processing time is a key factor.
+Because of this, Spark caches Kafka consumers on executors. The caching key is built up from the following information:
+* Topic name
+* Topic partition
+* Group ID
+
+The size of the cache is limited by <code>spark.kafka.consumer.cache.capacity</code> (default: 64).
+If this threshold is reached, it tries to remove the least-used entry that is currently not in use.
+If it cannot be removed, then the cache will keep growing. In the worst case, the cache will grow to
+the max number of concurrent tasks that can run in the executor (that is, number of tasks slots),
+after which it will never reduce.
+
+If a task fails for any reason the new task is executed with a newly created Kafka consumer for safety reasons.
+At the same time the cached Kafka consumer which was used in the failed execution will be invalidated. Here it has to
+be emphasized it will not be closed if any other task is using it.
 
 ## Writing Data to Kafka
 

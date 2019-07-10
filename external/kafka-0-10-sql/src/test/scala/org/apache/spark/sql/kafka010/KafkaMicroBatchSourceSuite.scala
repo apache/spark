@@ -660,7 +660,23 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
+  test("allow group.id prefix") {
+    testGroupId("groupIdPrefix", (expected, actual) => {
+      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+        "Valid consumer groups don't contain the expected group id - " +
+        s"Valid consumer groups: $actual / expected group id: $expected")
+    })
+  }
+
   test("allow group.id override") {
+    testGroupId("kafka.group.id", (expected, actual) => {
+      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+        s"contain the expected group id - Valid consumer groups: $actual / " +
+        s"expected group id: $expected")
+    })
+  }
+
+  private def testGroupId(groupIdKey: String, validateGroupId: (String, Iterable[String]) => Unit) {
     // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
     // as well as KafkaOffsetReader.createConsumer(.)
     val topic = newTopic()
@@ -673,7 +689,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val dsKafka = spark
       .readStream
       .format("kafka")
-      .option("kafka.group.id", customGroupId)
+      .option(groupIdKey, customGroupId)
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
@@ -689,9 +705,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         val consumerGroups = testUtils.listConsumerGroups()
         val validGroups = consumerGroups.valid().get()
         val validGroupsId = validGroups.asScala.map(_.groupId())
-        assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
-          s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
-          s"expected group id: $customGroupId")
+        validateGroupId(customGroupId, validGroupsId)
       }
     )
   }
@@ -1128,7 +1142,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
         val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
-          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaMicroBatchInputPartition])
+          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
           inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }

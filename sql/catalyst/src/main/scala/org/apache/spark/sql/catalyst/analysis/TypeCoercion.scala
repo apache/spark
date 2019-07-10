@@ -120,13 +120,14 @@ object TypeCoercion {
    */
   private def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    // We should cast all relative timestamp/date/string comparison into string comparisons
-    // This behaves as a user would expect because timestamp strings sort lexicographically.
-    // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
-    case (StringType, DateType) => Some(StringType)
-    case (DateType, StringType) => Some(StringType)
-    case (StringType, TimestampType) => Some(StringType)
-    case (TimestampType, StringType) => Some(StringType)
+    case (StringType, DateType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (DateType, StringType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (StringType, TimestampType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
+    case (TimestampType, StringType)
+      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
 
@@ -819,8 +820,10 @@ object TypeCoercion {
   }
 
   /**
-   * Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
-   * to TimeAdd/TimeSub
+   * 1. Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
+   *    to TimeAdd/TimeSub.
+   * 2. Turns Add/Subtract of DateType/IntegerType and IntegerType/DateType
+   *    to DateAdd/DateSub/DateDiff.
    */
   object DateTimeOperations extends Rule[LogicalPlan] {
 
@@ -836,6 +839,11 @@ object TypeCoercion {
         Cast(TimeAdd(l, r), l.dataType)
       case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeSub(l, r), l.dataType)
+
+      case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
+      case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
+      case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
+      case Subtract(l @ DateType(), r @ DateType()) => DateDiff(l, r)
     }
   }
 

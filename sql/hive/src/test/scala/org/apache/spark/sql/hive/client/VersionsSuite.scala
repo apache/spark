@@ -103,7 +103,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   }
 
   private val versions =
-    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.1")
+    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.0", "3.1")
 
   private var client: HiveClient = null
 
@@ -119,13 +119,15 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // hive.metastore.schema.verification from false to true since 2.0
       // For details, see the JIRA HIVE-6113 and HIVE-12463
       if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3" ||
-          version == "3.1") {
+          version == "3.0" || version == "3.1") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
       }
-      // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
-      if (version == "3.1") {
+      if (version == "3.0" || version == "3.1") {
+        // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
         hadoopConf.set("hive.in.test", "true")
+        // Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
+        hadoopConf.set("hive.query.reexecution.enabled", "false")
       }
       client = buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
       if (versionSpark != null) versionSpark.reset()
@@ -233,6 +235,33 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: getTableOption") {
       assert(client.getTableOption("default", "src").isDefined)
+    }
+
+    test(s"$version: getTablesByName") {
+      assert(client.getTablesByName("default", Seq("src")).head
+        == client.getTableOption("default", "src").get)
+    }
+
+    test(s"$version: getTablesByName when multiple tables") {
+      assert(client.getTablesByName("default", Seq("src", "temporary"))
+        .map(_.identifier.table) == Seq("src", "temporary"))
+    }
+
+    test(s"$version: getTablesByName when some tables do not exist") {
+      assert(client.getTablesByName("default", Seq("src", "notexist"))
+        .map(_.identifier.table) == Seq("src"))
+    }
+
+    test(s"$version: getTablesByName when contains invalid name") {
+      // scalastyle:off
+      val name = "砖"
+      // scalastyle:on
+      assert(client.getTablesByName("default", Seq("src", name))
+        .map(_.identifier.table) == Seq("src"))
+    }
+
+    test(s"$version: getTablesByName when empty") {
+      assert(client.getTablesByName("default", Seq.empty).isEmpty)
     }
 
     test(s"$version: alterTable(table: CatalogTable)") {
@@ -575,7 +604,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: sql create index and reset") {
       // HIVE-18448 Since Hive 3.0, INDEX is not supported.
-      if (version != "3.1") {
+      if (version != "3.0" && version != "3.1") {
         client.runSqlHive("CREATE TABLE indexed_table (key INT)")
         client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
           "as 'COMPACT' WITH DEFERRED REBUILD")
@@ -584,10 +613,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: sql read hive materialized view") {
       // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
-      // But skip Hive 3.1 because of SPARK-27074.
-      if (version == "2.3") {
+      if (version == "2.3" || version == "3.0" || version == "3.1") {
+        // Since HIVE-18394(Hive 3.1), "Create Materialized View" should default to rewritable ones
+        val disableRewrite = if (version == "2.3" || version == "3.0") "" else "DISABLE REWRITE"
         client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
-        client.runSqlHive("CREATE MATERIALIZED VIEW mv1 AS SELECT * FROM materialized_view_tbl")
+        client.runSqlHive(
+          s"CREATE MATERIALIZED VIEW mv1 $disableRewrite AS SELECT * FROM materialized_view_tbl")
         val e = intercept[AnalysisException](versionSpark.table("mv1").collect()).getMessage
         assert(e.contains("Hive materialized view is not supported"))
       }
@@ -944,9 +975,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
             |}
           """.stripMargin
         val schemaFile = new File(dir, "avroDecimal.avsc")
-        val writer = new PrintWriter(schemaFile)
-        writer.write(avroSchema)
-        writer.close()
+        Utils.tryWithResource(new PrintWriter(schemaFile)) { writer =>
+          writer.write(avroSchema)
+        }
         val schemaPath = schemaFile.toURI.toString
 
         val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")

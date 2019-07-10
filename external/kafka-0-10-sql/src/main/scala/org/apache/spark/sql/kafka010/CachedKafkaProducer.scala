@@ -31,7 +31,7 @@ import org.apache.kafka.clients.producer.KafkaProducer
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.kafka010.KafkaConfigUpdater
+import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
 
 private[kafka010] case class CachedKafkaProducer(
     private val id: String = ju.UUID.randomUUID().toString,
@@ -42,8 +42,10 @@ private[kafka010] case class CachedKafkaProducer(
 
   lazy val kafkaProducer: KafkaProducer[Array[Byte], Array[Byte]] = {
     val producer = new KafkaProducer[Array[Byte], Array[Byte]](configMap)
-    logDebug(s"Created a new instance of KafkaProducer for " +
-      s"$kafkaParams with Id: $id")
+    if (log.isDebugEnabled()) {
+      val redactedParamsSeq = KafkaRedactionUtil.redactParams(kafkaParams)
+      logDebug(s"Created a new instance of KafkaProducer for $redactedParamsSeq, with Id: $id.")
+    }
     closed = false
     producer
   }
@@ -54,8 +56,11 @@ private[kafka010] case class CachedKafkaProducer(
       this.synchronized {
         if (!closed) {
           closed = true
+          if (log.isInfoEnabled()) {
+            val redactedParamsSeq = KafkaRedactionUtil.redactParams(kafkaParams)
+            logInfo(s"Closing the KafkaProducer with params: ${redactedParamsSeq.mkString("\n")}.")
+          }
           kafkaProducer.close()
-          logDebug(s"Closed kafka producer: $this")
         }
       }
     } catch {
@@ -100,7 +105,11 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     override def onRemoval(
         notification: RemovalNotification[Seq[(String, Object)], CachedKafkaProducer]): Unit = {
       val producer: CachedKafkaProducer = notification.getValue
-      logDebug(s"Evicting kafka producer $producer, due to ${notification.getCause}.")
+      if (log.isDebugEnabled()) {
+        val redactedParamsSeq = KafkaRedactionUtil.redactParams(producer.kafkaParams)
+        logDebug(s"Evicting kafka producer $producer params: $redactedParamsSeq, " +
+          s"due to ${notification.getCause}")
+      }
       if (producer.inUse()) {
         // When `inuse` producer is evicted we wait for it to be released by all the tasks,
         // before finally closing it.
@@ -115,7 +124,6 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     CacheBuilder.newBuilder().expireAfterAccess(cacheExpireTimeout, TimeUnit.MILLISECONDS)
       .removalListener(removalListener)
       .build[Seq[(String, Object)], CachedKafkaProducer](cacheLoader)
-
 
   /**
    * Get a cached KafkaProducer for a given configuration. If matching KafkaProducer doesn't
