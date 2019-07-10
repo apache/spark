@@ -174,7 +174,11 @@ private[deploy] class DriverRunner(
   private[worker] def prepareAndRunDriver(): Int = {
     val driverDir = createWorkingDirectory()
     val localJarFilename = downloadUserJar(driverDir)
-    val resourceFile = ResourceUtils.prepareResourceFile(SPARK_DRIVER_PREFIX, resources, driverDir)
+    val resourceFileOpt = if (resources.isEmpty) {
+      None
+    } else {
+      Option(ResourceUtils.prepareResourceFile(SPARK_DRIVER_PREFIX, resources, driverDir))
+    }
 
     def substituteVariables(argument: String): String = argument match {
       case "{{WORKER_URL}}" => workerUrl
@@ -183,8 +187,8 @@ private[deploy] class DriverRunner(
     }
 
     // config resource file for driver, which would be used to load resources when driver starts up
-    val javaOpts = driverDesc.command.javaOpts ++
-      Seq(s"-D${DRIVER_RESOURCES_FILE.key}=${resourceFile.getAbsolutePath}")
+    val javaOpts = driverDesc.command.javaOpts ++ resourceFileOpt.map(f =>
+      Seq(s"-D${DRIVER_RESOURCES_FILE.key}=${f.getAbsolutePath}")).getOrElse(Seq.empty)
     // TODO: If we add ability to submit multiple jars they should also be added here
     val builder = CommandUtils.buildProcessBuilder(driverDesc.command.copy(javaOpts = javaOpts),
       securityManager, driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
