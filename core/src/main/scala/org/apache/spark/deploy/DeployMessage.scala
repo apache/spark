@@ -77,8 +77,8 @@ private[deploy] object DeployMessages {
 
   case class WorkerSchedulerStateResponse(
       id: String,
-      execWithResources: List[(ExecutorDescription, Map[String, Seq[String]])],
-      driverWithResources: Seq[(String, Map[String, Seq[String]])])
+      execWithResources: List[(ExecutorDescription, Map[String, ResourceInformation])],
+      driverWithResources: Seq[(String, Map[String, ResourceInformation])])
 
   /**
    * A worker will send this message to the master when it registers with the master. Then the
@@ -130,13 +130,13 @@ private[deploy] object DeployMessages {
       appDesc: ApplicationDescription,
       cores: Int,
       memory: Int,
-      resources: Map[String, Seq[String]])
+      resources: Map[String, ResourceInformation] = Map.empty)
     extends DeployMessage
 
   case class LaunchDriver(
       driverId: String,
       driverDesc: DriverDescription,
-      resources: Map[String, Seq[String]] = Map.empty) extends DeployMessage
+      resources: Map[String, ResourceInformation] = Map.empty) extends DeployMessage
 
   case class KillDriver(driverId: String) extends DeployMessage
 

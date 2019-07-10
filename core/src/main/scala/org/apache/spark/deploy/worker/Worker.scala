@@ -242,20 +242,6 @@ private[deploy] class Worker(
     }
   }
 
-  private def makeResourceInformation(resourceAddrs: Map[String, Seq[String]])
-    : Map[String, ResourceInformation] = {
-    resourceAddrs.map { case (rName, addresses) =>
-      rName -> new ResourceInformation(rName, addresses.toArray)
-    }
-  }
-
-  private def makeResourceAddresses(resourceInfos: Map[String, ResourceInformation])
-    : Map[String, Seq[String]] = {
-    resourceInfos.map { case (rName, rInfo) =>
-      rName -> rInfo.addresses.toSeq
-    }
-  }
-
   /**
    * Change to use the new master.
    *
@@ -529,13 +515,9 @@ private[deploy] class Worker(
       changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
       val execWithResources = executors.values.map { e =>
-        (new ExecutorDescription(e.appId, e.execId, e.cores, e.state),
-          makeResourceAddresses(e.resources))
+        (new ExecutorDescription(e.appId, e.execId, e.cores, e.state), e.resources)
       }
-      val driverWithResources = drivers.keys.map { id =>
-        (id, makeResourceAddresses(drivers(id).resources))
-      }
-
+      val driverWithResources = drivers.keys.map { id => (id, drivers(id).resources)}
       masterRef.send(WorkerSchedulerStateResponse(
         workerId, execWithResources.toList, driverWithResources.toSeq))
 
@@ -543,7 +525,7 @@ private[deploy] class Worker(
       logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
       registerWithMaster()
 
-    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, resources) =>
+    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, resources_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else {
@@ -597,7 +579,7 @@ private[deploy] class Worker(
             conf,
             appLocalDirs,
             ExecutorState.LAUNCHING,
-            makeResourceInformation(resources))
+            resources_)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -631,7 +613,7 @@ private[deploy] class Worker(
         }
       }
 
-    case LaunchDriver(driverId, driverDesc, resources) =>
+    case LaunchDriver(driverId, driverDesc, resources_) =>
       logInfo(s"Asked to launch driver $driverId")
       val driver = new DriverRunner(
         conf,
@@ -642,7 +624,7 @@ private[deploy] class Worker(
         self,
         workerUri,
         securityMgr,
-        makeResourceInformation(resources))
+        resources_)
       drivers(driverId) = driver
       driver.start()
 

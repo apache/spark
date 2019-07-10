@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master
 import java.util.Date
 
 import org.apache.spark.deploy.DriverDescription
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.Utils
 
 private[deploy] class DriverInfo(
@@ -35,8 +36,8 @@ private[deploy] class DriverInfo(
   /* Most recent worker assigned to this driver */
   @transient var worker: Option[WorkerInfo] = None
   // resources(e.f. gpu/fpga) allocated to this driver
-  // map from resource name to its addresses
-  private var _resources: Map[String, Seq[String]] = _
+  // map from resource name to ResourceInformation
+  private var _resources: Map[String, ResourceInformation] = _
 
   init()
 
@@ -51,7 +52,7 @@ private[deploy] class DriverInfo(
     exception = None
   }
 
-  def withResources(r: Map[String, Seq[String]]): Unit = _resources = r
+  def withResources(r: Map[String, ResourceInformation]): Unit = _resources = r
 
-  def resources: Map[String, Seq[String]] = _resources
+  def resources: Map[String, ResourceInformation] = _resources
 }

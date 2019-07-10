@@ -78,10 +78,10 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
     case RegisteredWorker(masterRef, _, _, _) =>
       masterRef.send(WorkerLatestState(id, Nil, drivers.toSeq))
     case LaunchExecutor(_, appId, execId, _, _, _, resources_) =>
-      execResources(appId + "/" + execId) = resources_.map(r => (r._1, r._2.toSet))
+      execResources(appId + "/" + execId) = resources_.map(r => (r._1, r._2.addresses.toSet))
     case LaunchDriver(driverId, desc, resources_) =>
       drivers += driverId
-      driverResources(driverId) = resources_.map(r => (r._1, r._2.toSet))
+      driverResources(driverId) = resources_.map(r => (r._1, r._2.addresses.toSet))
       master.send(RegisterApplication(appDesc, newDriver(driverId)))
     case KillDriver(driverId) =>
       master.send(DriverStateChanged(driverId, DriverState.KILLED, None))
@@ -257,8 +257,9 @@ class MasterSuite extends SparkFunSuite
         // Application state should be WAITING when "MasterChangeAcknowledged" event executed.
         fakeAppInfo.state should be(ApplicationState.WAITING)
       }
-      val execWithResources = fakeExecutors.map(exec => (exec, Map.empty[String, Seq[String]]))
-      val driverWithResources = (fakeDriverInfo.id, Map.empty[String, Seq[String]])
+      val execWithResources = fakeExecutors.map(exec =>
+        (exec, Map.empty[String, ResourceInformation]))
+      val driverWithResources = (fakeDriverInfo.id, Map.empty[String, ResourceInformation])
       master.self.send(WorkerSchedulerStateResponse(
         fakeWorkerInfo.id, execWithResources, Seq(driverWithResources)))
 

@@ -30,10 +30,10 @@ private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String
     new ResourceInformation(name, addresses.toArray)
   }
 
-  def acquire(amount: Int): Seq[String] = {
+  def acquire(amount: Int): ResourceInformation = {
     val allocated = availableAddrs.take(amount)
     acquire(allocated)
-    allocated
+    new ResourceInformation(name, allocated.toArray)
   }
 }
 
@@ -56,8 +56,10 @@ private[spark] class WorkerInfo(
   @transient var state: WorkerState.Value = _
   @transient var coresUsed: Int = _
   @transient var memoryUsed: Int = _
-  @transient var driverToResourcesUsed: mutable.HashMap[String, Map[String, Seq[String]]] = _
-  @transient var execToResourcesUsed: mutable.HashMap[String, Map[String, Seq[String]]] = _
+  @transient var driverToResourcesUsed:
+    mutable.HashMap[String, Map[String, ResourceInformation]] = _
+  @transient var execToResourcesUsed:
+    mutable.HashMap[String, Map[String, ResourceInformation]] = _
 
   @transient var lastHeartbeat: Long = _
 
@@ -141,12 +143,9 @@ private[spark] class WorkerInfo(
   /**
    * acquire specified amount resources for driver/executor from the worker
    * @param resourceReqs the resources requirement from driver/executor
-   * @return
    */
-  def acquireResources(resourceReqs: Map[String, Int])
-    : Map[String, Seq[String]] = {
+  def acquireResources(resourceReqs: Map[String, Int]): Map[String, ResourceInformation] = {
     resourceReqs.map { case (rName, amount) =>
-      // TODO (wuyi) rName does not exists ?
       rName -> resources(rName).acquire(amount)
     }
   }
@@ -154,9 +153,9 @@ private[spark] class WorkerInfo(
   /**
    * used during master recovery
    */
-  def notifyResources(expected: Map[String, Seq[String]]): Unit = {
-    expected.foreach { case (rName, addresses) =>
-      resources(rName).acquire(addresses)
+  def notifyResources(expected: Map[String, ResourceInformation]): Unit = {
+    expected.foreach { case (rName, rInfo) =>
+      resources(rName).acquire(rInfo.addresses)
     }
   }
 
@@ -164,10 +163,9 @@ private[spark] class WorkerInfo(
    * release resources to worker from the driver/executor
    * @param allocated the resources which allocated to driver/executor previously
    */
-  def releaseResources(allocated: Map[String, Seq[String]])
-    : Unit = {
-    allocated.foreach { case (rName, addresses) =>
-      resources(rName).release(addresses)
+  def releaseResources(allocated: Map[String, ResourceInformation]): Unit = {
+    allocated.foreach { case (rName, rInfo) =>
+      resources(rName).release(rInfo.addresses)
     }
   }
 }

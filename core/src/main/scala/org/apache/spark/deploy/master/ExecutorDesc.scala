@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.master
 
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
+import org.apache.spark.resource.ResourceInformation
 
 private[master] class ExecutorDesc(
     val id: Int,
@@ -27,9 +28,9 @@ private[master] class ExecutorDesc(
     val memory: Int) {
 
   var state = ExecutorState.LAUNCHING
-  // resources(e.f. gpu/fpga) allocated to this driver
-  // map from resource name to its addresses
-  private var _resources: Map[String, Seq[String]] = _
+  // resources(e.f. gpu/fpga) allocated to this executor
+  // map from resource name to ResourceInformation
+  private var _resources: Map[String, ResourceInformation] = _
 
   /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
   def copyState(execDesc: ExecutorDescription) {
@@ -53,7 +54,7 @@ private[master] class ExecutorDesc(
 
   override def hashCode: Int = toString.hashCode()
 
-  def withResources(r: Map[String, Seq[String]]): Unit = _resources = r
+  def withResources(r: Map[String, ResourceInformation]): Unit = _resources = r
 
-  def resources: Map[String, Seq[String]] = _resources
+  def resources: Map[String, ResourceInformation] = _resources
 }

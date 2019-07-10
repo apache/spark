@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.deploy.ApplicationDescription
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -82,7 +83,7 @@ private[spark] class ApplicationInfo(
   private[master] def addExecutor(
       worker: WorkerInfo,
       cores: Int,
-      resources: Map[String, Seq[String]],
+      resources: Map[String, ResourceInformation],
       useID: Option[Int] = None): ExecutorDesc = {
     val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores, desc.memoryPerExecutorMB)
     exec.withResources(resources)
