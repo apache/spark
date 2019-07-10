@@ -16,18 +16,20 @@
  */
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LogicalPlan, UnresolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
-import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
+import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarArray, ColumnarBatch, ColumnarMap}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -49,6 +51,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     val spark = builder.getOrCreate()
     try f(spark) finally {
       stop(spark)
+    }
+  }
+
+  test("SPARK-28292 inject analyzer hint") {
+    withSession(Seq(_.injectResolutionHint(MyRule))) { session =>
+      assert(session.sessionState.analyzer.extendedResolutionHints.contains(MyRule(session)))
     }
   }
 
@@ -146,6 +154,23 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(result(0).getLong(0) == 102L) // Check that broken columnar Add was used.
       assert(result(1).getLong(0) == 202L)
       assert(result(2).getLong(0) == 302L)
+    }
+  }
+
+  test("inject hint") {
+    val extensions = create { extensions =>
+      extensions.injectResolutionHint((_) => MyHint)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.analyzer.extendedResolutionHints.contains(MyHint))
+      import session.sqlContext.implicits._
+      // repartitioning avoids having the add operation pushed up into the LocalTableScan
+      val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
+      data.createTempView("test_hint")
+      session.sql("select * from test_hint").show()
+      val result = session.sql("select /*+ MY_HINT(1) */ vals from test_hint").collect()
+      // Verify that we get back the expected result
+      assert(result.size == 1)
     }
   }
 
@@ -649,6 +674,23 @@ case class MyPostRule() extends Rule[SparkPlan] {
 case class MyColumarRule(pre: Rule[SparkPlan], post: Rule[SparkPlan]) extends ColumnarRule {
   override def preColumnarTransitions: Rule[SparkPlan] = pre
   override def postColumnarTransitions: Rule[SparkPlan] = post
+}
+
+object MyHint extends Rule[LogicalPlan] {
+  private val MY_HINT_NAME = Set("MY_HINT")
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      val limits = h.parameters match {
+        case Seq(IntegerLiteral(limits)) =>
+          limits
+        case Seq(limits: Int) =>
+          limits
+        case _ =>
+          throw new AnalysisException(s"$MY_HINT_NAME Hint expects a limits number as parameter")
+      }
+      GlobalLimit(Literal(limits), LocalLimit(Literal(limits), h.child))
+  }
 }
 
 class MyExtensions extends (SparkSessionExtensions => Unit) {
