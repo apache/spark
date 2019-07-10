@@ -974,6 +974,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   test("SPARK-28323: PythonUDF should be able to use in join condition") {
     import IntegratedUDFTestUtils._
 
+    assume(shouldTestPythonUDFs)
+
     val pythonTestUDF = TestPythonUDF(name = "udf")
 
     val left = Seq((1, 2), (2, 3)).toDF("a", "b")
