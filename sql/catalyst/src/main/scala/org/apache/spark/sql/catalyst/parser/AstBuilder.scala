@@ -1852,7 +1852,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * supported:
    * - Single unit.
    * - From-To unit ('YEAR TO MONTH', 'DAY TO HOUR', 'DAY TO MINUTE', 'DAY TO SECOND',
-   * 'HOUR to MINUTE', 'HOUR to SECOND' and 'MINUTE to SECOND' are supported).
+   * 'HOUR TO MINUTE', 'HOUR TO SECOND' and 'MINUTE TO SECOND' are supported).
    */
   override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
     import ctx._
