@@ -205,8 +205,8 @@ class TaskContextTestsWithResources(unittest.TestCase):
         resources = rdd.map(lambda x: TaskContext.get().resources()).take(1)[0]
         self.assertEqual(len(resources), 1)
         self.assertTrue('gpu' in resources)
-        self.assertEqual(resources['gpu'].name(), 'gpu')
-        self.assertEqual(resources['gpu'].addresses(), ['0'])
+        self.assertEqual(resources['gpu'].name, 'gpu')
+        self.assertEqual(resources['gpu'].addresses, ['0'])
 
     def tearDown(self):
         os.unlink(self.tempFile.name)

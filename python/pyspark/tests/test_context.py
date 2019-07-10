@@ -260,7 +260,7 @@ class ContextTests(unittest.TestCase):
     def test_resources(self):
         """Test the resources are empty by default."""
         with SparkContext() as sc:
-            resources = sc.resources()
+            resources = sc.resources
             self.assertEqual(len(resources), 0)
 
 
@@ -279,11 +279,11 @@ class ContextTestsWithResources(unittest.TestCase):
 
     def test_resources(self):
         """Test the resources are available."""
-        resources = self.sc.resources()
+        resources = self.sc.resources
         self.assertEqual(len(resources), 1)
         self.assertTrue('gpu' in resources)
-        self.assertEqual(resources['gpu'].name(), 'gpu')
-        self.assertEqual(resources['gpu'].addresses(), ['0'])
+        self.assertEqual(resources['gpu'].name, 'gpu')
+        self.assertEqual(resources['gpu'].addresses, ['0'])
 
     def tearDown(self):
         os.unlink(self.tempFile.name)
