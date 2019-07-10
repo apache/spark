@@ -53,8 +53,8 @@ class ColumnarRule {
  * Provides a common executor to translate an [[RDD]] of [[ColumnarBatch]] into an [[RDD]] of
  * [[InternalRow]]. This is inserted whenever such a transition is determined to be needed.
  *
- * The implementation is based off of similar implementations in [[ColumnarBatchScan]],
- * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]], and
+ * The implementation is based off of similar implementations in
+ * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]] and
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan)
