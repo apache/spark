@@ -737,7 +737,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 
-  test("SPARK-28310 Support respect nulls keywords for first_value and last_value") {
+  test("Support respect nulls keywords for first_value and last_value") {
     assertEqual("first_value(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
     assertEqual("first_value(a respect nulls)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("first_value(a)", First('a, Literal(false)).toAggregateExpression())
