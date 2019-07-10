@@ -3,7 +3,7 @@
 --
 --
 -- FLOAT8
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/float8.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/float8.sql
 
 CREATE TABLE FLOAT8_TBL(f1 double) USING parquet;
 
