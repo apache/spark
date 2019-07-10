@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kafka010
 import java.io.File
 import java.lang.{ Long => JLong }
 import java.util.{ Arrays, HashMap => JHashMap, Map => JMap, UUID }
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
@@ -423,7 +424,7 @@ class DirectKafkaStreamSuite
     )
 
     val collectedData = new ConcurrentLinkedQueue[String]()
-    val committed = new JHashMap[TopicPartition, OffsetAndMetadata]()
+    val committed = new ConcurrentHashMap[TopicPartition, OffsetAndMetadata]()
 
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
@@ -452,6 +453,7 @@ class DirectKafkaStreamSuite
                 logError("commit failed", e)
               } else {
                 committed.putAll(m)
+                logDebug(s"commit succeeded: $m")
               }
             }
           })
@@ -462,8 +464,10 @@ class DirectKafkaStreamSuite
     for (i <- (1 to 10).grouped(4)) {
       sendDataAndWaitForReceive(i)
     }
+    eventually(timeout(10.seconds), interval(50.milliseconds)) {
+      assert(!committed.isEmpty)
+    }
     ssc.stop()
-    assert(! committed.isEmpty)
     val consumer = new KafkaConsumer[String, String](kafkaParams)
     consumer.subscribe(Arrays.asList(topic))
     consumer.poll(0)
