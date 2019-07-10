@@ -189,7 +189,7 @@ public final class CalendarInterval implements Serializable {
     } else {
       try {
         int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
-        long days = m.group(2) == null ? 0 : toLongWithRange("day", m.group(3),
+        long days = m.group(3) == null ? 0 : toLongWithRange("day", m.group(3),
           0, Integer.MAX_VALUE);
         long hours;
         long minutes;
@@ -212,7 +212,7 @@ public final class CalendarInterval implements Serializable {
           }
         }
         // Hive allow nanosecond precision interval
-        String nanoStr = m.group(8) == null ? null : (m.group(9) + "000000000").substring(0, 9);
+        String nanoStr = m.group(9) == null ? null : (m.group(9) + "000000000").substring(0, 9);
         long nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L);
         switch (to) {
           case "hour":
