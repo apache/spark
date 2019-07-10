@@ -159,6 +159,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .toDF("int", "str")
         .groupBy("str")
         .agg($"str", count("str").as("strCount"))
+        .select("str", "strCount")
         .createOrReplaceTempView("df")
 
     checkAnswer(
