@@ -34,7 +34,7 @@ case class DescribeTableExec(
     ident: Identifier,
     isExtended: Boolean) extends LeafExecNode {
 
-  private val EMPTY_ROW = toCatalystRow("", "", "")
+  import DescribeTableExec._
 
   override def output: Seq[AttributeReference] = DescribeTableSchemas.DESCRIBE_TABLE_ATTRIBUTES
 
@@ -83,10 +83,14 @@ case class DescribeTableExec(
       case (key, value) => toCatalystRow(key, value, "")
     }
   }
+}
+
+private object DescribeTableExec {
+  private val ENCODER = RowEncoder(DescribeTableSchemas.DESCRIBE_TABLE_SCHEMA)
+  private val EMPTY_ROW = toCatalystRow("", "", "")
 
   private def toCatalystRow(strs: String*): InternalRow = {
-    val encoder = RowEncoder(DescribeTableSchemas.DESCRIBE_TABLE_SCHEMA).resolveAndBind()
-    encoder.toRow(
+    ENCODER.resolveAndBind().toRow(
       new GenericRowWithSchema(strs.toArray, DescribeTableSchemas.DESCRIBE_TABLE_SCHEMA))
   }
 }
