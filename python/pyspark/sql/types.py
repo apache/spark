@@ -1211,6 +1211,10 @@ def _make_type_verifier(dataType, nullable=True, name=None):
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
+    >>> _make_type_verifier(LongType())(1 << 64) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     >>> _make_type_verifier(ArrayType(ShortType()))(list(range(3)))
     >>> _make_type_verifier(ArrayType(StringType()))(set()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
@@ -1316,6 +1320,16 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             if obj < -2147483648 or obj > 2147483647:
                 raise ValueError(
                     new_msg("object of IntegerType out of range, got: %s" % obj))
+
+        verify_value = verify_integer
+
+    elif isinstance(dataType, LongType):
+        def verify_integer(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if not (-9223372036854775808 <= obj <= 9223372036854775807):
+                raise ValueError(
+                    new_msg("object of LongType out of range, got: %s" % obj))
 
         verify_value = verify_integer
 
