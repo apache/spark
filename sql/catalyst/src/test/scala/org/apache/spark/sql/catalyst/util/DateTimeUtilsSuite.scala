@@ -139,6 +139,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("015")).isEmpty)
     assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
     assert(stringToDate(UTF8String.fromString("1999 08 01")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999-08 01")).isEmpty)
     assert(stringToDate(UTF8String.fromString("1999 08")).isEmpty)
   }
 
@@ -245,6 +246,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
       checkStringToTimestamp("2015-03-18T12:03.17-1:0:0", None)
       checkStringToTimestamp("1999 08 01", None)
+      checkStringToTimestamp("1999-08 01", None)
       checkStringToTimestamp("1999 08", None)
 
       // Truncating the fractional seconds
