@@ -104,9 +104,6 @@ case class DataSourceResolution(
       }
       DescribeTable(catalog.asTableCatalog, ident, isExtended)
 
-    case DropTableStatement(AsTableIdentifier(tableName), ifExists, purge) =>
-      DropTableCommand(tableName, ifExists, isView = false, purge)
-
     case DropTableStatement(CatalogObjectIdentifier(Some(catalog), ident), ifExists, _) =>
       DropTable(catalog.asTableCatalog, ident, ifExists)
 
