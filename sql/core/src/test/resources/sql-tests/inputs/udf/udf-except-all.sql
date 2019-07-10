@@ -1,4 +1,4 @@
---- This test file was converted from except-all.sql.
+-- This test file was converted from except-all.sql.
 -- Note that currently registered UDF returns a string. So there are some differences, for instance
 -- in string cast within UDF in Scala and Python.
 
