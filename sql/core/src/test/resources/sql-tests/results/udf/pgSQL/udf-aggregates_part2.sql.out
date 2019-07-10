@@ -137,9 +137,9 @@ struct<max(unique2):int>
 
 
 -- !query 13
-select max(unique2) from tenk1 order by udf(max(unique2))+1
+select udf(max(udf(unique2))) from tenk1 order by udf(max(unique2))+1
 -- !query 13 schema
-struct<max(unique2):int>
+struct<udf(max(udf(unique2))):string>
 -- !query 13 output
 9999
 

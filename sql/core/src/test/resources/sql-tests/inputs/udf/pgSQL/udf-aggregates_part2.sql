@@ -4,6 +4,10 @@
 --
 -- AGGREGATES [Part 2]
 -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql#L145-L350
+--
+-- This test file was converted from pgSQL/aggregates_part2.sql.
+-- Note that currently registered UDF returns a string. So there are some differences, for instance
+-- in string cast within UDF in Scala and Python.
 
 create temporary view int4_tbl as select * from values
   (0),
@@ -217,7 +221,7 @@ select max(unique2) from tenk1 order by udf(1);
 select max(unique2) from tenk1 order by max(udf(unique2));
 -- explain
 --  select max(unique2) from tenk1 order by max(unique2)+1;
-select max(unique2) from tenk1 order by udf(max(unique2))+1;
+select udf(max(udf(unique2))) from tenk1 order by udf(max(unique2))+1;
 -- explain
 --  select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
 select t1.max_unique2, udf(g) from (select max(udf(unique2)) as max_unique2 FROM tenk1) t1 LATERAL VIEW explode(array(1,2,3)) t2 AS g order by g desc;
