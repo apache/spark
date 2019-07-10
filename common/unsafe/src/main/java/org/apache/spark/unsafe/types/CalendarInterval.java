@@ -170,7 +170,7 @@ public final class CalendarInterval implements Serializable {
    * Below interval conversion patterns are supported:
    * - DAY TO (HOUR|MINUTE|SECOND)
    * - HOUR TO (MINUTE|SECOND)
-   * - HOUR TO SECOND
+   * - MINUTE TO SECOND
    */
   public static CalendarInterval fromDayTimeString(String s, String from, String to)
       throws IllegalArgumentException {
