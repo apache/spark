@@ -117,6 +117,17 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         .collect().toSeq)
   }
 
+  test("join - self join auto resolve ambiguity with case insensitivity") {
+    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    checkAnswer(
+      df.join(df, df("key") === df("Key")),
+      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
+
+    checkAnswer(
+      df.join(df.filter($"value" === "2"), df("key") === df("Key")),
+      Row(2, "2", 2, "2") :: Nil)
+  }
+
   test("join - cross join") {
     val df1 = Seq((1, "1"), (3, "3")).toDF("int", "str")
     val df2 = Seq((2, "2"), (4, "4")).toDF("int", "str")
@@ -162,6 +173,44 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       left.join(right, left("key") === right("key")),
       Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
+  }
+
+  test("SPARK-28344: fail ambiguous self join") {
+    val df1 = spark.range(3)
+    val df2 = df1.filter($"id" > 0)
+
+    withSQLConf(
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "false",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      // `df1("id") > df2("id")` is always false.
+      checkAnswer(df1.join(df2, df1("id") > df2("id")), Nil)
+
+      // `df2("id")` actually points to the column of `df1`.
+      checkAnswer(df1.join(df2).select(df2("id")), Seq(0, 0, 1, 1, 2, 2).map(Row(_)))
+
+      val df3 = df1.filter($"id" <= 2)
+      // `df2("id") < df3("id")` is always false
+      checkAnswer(df1.join(df2).join(df3, df2("id") < df3("id")), Nil)
+    }
+
+    withSQLConf(
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "true",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+
+      def assertAmbiguousSelfJoin(df: => DataFrame): Unit = {
+        val e = intercept[AnalysisException](df)
+        assert(e.message.contains("ambiguous"))
+      }
+
+      assertAmbiguousSelfJoin(df1.join(df2, df1("id") > df2("id")))
+      assertAmbiguousSelfJoin(df1.join(df2).select(df2("id")))
+      assertAmbiguousSelfJoin(df1.join(df2).join(df1, df1("id") > df2("id")))
+      assertAmbiguousSelfJoin(df1.join(df2).join(df1, df2("id") === 2))
+
+      val df3 = df1.filter($"id" <= 2)
+      assertAmbiguousSelfJoin(df1.join(df2).join(df3, df2("id") < df3("id")))
+      assertAmbiguousSelfJoin(df3.join(df1.join(df2), df2("id") < df3("id")))
+    }
   }
 
   test("broadcast join hint using broadcast function") {
