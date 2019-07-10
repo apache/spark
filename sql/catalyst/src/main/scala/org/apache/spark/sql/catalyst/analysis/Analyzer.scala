@@ -1533,6 +1533,18 @@ class Analyzer(
             ListQuery(plan, exprs, exprId, plan.output)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
+        case a @ ArraySubquery(sub, _, exprId) if !sub.resolved =>
+          resolveSubQuery(a, plans) { (plan, children) =>
+            // Array subquery must return one column as output.
+            if (plan.output.size != 1) {
+              failAnalysis(
+                s"Array subquery must return only one column, but got ${plan.output.size}")
+            }
+            ScalarSubquery(Aggregate(Seq.empty, Seq(
+              Alias(AggregateExpression(CollectList(plan.output.head), Complete, false), "array()")
+              ()
+            ), plan))
+          }
       }
     }
 

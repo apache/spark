@@ -780,4 +780,8 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
     }
   }
+
+  test("Array from subquery") {
+    assertEqual("array(SELECT c FROM t)", ArraySubquery(table("t").select('c)))
+  }
 }

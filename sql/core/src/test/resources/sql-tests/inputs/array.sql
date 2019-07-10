@@ -90,3 +90,10 @@ select
   size(date_array),
   size(timestamp_array)
 from primitive_arrays;
+
+-- array from subquery
+select array(select 1);
+select array(select a from data);
+select array(select a from data where false);
+select array(select 1, 2);
+select array(select a, a from data);

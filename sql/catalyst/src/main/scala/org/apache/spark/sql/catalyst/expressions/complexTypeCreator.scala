@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -68,6 +69,26 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def prettyName: String = "array"
+}
+
+case class ArraySubquery(
+    plan: LogicalPlan,
+    children: Seq[Expression] = Seq.empty,
+    exprId: ExprId = NamedExpression.newExprId)
+  extends SubqueryExpression(plan, children, exprId) with Unevaluable {
+  override def dataType: DataType = {
+    assert(plan.schema.fields.nonEmpty, "Array subquery should have only one column")
+    plan.schema.fields.head.dataType
+  }
+  override def nullable: Boolean = true
+  override def withNewPlan(plan: LogicalPlan): ArraySubquery = copy(plan = plan)
+  override def toString: String = s"array-subquery#${exprId.id} $conditionString"
+  override lazy val canonicalized: Expression = {
+    ArraySubquery(
+      plan.canonicalized,
+      children.map(_.canonicalized),
+      ExprId(0))
+  }
 }
 
 private [sql] object GenArrayData {

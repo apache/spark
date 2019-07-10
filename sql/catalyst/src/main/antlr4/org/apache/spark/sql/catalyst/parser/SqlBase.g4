@@ -703,6 +703,7 @@ primaryExpression
        FROM srcStr=valueExpression ')'                                                         #trim
     | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
+    | ARRAY '(' query ')'                                                                      #array
     ;
 
 constant

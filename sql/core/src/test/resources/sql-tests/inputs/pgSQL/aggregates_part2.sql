@@ -28,7 +28,7 @@ create temporary view int4_tbl as select * from values
 --               from generate_series(1, 3) s2 group by s2) ss
 -- order by 1, 2;
 
--- [SPARK-27878] Support ARRAY(sub-SELECT) expressions
+-- [SPARK-27769] Handling of sublinks within outer-level aggregates.
 -- explain (verbose, costs off)
 -- select array(select sum(x+y) s
 --             from generate_series(1,3) y group by y order by s)
