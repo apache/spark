@@ -138,6 +138,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("015-03-18")).isEmpty)
     assert(stringToDate(UTF8String.fromString("015")).isEmpty)
     assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999 08 01")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999 08")).isEmpty)
   }
 
   test("string to timestamp") {
