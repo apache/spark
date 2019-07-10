@@ -110,7 +110,7 @@ object SQLMetrics {
     // The final result of this metric in physical operator UI may look like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    val acc = new SQLMetric(SIZE_METRIC, -1)
+    val acc = new SQLMetric(SIZE_METRIC)
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
@@ -119,14 +119,14 @@ object SQLMetrics {
     // The final result of this metric in physical operator UI may looks like:
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
-    val acc = new SQLMetric(TIMING_METRIC, -1)
+    val acc = new SQLMetric(TIMING_METRIC)
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
 
   def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
-    val acc = new SQLMetric(NS_TIMING_METRIC, -1)
+    val acc = new SQLMetric(NS_TIMING_METRIC)
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
