@@ -6,7 +6,7 @@
 -- Test int8 64-bit integers.
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/select.sql
 --
-
+create or replace temporary view onek2 as select * from onek;
 create or replace temporary view INT8_TBL as select * from values
   (cast(trim('  123   ') as bigint), cast(trim('  456') as bigint)),
   (cast(trim('123   ') as bigint),cast('4567890123456789' as bigint)),

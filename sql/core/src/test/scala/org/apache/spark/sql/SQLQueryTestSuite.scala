@@ -487,32 +487,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         """.stripMargin)
       .load(testFile("test-data/postgresql/tenk.data"))
       .createOrReplaceTempView("tenk1")
-
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema(
-        """
-          |unique1 int,
-          |unique2 int,
-          |two int,
-          |four int,
-          |ten int,
-          |twenty int,
-          |hundred int,
-          |thousand int,
-          |twothousand int,
-          |fivethous int,
-          |tenthous int,
-          |odd int,
-          |even int,
-          |stringu1 string,
-          |stringu2 string,
-          |string4 string
-        """.stripMargin)
-      .load(testFile("test-data/postgresql/onek.data"))
-      .createOrReplaceTempView("onek2")
   }
 
   private val originalTimeZone = TimeZone.getDefault
