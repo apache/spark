@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
-import org.apache.spark.sql.vectorized.{ColumnVector, ColumnarArray, ColumnarBatch, ColumnarMap}
+import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnVector, ColumnarBatch, ColumnarMap}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
