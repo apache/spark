@@ -3,7 +3,7 @@
 --
 --
 -- NUMERIC
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/numeric.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/numeric.sql
 --
 -- This test suite contains eight Cartesian products without using explicit CROSS JOIN syntax.
 -- Thus, we set spark.sql.crossJoin.enabled to true.
