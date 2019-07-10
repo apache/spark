@@ -72,7 +72,6 @@ private[deploy] class Master(
 
   private val idToWorker = new HashMap[String, WorkerInfo]
   private val addressToWorker = new HashMap[RpcAddress, WorkerInfo]
-  private val hostResourceToAssignedAddress = new HashMap[(String, String), ArrayBuffer[String]]()
 
   private val endpointToApp = new HashMap[RpcEndpointRef, ApplicationInfo]
   private val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
