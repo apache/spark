@@ -433,6 +433,9 @@ trait CheckAnalysis extends PredicateHelper {
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
 
+          case InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
+            failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
             val invalidExprSqls = PlanHelper.specialExpressionsInUnsupportedOperator(f).map(_.sql)

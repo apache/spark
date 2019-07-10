@@ -295,7 +295,10 @@ def read_udfs(pickleSer, infile, eval_type):
     is_map_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
 
     if is_scalar_iter or is_map_iter:
-        assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
+        if is_scalar_iter:
+            assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
+        if is_map_iter:
+            assert num_udfs == 1, "One MAP_ITER UDF expected here."
 
         arg_offsets, udf = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
@@ -318,7 +321,7 @@ def read_udfs(pickleSer, infile, eval_type):
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
                 assert is_map_iter or num_output_rows <= num_input_rows[0], \
-                    "Pandas SCALAR_ITER UDF outputted more rows than input rows."
+                    "Pandas MAP_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 
             if is_scalar_iter:
