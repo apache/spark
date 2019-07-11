@@ -244,9 +244,8 @@ INSERT INTO department VALUES (7, 5, 'G');
 --	SELECT * FROM subdepartment;
 --
 --SELECT * FROM vsubdepartment ORDER BY name;
-
--- Check reverse listing
--- [TODO] is there a way to show DDL of a view?
+--
+---- Check reverse listing
 --SELECT pg_get_viewdef('vsubdepartment'::regclass);
 --SELECT pg_get_viewdef('vsubdepartment'::regclass, true);
 
@@ -259,8 +258,7 @@ INSERT INTO department VALUES (7, 5, 'G');
 --    SELECT n+1 FROM t WHERE n < 100
 --)
 --SELECT sum(n) FROM t;
-
--- [TODO] is there a way to show DDL of a view?
+--
 --\d+ sums_1_100
 
 -- corner case in which sub-WITH gets initialized first
@@ -465,10 +463,10 @@ INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 10));
 --SELECT * FROM y;
 
 -- [NOTE] Spark SQL doesn't support UPDATE statement
-----WITH t AS (
-----	SELECT a FROM y
-----)
-----UPDATE y SET a = y.a-10 FROM t WHERE y.a > 20 AND t.a = y.a RETURNING y.a;
+--WITH t AS (
+--	SELECT a FROM y
+--)
+--UPDATE y SET a = y.a-10 FROM t WHERE y.a > 20 AND t.a = y.a RETURNING y.a;
 --
 --SELECT * FROM y;
 
@@ -1184,10 +1182,10 @@ SELECT * FROM parent;
 --DROP RULE y_rule ON y;
 
 -- check that parser lookahead for WITH doesn't cause any odd behavior
--- [TODO] WITH should be a reserved keyword?
+set spark.sql.parser.ansi.enabled=true;
 create table foo (with baz);  -- fail, WITH is a reserved word
--- [TODO] WITH should be a reserved keyword?
 create table foo (with ordinality);  -- fail, WITH is a reserved word
+set spark.sql.parser.ansi.enabled=false;
 with ordinality as (select 1 as x) select * from ordinality;
 
 -- check sane response to attempt to modify CTE relation
