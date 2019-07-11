@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution
 import scala.io.Source
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, OneRowRelation, SubqueryAlias}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -137,5 +138,28 @@ class QueryExecutionSuite extends SharedSQLContext {
       (_: LogicalPlan) => throw new Error("error"))
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
+  }
+
+  test("analyzed plan should not change after it's generated") {
+    val df = spark.range(10).filter('id > 0).as("a")
+    val analyzedPlan = df.queryExecution.analyzed
+    val tag = new TreeNodeTag[String]("test")
+    analyzedPlan.setTagValue(tag, "tag")
+
+    def checkPlan(l: LogicalPlan): Unit = {
+      assert(l.isInstanceOf[SubqueryAlias])
+      val sub = l.asInstanceOf[SubqueryAlias]
+      assert(sub.child.isInstanceOf[Filter])
+      assert(sub.getTagValue(tag).isDefined)
+      assert(sub.child.getTagValue(tag).isEmpty)
+    }
+
+    checkPlan(analyzedPlan)
+    val df2 = df.filter('id > 0)
+    // trigger optimizaion
+    df2.queryExecution.optimizedPlan
+
+    // The previous analyzed plan should not get changed.
+    checkPlan(analyzedPlan)
   }
 }

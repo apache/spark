@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -168,4 +168,6 @@ case object ResetCommand extends RunnableCommand with IgnoreCachedData {
     sparkSession.sessionState.conf.clear()
     Seq.empty[Row]
   }
+
+  override def clone(): LogicalPlan = this
 }

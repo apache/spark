@@ -52,4 +52,8 @@ case class SaveIntoDataSourceCommand(
     val redacted = SQLConf.get.redactOptions(options)
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
   }
+
+  override def clone(): LogicalPlan = {
+    SaveIntoDataSourceCommand(query.clone(), dataSource, options, mode)
+  }
 }
