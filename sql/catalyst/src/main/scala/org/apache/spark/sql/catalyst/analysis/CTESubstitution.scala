@@ -89,12 +89,19 @@ object CTESubstitution extends Rule[LogicalPlan] {
   private def traverseAndSubstituteCTE(plan: LogicalPlan, inTraverse: Boolean): LogicalPlan = {
     plan.resolveOperatorsUp {
       case With(child: LogicalPlan, relations) =>
+        // child might contain an inner CTE that has priority so traverse and substitute inner CTEs
+        // in child first
         val traversedChild: LogicalPlan = child transformExpressions {
           case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
         }
 
+        // Substitute CTE definitions from last to first as a CTE definition can reference a
+        // previous one
         relations.foldRight(traversedChild) {
           case ((cteName, ctePlan), currentPlan) =>
+            // A CTE definition might contain an inner CTE that has priority so traverse and
+            // substitute ctePlan
+            // A CTE definition might be used multiple times so substitutedCTEPlan is lazy
             lazy val substitutedCTEPlan = traverseAndSubstituteCTE(ctePlan, true)
             substituteCTE(currentPlan, cteName, substitutedCTEPlan)
         }
