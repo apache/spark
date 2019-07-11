@@ -45,7 +45,7 @@ object DataSourceV2Implicits {
         case support: SupportsMaintenance =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support delete: ${table.name}")
+          throw new AnalysisException(s"Table does not support maintenance: ${table.name}")
       }
     }
 
