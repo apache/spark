@@ -19,6 +19,8 @@ package org.apache.spark.deploy
 
 import java.net.URI
 
+import org.apache.spark.resource.ResourceRequirement
+
 private[spark] case class ApplicationDescription(
     name: String,
     maxCores: Option[Int],
@@ -34,7 +36,7 @@ private[spark] case class ApplicationDescription(
     initialExecutorLimit: Option[Int] = None,
     user: String = System.getProperty("user.name", "<unknown>"),
     // map from resource name to its requested amount by the executor
-    resourceReqsPerExecutor: Map[String, Int] = Map.empty) {
+    resourceReqsPerExecutor: Seq[ResourceRequirement] = Seq.empty) {
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

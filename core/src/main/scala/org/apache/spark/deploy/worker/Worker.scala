@@ -230,8 +230,8 @@ private[deploy] class Worker(
   private def setupWorkerResources(): Unit = {
     try {
       val allResources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
-      val resourceRequests = parseResourceRequirements(conf, SPARK_WORKER_PREFIX)
-      resources = acquireResources(conf, SPARK_WORKER_PREFIX, allResources, resourceRequests)
+      val resourceRequirements = parseResourceRequirements(conf, SPARK_WORKER_PREFIX)
+      resources = acquireResources(conf, SPARK_WORKER_PREFIX, allResources, resourceRequirements)
     } catch {
       case e: Exception =>
         logError("Failed to setup worker resources: ", e)

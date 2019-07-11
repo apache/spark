@@ -19,7 +19,7 @@ package org.apache.spark.deploy.master
 
 import scala.collection.mutable
 
-import org.apache.spark.resource.{ResourceAllocator, ResourceInformation}
+import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -144,10 +144,13 @@ private[spark] class WorkerInfo(
    * acquire specified amount resources for driver/executor from the worker
    * @param resourceReqs the resources requirement from driver/executor
    */
-  def acquireResources(resourceReqs: Map[String, Int]): Map[String, ResourceInformation] = {
-    resourceReqs.map { case (rName, amount) =>
+  def acquireResources(resourceReqs: Seq[ResourceRequirement])
+    : Map[String, ResourceInformation] = {
+    resourceReqs.map { req =>
+      val rName = req.resourceName
+      val amount = req.amount
       rName -> resources(rName).acquire(amount)
-    }
+    }.toMap
   }
 
   /**

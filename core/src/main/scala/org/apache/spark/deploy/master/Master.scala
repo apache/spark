@@ -37,7 +37,7 @@ import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceRequirement, ResourceUtils}
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -643,12 +643,13 @@ private[deploy] class Master(
         val assignedMemory = assignedExecutorNum * memoryPerExecutor
         val enoughMemory = usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor
         val assignedResources = resourceReqsPerExecutor.map {
-          case (rName, amount) => rName -> amount * assignedExecutorNum
-        }
+          req => req.resourceName -> req.amount * assignedExecutorNum
+        }.toMap
         val resourcesFree = usableWorkers(pos).resourcesFree.map {
           case (rName, free) => rName -> (free - assignedResources.getOrElse(rName, 0))
         }
-        val enoughResources = hasEnoughResources(resourcesFree, resourceReqsPerExecutor)
+        val enoughResources = ResourceUtils.resourcesMeetRequirements(
+          resourcesFree, resourceReqsPerExecutor)
         val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
         keepScheduling && enoughCores && enoughMemory && enoughResources && underLimit
       } else {
@@ -740,31 +741,35 @@ private[deploy] class Master(
     }
   }
 
-  def hasEnoughResources(resourcesFree: Map[String, Int], resourceReqs: Map[String, Int])
+  private def canLaunch(
+      worker: WorkerInfo,
+      memoryReq: Int,
+      coresReq: Int,
+      resourceRequirements: Seq[ResourceRequirement])
     : Boolean = {
-    resourceReqs.forall { case (rName, amount) =>
-      resourcesFree.getOrElse(rName, 0) >= amount
-    }
+    val enoughMem = worker.memoryFree >= memoryReq
+    val enoughCores = worker.coresFree >= coresReq
+    val enoughResources = ResourceUtils.resourcesMeetRequirements(
+      worker.resourcesFree, resourceRequirements)
+    enoughMem && enoughCores && enoughResources
   }
 
   /**
    * @return whether the worker could launch the driver represented by DriverDescription
    */
   private def canLaunchDriver(worker: WorkerInfo, desc: DriverDescription): Boolean = {
-    val enoughMem = worker.memoryFree >= desc.mem
-    val enoughCores = worker.coresFree >= desc.cores
-    val enoughResources = hasEnoughResources(worker.resourcesFree, desc.resourceReqs)
-    enoughMem && enoughCores && enoughResources
+    canLaunch(worker, desc.mem, desc.cores, desc.resourceReqs)
   }
 
   /**
    * @return whether the worker could launch the executor according to application's requirement
    */
   private def canLaunchExecutor(worker: WorkerInfo, desc: ApplicationDescription): Boolean = {
-    val enoughMem = worker.memoryFree >= desc.memoryPerExecutorMB
-    val enoughCores = worker.coresFree >= desc.coresPerExecutor.getOrElse(1)
-    val enoughResources = hasEnoughResources(worker.resourcesFree, desc.resourceReqsPerExecutor)
-    enoughMem && enoughCores && enoughResources
+    canLaunch(
+      worker,
+      desc.memoryPerExecutorMB,
+      desc.coresPerExecutor.getOrElse(1),
+      desc.resourceReqsPerExecutor)
   }
 
   /**

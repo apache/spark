@@ -52,7 +52,7 @@ private[spark] case class ResourceRequest(
     discoveryScript: Option[String],
     vendor: Option[String])
 
-private[spark] case class TaskResourceRequirement(resourceName: String, amount: Int)
+private[spark] case class ResourceRequirement(resourceName: String, amount: Int)
 
 /**
  * Case class representing allocated resource addresses for a specific resource.
@@ -84,7 +84,7 @@ private[spark] object ResourceUtils extends Logging {
    * @param conf SparkConf
    * @param componentName spark.driver / spark.worker
    * @param resources the resources found by worker on the host
-   * @param resourceRequests map resource name to the request amount by the worker
+   * @param resourceRequirements the resource requirements asked by the worker/driver
    * @return allocated resources for the worker/driver or throws exception if can't
    *         meet worker/driver's requirement
    */
@@ -92,9 +92,9 @@ private[spark] object ResourceUtils extends Logging {
       conf: SparkConf,
       componentName: String,
       resources: Map[String, ResourceInformation],
-      resourceRequests: Map[String, Int])
+      resourceRequirements: Seq[ResourceRequirement])
     : Map[String, ResourceInformation] = {
-    if (resourceRequests.isEmpty) {
+    if (resourceRequirements.isEmpty) {
       return Map.empty
     }
     val lock = acquireLock(conf)
@@ -109,7 +109,9 @@ private[spark] object ResourceUtils extends Logging {
     }.toMap
 
     val newAssigned = {
-      resourceRequests.map{ case (rName, amount) =>
+      resourceRequirements.map{ req =>
+        val rName = req.resourceName
+        val amount = req.amount
         val assigned = allocated.getOrElse(rName, Array.empty)
         val available = resources(rName).addresses.diff(assigned)
         val newAssigned = {
@@ -122,7 +124,7 @@ private[spark] object ResourceUtils extends Logging {
           }
         }
         rName -> new ResourceInformation(rName, newAssigned)
-      }
+      }.toMap
     }
 
     val newAllocated = {
@@ -289,16 +291,20 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
-  def parseTaskResourceRequirements(sparkConf: SparkConf): Seq[TaskResourceRequirement] = {
-    parseAllResourceRequests(sparkConf, SPARK_TASK_PREFIX).map { request =>
-      TaskResourceRequirement(request.id.resourceName, request.amount)
+  def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
+    : Seq[ResourceRequirement] = {
+    parseAllResourceRequests(sparkConf, componentName).map { request =>
+      ResourceRequirement(request.id.resourceName, request.amount)
     }
   }
 
-  def parseResourceRequirements(sparkConf: SparkConf, componentName: String): Map[String, Int] = {
-    parseAllResourceRequests(sparkConf, componentName).map { request =>
-      request.id.resourceName -> request.amount
-    }.toMap
+  def resourcesMeetRequirements(
+      resourcesFree: Map[String, Int],
+      resourceRequirements: Seq[ResourceRequirement])
+    : Boolean = {
+    resourceRequirements.forall { req =>
+      resourcesFree.getOrElse(req.resourceName, 0) >= req.amount
+    }
   }
 
   def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {

@@ -2722,7 +2722,7 @@ object SparkContext extends Logging {
 
       // Calculate the max slots each executor can provide based on resources available on each
       // executor and resources required by each task.
-      val taskResourceRequirements = parseTaskResourceRequirements(sc.conf)
+      val taskResourceRequirements = parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
       val executorResourcesAndAmounts =
         parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
           .map(request => (request.id.resourceName, request.amount)).toMap
