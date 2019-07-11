@@ -140,6 +140,8 @@ case class ShuffleQueryStageExec(
       case _ =>
     }
   }
+
+  def supportAdaptive: Boolean = plan.supportAdaptive
 }
 
 /**

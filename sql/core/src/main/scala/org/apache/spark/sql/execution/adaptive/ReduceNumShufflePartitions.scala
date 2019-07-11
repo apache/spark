@@ -61,12 +61,16 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
+      return plan
+    }
+
+    val shuffleStages = plan.collect {
+      case stage: ShuffleQueryStageExec => stage
+      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => stage
+    }
+    if (!shuffleStages.forall(_.supportAdaptive)) {
       plan
     } else {
-      val shuffleStages = plan.collect {
-        case stage: ShuffleQueryStageExec => stage
-        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => stage
-      }
       val shuffleMetrics = shuffleStages.map { stage =>
         val metricsFuture = stage.mapOutputStatisticsFuture
         assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
