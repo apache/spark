@@ -3,7 +3,7 @@
 --
 --
 -- CASE
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/case.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/case.sql
 -- Test the CASE statement
 --
 -- This test suite contains two Cartesian products without using explicit CROSS JOIN syntax.

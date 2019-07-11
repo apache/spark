@@ -3,7 +3,7 @@
 --
 --
 -- AGGREGATES [Part 2]
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql#L145-L350
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/aggregates.sql#L145-L350
 --
 -- This test file was converted from pgSQL/aggregates_part2.sql.
 -- Note that currently registered UDF returns a string. So there are some differences, for instance
