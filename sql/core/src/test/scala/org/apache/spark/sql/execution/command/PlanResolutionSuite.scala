@@ -21,7 +21,7 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, Identifier, TableCatalog, TestTableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog, TableCatalog, TestTableCatalog}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -43,17 +43,43 @@ class PlanResolutionSuite extends AnalysisTest {
     newCatalog
   }
 
-  private val lookupCatalog: String => CatalogPlugin = {
-    case "testcat" =>
-      testCat
-    case name =>
-      throw new CatalogNotFoundException(s"No such catalog: $name")
+  private val v2SessionCatalog = {
+    val newCatalog = new TestTableCatalog
+    newCatalog.initialize("session", CaseInsensitiveStringMap.empty())
+    newCatalog
   }
 
-  def parseAndResolve(query: String): LogicalPlan = {
+  private val lookupWithDefault: LookupCatalog = new LookupCatalog {
+    override protected def defaultCatalogName: Option[String] = Some("testcat")
+
+    override protected def lookupCatalog(name: String): CatalogPlugin = name match {
+      case "testcat" =>
+        testCat
+      case "session" =>
+        v2SessionCatalog
+      case _ =>
+        throw new CatalogNotFoundException(s"No such catalog: $name")
+    }
+  }
+
+  private val lookupWithoutDefault: LookupCatalog = new LookupCatalog {
+    override protected def defaultCatalogName: Option[String] = None
+
+    override protected def lookupCatalog(name: String): CatalogPlugin = name match {
+      case "testcat" =>
+        testCat
+      case "session" =>
+        v2SessionCatalog
+      case _ =>
+        throw new CatalogNotFoundException(s"No such catalog: $name")
+    }
+  }
+
+  def parseAndResolve(query: String, withDefault: Boolean = false): LogicalPlan = {
     val newConf = conf.copy()
     newConf.setConfString("spark.sql.default.catalog", "testcat")
-    DataSourceResolution(newConf, lookupCatalog).apply(parsePlan(query))
+    DataSourceResolution(newConf, if (withDefault) lookupWithDefault else lookupWithoutDefault)
+        .apply(parsePlan(query))
   }
 
   private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
@@ -338,7 +364,46 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("Test v2 CreateTable with data source v2 provider") {
+  test("Test v2 CreateTable with default catalog") {
+    val sql =
+      s"""
+         |CREATE TABLE IF NOT EXISTS mydb.table_name (
+         |    id bigint,
+         |    description string,
+         |    point struct<x: double, y: double>)
+         |USING parquet
+         |COMMENT 'table comment'
+         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+         |OPTIONS (path 's3://bucket/path/to/data', other 20)
+      """.stripMargin
+
+    val expectedProperties = Map(
+      "p1" -> "v1",
+      "p2" -> "v2",
+      "other" -> "20",
+      "provider" -> "parquet",
+      "location" -> "s3://bucket/path/to/data",
+      "comment" -> "table comment")
+
+    parseAndResolve(sql, withDefault = true) match {
+      case create: CreateV2Table =>
+        assert(create.catalog.name == "testcat")
+        assert(create.tableName == Identifier.of(Array("mydb"), "table_name"))
+        assert(create.tableSchema == new StructType()
+            .add("id", LongType)
+            .add("description", StringType)
+            .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
+        assert(create.partitioning.isEmpty)
+        assert(create.properties == expectedProperties)
+        assert(create.ignoreIfExists)
+
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
+            s"got ${other.getClass.getName}: $sql")
+    }
+  }
+
+  test("Test v2 CreateTable with data source v2 provider and no default") {
     val sql =
       s"""
          |CREATE TABLE IF NOT EXISTS mydb.page_view (
@@ -360,7 +425,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case create: CreateV2Table =>
-        assert(create.catalog.name == "testcat")
+        assert(create.catalog.name == "session")
         assert(create.tableName == Identifier.of(Array("mydb"), "page_view"))
         assert(create.tableSchema == new StructType()
             .add("id", LongType)
@@ -410,7 +475,41 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("Test v2 CTAS with data source v2 provider") {
+  test("Test v2 CTAS with default catalog") {
+    val sql =
+      s"""
+         |CREATE TABLE IF NOT EXISTS mydb.table_name
+         |USING parquet
+         |COMMENT 'table comment'
+         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+         |OPTIONS (path 's3://bucket/path/to/data', other 20)
+         |AS SELECT * FROM src
+      """.stripMargin
+
+    val expectedProperties = Map(
+      "p1" -> "v1",
+      "p2" -> "v2",
+      "other" -> "20",
+      "provider" -> "parquet",
+      "location" -> "s3://bucket/path/to/data",
+      "comment" -> "table comment")
+
+    parseAndResolve(sql, withDefault = true) match {
+      case ctas: CreateTableAsSelect =>
+        assert(ctas.catalog.name == "testcat")
+        assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
+        assert(ctas.properties == expectedProperties)
+        assert(ctas.writeOptions == Map("other" -> "20"))
+        assert(ctas.partitioning.isEmpty)
+        assert(ctas.ignoreIfExists)
+
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableAsSelect].getName} from query," +
+            s"got ${other.getClass.getName}: $sql")
+    }
+  }
+
+  test("Test v2 CTAS with data source v2 provider and no default") {
     val sql =
       s"""
         |CREATE TABLE IF NOT EXISTS mydb.page_view
@@ -430,7 +529,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "testcat")
+        assert(ctas.catalog.name == "session")
         assert(ctas.tableName == Identifier.of(Array("mydb"), "page_view"))
         assert(ctas.properties == expectedProperties)
         assert(ctas.writeOptions.isEmpty)
