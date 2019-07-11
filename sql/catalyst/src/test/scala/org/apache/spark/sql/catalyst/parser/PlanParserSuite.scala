@@ -100,7 +100,7 @@ class PlanParserSuite extends AnalysisTest {
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
-      "Found duplicate keys 'cte1'")
+      "CTE definition can't have duplicate names: 'cte1'.")
   }
 
   test("simple select query") {

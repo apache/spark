@@ -155,6 +155,29 @@ The following example shows how to use this type of UDF to compute mean with gro
 
 For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf)
 
+
+### Map Iterator
+
+Map iterator Pandas UDFs are used to transform data with an iterator of batches. Map iterator
+Pandas UDFs can be used with 
+[`pyspark.sql.DataFrame.mapInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
+It defines a map function that transforms an iterator of `pandas.DataFrame` to another.
+
+It can return the output of arbitrary length in contrast to the scalar Pandas UDF. It maps an iterator of `pandas.DataFrame`s,
+that represents the current `DataFrame`, using the map iterator UDF and returns the result as a `DataFrame`.
+
+The following example shows how to create map iterator Pandas UDFs:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example map_iter_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf) and
+[`pyspark.sql.DataFrame.mapsInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
+
+
 ## Usage Notes
 
 ### Supported SQL Types
