@@ -107,7 +107,7 @@ abstract class StringRegexExpression extends BinaryExpression
 case class Like(left: Expression, right: Expression, escapeCharOpt: Option[String] = None)
   extends StringRegexExpression {
 
-  private lazy val escapeStr = escapeCharOpt.getOrElse("\\")
+  private lazy val escapeStr = escapeCharOpt.getOrElse("""\\""")
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeStr)
 
