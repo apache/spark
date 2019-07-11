@@ -270,7 +270,7 @@ createTableHeader
     ;
 
 replaceTableHeader
-    : (CREATE OR)? REPLACE TEMPORARY? TABLE multipartIdentifier
+    : (CREATE OR)? REPLACE TABLE multipartIdentifier
     ;
 
 bucketSpec

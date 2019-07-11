@@ -2122,9 +2122,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitReplaceTableHeader(
       ctx: ReplaceTableHeaderContext): TableHeader = withOrigin(ctx) {
-    val temporary = ctx.TEMPORARY != null
     val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText)
-    (multipartIdentifier, temporary, false, false)
+    (multipartIdentifier, false, false, false)
   }
 
   /**
@@ -2317,7 +2316,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temp, ifNotExists, external) = visitReplaceTableHeader(ctx.replaceTableHeader)
+    val (table, _, ifNotExists, external) = visitReplaceTableHeader(ctx.replaceTableHeader)
     if (external) {
       operationNotAllowed("REPLACE EXTERNAL TABLE ... USING", ctx)
     }
@@ -2342,9 +2341,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val orCreate = ctx.replaceTableHeader().CREATE() != null
 
     Option(ctx.query).map(plan) match {
-      case Some(_) if temp =>
-        operationNotAllowed("REPLACE TEMPORARY TABLE ... USING ... AS query", ctx)
-
       case Some(_) if schema.isDefined =>
         operationNotAllowed(
           "Schema may not be specified in a Replace Table As Select (RTAS) statement",
@@ -2353,11 +2349,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case Some(query) =>
         ReplaceTableAsSelectStatement(table, query, partitioning, bucketSpec, properties,
           provider, options, location, comment, orCreate = orCreate)
-
-      case None if temp =>
-        // REPLACE TEMPORARY TABLE ... USING ... is not supported by the catalyst parser.
-        // Use REPLACE TEMPORARY VIEW ... USING ... instead.
-        operationNotAllowed("REPLACE TEMPORARY TABLE IF NOT EXISTS", ctx)
 
       case _ =>
         ReplaceTableStatement(table, schema.getOrElse(new StructType), partitioning,
