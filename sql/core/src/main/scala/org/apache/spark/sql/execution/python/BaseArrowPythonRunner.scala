@@ -33,21 +33,20 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 
 
 abstract class BaseArrowPythonRunner[T](
-                         funcs: Seq[ChainedPythonFunctions],
-                         evalType: Int,
-                         argOffsets: Array[Array[Int]])
-  extends BasePythonRunner[T, ColumnarBatch](
-    funcs, evalType, argOffsets) {
+    funcs: Seq[ChainedPythonFunctions],
+    evalType: Int,
+    argOffsets: Array[Array[Int]])
+  extends BasePythonRunner[T, ColumnarBatch](funcs, evalType, argOffsets) {
 
 
   protected override def newReaderIterator(
-                                            stream: DataInputStream,
-                                            writerThread: WriterThread,
-                                            startTime: Long,
-                                            env: SparkEnv,
-                                            worker: Socket,
-                                            releasedOrClosed: AtomicBoolean,
-                                            context: TaskContext): Iterator[ColumnarBatch] = {
+      stream: DataInputStream,
+      writerThread: WriterThread,
+      startTime: Long,
+      env: SparkEnv,
+      worker: Socket,
+      releasedOrClosed: AtomicBoolean,
+      context: TaskContext): Iterator[ColumnarBatch] = {
 
     new ReaderIterator(stream, writerThread, startTime, env, worker, releasedOrClosed, context) {
 
