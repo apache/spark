@@ -105,6 +105,9 @@ SELECT onek2.unique1, onek2.stringu1 FROM onek2
 -- RESET enable_sort;
 
 -- [SPARK-28329] SELECT INTO syntax
+-- SELECT two, stringu1, ten, string4
+--    INTO TABLE tmp
+--    FROM onek;
 CREATE TABLE tmp USING parquet AS
 SELECT two, stringu1, ten, string4
 FROM onek;
