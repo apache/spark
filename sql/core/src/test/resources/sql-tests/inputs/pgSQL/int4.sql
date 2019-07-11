@@ -3,7 +3,7 @@
 --
 --
 -- INT4
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/int4.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/int4.sql
 --
 
 CREATE TABLE INT4_TBL(f1 int) USING parquet;

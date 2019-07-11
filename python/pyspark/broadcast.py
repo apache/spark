@@ -49,8 +49,8 @@ def _from_id(bid):
 class Broadcast(object):
 
     """
-    A broadcast variable created with L{SparkContext.broadcast()}.
-    Access its value through C{.value}.
+    A broadcast variable created with :meth:`SparkContext.broadcast`.
+    Access its value through :attr:`value`.
 
     Examples:
 
@@ -69,7 +69,7 @@ class Broadcast(object):
     def __init__(self, sc=None, value=None, pickle_registry=None, path=None,
                  sock_file=None):
         """
-        Should not be called directly by users -- use L{SparkContext.broadcast()}
+        Should not be called directly by users -- use :meth:`SparkContext.broadcast`
         instead.
         """
         if sc is not None:

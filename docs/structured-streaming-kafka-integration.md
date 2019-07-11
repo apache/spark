@@ -818,6 +818,11 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
   </tr>
 </table>
 
+#### Kafka Specific Configurations
+
+Kafka's own configurations can be set with `kafka.` prefix, e.g, `--conf spark.kafka.clusters.${cluster}.kafka.retries=1`.
+For possible Kafka parameters, see [Kafka adminclient config docs](http://kafka.apache.org/documentation.html#adminclientconfigs).
+
 #### Caveats
 
 - Obtaining delegation token for proxy user is not yet supported ([KAFKA-6945](https://issues.apache.org/jira/browse/KAFKA-6945)).
