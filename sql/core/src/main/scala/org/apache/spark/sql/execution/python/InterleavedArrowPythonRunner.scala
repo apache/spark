@@ -67,17 +67,17 @@ class InterleavedArrowPythonRunner(
         while (inputIterator.hasNext) {
           dataOut.writeInt(SpecialLengths.START_ARROW_STREAM)
           val (nextLeft, nextRight) = inputIterator.next()
-          writeGroup(nextLeft, leftSchema, dataOut)
-          writeGroup(nextRight, rightSchema, dataOut)
+          writeGroup(nextLeft, leftSchema, dataOut, "left")
+          writeGroup(nextRight, rightSchema, dataOut, "right")
         }
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
       }
 
-      def writeGroup(group: Iterator[InternalRow], schema: StructType, dataOut: DataOutputStream
-                    ) = {
+      def writeGroup(group: Iterator[InternalRow], schema: StructType, dataOut: DataOutputStream,
+                    name: String) = {
         val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for $pythonExec", 0, Long.MaxValue)
+          s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {

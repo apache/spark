@@ -238,7 +238,7 @@ class GroupedData(object):
         The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
         returnType of the pandas udf.
 
-        .. note:: This function requires a full shuffle. all the data of a group will be loaded
+        .. note:: This function requires a full shuffle. All the data of a group will be loaded
             into memory, so the user should be aware of the potential OOM risk if data is skewed
             and certain groups are too large to fit in memory.
 

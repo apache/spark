@@ -427,10 +427,10 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
-class InterleavedArrowStreamPandasSerializer(ArrowStreamPandasUDFSerializer):
+class PandasCogroupSerializer(ArrowStreamPandasUDFSerializer):
 
     def __init__(self, timezone, safecheck, assign_cols_by_name):
-        super(InterleavedArrowStreamPandasSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
+        super(PandasCogroupSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
 
     def load_stream(self, stream):
         """

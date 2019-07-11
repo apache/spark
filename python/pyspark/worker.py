@@ -38,7 +38,7 @@ from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowStreamPandasUDFSerializer, InterleavedArrowStreamPandasSerializer
+    BatchedSerializer, ArrowStreamPandasUDFSerializer, PandasCogroupSerializer
 from pyspark.sql.types import to_arrow_type, StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
@@ -313,7 +313,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
         # pandas Series. See SPARK-27240.
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-            ser = InterleavedArrowStreamPandasSerializer(timezone, safecheck, assign_cols_by_name)
+            ser = PandasCogroupSerializer(timezone, safecheck, assign_cols_by_name)
         else:
             df_for_struct = (eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
                              eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF or

@@ -150,7 +150,7 @@ class UserDefinedFunction(object):
                         "Invalid returnType with cogrouped map Pandas UDFs: "
                         "%s is not supported" % str(self._returnType_placeholder))
             else:
-                raise TypeError("Invalid returnType for grouped map Pandas "
+                raise TypeError("Invalid returnType for cogrouped map Pandas "
                                 "UDFs: returnType must be a StructType.")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
