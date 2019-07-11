@@ -45,17 +45,19 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
-  final val NANOS_PER_MICROS = MICROSECONDS.toNanos(1)
-  final val NANOS_PER_MILLIS = MILLISECONDS.toNanos(1)
-  final val NANOS_PER_SECOND = SECONDS.toNanos(1)
-  final val MICROS_PER_MILLIS = MILLISECONDS.toMicros(1)
-  final val MICROS_PER_SECOND = SECONDS.toMicros(1)
-  final val MICROS_PER_DAY = DAYS.toMicros(1)
-  final val MILLIS_PER_SECOND = SECONDS.toMillis(1)
-  final val MILLIS_PER_MINUTE = MINUTES.toMillis(1)
-  final val MILLIS_PER_HOUR = HOURS.toMillis(1)
-  final val MILLIS_PER_DAY = DAYS.toMillis(1)
-  final val SECONDS_PER_DAY = DAYS.toSeconds(1)
+  // Pre-calculated values can provide an opportunity of additional optimizations
+  // to the compiler like constants propagation and folding.
+  final val NANOS_PER_MICROS: Long = 1000
+  final val MICROS_PER_MILLIS: Long = 1000
+  final val MILLIS_PER_SECOND: Long = 1000
+  final val SECONDS_PER_DAY: Long = 24 * 60 * 60
+  final val MICROS_PER_SECOND: Long = MILLIS_PER_SECOND * MICROS_PER_MILLIS
+  final val NANOS_PER_MILLIS: Long = NANOS_PER_MICROS * MICROS_PER_MILLIS
+  final val NANOS_PER_SECOND: Long = NANOS_PER_MICROS * MICROS_PER_SECOND
+  final val MICROS_PER_DAY: Long = SECONDS_PER_DAY * MICROS_PER_SECOND
+  final val MILLIS_PER_MINUTE: Long = 60 * MILLIS_PER_SECOND
+  final val MILLIS_PER_HOUR: Long = 60 * MILLIS_PER_MINUTE
+  final val MILLIS_PER_DAY: Long = SECONDS_PER_DAY * MILLIS_PER_SECOND
 
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
