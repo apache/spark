@@ -146,7 +146,7 @@ case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Strin
     } else {
       val pattern = ctx.freshName("pattern")
       val rightStr = ctx.freshName("rightStr")
-      val escapeChar = escapeCharOpt.getOrElse("""\\\\""")
+      val escapeChar = escapeCharOpt.getOrElse("\\\\\\\\")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
