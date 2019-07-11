@@ -78,5 +78,17 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
     comparePlans(doubleOptimized, correctAnswer)
   }
+
+  test("normalize floating points in join keys (equal null safe) - idempotence") {
+    val query = testRelation1.join(testRelation2, condition = Some(a <=> b))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val joinCond = Some(KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(a, 0.0)))
+       === KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(b, 0.0))))
+    val correctAnswer = testRelation1.join(testRelation2, condition = joinCond)
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
 }
 
