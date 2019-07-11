@@ -25,8 +25,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
+import org.apache.spark.sql.internal.SQLConf.{CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE, MIN_BATCHES_TO_RETAIN}
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
 
@@ -308,7 +307,7 @@ class ContinuousMetaSuite extends ContinuousSuiteBase {
       "local[10]",
       "continuous-stream-test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")
-        .set(SQLConf.MIN_BATCHES_TO_RETAIN.key, "2")))
+        .set(MIN_BATCHES_TO_RETAIN.key, "2")))
 
   test("SPARK-24351: check offsetLog/commitLog retained in the checkpoint directory") {
     withTempDir { checkpointDir =>

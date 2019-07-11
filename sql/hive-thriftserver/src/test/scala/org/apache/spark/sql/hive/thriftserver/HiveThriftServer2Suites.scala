@@ -44,7 +44,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestUtils
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -660,7 +660,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def extraConf: Seq[String] =
-    s"--conf ${StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
+    s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
 
   test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement()(

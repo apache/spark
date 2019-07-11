@@ -33,7 +33,8 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveContext}
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
+import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -393,16 +394,16 @@ object SetWarehouseLocationTest extends Logging {
         // We are expecting that the value of spark.sql.warehouse.dir will override the
         // value of hive.metastore.warehouse.dir.
         val session = new TestHiveContext(new SparkContext(sparkConf
-          .set(StaticSQLConf.WAREHOUSE_PATH.key, warehouseLocation.toString)
+          .set(WAREHOUSE_PATH.key, warehouseLocation.toString)
           .set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)))
           .sparkSession
         (session, warehouseLocation.toString)
 
     }
 
-    if (sparkSession.conf.get(StaticSQLConf.WAREHOUSE_PATH.key) != expectedWarehouseLocation) {
+    if (sparkSession.conf.get(WAREHOUSE_PATH.key) != expectedWarehouseLocation) {
       throw new Exception(
-        s"${StaticSQLConf.WAREHOUSE_PATH.key} is not set to the expected warehouse location " +
+        s"${WAREHOUSE_PATH.key} is not set to the expected warehouse location " +
         s"$expectedWarehouseLocation.")
     }
 
@@ -565,7 +566,7 @@ object SparkSubmitClassLoaderTest extends Logging {
     val conf = new SparkConf()
     val hiveWarehouseLocation = Utils.createTempDir()
     conf.set(UI_ENABLED, false)
-    conf.set(StaticSQLConf.WAREHOUSE_PATH.key, hiveWarehouseLocation.toString)
+    conf.set(WAREHOUSE_PATH.key, hiveWarehouseLocation.toString)
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -680,7 +681,7 @@ object SPARK_9757 extends QueryTest {
         .set(HiveUtils.HIVE_METASTORE_VERSION.key, "0.13.1")
         .set(HiveUtils.HIVE_METASTORE_JARS.key, "maven")
         .set(UI_ENABLED, false)
-        .set(StaticSQLConf.WAREHOUSE_PATH.key, hiveWarehouseLocation.toString))
+        .set(WAREHOUSE_PATH.key, hiveWarehouseLocation.toString))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
@@ -726,7 +727,7 @@ object SPARK_11009 extends QueryTest {
     val sparkContext = new SparkContext(
       new SparkConf()
         .set(UI_ENABLED, false)
-        .set(SQLConf.SHUFFLE_PARTITIONS.key, "100"))
+        .set(SHUFFLE_PARTITIONS.key, "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
@@ -757,7 +758,7 @@ object SPARK_14244 extends QueryTest {
     val sparkContext = new SparkContext(
       new SparkConf()
         .set(UI_ENABLED, false)
-        .set(SQLConf.SHUFFLE_PARTITIONS.key, "100"))
+        .set(SHUFFLE_PARTITIONS.key, "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
