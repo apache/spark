@@ -113,7 +113,8 @@ case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Strin
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  override def toString: String = s"$left LIKE $right ESCAPE $escapeStr"
+  override def toString: String = s"$left LIKE $right" +
+    escapeCharOpt.map(str => s" ESCAPE $str")
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
