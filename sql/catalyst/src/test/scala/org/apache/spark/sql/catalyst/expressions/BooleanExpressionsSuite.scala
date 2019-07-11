@@ -23,27 +23,31 @@ import org.apache.spark.sql.types._
 
 class BooleanExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  val row0 = create_row(null)
+  val row1 = create_row(false)
+  val row2 = create_row(true)
+
   test("istrue and isnottrue") {
-    checkEvaluation(BooleanTest(Literal.create(null, NullType), TRUE), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), TRUE)), true)
-    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), TRUE), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), TRUE)), true)
-    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), TRUE), true)
-    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), TRUE)), false)
+    checkEvaluation(BooleanTest(Literal.create(null, NullType), TRUE), false, row0)
+    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), TRUE)), true, row0)
+    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), TRUE), false, row1)
+    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), TRUE)), true, row1)
+    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), TRUE), true, row2)
+    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), TRUE)), false, row2)
   }
 
   test("isfalse and isnotfalse") {
-    checkEvaluation(BooleanTest(Literal.create(null, NullType), FALSE), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), FALSE)), true)
-    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), FALSE), true)
-    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), FALSE)), false)
-    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), FALSE), false)
-    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), FALSE)), true)
+    checkEvaluation(BooleanTest(Literal.create(null, NullType), FALSE), false, row0)
+    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), FALSE)), true, row0)
+    checkEvaluation(BooleanTest(Literal.create(false, BooleanType), FALSE), true, row1)
+    checkEvaluation(Not(BooleanTest(Literal.create(false, BooleanType), FALSE)), false, row1)
+    checkEvaluation(BooleanTest(Literal.create(true, BooleanType), FALSE), false, row2)
+    checkEvaluation(Not(BooleanTest(Literal.create(true, BooleanType), FALSE)), true, row2)
   }
 
   test("isunknown and isnotunknown") {
-    checkEvaluation(BooleanTest(Literal.create(null, NullType), UNKNOWN), true)
-    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), UNKNOWN)), false)
+    checkEvaluation(BooleanTest(Literal.create(null, NullType), UNKNOWN), true, row0)
+    checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), UNKNOWN)), false, row0)
   }
 
 }
