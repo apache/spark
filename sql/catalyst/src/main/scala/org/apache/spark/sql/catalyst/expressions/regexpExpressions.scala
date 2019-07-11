@@ -99,6 +99,7 @@ abstract class StringRegexExpression extends BinaryExpression
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
       true
       > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/'
+      true
   """,
   note = """
     Use RLIKE to match with standard regular expressions.
