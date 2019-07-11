@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
-import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnVector, ColumnarBatch, ColumnarMap}
+import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -54,7 +54,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-28292 inject analyzer hint") {
+  test("inject analyzer hint") {
     withSession(Seq(_.injectResolutionHint(MyRule))) { session =>
       assert(session.sessionState.analyzer.extendedResolutionHints.contains(MyRule(session)))
     }
