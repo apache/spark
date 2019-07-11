@@ -948,6 +948,7 @@ ansiNonReserved
     | EXTENDED
     | EXTERNAL
     | EXTRACT
+    | FALSE
     | FIELDS
     | FILEFORMAT
     | FIRST
@@ -1039,6 +1040,7 @@ ansiNonReserved
     | SERDE
     | SERDEPROPERTIES
     | SET
+    | SETMINUS
     | SETS
     | SHOW
     | SKEWED
