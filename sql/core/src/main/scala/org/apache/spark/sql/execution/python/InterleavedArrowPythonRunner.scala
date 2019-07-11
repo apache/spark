@@ -32,23 +32,25 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 
+
 class InterleavedArrowPythonRunner(
-                         funcs: Seq[ChainedPythonFunctions],
-                         evalType: Int,
-                         argOffsets: Array[Array[Int]],
-                         leftSchema: StructType,
-                         rightSchema: StructType,
-                         timeZoneId: String,
-                         conf: Map[String, String])
+    funcs: Seq[ChainedPythonFunctions],
+    evalType: Int,
+    argOffsets: Array[Array[Int]],
+    leftSchema: StructType,
+    rightSchema: StructType,
+    timeZoneId: String,
+    conf: Map[String, String])
   extends BaseArrowPythonRunner[(Iterator[InternalRow], Iterator[InternalRow])](
     funcs, evalType, argOffsets) {
 
   protected def newWriterThread(
-        env: SparkEnv,
-        worker: Socket,
-        inputIterator: Iterator[(Iterator[InternalRow], Iterator[InternalRow])],
-        partitionIndex: Int,
-        context: TaskContext): WriterThread = {
+      env: SparkEnv,
+      worker: Socket,
+      inputIterator: Iterator[(Iterator[InternalRow], Iterator[InternalRow])],
+      partitionIndex: Int,
+      context: TaskContext): WriterThread = {
+
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
@@ -64,13 +66,15 @@ class InterleavedArrowPythonRunner(
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        // For each we first send the number of dataframes in each group then send
+        // first df, then send second df.  End of data is marked by sending 0.
         while (inputIterator.hasNext) {
-          dataOut.writeInt(SpecialLengths.START_ARROW_STREAM)
+          dataOut.writeInt(2)
           val (nextLeft, nextRight) = inputIterator.next()
           writeGroup(nextLeft, leftSchema, dataOut, "left")
           writeGroup(nextRight, rightSchema, dataOut, "right")
         }
-        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+        dataOut.writeInt(0)
       }
 
       def writeGroup(group: Iterator[InternalRow], schema: StructType, dataOut: DataOutputStream,

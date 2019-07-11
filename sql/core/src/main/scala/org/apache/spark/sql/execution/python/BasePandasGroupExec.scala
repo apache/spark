@@ -44,8 +44,9 @@ abstract class BasePandasGroupExec(func: Expression,
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
 
-  protected def executePython[T]
-  (data: Iterator[T], runner: BasePythonRunner[T, ColumnarBatch]): Iterator[InternalRow] = {
+  protected def executePython[T](
+      data: Iterator[T],
+      runner: BasePythonRunner[T, ColumnarBatch]): Iterator[InternalRow] = {
 
     val context = TaskContext.get()
     val columnarBatchIter = runner.compute(data, context.partitionId(), context)
@@ -63,9 +64,10 @@ abstract class BasePandasGroupExec(func: Expression,
   }
 
   protected def groupAndDedup(
-      input: Iterator[InternalRow], groupingAttributes: Seq[Attribute],
-      inputSchema: Seq[Attribute], dedupSchema: Seq[Attribute]
-                             ): Iterator[(InternalRow, Iterator[InternalRow])] = {
+      input: Iterator[InternalRow],
+      groupingAttributes: Seq[Attribute],
+      inputSchema: Seq[Attribute],
+      dedupSchema: Seq[Attribute]): Iterator[(InternalRow, Iterator[InternalRow])] = {
     val groupedIter = GroupedIterator(input, groupingAttributes, inputSchema)
     val dedupProj = UnsafeProjection.create(dedupSchema, inputSchema)
     groupedIter.map {
@@ -73,8 +75,9 @@ abstract class BasePandasGroupExec(func: Expression,
     }
   }
 
-  protected def createSchema(child: SparkPlan, groupingAttributes: Seq[Attribute])
-    : (StructType, Seq[Attribute], Array[Int]) = {
+  protected def createSchema(
+    child: SparkPlan,
+    groupingAttributes: Seq[Attribute]): (StructType, Seq[Attribute], Array[Int]) = {
 
     // Deduplicate the grouping attributes.
     // If a grouping attribute also appears in data attributes, then we don't need to send the
@@ -83,9 +86,10 @@ abstract class BasePandasGroupExec(func: Expression,
     //
     // We use argOffsets to distinguish grouping attributes and data attributes as following:
     //
-    // argOffsets[0] is the length of grouping attributes
-    // argOffsets[1 .. argOffsets[0]+1] is the arg offsets for grouping attributes
-    // argOffsets[argOffsets[0]+1 .. ] is the arg offsets for data attributes
+    // argOffsets[0] is the length of the argOffsets array
+    // argOffsets[1] is the length of grouping attributes
+    // argOffsets[2 .. argOffsets[0]+2] is the arg offsets for grouping attributes
+    // argOffsets[argOffsets[0]+2 .. ] is the arg offsets for data attributes
 
     val dataAttributes = child.output.drop(groupingAttributes.length)
     val groupingIndicesInData = groupingAttributes.map { attribute =>

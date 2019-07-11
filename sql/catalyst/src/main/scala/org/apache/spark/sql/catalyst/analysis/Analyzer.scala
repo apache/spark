@@ -2284,7 +2284,6 @@ class Analyzer(
     }
   }
 
-
   /**
    * Removes natural or using joins by calculating output columns based on output from two sides,
    * Then apply a Project on a normal Join to eliminate natural or using join.
