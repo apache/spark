@@ -247,7 +247,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   /**
    * A Scala UDF that takes one column and returns a string column.
-   * Equivalent to `udf((input: Any) => input.toString)`.
+   * Equivalent to `udf((input: Any) => String.valueOf(input)`.
    */
   case class TestScalaUDF(name: String) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = SparkUserDefinedFunction(
