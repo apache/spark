@@ -27,7 +27,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
 
@@ -155,7 +155,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
        expectedNodeIds: Set[Long],
        enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
     val previousExecutionIds = currentExecutionIds()
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
+    withSQLConf(WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
       df.collect()
     }
     sparkContext.listenerBus.waitUntilEmpty(10000)
