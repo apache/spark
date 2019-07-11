@@ -406,6 +406,10 @@ object DateTimeUtils {
       // year should have exact four digits
       return None
     }
+    if (i < 2 && j < bytes.length) {
+      // For the `yyyy` and `yyyy-[m]m` formats, entire input must be consumed.
+      return None
+    }
     segments(i) = currentSegmentValue
     try {
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))
