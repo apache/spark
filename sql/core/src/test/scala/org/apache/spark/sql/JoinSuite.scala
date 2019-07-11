@@ -972,6 +972,30 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-28323: PythonUDF should be able to use in join condition") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+
+    val left = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val right = Seq((1, 2), (3, 4)).toDF("c", "d")
+    val df = left.join(right, pythonTestUDF($"a") === pythonTestUDF($"c"))
+
+    val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
+    assert(joinNode.isDefined)
+
+    // There are two PythonUDFs which use attribute from left and right of join, individually.
+    // So two PythonUDFs should be evaluated before the join operator, at left and right side.
+    val pythonEvals = joinNode.get.collect {
+      case p: BatchEvalPythonExec => p
+    }
+    assert(pythonEvals.size == 2)
+
+    checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
+  }
+
   test("PythonUDF predicate should be able to pushdown to join") {
     import IntegratedUDFTestUtils._
 
@@ -989,9 +1013,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
     val filterExec = df.queryExecution.executedPlan.find(_.isInstanceOf[FilterExec])
     assert(filterExec.isEmpty)
-
-    val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
-    assert(joinNode.isDefined)
 
     df.show()
   }

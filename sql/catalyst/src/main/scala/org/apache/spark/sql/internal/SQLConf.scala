@@ -300,12 +300,6 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(64 * 1024 * 1024)
 
-  val RUNTIME_REOPTIMIZATION_ENABLED =
-    buildConf("spark.sql.runtime.reoptimization.enabled")
-      .doc("When true, enable runtime query re-optimization.")
-      .booleanConf
-      .createWithDefault(false)
-
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
     .booleanConf
@@ -1833,6 +1827,11 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
+      .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+      .stringConf
+      .createWithDefault("org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog")
+
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")
     .booleanConf
@@ -1948,10 +1947,7 @@ class SQLConf extends Serializable with Logging {
   def targetPostShuffleInputSize: Long =
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
-  def runtimeReoptimizationEnabled: Boolean = getConf(RUNTIME_REOPTIMIZATION_ENABLED)
-
-  def adaptiveExecutionEnabled: Boolean =
-    getConf(ADAPTIVE_EXECUTION_ENABLED) && !getConf(RUNTIME_REOPTIMIZATION_ENABLED)
+  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
 
