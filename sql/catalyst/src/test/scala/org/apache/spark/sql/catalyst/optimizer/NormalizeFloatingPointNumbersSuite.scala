@@ -84,10 +84,9 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
     val optimized = Optimize.execute(query)
     val doubleOptimized = Optimize.execute(optimized)
-    val joinCond = IsNull(a) === IsNull(b) &&
-      KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(a, 0.0))) ===
-        KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(b, 0.0)))
-    val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
+    val joinCond = Some(KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(a, 0.0)))
+       === KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(b, 0.0))))
+    val correctAnswer = testRelation1.join(testRelation2, condition = joinCond)
 
     comparePlans(doubleOptimized, correctAnswer)
   }
