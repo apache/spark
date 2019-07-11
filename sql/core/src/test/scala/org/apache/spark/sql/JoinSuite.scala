@@ -996,7 +996,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
   }
 
-  test("PythonUDF predicate should be able to pushdown to join") {
+  test("SPARK-28345: PythonUDF predicate should be able to pushdown to join") {
     import IntegratedUDFTestUtils._
 
     assume(shouldTestPythonUDFs)
@@ -1007,6 +1007,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val right = Seq((1, 2), (3, 4)).toDF("c", "d")
     val df = left.crossJoin(right).where(pythonTestUDF($"a") === pythonTestUDF($"c"))
 
+    // Before optimization, there is a logical Filter operator.
     val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])
     assert(filterInAnalysis.isDefined)
 
@@ -1014,6 +1015,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val filterExec = df.queryExecution.executedPlan.find(_.isInstanceOf[FilterExec])
     assert(filterExec.isEmpty)
 
-    df.show()
+    checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
   }
 }
