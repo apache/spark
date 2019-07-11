@@ -365,13 +365,13 @@ class InterleavedArrowReader(object):
         return self
 
     def __next__(self):
-        stream_status = read_int(self._stream)
-        if stream_status == SpecialLengths.START_ARROW_STREAM:
+        dataframes_in_group = read_int(self._stream)
+        if dataframes_in_group == 2:
             return self._read_df(), self._read_df()
-        elif stream_status == SpecialLengths.END_OF_DATA_SECTION:
+        elif dataframes_in_group == 0:
             raise StopIteration
         else:
-            raise ValueError('Received invalid stream status {0}'.format(stream_status))
+            raise ValueError('Received Invalid number of ddataframes in group {0}'.format(dataframes_in_group))
 
     def next(self):
         return self.__next__()

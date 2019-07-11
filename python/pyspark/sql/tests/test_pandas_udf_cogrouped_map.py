@@ -123,18 +123,18 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
         assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_with_key_left(self):
-        self._test_with_key_left(self.data1, self.data2)
+        self._test_with_key(self.data1, self.data1, isLeft=True)
 
     def test_with_key_right(self):
-        self._test_with_key_right(self.data1, self.data2)
+        self._test_with_key(self.data1, self.data1, isLeft=False)
 
     def test_with_key_left_group_empty(self):
         left = self.data1.where(col("id") % 2 == 0)
-        self._test_with_key_right(left, self.data2)
+        self._test_with_key(left, self.data1, isLeft=True)
 
     def test_with_key_right_group_empty(self):
-        right = self.data2.where(col("id") % 2 == 0)
-        self._test_with_key_left(self.data1, right)
+        right = self.data1.where(col("id") % 2 == 0)
+        self._test_with_key(self.data1, right, isLeft=False)
 
     def test_with_key_complex(self):
 
@@ -165,51 +165,42 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
                     PandasUDFType.COGROUPED_MAP)
 
     def test_wrong_args(self):
+        # Test that we get a sensible exception invalid values passed to apply
         left = self.data1
         right = self.data2
-
         with QuietTest(self.sc):
+            # Function rather than a udf
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
                 left.groupby('id').cogroup(right.groupby('id')).apply(lambda l, r: l)
+
+            # Udf missing return type and PandasUdfType
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
                 left.groupby('id').cogroup(right.groupby('id')).apply(udf(lambda l, r: l, DoubleType()))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
-                left.groupby('id').cogroup(right.groupby('id')).apply(sum(left.v))
+
+            # Pass in expression rather than udf
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
                 left.groupby('id').cogroup(right.groupby('id')).apply(left.v + 1)
+
+            # Zero arg function
             with self.assertRaisesRegexp(ValueError, 'Invalid function'):
                 left.groupby('id').cogroup(right.groupby('id')).apply(
                     pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())])))
+
+            # Udf without PandasUDFType
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
                 left.groupby('id').cogroup(right.groupby('id')).apply(pandas_udf(lambda x, y: x, DoubleType()))
+
+            # Udf with incorrect PandasUDFType
             with self.assertRaisesRegexp(ValueError, 'Invalid udf.*COGROUPED_MAP'):
                 left.groupby('id').cogroup(right.groupby('id')).apply(
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     @staticmethod
-    def _test_with_key_left(left, right):
+    def _test_with_key(left, right, isLeft):
 
         @pandas_udf('id long, k int, v int, key long', PandasUDFType.COGROUPED_MAP)
-        def left_assign_key(key, l, _):
-            return l.assign(key=key[0])
-
-        result = left \
-            .groupby('id') \
-            .cogroup(right.groupby('id')) \
-            .apply(left_assign_key) \
-            .toPandas()
-
-        expected = left.toPandas()
-        expected = expected.assign(key=expected.id)
-
-        assert_frame_equal(expected, result, check_column_type=_check_column_type)
-
-    @staticmethod
-    def _test_with_key_right(left, right):
-
-        @pandas_udf('id long, k int, v2 int, key long', PandasUDFType.COGROUPED_MAP)
-        def right_assign_key(key, _, r):
-            return r.assign(key=key[0])
+        def right_assign_key(key, l, r):
+            return l.assign(key=key[0]) if isLeft else r.assign(key=key[0])
 
         result = left \
             .groupby('id') \
@@ -217,7 +208,7 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
             .apply(right_assign_key) \
             .toPandas()
 
-        expected = right.toPandas()
+        expected = left.toPandas() if isLeft else right.toPandas()
         expected = expected.assign(key=expected.id)
 
         assert_frame_equal(expected, result, check_column_type=_check_column_type)

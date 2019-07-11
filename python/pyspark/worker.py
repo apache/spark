@@ -377,6 +377,29 @@ def read_udfs(pickleSer, infile, eval_type):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
+    # Helper function to extract the key and value indexs from arg_offsets
+    # arg_offsets is a List containing the key and value
+    # indexes of columns of the DataFrames to be passed to the udf.
+    # It consists of n repeating groups where n is the number of
+    # DataFrames.  Each group has the following format.
+    # group[0]: length of group
+    # group[1]: length of key indexes
+    # group[2.. group[1] +2]: key attributes
+    # group[group[1] +3 group[0]]: value attributes
+    def extract_key_value_indexes():
+        parsed = []
+        i = 0
+        while i < len(arg_offsets):
+            offsets_len = arg_offsets[i]
+            i += 1
+            offsets = arg_offsets[i: i + offsets_len]
+            split_index = offsets[0] + 1
+            keys = offsets[1: split_index]
+            values = offsets[split_index:]
+            parsed.append([keys, values])
+            i += offsets_len
+        return parsed
+
     udfs = {}
     call_udf = []
     mapper_str = ""
@@ -393,10 +416,10 @@ def read_udfs(pickleSer, infile, eval_type):
         arg_offsets, udf = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
         udfs['f'] = udf
-        parsed_offsets = parse_grouped_arg_offsets(arg_offsets)
-        arg0 = ["a[%d]" % o for o in parsed_offsets[0][0]]
-        arg1 = ["a[%d]" % o for o in parsed_offsets[0][1]]
-        mapper_str = "lambda a: f([%s], [%s])" % (", ".join(arg0), ", ".join(arg1))
+        parsed_offsets = extract_key_value_indexes()
+        keys = ["a[%d]" % o for o in parsed_offsets[0][0]]
+        vals = ["a[%d]" % o for o in parsed_offsets[0][1]]
+        mapper_str = "lambda a: f([%s], [%s])" % (", ".join(keys), ", ".join(vals))
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
@@ -404,12 +427,13 @@ def read_udfs(pickleSer, infile, eval_type):
         arg_offsets, udf = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
         udfs['f'] = udf
-        parsed_offsets = parse_grouped_arg_offsets(arg_offsets)
-        arg0 = ["a[0][%d]" % o for o in parsed_offsets[0][0]]
-        arg1 = ["a[0][%d]" % o for o in parsed_offsets[0][1]]
-        arg2 = ["a[1][%d]" % o for o in parsed_offsets[1][0]]
-        arg3 = ["a[1][%d]" % o for o in parsed_offsets[1][1]]
-        mapper_str = "lambda a: f([%s], [%s], [%s], [%s])" % (", ".join(arg0), ", ".join(arg1), ", ".join(arg2), ", ".join(arg3))
+        parsed_offsets = extract_key_value_indexes()
+        df1_keys = ["a[0][%d]" % o for o in parsed_offsets[0][0]]
+        df1_vals = ["a[0][%d]" % o for o in parsed_offsets[0][1]]
+        df2_keys = ["a[1][%d]" % o for o in parsed_offsets[1][0]]
+        df2_vals = ["a[1][%d]" % o for o in parsed_offsets[1][1]]
+        mapper_str = "lambda a: f([%s], [%s], [%s], [%s])"  \
+                     % (", ".join(df1_keys), ", ".join(df1_vals), ", ".join(df2_keys), ", ".join(df2_vals))
     else:
         # Create function like this:
         #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))
@@ -428,21 +452,6 @@ def read_udfs(pickleSer, infile, eval_type):
 
     # profiling is not supported for UDF
     return func, None, ser, ser
-
-
-def parse_grouped_arg_offsets(arg_offsets):
-    parsed = []
-    i = 0
-    while i < len(arg_offsets):
-        offsets_len = arg_offsets[i]
-        i += 1
-        offsets = arg_offsets[i: i + offsets_len]
-        split_index = offsets[0] + 1
-        keys = offsets[1: split_index]
-        values = offsets[split_index:]
-        parsed.append([keys, values])
-        i += offsets_len
-    return parsed
 
 
 def main(infile, outfile):
