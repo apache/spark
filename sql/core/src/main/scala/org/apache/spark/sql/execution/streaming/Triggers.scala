@@ -25,7 +25,7 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.CalendarInterval
 
-private[sql] object TriggerIntervalUtils {
+private object Triggers {
   def validate(intervalMs: Long): Unit = {
     require(intervalMs >= 0, "the interval of trigger should not be negative")
   }
@@ -57,11 +57,11 @@ private[sql] case object OneTimeTrigger extends Trigger
  */
 @Evolving
 private[sql] case class ProcessingTimeTrigger(intervalMs: Long) extends Trigger {
-  TriggerIntervalUtils.validate(intervalMs)
+  Triggers.validate(intervalMs)
 }
 
 private[sql] object ProcessingTimeTrigger {
-  import TriggerIntervalUtils._
+  import Triggers._
 
   def apply(interval: String): ProcessingTimeTrigger = {
     ProcessingTimeTrigger(convert(interval))
@@ -86,11 +86,11 @@ private[sql] object ProcessingTimeTrigger {
  */
 @Evolving
 private[sql] case class ContinuousTrigger(intervalMs: Long) extends Trigger {
-  TriggerIntervalUtils.validate(intervalMs)
+  Triggers.validate(intervalMs)
 }
 
 private[sql] object ContinuousTrigger {
-  import TriggerIntervalUtils._
+  import Triggers._
 
   def apply(interval: String): ContinuousTrigger = {
     ContinuousTrigger(convert(interval))
