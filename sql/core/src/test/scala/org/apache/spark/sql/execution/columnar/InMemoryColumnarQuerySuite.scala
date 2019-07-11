@@ -24,7 +24,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, LocalTableScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -486,15 +486,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val df2 = df1.where("y = 3")
 
     val planBeforeFilter = df2.queryExecution.executedPlan.collect {
-      case f: FilterExec => f.child
+      case FilterExec(_, c: ColumnarToRowExec) => c.child
+      case WholeStageCodegenExec(FilterExec(_, ColumnarToRowExec(i: InputAdapter))) => i.child
     }
     assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
-    val execPlan = if (codegenEnabled == "true") {
-      WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
-    } else {
-      planBeforeFilter.head
-    }
+    val execPlan = planBeforeFilter.head
     assert(execPlan.executeCollectPublic().length == 0)
   }
 
@@ -521,7 +518,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
               case plan: InMemoryRelation => plan
             }.head
             // InMemoryRelation's stats is file size before the underlying RDD is materialized
-            assert(inMemoryRelation.computeStats().sizeInBytes === 486)
+            assert(inMemoryRelation.computeStats().sizeInBytes === getLocalDirSize(workDir))
 
             // InMemoryRelation's stats is updated after materializing RDD
             dfFromFile.collect()
@@ -534,7 +531,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
             // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's
             // stats is calculated
-            assert(inMemoryRelation2.computeStats().sizeInBytes === 486)
+            assert(inMemoryRelation2.computeStats().sizeInBytes === getLocalDirSize(workDir))
 
             // InMemoryRelation's stats should be updated after calculating stats of the table
             // clear cache to simulate a fresh environment

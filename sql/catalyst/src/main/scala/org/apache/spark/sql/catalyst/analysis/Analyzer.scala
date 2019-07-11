@@ -104,6 +104,8 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
+  override protected def defaultCatalogName: Option[String] = conf.defaultV2Catalog
+
   override protected def lookupCatalog(name: String): CatalogPlugin =
     throw new CatalogNotFoundException("No catalog lookup function")
 
@@ -197,8 +199,6 @@ class Analyzer(
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
-    Batch("View", Once,
-      AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -226,12 +226,13 @@ class Analyzer(
       case other => other
     }
 
-    def substituteCTE(plan: LogicalPlan, cteName: String, ctePlan: LogicalPlan): LogicalPlan = {
+    private def substituteCTE(
+        plan: LogicalPlan,
+        cteName: String,
+        ctePlan: LogicalPlan): LogicalPlan = {
       plan resolveOperatorsUp {
         case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
           ctePlan
-        case u: UnresolvedRelation =>
-          u
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
@@ -668,6 +669,10 @@ class Analyzer(
     import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
+          if catalog.isTemporaryTable(ident) =>
+        u // temporary views take precedence over catalog table names
+
       case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
         loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
     }
@@ -705,6 +710,10 @@ class Analyzer(
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
+      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
+        if catalog.isTemporaryTable(ident) =>
+        resolveRelation(lookupTableFromCatalog(ident, u, AnalysisContext.get.defaultDatabase))
+
       case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val foundRelation = lookupTableFromCatalog(ident, u, defaultDatabase)

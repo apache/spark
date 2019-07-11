@@ -48,7 +48,10 @@ package object config {
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional
 
   private[spark] val DRIVER_JAVA_OPTIONS =
-    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
+      .withPrepended(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
+      .stringConf
+      .createOptional
 
   private[spark] val DRIVER_LIBRARY_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH).stringConf.createOptional
@@ -174,7 +177,10 @@ package object config {
     ConfigBuilder("spark.executor.heartbeat.maxFailures").internal().intConf.createWithDefault(60)
 
   private[spark] val EXECUTOR_JAVA_OPTIONS =
-    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
+      .withPrepended(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS)
+      .stringConf
+      .createOptional
 
   private[spark] val EXECUTOR_LIBRARY_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_LIBRARY_PATH).stringConf.createOptional

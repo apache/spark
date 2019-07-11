@@ -28,7 +28,8 @@ else:
 import warnings
 
 from pyspark import copy_func, since, _NoValue
-from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket, ignore_unicode_prefix
+from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket, \
+    ignore_unicode_prefix, PythonEvalType
 from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -407,7 +408,7 @@ class DataFrame(object):
         """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
         logical plan of this DataFrame, which is especially useful in iterative algorithms where the
         plan may grow exponentially. It will be saved to files inside the checkpoint
-        directory set with L{SparkContext.setCheckpointDir()}.
+        directory set with :meth:`SparkContext.setCheckpointDir`.
 
         :param eager: Whether to checkpoint this DataFrame immediately
 
@@ -580,9 +581,9 @@ class DataFrame(object):
 
     @since(1.3)
     def cache(self):
-        """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
+        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK`).
 
-        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
@@ -593,9 +594,9 @@ class DataFrame(object):
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
+        If no storage level is specified defaults to (`MEMORY_AND_DISK`).
 
-        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -2191,6 +2192,48 @@ class DataFrame(object):
                     pdf[field.name] = \
                         _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
             return pdf
+
+    def mapInPandas(self, udf):
+        """
+        Maps an iterator of batches in the current :class:`DataFrame` using a Pandas user-defined
+        function and returns the result as a :class:`DataFrame`.
+
+        The user-defined function should take an iterator of `pandas.DataFrame`\\s and return
+        another iterator of `pandas.DataFrame`\\s. All columns are passed
+        together as an iterator of `pandas.DataFrame`\\s to the user-defined function and the
+        returned iterator of `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
+        Each `pandas.DataFrame` size can be controlled by
+        `spark.sql.execution.arrow.maxRecordsPerBatch`.
+        Its schema must match the returnType of the Pandas user-defined function.
+
+        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> df = spark.createDataFrame([(1, 21), (2, 30)],
+        ...                            ("id", "age"))  # doctest: +SKIP
+        >>> @pandas_udf(df.schema, PandasUDFType.MAP_ITER)  # doctest: +SKIP
+        ... def filter_func(batch_iter):
+        ...     for pdf in batch_iter:
+        ...         yield pdf[pdf.id == 1]
+        >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
+
+        """
+        # Columns are special because hasattr always return True
+        if isinstance(udf, Column) or not hasattr(udf, 'func') \
+                or udf.evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "MAP_ITER.")
+
+        udf_column = udf(*[self[col] for col in self.columns])
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.sql_ctx)
 
     def _collectAsArrow(self):
         """
