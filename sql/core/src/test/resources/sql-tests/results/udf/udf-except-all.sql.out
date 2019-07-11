@@ -263,14 +263,14 @@ FROM   (SELECT udf(tab3.k),
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON tab3.k = tab4.k)
+                 ON udf(tab3.k) = udf(tab4.k))
 EXCEPT ALL 
 SELECT * 
 FROM   (SELECT udf(tab3.k),
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON tab3.k = tab4.k)
+                 ON udf(tab3.k) = udf(tab4.k))
 -- !query 20 schema
 struct<udf(k):string,udf(v):string>
 -- !query 20 output
@@ -283,14 +283,14 @@ FROM   (SELECT udf(tab3.k),
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON tab3.k = tab4.k) 
+                 ON udf(tab3.k) = udf(tab4.k))
 EXCEPT ALL 
 SELECT * 
 FROM   (SELECT udf(tab4.v) AS k,
                udf(tab3.k) AS v
         FROM   tab3 
                JOIN tab4 
-                 ON tab3.k = tab4.k)
+                 ON udf(tab3.k) = udf(tab4.k))
 -- !query 21 schema
 struct<udf(k):string,udf(v):string>
 -- !query 21 output

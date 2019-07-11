@@ -32,6 +32,8 @@ MINUS ALL
 SELECT * FROM tab2;
 
 -- EXCEPT ALL same table in both branches
+-- Note that there will one less NULL in the result compared to the non-udf result
+-- because udf converts null to a string "null".
 SELECT * FROM tab1
 EXCEPT ALL
 SELECT * FROM tab2 WHERE udf(c1) IS NOT NULL;
@@ -128,14 +130,14 @@ FROM   (SELECT udf(tab3.k),
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON tab3.k = tab4.k)
+                 ON udf(tab3.k) = udf(tab4.k))
 EXCEPT ALL 
 SELECT * 
 FROM   (SELECT udf(tab3.k),
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON tab3.k = tab4.k);
+                 ON udf(tab3.k) = udf(tab4.k));
 
 -- Join under except all (2)
 SELECT * 
@@ -143,14 +145,14 @@ FROM   (SELECT udf(tab3.k),
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON tab3.k = tab4.k) 
+                 ON udf(tab3.k) = udf(tab4.k))
 EXCEPT ALL 
 SELECT * 
 FROM   (SELECT udf(tab4.v) AS k,
                udf(tab3.k) AS v
         FROM   tab3 
                JOIN tab4 
-                 ON tab3.k = tab4.k);
+                 ON udf(tab3.k) = udf(tab4.k));
 
 -- Group by under ExceptAll
 SELECT udf(v) FROM tab3 GROUP BY v
