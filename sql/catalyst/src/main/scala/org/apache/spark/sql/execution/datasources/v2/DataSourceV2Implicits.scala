@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.sources.v2._
 
 object DataSourceV2Implicits {
   implicit class TableHelper(table: Table) {
@@ -37,6 +37,15 @@ object DataSourceV2Implicits {
           support
         case _ =>
           throw new AnalysisException(s"Table does not support writes: ${table.name}")
+      }
+    }
+
+    def asMaintainable: SupportsMaintenance = {
+      table match {
+        case support: SupportsMaintenance =>
+          support
+        case _ =>
+          throw new AnalysisException(s"Table does not support delete: ${table.name}")
       }
     }
 

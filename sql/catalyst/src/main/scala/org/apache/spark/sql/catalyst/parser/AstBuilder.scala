@@ -338,6 +338,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
   }
 
+  override def visitDeleteFromTable(
+      ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
+
+    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val table = mayApplyAliasPlan(ctx.tableAlias, UnresolvedRelation(tableId))
+
+    DeleteFromTable(table, expression(ctx.whereClause().booleanExpression()))
+  }
+
   /**
    * Create a partition specification map.
    */

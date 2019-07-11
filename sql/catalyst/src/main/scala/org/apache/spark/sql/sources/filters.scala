@@ -36,9 +36,17 @@ abstract class Filter {
    */
   def references: Array[String]
 
+  def sql: String
+
   protected def findReferences(value: Any): Array[String] = value match {
     case f: Filter => f.references
     case _ => Array.empty
+  }
+
+  protected def quoteIdentifier(name: String): String = {
+    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
+    // identifier with back-ticks.
+    "`" + name.replace("`", "``") + "`"
   }
 }
 
@@ -50,6 +58,8 @@ abstract class Filter {
  */
 @Stable
 case class EqualTo(attribute: String, value: Any) extends Filter {
+  def symbol: String = "="
+  override def sql: String = s"(${quoteIdentifier(attribute)} $symbol ${value.toString})"
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
 
@@ -62,6 +72,8 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
  */
 @Stable
 case class EqualNullSafe(attribute: String, value: Any) extends Filter {
+  def symbol: String = "<=>"
+  override def sql: String = s"(${quoteIdentifier(attribute)} $symbol ${value.toString})"
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
 
@@ -73,6 +85,8 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
  */
 @Stable
 case class GreaterThan(attribute: String, value: Any) extends Filter {
+  def symbol: String = ">"
+  override def sql: String = s"(${quoteIdentifier(attribute)} $symbol ${value.toString})"
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
 
@@ -84,6 +98,8 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
  */
 @Stable
 case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
+  def symbol: String = ">="
+  override def sql: String = s"(${quoteIdentifier(attribute)} $symbol ${value.toString})"
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
 
@@ -95,6 +111,8 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
  */
 @Stable
 case class LessThan(attribute: String, value: Any) extends Filter {
+  def symbol: String = "<"
+  override def sql: String = s"(${quoteIdentifier(attribute)} $symbol ${value.toString})"
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
 
@@ -106,6 +124,8 @@ case class LessThan(attribute: String, value: Any) extends Filter {
  */
 @Stable
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
+  def symbol: String = "<="
+  override def sql: String = s"(${quoteIdentifier(attribute)} $symbol ${value.toString})"
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
 
@@ -133,6 +153,8 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
     s"In($attribute, [${values.mkString(",")}])"
   }
 
+  override def sql: String = s"${quoteIdentifier(attribute)} IN (${values.mkString(",")})"
+
   override def references: Array[String] = Array(attribute) ++ values.flatMap(findReferences)
 }
 
@@ -143,6 +165,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
  */
 @Stable
 case class IsNull(attribute: String) extends Filter {
+  override def sql: String = s"(${quoteIdentifier(attribute)} IS NULL)"
   override def references: Array[String] = Array(attribute)
 }
 
@@ -153,6 +176,7 @@ case class IsNull(attribute: String) extends Filter {
  */
 @Stable
 case class IsNotNull(attribute: String) extends Filter {
+  override def sql: String = s"(${quoteIdentifier(attribute)} IS NOT NULL)"
   override def references: Array[String] = Array(attribute)
 }
 
@@ -163,6 +187,7 @@ case class IsNotNull(attribute: String) extends Filter {
  */
 @Stable
 case class And(left: Filter, right: Filter) extends Filter {
+  override def sql: String = s"${left.sql} AND ${right.sql}"
   override def references: Array[String] = left.references ++ right.references
 }
 
@@ -173,6 +198,7 @@ case class And(left: Filter, right: Filter) extends Filter {
  */
 @Stable
 case class Or(left: Filter, right: Filter) extends Filter {
+  override def sql: String = s"${left.sql} OR ${right.sql}"
   override def references: Array[String] = left.references ++ right.references
 }
 
@@ -183,6 +209,7 @@ case class Or(left: Filter, right: Filter) extends Filter {
  */
 @Stable
 case class Not(child: Filter) extends Filter {
+  override def sql: String = s"NOT ${child.sql}"
   override def references: Array[String] = child.references
 }
 
@@ -194,6 +221,7 @@ case class Not(child: Filter) extends Filter {
  */
 @Stable
 case class StringStartsWith(attribute: String, value: String) extends Filter {
+  override def sql: String = s"${quoteIdentifier(attribute)} LIKE '${value.toString}%'"
   override def references: Array[String] = Array(attribute)
 }
 
@@ -205,6 +233,7 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
  */
 @Stable
 case class StringEndsWith(attribute: String, value: String) extends Filter {
+  override def sql: String = s"${quoteIdentifier(attribute)} LIKE '%${value.toString}'"
   override def references: Array[String] = Array(attribute)
 }
 
@@ -216,6 +245,7 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
  */
 @Stable
 case class StringContains(attribute: String, value: String) extends Filter {
+  override def sql: String = s"${quoteIdentifier(attribute)} LIKE '%${value.toString}%'"
   override def references: Array[String] = Array(attribute)
 }
 
@@ -224,6 +254,7 @@ case class StringContains(attribute: String, value: String) extends Filter {
  */
 @Evolving
 case class AlwaysTrue() extends Filter {
+  override def sql: String = "TRUE"
   override def references: Array[String] = Array.empty
 }
 
@@ -236,6 +267,7 @@ object AlwaysTrue extends AlwaysTrue {
  */
 @Evolving
 case class AlwaysFalse() extends Filter {
+  override def sql: String = "FALSE"
   override def references: Array[String] = Array.empty
 }
 

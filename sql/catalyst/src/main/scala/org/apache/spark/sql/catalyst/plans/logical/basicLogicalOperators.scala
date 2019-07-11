@@ -567,6 +567,15 @@ case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Comm
   override val output = DescribeTableSchema.describeTableAttributes()
 }
 
+case class DeleteFromTable(
+    child: LogicalPlan,
+    condition: Expression)
+    extends Command {
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+  override def output: Seq[Attribute] = Seq.empty
+}
+
 /**
  * Drop a table.
  */
