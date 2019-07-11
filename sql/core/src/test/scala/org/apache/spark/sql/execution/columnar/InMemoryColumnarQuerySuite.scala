@@ -24,7 +24,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, LocalTableScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -486,15 +486,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val df2 = df1.where("y = 3")
 
     val planBeforeFilter = df2.queryExecution.executedPlan.collect {
-      case f: FilterExec => f.child
+      case FilterExec(_, c: ColumnarToRowExec) => c.child
+      case WholeStageCodegenExec(FilterExec(_, ColumnarToRowExec(i: InputAdapter))) => i.child
     }
     assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
-    val execPlan = if (codegenEnabled == "true") {
-      WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
-    } else {
-      planBeforeFilter.head
-    }
+    val execPlan = planBeforeFilter.head
     assert(execPlan.executeCollectPublic().length == 0)
   }
 
