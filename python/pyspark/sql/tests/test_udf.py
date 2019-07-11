@@ -197,6 +197,8 @@ class UDFTests(ReusedSQLTestCase):
         left = self.spark.createDataFrame([Row(a=1)])
         right = self.spark.createDataFrame([Row(b=1)])
         f = udf(lambda a, b: a == b, BooleanType())
+        # The udf uses attributes from both sides of join, so it is pulled out as Filter +
+        # Cross join.
         df = left.join(right, f("a", "b"))
         with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
             df.collect()
@@ -242,6 +244,14 @@ class UDFTests(ReusedSQLTestCase):
         runWithJoinType("right", "RightOuter")
         runWithJoinType("leftanti", "LeftAnti")
         runWithJoinType("leftsemi", "LeftSemi")
+
+    def test_udf_as_join_condition(self):
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a: a, IntegerType())
+
+        df = left.join(right, [f("a") == f("b"), left.a1 == right.b1])
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1, b=1, b1=1, b2=1)])
 
     def test_udf_without_arguments(self):
         self.spark.catalog.registerFunction("foo", lambda: "bar")
