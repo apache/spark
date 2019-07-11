@@ -26,7 +26,7 @@ import scala.util.Random
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.ByteArraySerializer
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -74,14 +74,9 @@ class CachedKafkaProducerSuite extends SharedSQLContext with KafkaTest {
         .option("kafka.bootstrap.servers", "12.0.0.1:39022")
         .save()
     }
-    assert(ex.getMessage.contains("TimeoutException"),
-      "Spark command should fail due to service not reachable.")
     // Kafka first tries to fetch metadata and reports failures as, " not present in metadata after
     // max.block.ms time."
-    assert(ex.getMessage.toLowerCase(ju.Locale.ROOT)
-      .contains("not present in metadata after 2 ms."),
-      "Spark command should fail due to service not reachable.")
-
+    TestUtils.assertExceptionMsg(ex, "org.apache.kafka.common.errors.TimeoutException")
     // Since failing kafka producer is released on error and also invalidated, it should not be in
     // cache.
     val map = CachedKafkaProducer.getAsMap
