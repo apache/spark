@@ -277,6 +277,10 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  override def onDriverMetricsUpdate(event: SparkDriverMetricsUpdate): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
       logEvent(event, flushLogger = true)

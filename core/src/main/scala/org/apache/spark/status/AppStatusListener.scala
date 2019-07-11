@@ -876,6 +876,11 @@ private[spark] class AppStatusListener(
     }
   }
 
+  override def onDriverMetricsUpdate(event: SparkDriverMetricsUpdate): Unit = {
+    val metrics = v1.DriverMetrics(event.schedulerMetrics)
+    kvstore.write(new DriverMetricsWrapper(metrics))
+  }
+
   /** Go through all `LiveEntity`s and use `entityFlushFunc(entity)` to flush them. */
   private def flush(entityFlushFunc: LiveEntity => Unit): Unit = {
     liveStages.values.asScala.foreach { stage =>

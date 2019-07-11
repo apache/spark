@@ -139,127 +139,159 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(executorId, taskId, state, data, resources) =>
-        scheduler.statusUpdate(taskId, state, data.value)
-        if (TaskState.isFinished(state)) {
-          executorDataMap.get(executorId) match {
-            case Some(executorInfo) =>
-              executorInfo.freeCores += scheduler.CPUS_PER_TASK
-              resources.foreach { case (k, v) =>
-                executorInfo.resourcesInfo.get(k).foreach { r =>
-                  r.release(v.addresses)
+      new PartialFunction[Any, Unit] {
+        override def isDefinedAt(x: Any): Boolean = {
+          x.isInstanceOf[CoarseGrainedClusterMessage]
+        }
+        override def apply(event: Any): Unit = {
+          val startTime = System.currentTimeMillis()
+          event match {
+            case StatusUpdate(executorId, taskId, state, data, resources) =>
+              scheduler.statusUpdate(taskId, state, data.value)
+              if (TaskState.isFinished(state)) {
+                executorDataMap.get(executorId) match {
+                  case Some(executorInfo) =>
+                    executorInfo.freeCores += scheduler.CPUS_PER_TASK
+                    resources.foreach { case (k, v) =>
+                      executorInfo.resourcesInfo.get(k).foreach { r =>
+                        r.release(v.addresses)
+                      }
+                    }
+                    makeOffers(executorId)
+                  case None =>
+                    // Ignoring the update since we don't know about the executor.
+                    logWarning(s"Ignored task status update ($taskId state $state) " +
+                      s"from unknown executor with ID $executorId")
                 }
               }
-              makeOffers(executorId)
-            case None =>
-              // Ignoring the update since we don't know about the executor.
-              logWarning(s"Ignored task status update ($taskId state $state) " +
-                s"from unknown executor with ID $executorId")
+
+            case ReviveOffers =>
+              makeOffers()
+
+            case KillTask(taskId, executorId, interruptThread, reason) =>
+              executorDataMap.get(executorId) match {
+                case Some(executorInfo) =>
+                  executorInfo.executorEndpoint.send(
+                    KillTask(taskId, executorId, interruptThread, reason))
+                case None =>
+                  // Ignoring the task kill since the executor is not registered.
+                  logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
+              }
+
+            case KillExecutorsOnHost(host) =>
+              scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
+                killExecutors(exec.toSeq, adjustTargetNumExecutors = false, countFailures = false,
+                  force = true)
+              }
+
+            case UpdateDelegationTokens(newDelegationTokens) =>
+              updateDelegationTokens(newDelegationTokens)
+
+            case RemoveExecutor(executorId, reason) =>
+              // We will remove the executor's state and cannot restore it. However, the connection
+              // between the driver and the executor may be still alive so that the executor won't
+              // exit automatically, so try to tell the executor to stop itself. See SPARK-13519.
+              executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
+              removeExecutor(executorId, reason)
+          }
+          if (scheduler.sc.schedulerMetricsManager != null && event.isInstanceOf[AnyRef]) {
+            scheduler.sc.schedulerMetricsManager.updateMetricAfterHandlingEvent(
+              SchedulerMetricsManager.computeEventTypeString(
+                CoarseGrainedSchedulerBackend, event.asInstanceOf[AnyRef]),
+              System.currentTimeMillis() - startTime)
           }
         }
-
-      case ReviveOffers =>
-        makeOffers()
-
-      case KillTask(taskId, executorId, interruptThread, reason) =>
-        executorDataMap.get(executorId) match {
-          case Some(executorInfo) =>
-            executorInfo.executorEndpoint.send(
-              KillTask(taskId, executorId, interruptThread, reason))
-          case None =>
-            // Ignoring the task kill since the executor is not registered.
-            logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
-        }
-
-      case KillExecutorsOnHost(host) =>
-        scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
-          killExecutors(exec.toSeq, adjustTargetNumExecutors = false, countFailures = false,
-            force = true)
-        }
-
-      case UpdateDelegationTokens(newDelegationTokens) =>
-        updateDelegationTokens(newDelegationTokens)
-
-      case RemoveExecutor(executorId, reason) =>
-        // We will remove the executor's state and cannot restore it. However, the connection
-        // between the driver and the executor may be still alive so that the executor won't exit
-        // automatically, so try to tell the executor to stop itself. See SPARK-13519.
-        executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
-        removeExecutor(executorId, reason)
+      }
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      new PartialFunction[Any, Unit] {
+        override def isDefinedAt(x: Any): Boolean = {
+          x.isInstanceOf[CoarseGrainedClusterMessage]
+        }
+        override def apply(event: Any): Unit = {
+          val startTime = System.currentTimeMillis()
+          event match {
+            case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls,
+            attributes, resources) =>
+              if (executorDataMap.contains(executorId)) {
+                executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
+                context.reply(true)
+              } else if (scheduler.nodeBlacklist.contains(hostname)) {
+                // If the cluster manager gives us an executor on a blacklisted node (because it
+                // already started allocating those resources before we informed it of our
+                // blacklist, or if it ignored our blacklist), then we reject that executor
+                // immediately.
+                logInfo(s"Rejecting $executorId as it has been blacklisted.")
+                executorRef.send(RegisterExecutorFailed(s"Executor is blacklisted: $executorId"))
+                context.reply(true)
+              } else {
+                // If the executor's rpc env is not listening for incoming connections, `hostPort`
+                // will be null, and the client connection should be used to contact the executor.
+                val executorAddress = if (executorRef.address != null) {
+                  executorRef.address
+                } else {
+                  context.senderAddress
+                }
+                logInfo(s"Registered executor $executorRef ($executorAddress) with ID $executorId")
+                addressToExecutorId(executorAddress) = executorId
+                totalCoreCount.addAndGet(cores)
+                totalRegisteredExecutors.addAndGet(1)
+                val resourcesInfo = resources.map{ case (k, v) =>
+                  (v.name, new ExecutorResourceInfo(v.name, v.addresses))}
+                val data = new ExecutorData(executorRef, executorAddress, hostname,
+                  cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
+                  resourcesInfo)
+                // This must be synchronized because variables mutated
+                // in this block are read when requesting executors
+                CoarseGrainedSchedulerBackend.this.synchronized {
+                  executorDataMap.put(executorId, data)
+                  if (currentExecutorIdCounter < executorId.toInt) {
+                    currentExecutorIdCounter = executorId.toInt
+                  }
+                  if (numPendingExecutors > 0) {
+                    numPendingExecutors -= 1
+                    logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
+                  }
+                }
+                executorRef.send(RegisteredExecutor)
+                // Note: some tests expect the reply to come after we put the executor in the map
+                context.reply(true)
+                listenerBus.post(
+                  SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
+                makeOffers()
+              }
 
-      case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls,
-          attributes, resources) =>
-        if (executorDataMap.contains(executorId)) {
-          executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
-          context.reply(true)
-        } else if (scheduler.nodeBlacklist.contains(hostname)) {
-          // If the cluster manager gives us an executor on a blacklisted node (because it
-          // already started allocating those resources before we informed it of our blacklist,
-          // or if it ignored our blacklist), then we reject that executor immediately.
-          logInfo(s"Rejecting $executorId as it has been blacklisted.")
-          executorRef.send(RegisterExecutorFailed(s"Executor is blacklisted: $executorId"))
-          context.reply(true)
-        } else {
-          // If the executor's rpc env is not listening for incoming connections, `hostPort`
-          // will be null, and the client connection should be used to contact the executor.
-          val executorAddress = if (executorRef.address != null) {
-              executorRef.address
-            } else {
-              context.senderAddress
-            }
-          logInfo(s"Registered executor $executorRef ($executorAddress) with ID $executorId")
-          addressToExecutorId(executorAddress) = executorId
-          totalCoreCount.addAndGet(cores)
-          totalRegisteredExecutors.addAndGet(1)
-          val resourcesInfo = resources.map{ case (k, v) =>
-            (v.name, new ExecutorResourceInfo(v.name, v.addresses))}
-          val data = new ExecutorData(executorRef, executorAddress, hostname,
-            cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
-            resourcesInfo)
-          // This must be synchronized because variables mutated
-          // in this block are read when requesting executors
-          CoarseGrainedSchedulerBackend.this.synchronized {
-            executorDataMap.put(executorId, data)
-            if (currentExecutorIdCounter < executorId.toInt) {
-              currentExecutorIdCounter = executorId.toInt
-            }
-            if (numPendingExecutors > 0) {
-              numPendingExecutors -= 1
-              logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
-            }
+            case StopDriver =>
+              context.reply(true)
+              stop()
+
+            case StopExecutors =>
+              logInfo("Asking each executor to shut down")
+              for ((_, executorData) <- executorDataMap) {
+                executorData.executorEndpoint.send(StopExecutor)
+              }
+              context.reply(true)
+
+            case RemoveWorker(workerId, host, message) =>
+              removeWorker(workerId, host, message)
+              context.reply(true)
+
+            case RetrieveSparkAppConfig =>
+              val reply = SparkAppConfig(
+                sparkProperties,
+                SparkEnv.get.securityManager.getIOEncryptionKey(),
+                Option(delegationTokens.get()))
+              context.reply(reply)
           }
-          executorRef.send(RegisteredExecutor)
-          // Note: some tests expect the reply to come after we put the executor in the map
-          context.reply(true)
-          listenerBus.post(
-            SparkListenerExecutorAdded(System.currentTimeMillis(), executorId, data))
-          makeOffers()
+          if (scheduler.sc.schedulerMetricsManager != null && event.isInstanceOf[AnyRef]) {
+            scheduler.sc.schedulerMetricsManager.updateMetricAfterHandlingEvent(
+              SchedulerMetricsManager.computeEventTypeString(
+                CoarseGrainedSchedulerBackend, event.asInstanceOf[AnyRef]),
+              System.currentTimeMillis() - startTime)
+          }
         }
-
-      case StopDriver =>
-        context.reply(true)
-        stop()
-
-      case StopExecutors =>
-        logInfo("Asking each executor to shut down")
-        for ((_, executorData) <- executorDataMap) {
-          executorData.executorEndpoint.send(StopExecutor)
-        }
-        context.reply(true)
-
-      case RemoveWorker(workerId, host, message) =>
-        removeWorker(workerId, host, message)
-        context.reply(true)
-
-      case RetrieveSparkAppConfig =>
-        val reply = SparkAppConfig(
-          sparkProperties,
-          SparkEnv.get.securityManager.getIOEncryptionKey(),
-          Option(delegationTokens.get()))
-        context.reply(reply)
+      }
     }
 
     // Make fake resource offers on all executors
@@ -764,6 +796,26 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private def withLock[T](fn: => T): T = scheduler.synchronized {
     CoarseGrainedSchedulerBackend.this.synchronized { fn }
   }
+
+  def registerSchedulerMetrics(): Unit = {
+    if (scheduler.sc.schedulerMetricsManager != null) {
+      Seq(StatusUpdate,
+        ReviveOffers,
+        KillTask,
+        KillExecutorsOnHost,
+        UpdateDelegationTokens,
+        RemoveExecutor,
+        RegisterExecutor,
+        StopDriver,
+        StopExecutors,
+        RemoveWorker,
+        RetrieveSparkAppConfig).foreach(eventType => {
+        scheduler.sc.schedulerMetricsManager.registerEvent(
+          SchedulerMetricsManager.computeEventTypeString(CoarseGrainedSchedulerBackend, eventType))
+      })
+    }
+  }
+  registerSchedulerMetrics()
 
 }
 

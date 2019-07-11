@@ -1338,4 +1338,24 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
+  private[spark] val SCHEDULERS_METRICS_INTERVAL_LENGTH =
+    ConfigBuilder("spark.scheduler.metric.compute.intervalLength")
+      .doc("The length of an interval ")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10s")
+
+  private[spark] val SCHEDULERS_METRICS_NUM_TOP_BUSIEST_INTERVALS =
+    ConfigBuilder("spark.scheduler.metric.compute.numTopBusiestIntervals")
+      .doc("The number of top busiest intervals that are kept")
+      .longConf
+      .createWithDefault(5)
+
+  private[spark] val SCHEDULERS_METRICS_BUSY_INTERVAL_THRESHOLD =
+    ConfigBuilder("spark.scheduler.metric.compute.busyIntervalThreshold")
+      .doc("The threshold (in percent) for an interval to be considered busy." +
+        "An interval is considered busy if the total time used in this interval is" +
+        "greater than this threshold*interval_length/100")
+      .intConf
+      .createWithDefault(70)
+
 }

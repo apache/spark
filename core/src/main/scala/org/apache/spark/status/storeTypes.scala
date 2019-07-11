@@ -425,6 +425,11 @@ private[spark] class RDDOperationGraphWrapper(
 
 }
 
+private [spark] class DriverMetricsWrapper(val info: DriverMetrics) {
+  @JsonIgnore @KVIndex
+  def id: Int = 1
+}
+
 private[spark] class PoolData(
     @KVIndexParam val name: String,
     val stageIds: Set[Int])

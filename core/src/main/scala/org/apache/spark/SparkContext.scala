@@ -214,6 +214,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
+  private var _schedulerMetricsManager: SchedulerMetricsManager = _
   private var _heartbeater: Heartbeater = _
   private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
 
@@ -308,6 +309,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def dagScheduler_=(ds: DAGScheduler): Unit = {
     _dagScheduler = ds
   }
+
+  private[spark] def schedulerMetricsManager: SchedulerMetricsManager = _schedulerMetricsManager
 
   /**
    * A unique identifier for the Spark application.
@@ -507,6 +510,12 @@ class SparkContext(config: SparkConf) extends Logging {
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
+
+    // Create the scheduler metrics manager
+    if (conf.getBoolean("spark.scheduler.metric.compute.enabled", false)) {
+      _schedulerMetricsManager = new SchedulerMetricsManager(this)
+      _schedulerMetricsManager.start()
+    }
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
@@ -1911,6 +1920,12 @@ class SparkContext(config: SparkConf) extends Logging {
         _dagScheduler.stop()
       }
       _dagScheduler = null
+    }
+    if (_schedulerMetricsManager != null) {
+      Utils.tryLogNonFatalError {
+        _schedulerMetricsManager.stop()
+      }
+      _schedulerMetricsManager = null
     }
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {

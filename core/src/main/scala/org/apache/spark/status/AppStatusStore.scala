@@ -136,6 +136,14 @@ private[spark] class AppStatusStore(
     store.read(classOf[StageDataWrapper], Array(stageId, stageAttemptId)).locality
   }
 
+  def driverMetrics(): v1.DriverMetrics = {
+    if (store.count(classOf[DriverMetricsWrapper]) > 0) {
+      store.read(classOf[DriverMetricsWrapper], 1).info
+    } else {
+      null
+    }
+  }
+
   /**
    * Calculates a summary of the task metrics for the given stage attempt, returning the
    * requested quantiles for the recorded metrics.

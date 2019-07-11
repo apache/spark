@@ -54,12 +54,22 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     }
   }
 
+  private lazy val TASK_SUCCESS_EVENT_MSG = "Handle Successful Task"
+
+  private lazy val TASK_FAILED_EVENT_MSG = "Handle Failed Task"
+
   def enqueueSuccessfulTask(
       taskSetManager: TaskSetManager,
       tid: Long,
       serializedData: ByteBuffer): Unit = {
+    if (scheduler.sc.schedulerMetricsManager != null) {
+      scheduler.sc.schedulerMetricsManager.increaseNumPendingEvent(
+        SchedulerMetricsManager.computeEventTypeString(
+          TaskResultGetter.this, TASK_SUCCESS_EVENT_MSG))
+    }
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
+        val startTime = System.currentTimeMillis()
         try {
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
@@ -119,6 +129,13 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           case NonFatal(ex) =>
             logError("Exception while getting task result", ex)
             taskSetManager.abort("Exception while getting task result: %s".format(ex))
+        } finally {
+          if (scheduler.sc.schedulerMetricsManager != null) {
+            scheduler.sc.schedulerMetricsManager.updateMetricAfterHandlingEvent(
+              SchedulerMetricsManager.computeEventTypeString(
+                TaskResultGetter.this, TASK_SUCCESS_EVENT_MSG),
+              System.currentTimeMillis() - startTime)
+          }
         }
       }
     })
@@ -128,7 +145,13 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     serializedData: ByteBuffer) {
     var reason : TaskFailedReason = UnknownReason
     try {
+      if (scheduler.sc.schedulerMetricsManager != null) {
+        scheduler.sc.schedulerMetricsManager.increaseNumPendingEvent(
+          SchedulerMetricsManager.computeEventTypeString(
+            TaskResultGetter.this, TASK_FAILED_EVENT_MSG))
+      }
       getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
+        val startTime = System.currentTimeMillis()
         val loader = Utils.getContextOrSparkClassLoader
         try {
           if (serializedData != null && serializedData.limit() > 0) {
@@ -147,6 +170,12 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           // will die. Still tell the scheduler about the task failure, to avoid a hang
           // where the scheduler thinks the task is still running.
           scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
+          if (scheduler.sc.schedulerMetricsManager != null) {
+            scheduler.sc.schedulerMetricsManager.updateMetricAfterHandlingEvent(
+              SchedulerMetricsManager.computeEventTypeString(
+                TaskResultGetter.this, TASK_FAILED_EVENT_MSG),
+              System.currentTimeMillis() - startTime)
+          }
         }
       })
     } catch {
@@ -167,4 +196,15 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   def stop() {
     getTaskResultExecutor.shutdownNow()
   }
+
+  private def registerSchedulerMetrics() {
+    if (scheduler.sc.schedulerMetricsManager != null) {
+      scheduler.sc.schedulerMetricsManager.registerEvent(
+        SchedulerMetricsManager.computeEventTypeString(this, TASK_SUCCESS_EVENT_MSG))
+      scheduler.sc.schedulerMetricsManager.registerEvent(
+        SchedulerMetricsManager.computeEventTypeString(this, TASK_FAILED_EVENT_MSG))
+    }
+  }
+
+  registerSchedulerMetrics()
 }

@@ -163,6 +163,11 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
+  public void onDriverMetricsUpdate(SparkDriverMetricsUpdate onDriverMetricsUpdate) {
+    onEvent(onDriverMetricsUpdate);
+  }
+
+  @Override
   public void onOtherEvent(SparkListenerEvent event) {
     onEvent(event);
   }

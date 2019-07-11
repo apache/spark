@@ -99,4 +99,13 @@ private[spark] object ToolTips {
        dynamic allocation is enabled. The number of granted executors may exceed the limit
        ephemerally when executors are being killed.
     """
+
+  val DRIVER_METRICS_BUSY_INTERVALS =
+    """Busy intervals are the interval in which the scheduler spends lots of time to handle
+        this type of event (defined when the total time for handling all events of this type
+        is greater than a threshold (by default 70% of the interval length).
+     """
+
+  val DRIVER_METRICS_SUMMARY =
+    """Aggregated metric over all intervals."""
 }

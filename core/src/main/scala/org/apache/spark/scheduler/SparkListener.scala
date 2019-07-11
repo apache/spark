@@ -28,6 +28,7 @@ import org.apache.spark.TaskEndReason
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.status.api.v1.SchedulerEventHandlingMetric
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 
 @DeveloperApi
@@ -203,6 +204,10 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 @DeveloperApi
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
+@DeveloperApi
+case class SparkDriverMetricsUpdate(schedulerMetrics: Seq[SchedulerEventHandlingMetric])
+  extends SparkListenerEvent
+
 /**
  * Interface for listening to events from the Spark scheduler. Most applications should probably
  * extend SparkListener or SparkFirehoseListener directly, rather than implementing this class.
@@ -341,6 +346,11 @@ private[spark] trait SparkListenerInterface {
   def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit
 
   /**
+   * Called when driver metrics thread is scheduled
+   */
+  def onDriverMetricsUpdate(event: SparkDriverMetricsUpdate): Unit
+
+  /**
    * Called when other events like SQL-specific events are posted.
    */
   def onOtherEvent(event: SparkListenerEvent): Unit
@@ -415,6 +425,8 @@ abstract class SparkListener extends SparkListenerInterface {
 
   override def onSpeculativeTaskSubmitted(
       speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit = { }
+
+  override def onDriverMetricsUpdate(event: SparkDriverMetricsUpdate): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
 }

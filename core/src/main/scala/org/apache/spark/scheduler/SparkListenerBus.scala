@@ -79,6 +79,8 @@ private[spark] trait SparkListenerBus
         listener.onBlockUpdated(blockUpdated)
       case speculativeTaskSubmitted: SparkListenerSpeculativeTaskSubmitted =>
         listener.onSpeculativeTaskSubmitted(speculativeTaskSubmitted)
+      case driverMetricsUpdate: SparkDriverMetricsUpdate =>
+        listener.onDriverMetricsUpdate(driverMetricsUpdate)
       case _ => listener.onOtherEvent(event)
     }
   }

@@ -2112,12 +2112,40 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   /**
    * The main event loop of the DAG scheduler.
    */
+  override def onStart(): Unit = {
+    if (dagScheduler.sc.schedulerMetricsManager != null) {
+      Seq(JobSubmitted,
+        MapStageSubmitted,
+        StageCancelled,
+        JobCancelled,
+        JobGroupCancelled,
+        AllJobsCancelled,
+        ExecutorAdded,
+        ExecutorLost,
+        WorkerRemoved,
+        BeginEvent,
+        SpeculativeTaskSubmitted,
+        GettingResultEvent,
+        CompletionEvent,
+        TaskSetFailed,
+        ResubmitFailedStages).foreach(eventType => {
+        dagScheduler.sc.schedulerMetricsManager.registerEvent(
+          SchedulerMetricsManager.computeEventTypeString(dagScheduler, eventType))
+      })
+    }
+  }
+
   override def onReceive(event: DAGSchedulerEvent): Unit = {
     val timerContext = timer.time()
     try {
       doOnReceive(event)
     } finally {
-      timerContext.stop()
+      val usedTimeInns = timerContext.stop()
+      if (dagScheduler.sc.schedulerMetricsManager != null) {
+        dagScheduler.sc.schedulerMetricsManager.updateMetricAfterHandlingEvent(
+          SchedulerMetricsManager.computeEventTypeString(dagScheduler, event),
+          usedTimeInns/1000000)
+      }
     }
   }
 
@@ -2185,6 +2213,14 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   override def onStop(): Unit = {
     // Cancel any active jobs in postStop hook
     dagScheduler.cleanUpAfterSchedulerStop()
+  }
+
+  override def post(event: DAGSchedulerEvent): Unit = {
+    super.post(event)
+    if (dagScheduler.sc.schedulerMetricsManager != null) {
+      dagScheduler.sc.schedulerMetricsManager.increaseNumPendingEvent(
+        SchedulerMetricsManager.computeEventTypeString(dagScheduler, event))
+    }
   }
 }
 

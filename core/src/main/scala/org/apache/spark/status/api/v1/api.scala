@@ -360,6 +360,20 @@ class AccumulableInfo private[spark](
     val update: Option[String],
     val value: String)
 
+case class SchedulerMetricInfo(
+  handlingTimePerEvent: Float,
+  numHandledEvents: Long,
+  @JsonDeserialize(contentAs = classOf[JLong])
+  numPendingEvents: Option[Long],
+  timeStamp: Long)
+
+case class SchedulerEventHandlingMetric(
+  eventType: String,
+  summary: SchedulerMetricInfo,
+  busiestIntervals: Seq[SchedulerMetricInfo])
+
+case class DriverMetrics private[spark] (metrics: Seq[SchedulerEventHandlingMetric])
+
 class VersionInfo private[spark](
   val spark: String)
 

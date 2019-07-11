@@ -257,6 +257,65 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
   }
 
+  private def driverMetricsTable(
+    request: HttpServletRequest,
+    driverMetricsData: Seq[v1.SchedulerEventHandlingMetric],
+    metricTag: String,
+    tableHeaderId: String): Seq[Node] = {
+    val parameterOtherTable = request.getParameterMap().asScala
+      .filterNot(_._1.startsWith(metricTag))
+      .map(para => para._1 + "=" + para._2(0))
+
+    val parameterMetricPage = request.getParameter(metricTag + ".page")
+    val parameterMetricSortColumn = request.getParameter(metricTag + ".sort")
+    val parameterMetricSortDesc = request.getParameter(metricTag + ".desc")
+    val parameterMetricPageSize = request.getParameter(metricTag + ".pageSize")
+    val parameterMetricPrevPageSize = request.getParameter(metricTag + ".prevPageSize")
+
+    val metricPage = Option(parameterMetricPage).map(_.toInt).getOrElse(1)
+    val metricSortColumn = Option(parameterMetricSortColumn).map { sortColumn =>
+      UIUtils.decodeURLParameter(sortColumn)
+    }.getOrElse("Event Type")
+    val metricSortDesc = Option(parameterMetricSortDesc).map(_.toBoolean).getOrElse(
+      metricSortColumn == "Event Type"
+    )
+    val metricPageSize = Option(parameterMetricPageSize).map(_.toInt).getOrElse(5)
+    val metricPrevPageSize =
+      Option(parameterMetricPrevPageSize).map(_.toInt).getOrElse(metricPageSize)
+
+    val page: Int = {
+      // If the user has changed to a larger page size, then go to page 1 in order to avoid
+      // IndexOutOfBoundsException.
+      if (metricPageSize <= metricPrevPageSize) {
+        metricPage
+      } else {
+        1
+      }
+    }
+
+    try {
+      new DriverMetricsTable(
+        driverMetricsData,
+        UIUtils.prependBaseUri(request, parent.basePath),
+        "jobs",
+        parameterOtherTable,
+        metricPageSize,
+        metricSortColumn,
+        metricSortDesc,
+        metricTag,
+        tableHeaderId
+      ).table(page)
+    } catch {
+      case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+        <div class="alert alert-error">
+          <p>Error while rendering job table:</p>
+          <pre>
+            {Utils.exceptionString(e)}
+          </pre>
+        </div>
+    }
+  }
+
   def render(request: HttpServletRequest): Seq[Node] = {
     val appInfo = store.applicationInfo()
     val startTime = appInfo.attempts.head.startTime.getTime()
@@ -390,6 +449,62 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       <div class="aggregated-failedJobs collapsible-table">
         {failedJobsTable}
       </div>
+    }
+
+    val driverMetrics = store.driverMetrics()
+    if (driverMetrics != null) {
+      val shouldShowSummaryMetricTable =
+        driverMetrics.metrics.count(_.summary.numHandledEvents > 0) > 0
+      if (shouldShowSummaryMetricTable) {
+        val driverSummaryTable = driverMetricsTable(
+          request,
+          driverMetrics.metrics,
+          "summaryMetrics",
+          "summary")
+        content ++=
+          <span id ="driverSummaryMetrics"
+                class="collapse-driver-schedulers-summary-metrics collapse-table"
+                onClick="collapseTable('collapse-driver-schedulers-summary-metrics',
+                       'driver-schedulers-summary-metrics')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a data-toggle="tooltip" title={ToolTips.DRIVER_METRICS_SUMMARY}
+                 data-placement="right">
+                Driver Schedulers Summary Metrics
+              </a>
+            </h4>
+          </span> ++
+            <div class="driver-schedulers-summary-metrics collapsible-table">
+              {driverSummaryTable}
+            </div>
+
+      }
+
+      val shouldShowBusyIntervalsTable =
+        driverMetrics.metrics.count(_.busiestIntervals.nonEmpty) > 0
+      if (shouldShowBusyIntervalsTable) {
+        val driverBusyIntervalsTable = driverMetricsTable(
+          request,
+          driverMetrics.metrics,
+          "busyIntervalsMetrics",
+          "busyIntervals")
+        content ++=
+          <span id ="driverBusyIntervalssMetrics"
+                class="collapse-driver-schedulers-busyIntervals-metrics collapse-table"
+                onClick="collapseTable('collapse-driver-schedulers-busyIntervals-metrics',
+                       'driver-schedulers-busyIntervals-metrics')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a data-toggle="tooltip" title={ToolTips.DRIVER_METRICS_BUSY_INTERVALS}
+                 data-placement="right">
+                Driver Schedulers Busy Intervals Metrics
+              </a>
+            </h4>
+          </span> ++
+            <div class="driver-schedulers-busyIntervals-metrics collapsible-table">
+              {driverBusyIntervalsTable}
+            </div>
+      }
     }
 
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +
@@ -638,6 +753,202 @@ private[ui] class JobPagedTable(
         failed = job.numFailedTasks, skipped = job.numSkippedTasks,
         reasonToNumKilled = job.killedTasksSummary, total = job.numTasks - job.numSkippedTasks)}
       </td>
+    </tr>
+  }
+}
+
+private[ui] class DriverMetricsRowData(
+  val eventType: String,
+  val numHandledEvents: Long,
+  val numPendingEvents: Option[Long],
+  val processingSpeed: Float,
+  val timeStamp: Long)
+
+private[ui] class DriverMetricsDataSource(
+  schedulersMetrics: Seq[v1.SchedulerEventHandlingMetric],
+  pageSize: Int,
+  sortColumn: String,
+  desc: Boolean,
+  metricTag: String) extends PagedDataSource[DriverMetricsRowData](pageSize) {
+
+  private val data: Seq[DriverMetricsRowData] = {
+    metricTag match {
+      case "summaryMetrics" =>
+        schedulersMetrics.filter(_.summary.numHandledEvents > 0).map(metric => {
+          val eventType = metric.eventType
+          val numHandledEvent = metric.summary.numHandledEvents
+          val numPendingEvent = metric.summary.numPendingEvents
+          val processingSpeed = metric.summary.handlingTimePerEvent
+          val timeStamp = metric.summary.timeStamp
+          new DriverMetricsRowData(eventType,
+            numHandledEvent,
+            numPendingEvent,
+            processingSpeed,
+            timeStamp)
+        })
+      case _ =>
+        schedulersMetrics.flatMap(metric => metric.busiestIntervals.map(interval => {
+          val eventType = metric.eventType
+          val numHandledEvent = interval.numHandledEvents
+          val numPendingEvent = interval.numPendingEvents
+          val processingSpeed = interval.handlingTimePerEvent
+          val timeStamp = interval.timeStamp
+          new DriverMetricsRowData(
+            eventType,
+            numHandledEvent,
+            numPendingEvent,
+            processingSpeed,
+            timeStamp)
+        }))
+    }
+  }.sorted(ordering(sortColumn, desc))
+
+  override def dataSize: Int = data.size
+
+  override def sliceData(from: Int, to: Int): Seq[DriverMetricsRowData] = {
+    data.slice(from, to)
+  }
+
+  /**
+   * Return Ordering according to sortColumn and desc
+   */
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[DriverMetricsRowData] = {
+    val ordering: Ordering[DriverMetricsRowData] = sortColumn match {
+      case "Event Type" => Ordering.by(_.eventType)
+      case "Number of Handled Events" => Ordering.by(x => x.numHandledEvents)
+      case "Number of Pending Events" => Ordering.by(x => x.numPendingEvents.getOrElse(-1L))
+      case "Processing Speed (ms/event)" => Ordering.by(x => x.processingSpeed)
+      case "Total Time" => Ordering.by(x => x.processingSpeed * x.numHandledEvents)
+      case "TimeStamp" => Ordering.by(x => x.timeStamp)
+      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
+    }
+    if (desc) {
+      ordering.reverse
+    } else {
+      ordering
+    }
+  }
+}
+
+private[ui] class DriverMetricsTable(
+  data: Seq[v1.SchedulerEventHandlingMetric],
+  basePath: String,
+  subPath: String,
+  parameterOtherTable: Iterable[String],
+  pageSize: Int,
+  sortColumn: String,
+  desc: Boolean,
+  metricTag: String,
+  tableHeaderId: String) extends PagedTable[DriverMetricsRowData] {
+
+  val parameterPath = basePath + s"/$subPath/?" + parameterOtherTable.mkString("&")
+
+  override def tableId: String = metricTag + "-table"
+
+  override def tableCssClass: String =
+    "table table-bordered table-condensed table-striped " +
+      "table-head-clickable table-cell-width-limited"
+
+  override def pageSizeFormField: String = metricTag + ".pageSize"
+
+  override def pageNumberFormField: String = metricTag + ".page"
+
+  override def pageLink(page: Int): String = {
+    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    parameterPath +
+      s"&$pageNumberFormField=$page" +
+      s"&$metricTag.sort=$encodedSortColumn" +
+      s"&$metricTag.desc=$desc" +
+      s"&$pageSizeFormField=$pageSize" +
+      s"#$tableHeaderId"
+  }
+
+  override def goButtonFormPath: String = {
+    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    s"$parameterPath&$metricTag.sort=$encodedSortColumn&$metricTag.desc=$desc#$tableHeaderId"
+  }
+  override val dataSource =
+    new DriverMetricsDataSource(data, pageSize, sortColumn, desc, metricTag)
+
+  override def headers: Seq[Node] = {
+    // Information for each header: title, cssClass, and sortable
+    val metricHeadersAndCssClasses: Seq[(String, String, Boolean)] = {
+      Seq(("Event Type", "", true),
+        ("Number of Handled Events", "", true),
+        ("Number of Pending Events", "", true),
+        ("Processing Speed (ms/event)", "", true),
+        ("Total Time", "", true),
+        ("TimeStamp", "", true))
+    }
+
+    if (!metricHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
+      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
+    }
+
+    val headerRow: Seq[Node] = {
+      metricHeadersAndCssClasses.map { case (header, cssClass, sortable) =>
+        if (header == sortColumn) {
+          val headerLink = Unparsed(
+            parameterPath +
+              s"&$metricTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&$metricTag.desc=${!desc}" +
+              s"&$metricTag.pageSize=$pageSize" +
+              s"#$tableHeaderId")
+          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
+          <th class={cssClass}>
+            {
+            <a href={headerLink}>
+              {header}
+              <span>
+                &nbsp;{Unparsed(arrow)}
+              </span>
+            </a>
+            }
+          </th>
+        } else {
+          if (sortable) {
+            val headerLink = Unparsed(
+              parameterPath +
+                s"&$metricTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+                s"&$metricTag.pageSize=$pageSize" +
+                s"#$tableHeaderId")
+            <th class={cssClass}>
+              {
+              <a href={headerLink}>
+                {header}
+              </a>
+              }
+            </th>
+          } else {
+            <th class={cssClass}>
+              {header}
+            </th>
+          }
+        }
+      }
+    }
+    <thead>{headerRow}</thead>
+  }
+
+  override def row(driverMetricsTableRow: DriverMetricsRowData): Seq[Node] = {
+    <tr>
+      <td> {driverMetricsTableRow.eventType} </td>
+      <td> {driverMetricsTableRow.numHandledEvents.toString} </td>
+      <td> {
+        if (driverMetricsTableRow.numPendingEvents.isDefined) {
+          driverMetricsTableRow.numPendingEvents.get.toString
+        } else {
+          "N/A"
+        }
+        }
+      </td>
+      <td> {driverMetricsTableRow.processingSpeed} </td>
+      <td> {
+        val totalTime = driverMetricsTableRow.processingSpeed *
+          driverMetricsTableRow.numHandledEvents
+        UIUtils.formatDuration(totalTime.toLong)}
+      </td>
+      <td> {UIUtils.formatDate(driverMetricsTableRow.timeStamp)} </td>
     </tr>
   }
 }

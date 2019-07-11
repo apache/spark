@@ -35,6 +35,7 @@ import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.status.api.v1.{SchedulerEventHandlingMetric, SchedulerMetricInfo}
 import org.apache.spark.storage._
 
 /**
@@ -103,6 +104,8 @@ private[spark] object JsonProtocol {
         stageExecutorMetricsToJson(stageExecutorMetrics)
       case blockUpdate: SparkListenerBlockUpdated =>
         blockUpdateToJson(blockUpdate)
+      case driverMetricsUpdate: SparkDriverMetricsUpdate =>
+        driverMetricsUpdateToJson(driverMetricsUpdate)
       case _ => parse(mapper.writeValueAsString(event))
     }
   }
@@ -266,6 +269,12 @@ private[spark] object JsonProtocol {
     val blockUpdatedInfo = blockUpdatedInfoToJson(blockUpdate.blockUpdatedInfo)
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockUpdate) ~
     ("Block Updated Info" -> blockUpdatedInfo)
+  }
+
+  def driverMetricsUpdateToJson(driverMetrics: SparkDriverMetricsUpdate): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.driverMetricsUpdate) ~
+      ("Driver Metrics" ->
+        JArray(driverMetrics.schedulerMetrics.map(schedulerEventHandlingMetricToJson).toList))
   }
 
   /** ------------------------------------------------------------------- *
@@ -499,6 +508,19 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> blockUpdatedInfo.diskSize)
   }
 
+  def schedulerEventHandlingMetricToJson(metric: SchedulerEventHandlingMetric): JValue = {
+    ("Event Type" -> metric.eventType)~
+      ("Summary" -> schedulerMetricInfoToJson(metric.summary))~
+      ("Busiest Intervals" -> JArray(metric.busiestIntervals.map(schedulerMetricInfoToJson).toList))
+  }
+
+  def schedulerMetricInfoToJson(info: SchedulerMetricInfo): JValue = {
+    ("Handling Time Per Event" -> info.handlingTimePerEvent) ~
+      ("Number Handled Events" -> info.numHandledEvents) ~
+      ("Number Pending Events" -> info.numPendingEvents.map(JLong(_)).getOrElse(JNothing)) ~
+      ("Timestamp" -> info.timeStamp)
+  }
+
   /** ------------------------------ *
    * Util JSON serialization methods |
    * ------------------------------- */
@@ -558,6 +580,7 @@ private[spark] object JsonProtocol {
     val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
     val stageExecutorMetrics = Utils.getFormattedClassName(SparkListenerStageExecutorMetrics)
     val blockUpdate = Utils.getFormattedClassName(SparkListenerBlockUpdated)
+    val driverMetricsUpdate = Utils.getFormattedClassName(SparkDriverMetricsUpdate)
   }
 
   def sparkEventFromJson(json: JValue): SparkListenerEvent = {
@@ -583,6 +606,7 @@ private[spark] object JsonProtocol {
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
       case `stageExecutorMetrics` => stageExecutorMetricsFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
+      case `driverMetricsUpdate` => driverMetricsUpdateFromJson(json)
       case other => mapper.readValue(compact(render(json)), Utils.classForName(other))
         .asInstanceOf[SparkListenerEvent]
     }
@@ -750,6 +774,11 @@ private[spark] object JsonProtocol {
   def blockUpdateFromJson(json: JValue): SparkListenerBlockUpdated = {
     val blockUpdatedInfo = blockUpdatedInfoFromJson(json \ "Block Updated Info")
     SparkListenerBlockUpdated(blockUpdatedInfo)
+  }
+
+  def driverMetricsUpdateFromJson(json: JValue): SparkDriverMetricsUpdate = {
+    SparkDriverMetricsUpdate((json \ "Driver Metrics").
+      extract[List[JValue]].map(SchedulerMetricFromJson))
   }
 
   /** --------------------------------------------------------------------- *
@@ -1079,6 +1108,26 @@ private[spark] object JsonProtocol {
     val memorySize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
     BlockUpdatedInfo(blockManagerId, blockId, storageLevel, memorySize, diskSize)
+  }
+
+  def SchedulerMetricFromJson(json: JValue): SchedulerEventHandlingMetric = {
+    val eventType = (json \ "Event Type").extract[String]
+    val summary = schedulerMetricInfoFromJson(json \ "Summary")
+    val busiestIntervals = (json \ "Busiest Intervals").extract[List[JValue]].
+      map(schedulerMetricInfoFromJson)
+    SchedulerEventHandlingMetric(eventType, summary, busiestIntervals)
+  }
+
+  def schedulerMetricInfoFromJson(json: JValue): SchedulerMetricInfo = {
+    val handlingTimePerEvent = (json \ "Handling Time Per Event").extract[Float]
+    val numHandledEvents = (json \ "Number Handled Events").extract[Long]
+    val numPendingEvents = jsonOption(json \ "Number Pending Events").map(_.extract[Long])
+    val timeStamp = (json \ "Timestamp").extract[Long]
+
+    SchedulerMetricInfo(handlingTimePerEvent,
+      numHandledEvents,
+      numPendingEvents,
+      timeStamp)
   }
 
   /** -------------------------------- *
