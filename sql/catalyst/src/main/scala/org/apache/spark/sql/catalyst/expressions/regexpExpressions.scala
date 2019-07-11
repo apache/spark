@@ -70,8 +70,8 @@ abstract class StringRegexExpression extends BinaryExpression
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern escape - Returns true if str matches pattern with escape, " +
-    "null if any arguments are null, false otherwise.",
+  usage = "str _FUNC_ pattern[ escape] - Returns true if str matches `pattern` with `escape`" +
+    ", null if any arguments are null, false otherwise.",
   arguments = """
     Arguments:
       * str - a string expression
@@ -98,6 +98,7 @@ abstract class StringRegexExpression extends BinaryExpression
     Examples:
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
       true
+      > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/'
   """,
   note = """
     Use RLIKE to match with standard regular expressions.
@@ -149,7 +150,7 @@ case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Strin
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, "$escapeChar"));
+          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, "$escapeStr"));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
