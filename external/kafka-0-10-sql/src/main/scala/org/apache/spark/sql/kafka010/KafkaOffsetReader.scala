@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.{time => jt}
 import java.{util => ju}
 import java.util.concurrent.Executors
 
@@ -29,7 +30,9 @@ import scala.util.control.NonFatal
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 
@@ -49,6 +52,11 @@ private[kafka010] class KafkaOffsetReader(
     val driverKafkaParams: ju.Map[String, Object],
     readerOptions: Map[String, String],
     driverGroupIdPrefix: String) extends Logging {
+  private val pollTimeoutMs = readerOptions.getOrElse(
+    KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
+    (SparkEnv.get.conf.get(NETWORK_TIMEOUT) * 1000L).toString
+  ).toLong
+
   /**
    * Used to ensure execute fetch operations execute in an UninterruptibleThread
    */
@@ -115,9 +123,7 @@ private[kafka010] class KafkaOffsetReader(
    */
   def fetchTopicPartitions(): Set[TopicPartition] = runUninterruptibly {
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
-    // Poll to get the latest assigned partitions
-    consumer.poll(0)
-    val partitions = consumer.assignment()
+    val partitions = getPartitions()
     consumer.pause(partitions)
     partitions.asScala.toSet
   }
@@ -163,9 +169,7 @@ private[kafka010] class KafkaOffsetReader(
       reportDataLoss: String => Unit): KafkaSourceOffset = {
     val fetched = runUninterruptibly {
       withRetriesWithoutInterrupt {
-        // Poll to get the latest assigned partitions
-        consumer.poll(0)
-        val partitions = consumer.assignment()
+        val partitions = getPartitions()
 
         // Call `position` to wait until the potential offset request triggered by `poll(0)` is
         // done. This is a workaround for KAFKA-7703, which an async `seekToBeginning` triggered by
@@ -177,7 +181,7 @@ private[kafka010] class KafkaOffsetReader(
           "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
             "Use -1 for latest, -2 for earliest, if you don't care.\n" +
             s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions.asScala}")
-        logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
+        logDebug(s"Seeking to $partitionOffsets")
 
         partitionOffsets.foreach {
           case (tp, KafkaOffsetRangeLimit.LATEST) =>
@@ -211,11 +215,9 @@ private[kafka010] class KafkaOffsetReader(
    */
   def fetchEarliestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
     withRetriesWithoutInterrupt {
-      // Poll to get the latest assigned partitions
-      consumer.poll(0)
-      val partitions = consumer.assignment()
+      val partitions = getPartitions()
       consumer.pause(partitions)
-      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the beginning")
+      logDebug(s"Seeking to the beginning")
 
       consumer.seekToBeginning(partitions)
       val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
@@ -241,9 +243,7 @@ private[kafka010] class KafkaOffsetReader(
   def fetchLatestOffsets(
       knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap = runUninterruptibly {
     withRetriesWithoutInterrupt {
-      // Poll to get the latest assigned partitions
-      consumer.poll(0)
-      val partitions = consumer.assignment()
+      val partitions = getPartitions()
 
       // Call `position` to wait until the potential offset request triggered by `poll(0)` is
       // done. This is a workaround for KAFKA-7703, which an async `seekToBeginning` triggered by
@@ -251,7 +251,7 @@ private[kafka010] class KafkaOffsetReader(
       partitions.asScala.map(p => p -> consumer.position(p)).foreach(_ => {})
 
       consumer.pause(partitions)
-      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the end.")
+      logDebug(s"Seeking to the end.")
 
       if (knownOffsets.isEmpty) {
         consumer.seekToEnd(partitions)
@@ -317,11 +317,8 @@ private[kafka010] class KafkaOffsetReader(
     } else {
       runUninterruptibly {
         withRetriesWithoutInterrupt {
-          // Poll to get the latest assigned partitions
-          consumer.poll(0)
-          val partitions = consumer.assignment()
+          val partitions = getPartitions()
           consumer.pause(partitions)
-          logDebug(s"\tPartitions assigned to consumer: $partitions")
 
           // Get the earliest offset of each partition
           consumer.seekToBeginning(partitions)
@@ -418,6 +415,19 @@ private[kafka010] class KafkaOffsetReader(
   private def resetConsumer(): Unit = synchronized {
     stopConsumer()
     _consumer = null  // will automatically get reinitialized again
+  }
+
+  private def getPartitions(): ju.Set[TopicPartition] = {
+    var partitions = Set.empty[TopicPartition].asJava
+    val startTimeMs = System.currentTimeMillis()
+    while (partitions.isEmpty && System.currentTimeMillis() - startTimeMs < pollTimeoutMs) {
+      // Poll to get the latest assigned partitions
+      consumer.poll(jt.Duration.ZERO)
+      partitions = consumer.assignment()
+    }
+    require(!partitions.isEmpty)
+    logDebug(s"Partitions assigned to consumer: $partitions")
+    partitions
   }
 }
 

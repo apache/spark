@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.time.Duration
 import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
@@ -471,7 +472,7 @@ private[kafka010] case class InternalKafkaConsumer(
   private def fetchData(offset: Long, pollTimeoutMs: Long): Unit = {
     // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
     seek(offset)
-    val p = consumer.poll(pollTimeoutMs)
+    val p = consumer.poll(Duration.ofMillis(pollTimeoutMs))
     val r = p.records(topicPartition)
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
     val offsetAfterPoll = consumer.position(topicPartition)

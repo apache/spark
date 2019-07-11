@@ -33,6 +33,12 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
   private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
 
+  override protected def beforeEach(): Unit = {
+    val sparkEnv = mock(classOf[SparkEnv])
+    when(sparkEnv.conf).thenReturn(new SparkConf())
+    SparkEnv.set(sparkEnv)
+  }
+
   override protected def afterEach(): Unit = {
     SparkEnv.set(null)
     super.afterEach()
@@ -43,11 +49,6 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
         options: CaseInsensitiveStringMap,
         expectedPollTimeoutMs: Long,
         expectedMaxOffsetsPerTrigger: Option[Long]): Unit = {
-      // KafkaMicroBatchStream reads Spark conf from SparkEnv for default value
-      // hence we set mock SparkEnv here before creating KafkaMicroBatchStream
-      val sparkEnv = mock(classOf[SparkEnv])
-      when(sparkEnv.conf).thenReturn(new SparkConf())
-      SparkEnv.set(sparkEnv)
 
       val scan = getKafkaDataSourceScan(options)
       val stream = scan.toMicroBatchStream("dummy").asInstanceOf[KafkaMicroBatchStream]

@@ -20,7 +20,8 @@ package org.apache.spark.sql.kafka010
 import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
-import java.util.{Collections, Map => JMap, Properties, UUID}
+import java.time.Duration
+import java.util.{Collections, Map => JMap, Properties, Set => JSet, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -286,8 +287,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     val kc = new KafkaConsumer[String, String](consumerConfiguration)
     logInfo("Created consumer to get earliest offsets")
     kc.subscribe(topics.asJavaCollection)
-    kc.poll(0)
-    val partitions = kc.assignment()
+    val partitions = getPartitions(kc)
     kc.pause(partitions)
     kc.seekToBeginning(partitions)
     val offsets = partitions.asScala.map(p => p -> kc.position(p)).toMap
@@ -300,14 +300,27 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     val kc = new KafkaConsumer[String, String](consumerConfiguration)
     logInfo("Created consumer to get latest offsets")
     kc.subscribe(topics.asJavaCollection)
-    kc.poll(0)
-    val partitions = kc.assignment()
+    val partitions = getPartitions(kc)
     kc.pause(partitions)
     kc.seekToEnd(partitions)
     val offsets = partitions.asScala.map(p => p -> kc.position(p)).toMap
     kc.close()
     logInfo("Closed consumer to get latest offsets")
     offsets
+  }
+
+  private def getPartitions(consumer: KafkaConsumer[String, String]): JSet[TopicPartition] = {
+    var partitions = Set.empty[TopicPartition].asJava
+    val startTimeMs = System.currentTimeMillis()
+    val timeoutMs = timeout(1.minute).value.toMillis
+    while (partitions.isEmpty&& System.currentTimeMillis() - startTimeMs < timeoutMs) {
+      // Poll to get the latest assigned partitions
+      consumer.poll(Duration.ZERO)
+      partitions = consumer.assignment()
+    }
+    require(!partitions.isEmpty)
+    logDebug(s"Partitions assigned to consumer: $partitions")
+    partitions
   }
 
   def listConsumerGroups(): ListConsumerGroupsResult = {
