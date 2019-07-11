@@ -106,6 +106,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
             substituteCTE(currentPlan, cteName, substitutedCTEPlan)
         }
 
+      // CTE name collision can occur only when inTraverse is true, it helps to avoid eager CTE
+      // substitution in a subquery expression
       case other if inTraverse =>
         other.transformExpressions {
           case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
