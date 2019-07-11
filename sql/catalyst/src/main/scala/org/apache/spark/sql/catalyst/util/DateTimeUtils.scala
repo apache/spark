@@ -543,22 +543,7 @@ object DateTimeUtils {
    * Returns a date value, expressed in days since 1.1.1970.
    */
   def dateAddMonths(days: SQLDate, months: Int): SQLDate = {
-    val (year, monthInYear, dayOfMonth, daysToMonthEnd) = splitDate(days)
-    val absoluteMonth = (year - YearZero) * 12 + monthInYear - 1 + months
-    val nonNegativeMonth = if (absoluteMonth >= 0) absoluteMonth else 0
-    val currentMonthInYear = nonNegativeMonth % 12
-    val currentYear = nonNegativeMonth / 12
-
-    val leapDay = if (currentMonthInYear == 1 && isLeap(currentYear + YearZero)) 1 else 0
-    val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
-
-    val currentDayInMonth = if (daysToMonthEnd == 0 || dayOfMonth >= lastDayOfMonth) {
-      // last day of the month
-      lastDayOfMonth
-    } else {
-      dayOfMonth
-    }
-    firstDayOfMonth(nonNegativeMonth) + currentDayInMonth - 1
+    LocalDate.ofEpochDay(days).plusMonths(months).toEpochDay.toInt
   }
 
   /**
