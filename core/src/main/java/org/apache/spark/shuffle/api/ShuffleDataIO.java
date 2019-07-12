@@ -17,11 +17,11 @@
 
 package org.apache.spark.shuffle.api;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Private;
 
 /**
  * :: Experimental ::
- * An interface for launching Shuffle related components.
+ * An interface for plugging in modules for storing and reading temporary shuffle data.
  * <p>
  * A single instance of this module is loaded per process in the Spark application.
  * The default implementation reads and writes shuffle data from the local disks of
@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Experimental;
  * spark.shuffle.io.plugin.class.
  * @since 3.0.0
  */
-@Experimental
+@Private
 public interface ShuffleDataIO {
 
   /**

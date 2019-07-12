@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.api;
 
 import java.io.IOException;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Private;
 
 /**
  * :: Experimental ::
@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Experimental;
  *
  * @since 3.0.0
  */
-@Experimental
+@Private
 public interface ShuffleMapOutputWriter {
 
   /**

@@ -17,19 +17,15 @@
 
 package org.apache.spark.shuffle.api;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Private;
 
 /**
  * :: Experimental ::
  * An interface for building shuffle support for Executors.
- * <p>
- * At present, submodules returned by this plugin are responsible for managing the
- * writing of shuffle bytes (via {@link ShuffleWriteSupport} and the reading of
- * shuffle bytes (to be added in subsequent patches).
  *
  * @since 3.0.0
  */
-@Experimental
+@Private
 public interface ShuffleExecutorComponents {
 
   /**

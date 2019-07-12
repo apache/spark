@@ -26,8 +26,6 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
 import org.mockito.Mock
 import org.mockito.Mockito.{doAnswer, doNothing, when}
 import org.mockito.MockitoAnnotations
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -76,17 +74,15 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
 
     doNothing().when(shuffleWriteMetrics).incWriteTime(anyLong)
 
-    doAnswer(new Answer[Void] {
-      def answer(invocationOnMock: InvocationOnMock): Void = {
-        partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]
-        val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
-        if (tmp != null) {
-          mergedOutputFile.delete
-          tmp.renameTo(mergedOutputFile)
-        }
-        null
+    doAnswer { invocationOnMock =>
+      partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]
+      val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
+      if (tmp != null) {
+        mergedOutputFile.delete
+        tmp.renameTo(mergedOutputFile)
       }
-    }).when(blockResolver)
+      null
+    }.when(blockResolver)
       .writeIndexFileAndCommit(anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File]))
     mapOutputWriter = new LocalDiskShuffleMapOutputWriter(
       0,
@@ -139,15 +135,15 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   test("writing to an outputstream") {
-    (0 until NUM_PARTITIONS).foreach{ p =>
+    (0 until NUM_PARTITIONS).foreach { p =>
       val writer = mapOutputWriter.getPartitionWriter(p)
       val stream = writer.openStream()
-      data(p).foreach { i => stream.write(i)}
+      data(p).foreach { i => stream.write(i) }
       stream.close()
       intercept[IllegalStateException] {
         stream.write(p)
       }
-      assert(writer.getNumBytesWritten() == D_LEN)
+      assert(writer.getNumBytesWritten === D_LEN)
     }
     mapOutputWriter.commitAllPartitions()
     val partitionLengths = (0 until NUM_PARTITIONS).map { _ => D_LEN.toDouble}.toArray
@@ -157,7 +153,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   test("writing to a channel") {
-    (0 until NUM_PARTITIONS).foreach{ p =>
+    (0 until NUM_PARTITIONS).foreach { p =>
       val writer = mapOutputWriter.getPartitionWriter(p)
       val channel = writer.asInstanceOf[SupportsTransferTo].openTransferrableChannel()
       val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
@@ -175,7 +171,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       // Bytes require * 4
       channel.close()
       tempFileInput.close()
-      assert(writer.getNumBytesWritten == D_LEN * 4)
+      assert(writer.getNumBytesWritten === D_LEN * 4)
     }
     mapOutputWriter.commitAllPartitions()
     val partitionLengths = (0 until NUM_PARTITIONS).map { _ => (D_LEN * 4).toDouble}.toArray
@@ -185,7 +181,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   test("copyStreams with an outputstream") {
-    (0 until NUM_PARTITIONS).foreach{ p =>
+    (0 until NUM_PARTITIONS).foreach { p =>
       val writer = mapOutputWriter.getPartitionWriter(p)
       val stream = writer.openStream()
       val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
@@ -195,7 +191,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       Utils.copyStream(in, stream, false, false)
       in.close()
       stream.close()
-      assert(writer.getNumBytesWritten == D_LEN * 4)
+      assert(writer.getNumBytesWritten === D_LEN * 4)
     }
     mapOutputWriter.commitAllPartitions()
     val partitionLengths = (0 until NUM_PARTITIONS).map { _ => (D_LEN * 4).toDouble}.toArray
@@ -205,7 +201,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   test("copyStreamsWithNIO with a channel") {
-    (0 until NUM_PARTITIONS).foreach{ p =>
+    (0 until NUM_PARTITIONS).foreach { p =>
       val writer = mapOutputWriter.getPartitionWriter(p)
       val channel = writer.asInstanceOf[SupportsTransferTo].openTransferrableChannel()
       val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
@@ -217,7 +213,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       val in = new FileInputStream(tempFile)
       channel.transferFrom(in.getChannel, 0L, byteBuffer.remaining())
       channel.close()
-      assert(writer.getNumBytesWritten == D_LEN * 4)
+      assert(writer.getNumBytesWritten === D_LEN * 4)
     }
     mapOutputWriter.commitAllPartitions()
     val partitionLengths = (0 until NUM_PARTITIONS).map { _ => (D_LEN * 4).toDouble}.toArray

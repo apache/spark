@@ -22,7 +22,7 @@ import java.io.IOException;
 
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Private;
 
 /**
  * :: Experimental ::
@@ -38,7 +38,7 @@ import org.apache.spark.annotation.Experimental;
  *
  * @since 3.0.0
  */
-@Experimental
+@Private
 public interface TransferrableWritableByteChannel extends Closeable {
 
   /**
@@ -52,6 +52,8 @@ public interface TransferrableWritableByteChannel extends Closeable {
    * @param transferStartPosition Start position of the input file to transfer from.
    * @param numBytesToTransfer Number of bytes to transfer from the given source.
    */
-  void transferFrom(FileChannel source, long transferStartPosition, long numBytesToTransfer)
-      throws IOException;
+  void transferFrom(
+      FileChannel source,
+      long transferStartPosition,
+      long numBytesToTransfer) throws IOException;
 }

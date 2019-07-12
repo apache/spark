@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.api;
 
 import java.io.IOException;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Private;
 
 /**
  * :: Experimental ::
@@ -27,16 +27,12 @@ import org.apache.spark.annotation.Experimental;
  *
  * @since 3.0.0
  */
-@Experimental
+@Private
 public interface ShuffleWriteSupport {
 
   /**
    * Called once per map task to create a writer that will be responsible for persisting all the
    * partitioned bytes written by that map task.
-   * <p>
-   * The caller of this method will also call either
-   * {@link ShuffleMapOutputWriter#commitAllPartitions()} upon successful completion of the map
-   * task, or {@link ShuffleMapOutputWriter#abort(Throwable)} if the map task fails.
    */
   ShuffleMapOutputWriter createMapOutputWriter(
     int shuffleId,

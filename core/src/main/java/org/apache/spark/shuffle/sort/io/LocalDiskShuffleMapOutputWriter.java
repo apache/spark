@@ -109,12 +109,8 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
-  public void abort(Throwable error) {
-    try {
-      cleanUp();
-    } catch (Exception e) {
-      log.error("Unable to close appropriate underlying file stream", e);
-    }
+  public void abort(Throwable error) throws IOException {
+    cleanUp();
     if (outputTempFile != null && outputTempFile.exists() && !outputTempFile.delete()) {
       log.warn("Failed to delete temporary shuffle file at {}", outputTempFile.getAbsolutePath());
     }

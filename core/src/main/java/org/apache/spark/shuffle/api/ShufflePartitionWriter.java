@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.api;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Private;
 
 /**
  * :: Experimental ::
@@ -28,19 +28,23 @@ import org.apache.spark.annotation.Experimental;
  *
  * @since 3.0.0
  */
-@Experimental
+@Private
 public interface ShufflePartitionWriter {
 
   /**
-   * Opens and returns an underlying {@link OutputStream} that can write bytes to the underlying
+   * Open and return an {@link OutputStream} that can write bytes to the underlying
    * data store.
    * <p>
-   * The same caller that invokes this method will also close the returned output stream.
+   * This method will only be called once to write the bytes to the partition.
    */
   OutputStream openStream() throws IOException;
 
   /**
    * Get the number of bytes written by this writer's stream returned by {@link #openStream()}.
+   * <p>
+   * This can be different from the number of bytes given by the caller. For example, the
+   * stream might compress or encrypt the bytes before persisting the data to the backing
+   * data store.
    */
   long getNumBytesWritten();
 }
