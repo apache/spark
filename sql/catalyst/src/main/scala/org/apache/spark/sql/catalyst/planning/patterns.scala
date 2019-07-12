@@ -131,13 +131,9 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       }
       val otherPredicates = predicates.filterNot {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
-        case EqualTo(l, r) =>
+        case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
-        case EqualNullSafe(l, r) =>
-          canEvaluate(l, left) && canEvaluate(r, right) ||
-            canEvaluate(l, right) && canEvaluate(r, left)
-        case other => false
       }
 
       if (joinKeys.nonEmpty) {
