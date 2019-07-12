@@ -2,7 +2,7 @@ create temporary view t as select * from values 0, 1, 2 as t(id);
 create temporary view t2 as select * from values 0, 1 as t(id);
 
 -- CTE legacy substitution
-SET spark.sql.legacy.outerCTEHasPriority=true;
+SET spark.sql.legacy.ctePrecedence.enabled=true;
 
 -- CTE in CTE definition
 WITH t as (

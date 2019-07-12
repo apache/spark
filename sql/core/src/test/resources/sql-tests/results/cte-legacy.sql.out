@@ -19,11 +19,11 @@ struct<>
 
 
 -- !query 2
-SET spark.sql.legacy.outerCTEHasPriority=true
+SET spark.sql.legacy.ctePrecedence.enabled=true
 -- !query 2 schema
 struct<key:string,value:string>
 -- !query 2 output
-spark.sql.legacy.outerCTEHasPriority	true
+spark.sql.legacy.ctePrecedence.enabled	true
 
 
 -- !query 3

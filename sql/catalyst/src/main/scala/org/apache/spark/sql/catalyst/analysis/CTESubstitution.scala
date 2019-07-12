@@ -21,15 +21,18 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, With}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_ENABLED
 
 /**
  * Analyze WITH nodes and substitute child plan with CTE definitions.
  */
 object CTESubstitution extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = if (SQLConf.get.legacyCTESubstitutionEnabled) {
-    legacyTraverseAndSubstituteCTE(plan)
-  } else {
-    traverseAndSubstituteCTE(plan, false)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.getConf(LEGACY_CTE_PRECEDENCE_ENABLED)) {
+      legacyTraverseAndSubstituteCTE(plan)
+    } else {
+      traverseAndSubstituteCTE(plan, false)
+    }
   }
 
   private def legacyTraverseAndSubstituteCTE(plan: LogicalPlan): LogicalPlan = {
@@ -81,7 +84,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
    *     WITH t AS (SELECT 2)
    *     SELECT * FROM t
    *   )
-   * @param plan  the plan to be traversed
+   * @param plan the plan to be traversed
    * @param inTraverse whether the current traverse is called from another traverse, only in this
    *                   case name collision can occur
    * @return the plan where CTE substitution is applied
@@ -99,15 +102,17 @@ object CTESubstitution extends Rule[LogicalPlan] {
         // previous one
         relations.foldRight(traversedChild) {
           case ((cteName, ctePlan), currentPlan) =>
-            // A CTE definition might contain an inner CTE that has priority so traverse and
-            // substitute ctePlan
-            // A CTE definition might be used multiple times so substitutedCTEPlan is lazy
+            // A CTE definition might contain an inner CTE that has priority, so traverse and
+            // substitute CTE defined in ctePlan.
+            // A CTE definition might not be used at all or might be used multiple times. To avoid
+            // computation if it is not used and to avoid multiple recomputation if it is used
+            // multiple times we use a lazy construct with call-by-name parameter passing.
             lazy val substitutedCTEPlan = traverseAndSubstituteCTE(ctePlan, true)
             substituteCTE(currentPlan, cteName, substitutedCTEPlan)
         }
 
       // CTE name collision can occur only when inTraverse is true, it helps to avoid eager CTE
-      // substitution in a subquery expression
+      // substitution in a subquery expression.
       case other if inTraverse =>
         other.transformExpressions {
           case e: SubqueryExpression => e.withNewPlan(traverseAndSubstituteCTE(e.plan, true))
@@ -115,7 +120,6 @@ object CTESubstitution extends Rule[LogicalPlan] {
     }
   }
 
-  // A CTE definition might not be used at all so ctePlan is call by name.
   private def substituteCTE(
       plan: LogicalPlan,
       cteName: String,
