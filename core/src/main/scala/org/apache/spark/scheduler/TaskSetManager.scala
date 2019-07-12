@@ -147,7 +147,9 @@ private[spark] class TaskSetManager(
 
   private[scheduler] val pendingTasks = new PendingTasksByLocality()
 
-  // The HashSet here ensures that we do not add duplicate speculative tasks
+  // Tasks that can be speculated. Since these will be a small fraction of total
+  // tasks, we'll just hold them in a HashSet. The HashSet here ensures that we do not add
+  // duplicate speculative tasks.
   private[scheduler] val speculatableTasks = new HashSet[Int]
 
   // Set of pending tasks marked as speculative for various levels of locality: executor, host,
@@ -260,7 +262,7 @@ private[spark] class TaskSetManager(
       pendingTaskSetToAddTo.noPrefs += index
     }
 
-    pendingTaskSetToAddTo.anyPrefs += index
+    pendingTaskSetToAddTo.all += index
   }
 
   /**
@@ -282,9 +284,12 @@ private[spark] class TaskSetManager(
         !(speculative && hasAttemptOnHost(index, host))) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
-        if (((copiesRunning(index) < 2 && speculative) ||
-          (!speculative && copiesRunning(index) == 0)) && !successful(index)) {
-          return Some(index)
+        if (!successful(index)) {
+          if (copiesRunning(index) == 0) {
+            return Some(index)
+          } else if (speculative && copiesRunning(index) == 1) {
+            return Some(index)
+          }
         }
       }
     }
@@ -343,7 +348,7 @@ private[spark] class TaskSetManager(
     // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NO_PREF)) {
       dequeue(pendingTaskSetToUse.noPrefs).foreach { index =>
-        return Some((index, TaskLocality.NO_PREF, speculative))
+        return Some((index, TaskLocality.PROCESS_LOCAL, speculative))
       }
     }
 
@@ -357,7 +362,7 @@ private[spark] class TaskSetManager(
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.ANY)) {
-      dequeue(pendingTaskSetToUse.anyPrefs).foreach { index =>
+      dequeue(pendingTaskSetToUse.all).foreach { index =>
         return Some((index, TaskLocality.ANY, speculative))
       }
     }
@@ -596,13 +601,13 @@ private[spark] class TaskSetManager(
           // from each list, we may need to go deeper in the list.  We poll from the end because
           // failed tasks are put back at the end of allPendingTasks, so we're more likely to find
           // an unschedulable task this way.
-          val indexOffset = pendingTasks.anyPrefs.lastIndexWhere { indexInTaskSet =>
+          val indexOffset = pendingTasks.all.lastIndexWhere { indexInTaskSet =>
             copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)
           }
           if (indexOffset == -1) {
             None
           } else {
-            Some(pendingTasks.anyPrefs(indexOffset))
+            Some(pendingTasks.all(indexOffset))
           }
         }
 
@@ -1051,9 +1056,14 @@ private[spark] object TaskSetManager {
 
 private[scheduler] class PendingTasksByLocality {
 
-  val forExecutor: HashMap[String, ArrayBuffer[Int]] = new HashMap[String, ArrayBuffer[Int]]
-  val forHost: HashMap[String, ArrayBuffer[Int]] = new HashMap[String, ArrayBuffer[Int]]
-  val noPrefs: ArrayBuffer[Int] = new ArrayBuffer[Int]
-  val forRack: HashMap[String, ArrayBuffer[Int]] = new HashMap[String, ArrayBuffer[Int]]
-  val anyPrefs: ArrayBuffer[Int] = new ArrayBuffer[Int]
+  // Set of pending tasks for each executor.
+  val forExecutor = new HashMap[String, ArrayBuffer[Int]]
+  // Set of pending tasks for each host. Similar to pendingTasksForExecutor, but at host level.
+  val forHost = new HashMap[String, ArrayBuffer[Int]]
+  // Set containing pending tasks with no locality preferences.
+  val noPrefs = new ArrayBuffer[Int]
+  // Set of pending tasks for each rack -- similar to the above.
+  val forRack = new HashMap[String, ArrayBuffer[Int]]
+  // Set containing all pending tasks (also used as a stack, as above).
+  val all = new ArrayBuffer[Int]
 }
