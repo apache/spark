@@ -392,6 +392,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   test("SPARK-28355: Use Spark conf for threshold at which UDFs are compressed by broadcast") {
     val conf = new SparkConf()
 
+    // Check the default value
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024 * 1024)
+
     // Set the conf
     conf.set(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD, 1L * 1024)
 
