@@ -953,7 +953,7 @@ abstract class ParquetPartitionDiscoverySuite
 
       withSQLConf(
           ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
-          "spark.sql.sources.commitProtocolClass" ->
+          SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
             classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
         spark.range(3).write.parquet(s"$path/p0=0/p1=0")
       }

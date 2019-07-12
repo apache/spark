@@ -83,7 +83,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -92,7 +92,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -119,7 +119,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -128,7 +128,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -154,7 +154,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -163,7 +163,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -189,7 +189,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -198,7 +198,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -234,7 +234,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -243,7 +243,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
