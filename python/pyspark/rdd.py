@@ -326,11 +326,11 @@ class RDD(object):
         self._jrdd.unpersist(blocking)
         return self
 
-    def materialize(self):
+    def noOpRun(self):
         """
-        Action to force materialization of this RDD. Returns a new RDD.
+        Action to run the job until this point. Returns a new RDD.
         """
-        return RDD(self._jrdd.rdd().materialize(), self.ctx, self._jrdd_deserializer)
+        return RDD(self._jrdd.rdd().noOpRun(), self.ctx, self._jrdd_deserializer)
 
     def checkpoint(self):
         """

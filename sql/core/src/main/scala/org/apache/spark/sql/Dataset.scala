@@ -2949,11 +2949,11 @@ class Dataset[T] private[sql](
    */
   def cache(): this.type = persist()
 
-  def materialize(): Dataset[T] = withAction("materialize", queryExecution) { _ =>
+  def noOpRun(): Dataset[T] = withAction("noOpRun", queryExecution) { _ =>
     withNewExecutionId {
-      var materializedRDD = queryExecution.toRdd.materialize().map(
+      var resultRDD = queryExecution.toRdd.noOpRun().map(
         exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer).fromRow)
-      sparkSession.createDataset(materializedRDD)
+      sparkSession.createDataset(resultRDD)
     }
   }
 

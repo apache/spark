@@ -602,13 +602,11 @@ class DataFrame(object):
         self._jdf.persist(javaStorageLevel)
         return self
 
-    def materialize(self):
+    def noOpRun(self):
         """
-        Action to force materialization of this DF.
-
-        Returns a new DF based on the underlying materialized RDD.
+        Action to run the job until this point and return a new DF.
         """
-        return DataFrame(self._jdf.materialize(), self.sql_ctx)
+        return DataFrame(self._jdf.noOpRun(), self.sql_ctx)
 
     @property
     @since(2.1)

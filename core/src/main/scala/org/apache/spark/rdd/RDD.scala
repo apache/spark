@@ -209,7 +209,7 @@ abstract class RDD[T: ClassTag](
    */
   def cache(): this.type = persist()
 
-  def materialize(): RDD[T] = withScope{
+  def noOpRun(): RDD[T] = withScope{
     sc.runJob(this, Utils.getIteratorSize _)
     this
   }
