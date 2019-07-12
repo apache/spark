@@ -589,7 +589,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing. It supports the following case-insensitive modes.
+   *    during parsing. It supports the following case-insensitive modes. Note that Spark tries
+   *    to parse only required columns in CSV under column pruning. Therefore, corrupt records
+   *    can be different based on required set of fields. This behavior can be controlled by
+   *    `spark.sql.csv.parser.columnPruning.enabled` (enabled by default).
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
    *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep

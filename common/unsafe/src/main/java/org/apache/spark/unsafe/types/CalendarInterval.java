@@ -177,7 +177,8 @@ public final class CalendarInterval implements Serializable {
         long minutes = toLongWithRange("minute", m.group(4), 0, 59);
         long seconds = toLongWithRange("second", m.group(5), 0, 59);
         // Hive allow nanosecond precision interval
-        long nanos = toLongWithRange("nanosecond", m.group(7), 0L, 999999999L);
+        String nanoStr = m.group(7) == null ? null : (m.group(7) + "000000000").substring(0, 9);
+        long nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L);
         result = new CalendarInterval(0, sign * (
           days * MICROS_PER_DAY + hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
           seconds * MICROS_PER_SECOND + nanos / 1000L));

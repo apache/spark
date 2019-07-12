@@ -973,6 +973,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.checkpoint.compress</code></td>
+  <td>false</td>
+  <td>
+    Whether to compress RDD checkpoints. Generally a good idea.
+    Compression will use <code>spark.io.compression.codec</code>.
+   </td>
+</tr>
+<tr>
   <td><code>spark.io.compression.codec</code></td>
   <td>lz4</td>
   <td>
