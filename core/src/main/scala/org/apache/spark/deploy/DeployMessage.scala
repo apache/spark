@@ -45,6 +45,7 @@ private[deploy] object DeployMessages {
    * @param workerWebUiUrl the worker Web UI address
    * @param masterAddress the master address used by the worker to connect
    * @param resources the resources of worker
+   * @param pid the process id of worker
    */
   case class RegisterWorker(
       id: String,
@@ -55,7 +56,8 @@ private[deploy] object DeployMessages {
       memory: Int,
       workerWebUiUrl: String,
       masterAddress: RpcAddress,
-      resources: Map[String, ResourceInformation] = Map.empty)
+      resources: Map[String, ResourceInformation] = Map.empty,
+      pid: Int = 0)
     extends DeployMessage {
     Utils.checkHost(host)
     assert (port > 0)
@@ -117,9 +119,13 @@ private[deploy] object DeployMessages {
 
   /**
    * Ask the worker to release the indicated resources in ALLOCATED_RESOURCES_JSON_FILE
+   * @param pid process id of the target worker
    * @param toRelease the resources expected to release
    */
-  case class ReleaseResources(toRelease: Map[String, ResourceInformation]) extends DeployMessage
+  case class ReleaseResources(
+      pid: Int,
+      toRelease: Map[String, ResourceInformation])
+    extends DeployMessage
 
   case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
 

@@ -56,7 +56,8 @@ private[deploy] class Worker(
     val conf: SparkConf,
     val securityMgr: SecurityManager,
     resourceFileOpt: Option[String] = None,
-    externalShuffleServiceSupplier: Supplier[ExternalShuffleService] = null)
+    externalShuffleServiceSupplier: Supplier[ExternalShuffleService] = null,
+    pid: Int = Utils.getProcessId)
   extends ThreadSafeRpcEndpoint with Logging {
 
   private val host = rpcEnv.address.host
@@ -222,7 +223,7 @@ private[deploy] class Worker(
    */
   private def releaseResourcesOnInterrupt(): Unit = {
     SignalUtils.register("TERM") {
-      releaseResources(conf, resources)
+      releaseResources(conf, SPARK_WORKER_PREFIX, resources, pid)
       false
     }
   }
@@ -231,11 +232,12 @@ private[deploy] class Worker(
     try {
       val allResources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
       val resourceRequirements = parseResourceRequirements(conf, SPARK_WORKER_PREFIX)
-      resources = acquireResources(conf, SPARK_WORKER_PREFIX, allResources, resourceRequirements)
+      resources = acquireResources(conf, SPARK_WORKER_PREFIX, allResources,
+        resourceRequirements, pid)
     } catch {
       case e: Exception =>
         logError("Failed to setup worker resources: ", e)
-        releaseResources(conf, resources)
+        releaseResources(conf, SPARK_WORKER_PREFIX, resources, pid)
         if (!Utils.isTesting) {
           System.exit(1)
         }
@@ -354,7 +356,7 @@ private[deploy] class Worker(
               TimeUnit.SECONDS))
         }
       } else {
-        releaseResources(conf, resources)
+        releaseResources(conf, SPARK_WORKER_PREFIX, resources, pid)
         logError("All masters are unresponsive! Giving up.")
         System.exit(1)
       }
@@ -453,7 +455,7 @@ private[deploy] class Worker(
       case RegisterWorkerFailed(message) =>
         if (!registered) {
           logError("Worker registration failed: " + message)
-          releaseResources(conf, resources)
+          releaseResources(conf, SPARK_WORKER_PREFIX, resources, pid)
           System.exit(1)
         }
 
@@ -650,8 +652,8 @@ private[deploy] class Worker(
       finishedApps += id
       maybeCleanupApplication(id)
 
-    case ReleaseResources(toRelease) =>
-      releaseResources(conf, toRelease)
+    case ReleaseResources(pid, toRelease) =>
+      releaseResources(conf, SPARK_WORKER_PREFIX, toRelease, pid)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -717,7 +719,7 @@ private[deploy] class Worker(
   }
 
   override def onStop() {
-    releaseResources(conf, resources)
+    releaseResources(conf, SPARK_WORKER_PREFIX, resources, pid)
     cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()
@@ -852,8 +854,9 @@ private[deploy] object Worker extends Logging {
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
     val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL)
+    val pid = if (Utils.isTesting) workerNumber.get else Utils.getProcessId
     rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
-      masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr, resourceFileOpt))
+      masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr, resourceFileOpt, pid = pid))
     rpcEnv
   }
 

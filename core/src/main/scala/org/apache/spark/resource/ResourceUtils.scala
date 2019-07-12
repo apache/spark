@@ -21,6 +21,7 @@ import java.io.{File, RandomAccessFile}
 import java.nio.channels.{FileLock, OverlappingFileLockException}
 import java.nio.file.{Files, Paths}
 
+import scala.collection.mutable
 import scala.util.Random
 import scala.util.control.NonFatal
 
@@ -65,6 +66,13 @@ private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[Stri
   }
 }
 
+/**
+ * Resource allocation used in Standalone only, which tracks assignments with
+ * worker/driver(client only) pid.
+ */
+private[spark]
+case class StandaloneResourceAllocation(pid: Int, allocations: Seq[ResourceAllocation])
+
 private[spark] object ResourceUtils extends Logging {
   // These directory/files are used to coordinate the resources between
   // the drivers/workers on the host in Spark Standalone.
@@ -83,8 +91,9 @@ private[spark] object ResourceUtils extends Logging {
    * Assign resources to workers from the same host to avoid address conflict.
    * @param conf SparkConf
    * @param componentName spark.driver / spark.worker
-   * @param resources the resources found by worker on the host
+   * @param resources the resources found by worker/driver on the host
    * @param resourceRequirements the resource requirements asked by the worker/driver
+   * @param pid the process id of worker/driver to acquire resources.
    * @return allocated resources for the worker/driver or throws exception if can't
    *         meet worker/driver's requirement
    */
@@ -92,7 +101,8 @@ private[spark] object ResourceUtils extends Logging {
       conf: SparkConf,
       componentName: String,
       resources: Map[String, ResourceInformation],
-      resourceRequirements: Seq[ResourceRequirement])
+      resourceRequirements: Seq[ResourceRequirement],
+      pid: Int)
     : Map[String, ResourceInformation] = {
     if (resourceRequirements.isEmpty) {
       return Map.empty
@@ -101,18 +111,34 @@ private[spark] object ResourceUtils extends Logging {
     val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
     val allocated = {
       if (resourcesFile.exists()) {
-        val allocated = parseAllocatedFromJsonFile(resourcesFile.getPath)
-        allocated.map { allocation => allocation.id.resourceName -> allocation.addresses.toArray}
+        val livingPids = livingWorkerAndDriverPids
+        val allocations = allocatedResources(resourcesFile.getPath).filter {
+          allocation => livingPids.contains(allocation.pid) || Utils.isTesting
+        }
+        allocations
       } else {
-        Map.empty
+        Seq.empty
       }
-    }.toMap
+    }
 
-    val newAssigned = {
-      resourceRequirements.map{ req =>
+    // combine all allocated resources into a single Array by resource type
+    val allocatedAddresses = {
+      val rNameToAddresses = new mutable.HashMap[String, mutable.ArrayBuffer[String]]()
+      allocated.map(_.allocations).foreach { allocations =>
+        allocations.foreach { allocation =>
+          val addresses = rNameToAddresses.getOrElseUpdate(allocation.id.resourceName,
+            mutable.ArrayBuffer())
+          addresses ++= allocation.addresses
+        }
+      }
+      rNameToAddresses.map(r => r._1 -> r._2.toArray)
+    }
+
+    val newAllocated = {
+      val allocations = resourceRequirements.map{ req =>
         val rName = req.resourceName
         val amount = req.amount
-        val assigned = allocated.getOrElse(rName, Array.empty)
+        val assigned = allocatedAddresses.getOrElse(rName, Array.empty)
         val available = resources(rName).addresses.diff(assigned)
         val newAssigned = {
           if (available.length >= amount) {
@@ -123,55 +149,70 @@ private[spark] object ResourceUtils extends Logging {
               s" assigned to other workers/drivers.")
           }
         }
-        rName -> new ResourceInformation(rName, newAssigned)
+        ResourceAllocation(ResourceID(componentName, rName), newAssigned)
+      }
+      StandaloneResourceAllocation(pid, allocations)
+    }
+    writeResourceAllocationJson(SPARK_WORKER_PREFIX, allocated ++ Seq(newAllocated), resourcesFile)
+    val acquired = {
+      newAllocated.allocations.map { allocation =>
+        allocation.id.resourceName -> allocation.toResourceInformation
       }.toMap
     }
-
-    val newAllocated = {
-      val newResources = newAssigned.keys.partition(allocated.keySet.contains)._2.toSet
-      val allResources = newResources ++ allocated.keys
-      allResources.map { rName =>
-        val oldAddrs = allocated.getOrElse(rName, Array.empty)
-        val newAddrs = Option(newAssigned.getOrElse(rName, null)).map(_.addresses)
-          .getOrElse(Array.empty)
-        rName -> new ResourceInformation(rName, Array.concat(oldAddrs, newAddrs))
-      }.toMap
-    }
-    writeResourceAllocationJson(SPARK_WORKER_PREFIX, newAllocated, resourcesFile)
     logInfo("==============================================================")
-    logInfo(s"Acquired isolated resources for $componentName:\n${newAssigned.mkString("\n")}")
+    logInfo(s"Acquired isolated resources for $componentName:\n${acquired.mkString("\n")}")
     logInfo("==============================================================")
     releaseLock(lock)
-    newAssigned
+    acquired
   }
 
   /**
    * Free the indicated resources to make those resources be available for other
    * workers on the same host.
    * @param conf SparkConf
+   * @param componentName spark.driver / spark.worker
    * @param toRelease the resources expected to release
+   * @param pid the process id of worker/driver to release resources.
    */
-  def releaseResources(conf: SparkConf, toRelease: Map[String, ResourceInformation]): Unit = {
+  def releaseResources(
+      conf: SparkConf,
+      componentName: String,
+      toRelease: Map[String, ResourceInformation],
+      pid: Int)
+    : Unit = {
     if (toRelease.nonEmpty) {
       val lock = acquireLock(conf)
       val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
       if (resourcesFile.exists()) {
-        val allocated = {
-          val allocated = parseAllocatedFromJsonFile(resourcesFile.getPath)
-          allocated.map { allocation => allocation.id.resourceName -> allocation.addresses.toArray}
-        }.toMap
-        val newAllocated = {
-          allocated.map { case (rName, addresses) =>
-            val retained = addresses.diff(Option(toRelease.getOrElse(rName, null))
-              .map(_.addresses).getOrElse(Array.empty))
-            rName -> new ResourceInformation(rName, retained)
-          }.filter(_._2.addresses.nonEmpty)
-        }
-        if (newAllocated.nonEmpty) {
-          writeResourceAllocationJson(SPARK_WORKER_PREFIX, newAllocated, resourcesFile)
-        } else {
-          if (!resourcesFile.delete()) {
-            logWarning(s"Failed to delete $ALLOCATED_RESOURCES_FILE.")
+        val (target, others) = allocatedResources(resourcesFile.getPath).partition(_.pid == pid)
+        if (target.nonEmpty) {
+          val rNameToAddresses = {
+            target.head.allocations.map { allocation =>
+              allocation.id.resourceName -> allocation.addresses
+            }.toMap
+          }
+          val allocations = {
+            rNameToAddresses.map { case (rName, addresses) =>
+              val retained = addresses.diff(Option(toRelease.getOrElse(rName, null))
+                .map(_.addresses).getOrElse(Array.empty))
+              rName -> retained
+            }
+            .filter(_._2.nonEmpty)
+            .map{ case (rName, addresses) =>
+              ResourceAllocation(ResourceID(componentName, rName), addresses)
+            }.toSeq
+          }
+          if (allocations.nonEmpty) {
+            val newAllocation = StandaloneResourceAllocation(pid, allocations)
+            writeResourceAllocationJson(componentName, others ++ Seq(newAllocation), resourcesFile)
+          } else {
+            if (others.isEmpty) {
+              if (!resourcesFile.delete()) {
+                logWarning(s"Failed to delete $ALLOCATED_RESOURCES_FILE.")
+              }
+            } else {
+              writeResourceAllocationJson(componentName, others, resourcesFile)
+            }
           }
         }
       }
@@ -236,15 +277,25 @@ private[spark] object ResourceUtils extends Logging {
     resourceDir
   }
 
-  def writeResourceAllocationJson(
+  private def livingWorkerAndDriverPids: Seq[Int] = {
+    val processIds = try {
+      Utils.executeAndGetOutput(Seq("jps"))
+        .split("\n")
+        .filter(p => p.contains("Worker") || p.contains("SparkSubmit"))
+        .map(_.split(" ")(0).toInt)
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error while fetching process ids of worker and driver", e)
+    }
+    processIds
+  }
+
+  def writeResourceAllocationJson[T](
       componentName: String,
-      resources: Map[String, ResourceInformation],
+      allocations: Seq[T],
       jsonFile: File): Unit = {
     implicit val formats = DefaultFormats
-    val allocation = resources.map { case (rName, rInfo) =>
-      ResourceAllocation(ResourceID(componentName, rName), rInfo.addresses)
-    }.toSeq
-    val allocationJson = Extraction.decompose(allocation)
+    val allocationJson = Extraction.decompose(allocations)
     Files.write(jsonFile.toPath, compact(render(allocationJson)).getBytes())
   }
 
@@ -254,8 +305,11 @@ private[spark] object ResourceUtils extends Logging {
       dir: File): File = {
     val compShortName = componentName.substring(componentName.lastIndexOf(".") + 1)
     val tmpFile = Utils.tempFileWith(dir)
+    val allocations = resources.map { case (rName, rInfo) =>
+      ResourceAllocation(ResourceID(componentName, rName), rInfo.addresses)
+    }.toSeq
     try {
-      writeResourceAllocationJson(componentName, resources, tmpFile)
+      writeResourceAllocationJson(componentName, allocations, tmpFile)
     } catch {
       case NonFatal(e) =>
         val errMsg = s"Exception threw while preparing resource file for $compShortName"
@@ -307,14 +361,27 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
-  def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
-    implicit val formats = DefaultFormats
+  private def withResourcesJson[T](resourcesFile: String)(extract: String => Seq[T]): Seq[T] = {
     val json = new String(Files.readAllBytes(Paths.get(resourcesFile)))
     try {
-      parse(json).extract[Seq[ResourceAllocation]]
+      extract(json)
     } catch {
       case NonFatal(e) =>
         throw new SparkException(s"Error parsing resources file $resourcesFile", e)
+    }
+  }
+
+  private def allocatedResources(resourcesFile: String): Seq[StandaloneResourceAllocation] = {
+    withResourcesJson[StandaloneResourceAllocation](resourcesFile) { json =>
+      implicit val formats = DefaultFormats
+      parse(json).extract[Seq[StandaloneResourceAllocation]]
+    }
+  }
+
+  def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
+    withResourcesJson[ResourceAllocation](resourcesFile) { json =>
+      implicit val formats = DefaultFormats
+      parse(json).extract[Seq[ResourceAllocation]]
     }
   }
 

@@ -2568,6 +2568,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Returns the pid of this JVM process.
+   */
+  def getProcessId: Int = {
+    try {
+      getProcessName().split("@")(0).toInt
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error while getting process id.", e)
+    }
+  }
+
+  /**
    * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
    * this is formatted as PID@hostname.
    */

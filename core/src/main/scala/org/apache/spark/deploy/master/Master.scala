@@ -245,7 +245,7 @@ private[deploy] class Master(
 
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
-      masterAddress, resources) =>
+      masterAddress, resources, pid) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -255,7 +255,7 @@ private[deploy] class Master(
       } else {
         val workerResources = resources.map(r => r._1 -> WorkerResourceInfo(r._1, r._2.addresses))
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerWebUiUrl, workerResources)
+          workerRef, workerWebUiUrl, workerResources, pid)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, false))
@@ -309,6 +309,7 @@ private[deploy] class Master(
             }
             exec.worker.releaseResources(exec.resources)
             exec.worker.removeExecutor(exec)
+            releaseResourcesIfPossible(exec.worker)
 
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
@@ -869,18 +870,18 @@ private[deploy] class Master(
     apps.filterNot(completedApps.contains(_)).foreach { app =>
       app.driver.send(WorkerRemoved(worker.id, worker.host, msg))
     }
-    if (worker.resourcesCanBeReleased.nonEmpty) {
+    releaseResourcesIfPossible(worker)
+    persistenceEngine.removeWorker(worker)
+  }
+
+  private def releaseResourcesIfPossible(worker: WorkerInfo): Unit = {
+    if (!worker.isAlive() && worker.resourcesCanBeReleased.nonEmpty) {
       val brothers = Random.shuffle(idToWorker.filter(_._2.host == worker.host))
       if (brothers.nonEmpty) {
         val delegate = brothers.head._2
-        delegate.endpoint.send(ReleaseResources(worker.resourcesCanBeReleased))
-      } else {
-        // TODO(wuyi5) cases here are hard to handle:
-        // case 1: the worker is the only one instance on the host
-        // case 2: assigned resources on that worker may be wasted
+        delegate.endpoint.send(ReleaseResources(worker.pid, worker.resourcesCanBeReleased))
       }
     }
-    persistenceEngine.removeWorker(worker)
   }
 
   private def relaunchDriver(driver: DriverInfo) {

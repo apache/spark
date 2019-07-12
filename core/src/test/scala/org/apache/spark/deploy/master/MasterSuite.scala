@@ -42,7 +42,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer
@@ -772,7 +772,8 @@ class MasterSuite extends SparkFunSuite
   test("assign/recycle resources to/from driver") {
     val master = makeAliveMaster()
     val masterRef = master.self
-    val driver = DeployTestUtils.createDriverDesc().copy(resourceReqs = Map(GPU -> 3, FPGA -> 3))
+    val resourceReqs = Seq(ResourceRequirement(GPU, 3), ResourceRequirement(FPGA, 3))
+    val driver = DeployTestUtils.createDriverDesc().copy(resourceReqs = resourceReqs)
     val driverId = masterRef.askSync[SubmitDriverResponse](
       RequestSubmitDriver(driver)).driverId.get
     var status = masterRef.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
@@ -828,7 +829,7 @@ class MasterSuite extends SparkFunSuite
 
     val master = makeAliveMaster()
     val masterRef = master.self
-    val resourceReqs = Map(GPU -> 3, FPGA -> 3)
+    val resourceReqs = Seq(ResourceRequirement(GPU, 3), ResourceRequirement(FPGA, 3))
     val worker = makeWorkerAndRegister(masterRef, Map(GPU -> 6, FPGA -> 6))
     worker.appDesc = worker.appDesc.copy(resourceReqsPerExecutor = resourceReqs)
     val driver = DeployTestUtils.createDriverDesc().copy(resourceReqs = resourceReqs)

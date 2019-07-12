@@ -63,6 +63,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   private def makeWorker(
       conf: SparkConf = new SparkConf(),
       shuffleServiceSupplier: Supplier[ExternalShuffleService] = null,
+      pid: Int = Utils.getProcessId,
       local: Boolean = false): Worker = {
     assert(_worker === null, "Some Worker's RpcEnv is leaked in tests")
     val securityMgr = new SecurityManager(conf)
@@ -70,7 +71,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     val resourcesFile = conf.get(SPARK_WORKER_RESOURCE_FILE)
     val localWorker = new Worker(rpcEnv, 50000, 20, 1234 * 5,
       Array.fill(1)(RpcAddress("1.2.3.4", 1234)), "Worker", "/tmp",
-      conf, securityMgr, resourcesFile, shuffleServiceSupplier)
+      conf, securityMgr, resourcesFile, shuffleServiceSupplier, pid)
     if (local) {
       localWorker
     } else {
@@ -325,7 +326,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
         """{"name": "fpga","addresses":["f1", "f2", "f3", "f4", "f5"]}""")
       conf.set(WORKER_FPGA_ID.discoveryScriptConf, scriptPath)
       conf.set(WORKER_FPGA_ID.amountConf, "2")
-      val workers = (0 until 3).map(_ => makeWorker(conf, local = true))
+      val workers = (0 until 3).map(id => makeWorker(conf, pid = id, local = true))
       workers.zipWithIndex.foreach{case (w, i) => w.rpcEnv.setupEndpoint(s"worker$i", w)}
       eventually(timeout(20.seconds)) {
         val (empty, nonEmpty) = workers.partition(_.resources.isEmpty)
