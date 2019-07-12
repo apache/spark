@@ -671,8 +671,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
 
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
     Seq(1.0, 0.5).foreach { compressionFactor =>
-      withSQLConf("spark.sql.sources.fileCompressionFactor" -> compressionFactor.toString,
-        "spark.sql.autoBroadcastJoinThreshold" -> "250") {
+      withSQLConf(SQLConf.FILE_COMRESSION_FACTOR.key -> compressionFactor.toString,
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "250") {
         withTempPath { workDir =>
           // the file size is 486 bytes
           val workDirPath = workDir.getAbsolutePath

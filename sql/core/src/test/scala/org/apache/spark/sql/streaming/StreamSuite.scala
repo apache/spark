@@ -871,7 +871,7 @@ class StreamSuite extends StreamTest {
 
   testQuietly("specify custom state store provider") {
     val providerClassName = classOf[TestStateStoreProvider].getCanonicalName
-    withSQLConf("spark.sql.streaming.stateStore.providerClass" -> providerClassName) {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName) {
       val input = MemoryStream[Int]
       val df = input.toDS().groupBy().count()
       val query = df.writeStream.outputMode("complete").format("memory").queryName("name").start()
@@ -888,9 +888,9 @@ class StreamSuite extends StreamTest {
   testQuietly("custom state store provider read from offset log") {
     val input = MemoryStream[Int]
     val df = input.toDS().groupBy().count()
-    val providerConf1 = "spark.sql.streaming.stateStore.providerClass" ->
+    val providerConf1 = SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider"
-    val providerConf2 = "spark.sql.streaming.stateStore.providerClass" ->
+    val providerConf2 = SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[TestStateStoreProvider].getCanonicalName
 
     def runQuery(queryName: String, checkpointLoc: String): Unit = {
