@@ -218,7 +218,7 @@ final class OneVsRestModel private[ml] (
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
 
-    if (getRawPredictionCol != "") {
+    if (getRawPredictionCol.nonEmpty) {
       val numClass = models.length
 
       // output the RawPrediction as vector
@@ -232,7 +232,7 @@ final class OneVsRestModel private[ml] (
       predictionColumns :+= rawPredictionUDF(col(accColName))
     }
 
-    if (getPredictionCol != "") {
+    if (getPredictionCol.nonEmpty) {
       // output the index of the classifier with highest confidence as prediction
       val labelUDF = udf { (predictions: Map[Int, Double]) =>
         predictions.maxBy(_._2)._1.toDouble
