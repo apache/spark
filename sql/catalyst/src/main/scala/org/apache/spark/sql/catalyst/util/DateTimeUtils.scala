@@ -506,39 +506,6 @@ object DateTimeUtils {
   }
 
   /**
-   * The number of days for each month (not leap year)
-   */
-  private val monthDays = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-
-  /**
-   * Returns the date value for the first day of the given month.
-   * The month is expressed in months since year zero (17999 BC), starting from 0.
-   */
-  private def firstDayOfMonth(absoluteMonth: Int): SQLDate = {
-    val absoluteYear = absoluteMonth / 12
-    var monthInYear = absoluteMonth - absoluteYear * 12
-    var date = getDateFromYear(absoluteYear)
-    if (monthInYear >= 2 && isLeap(absoluteYear + YearZero)) {
-      date += 1
-    }
-    while (monthInYear > 0) {
-      date += monthDays(monthInYear - 1)
-      monthInYear -= 1
-    }
-    date
-  }
-
-  /**
-   * Returns the date value for January 1 of the given year.
-   * The year is expressed in years since year zero (17999 BC), starting from 0.
-   */
-  private def getDateFromYear(absoluteYear: Int): SQLDate = {
-    val absoluteDays = (absoluteYear * 365 + absoluteYear / 400 - absoluteYear / 100
-      + absoluteYear / 4)
-    absoluteDays - toYearZero
-  }
-
-  /**
    * Add date and year-month interval.
    * Returns a date value, expressed in days since 1.1.1970.
    */
