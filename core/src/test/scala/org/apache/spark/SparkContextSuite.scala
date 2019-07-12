@@ -170,7 +170,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val jarPath = "hdfs:///no/path/to/TestUDTF.jar"
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath)
-      assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 0)
+      assert(sc.listJars().forall(!_..contains("TestUDTF.jar")))
     } finally {
       sc.stop()
     }
