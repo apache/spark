@@ -1851,6 +1851,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
+    .internal()
+    .doc("When true, outer CTE definitions takes precedence over inner definitions.")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.arrayExistsFollowsThreeValuedLogic")
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
