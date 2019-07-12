@@ -129,7 +129,7 @@ SELECT '<NULL>' AS `One`,
     WHEN 1 > 2 THEN udf(3)
   END AS `Simple default`
 -- !query 14 schema
-struct<One:string,Simple default:string>
+struct<One:string,Simple default:int>
 -- !query 14 output
 <NULL>	NULL
 
@@ -141,7 +141,7 @@ SELECT '3' AS `One`,
     ELSE udf(4)
   END AS `Simple ELSE`
 -- !query 15 schema
-struct<One:string,Simple ELSE:string>
+struct<One:string,Simple ELSE:int>
 -- !query 15 output
 3	3
 
@@ -192,7 +192,7 @@ struct<CASE WHEN CAST(udf((1 = 0)) AS BOOLEAN) THEN (CAST(1 AS DOUBLE) / CAST(0 
 -- !query 20
 SELECT CASE 1 WHEN 0 THEN 1/udf(0) WHEN 1 THEN 1 ELSE 2/0 END
 -- !query 20 schema
-struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(CAST(udf(0) AS DOUBLE) AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
+struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(udf(0) AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
 -- !query 20 output
 1.0
 
@@ -200,18 +200,18 @@ struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(CAST(udf(0) AS DOUBLE) A
 -- !query 21
 SELECT CASE WHEN i > 100 THEN udf(1/0) ELSE udf(0) END FROM case_tbl
 -- !query 21 schema
-struct<CASE WHEN (i > 100) THEN udf((cast(1 as double) / cast(0 as double))) ELSE udf(0) END:string>
+struct<CASE WHEN (i > 100) THEN udf((cast(1 as double) / cast(0 as double))) ELSE CAST(udf(0) AS DOUBLE) END:double>
 -- !query 21 output
-0
-0
-0
-0
+0.0
+0.0
+0.0
+0.0
 
 
 -- !query 22
 SELECT CASE 'a' WHEN 'a' THEN udf(1) ELSE udf(2) END
 -- !query 22 schema
-struct<CASE WHEN (a = a) THEN udf(1) ELSE udf(2) END:string>
+struct<CASE WHEN (a = a) THEN udf(1) ELSE udf(2) END:int>
 -- !query 22 output
 1
 
@@ -302,7 +302,7 @@ struct<i:int,f:double>
 SELECT udf(COALESCE(a.f, b.i, b.j))
   FROM CASE_TBL a, CASE2_TBL b
 -- !query 29 schema
-struct<udf(coalesce(f, cast(i as double), cast(j as double))):string>
+struct<udf(coalesce(f, cast(i as double), cast(j as double))):double>
 -- !query 29 output
 -30.3
 -30.3

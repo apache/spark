@@ -10,8 +10,6 @@
 -- Thus, we set spark.sql.crossJoin.enabled to true.
 
 -- This test file was converted from pgSQL/case.sql.
--- Note that currently registered UDF returns a string. So there are some differences, for instance
--- in string cast within UDF in Scala and Python.
 
 set spark.sql.crossJoin.enabled=true;
 CREATE TABLE CASE_TBL (
