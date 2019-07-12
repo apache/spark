@@ -1001,7 +1001,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     val left = Seq((1, 2), (2, 3)).toDF("a", "b")
     val right = Seq((1, 2), (3, 4)).toDF("c", "d")
-    val df = left.join(right, pythonTestUDF($"a") === pythonTestUDF($"c"))
+    val df = left.join(right, pythonTestUDF(left("a")) === pythonTestUDF(right.col("c")))
 
     val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
     assert(joinNode.isDefined)
