@@ -134,6 +134,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
+        case _ => false
       }
 
       if (joinKeys.nonEmpty) {
