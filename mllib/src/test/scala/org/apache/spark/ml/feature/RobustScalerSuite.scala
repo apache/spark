@@ -23,7 +23,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.Row
 
-class StandardScalerSuite extends MLTest with DefaultReadWriteTest {
+class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -57,6 +57,7 @@ class StandardScalerSuite extends MLTest with DefaultReadWriteTest {
     )
   }
 
+
   def assertResult: Row => Unit = {
     case Row(vector1: Vector, vector2: Vector) =>
       assert(vector1 ~== vector2 absTol 1E-5,
@@ -64,12 +65,12 @@ class StandardScalerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new StandardScaler)
-    ParamsSuite.checkParams(new StandardScalerModel("empty",
+    ParamsSuite.checkParams(new RobustScaler)
+    ParamsSuite.checkParams(new RobustScalerModel("empty",
       Vectors.dense(1.0), Vectors.dense(2.0)))
   }
 
-  test("Standardization with default parameter") {
+  test("Scaling with default parameter") {
     val df0 = data.zip(resWithStd).toSeq.toDF("features", "expected")
 
     val standardScalerEst0 = new StandardScaler()
@@ -82,7 +83,7 @@ class StandardScalerSuite extends MLTest with DefaultReadWriteTest {
       assertResult)
   }
 
-  test("Standardization with setter") {
+  test("Scaling with setter") {
     val df1 = data.zip(resWithBoth).toSeq.toDF("features", "expected")
     val df2 = data.zip(resWithMean).toSeq.toDF("features", "expected")
     val df3 = data.zip(data).toSeq.toDF("features", "expected")
@@ -133,21 +134,21 @@ class StandardScalerSuite extends MLTest with DefaultReadWriteTest {
       assertResult)
   }
 
-  test("StandardScaler read/write") {
-    val t = new StandardScaler()
+  test("RobustScaler read/write") {
+    val t = new RobustScaler()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
-      .setWithStd(false)
-      .setWithMean(true)
+      .setWithCentering(false)
+      .setWithScaling(true)
     testDefaultReadWrite(t)
   }
 
-  test("StandardScalerModel read/write") {
-    val instance = new StandardScalerModel("myStandardScalerModel",
+  test("RobustScalerModel read/write") {
+    val instance = new RobustScalerModel("myRobustScalerModel",
       Vectors.dense(1.0, 2.0), Vectors.dense(3.0, 4.0))
     val newInstance = testDefaultReadWrite(instance)
-    assert(newInstance.std === instance.std)
-    assert(newInstance.mean === instance.mean)
+    assert(newInstance.range === instance.range)
+    assert(newInstance.median === instance.median)
   }
 
 }

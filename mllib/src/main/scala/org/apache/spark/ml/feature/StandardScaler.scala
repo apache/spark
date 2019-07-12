@@ -160,35 +160,24 @@ class StandardScalerModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
+    val shift = mean.toArray
+    val scale = std.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
 
-    val func = if ($(withMean)) {
-      vector: Vector =>
-        val values = vector match {
-          // specially handle DenseVector because its toArray does not clone already
-          case d: DenseVector => d.values.clone()
-          case v: Vector => v.toArray
-        }
-        val newValues = scaler.transformWithMean(values)
+    val func = getTransformFunc(shift, scale, $(withMean), $(withStd))
+    val transformer = udf { vector: Vector =>
+      val (newSize, newIndices, newValues) = vector match {
+        case DenseVector(values) =>
+          func(values.length, Array.emptyIntArray, values)
+        case SparseVector(size, indices, values) =>
+          func(size, indices, values)
+      }
+      if (newSize == newValues.length) {
         Vectors.dense(newValues)
-    } else if ($(withStd)) {
-      vector: Vector =>
-        vector match {
-          case DenseVector(values) =>
-            val newValues = scaler.transformDenseWithStd(values)
-            Vectors.dense(newValues)
-          case SparseVector(size, indices, values) =>
-            val (newIndices, newValues) = scaler.transformSparseWithStd(indices, values)
-            Vectors.sparse(size, newIndices, newValues)
-          case other =>
-            throw new UnsupportedOperationException(
-              s"Only sparse and dense vectors are supported but got ${other.getClass}.")
-        }
-    } else {
-      vector: Vector => vector
+      } else {
+        Vectors.sparse(newSize, newIndices, newValues)
+      }
     }
 
-    val transformer = udf(func)
     dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
 
@@ -245,4 +234,75 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
 
   @Since("1.6.0")
   override def load(path: String): StandardScalerModel = super.load(path)
+
+  private[spark] def getTransformFunc(shift: Array[Double],
+                                      scale: Array[Double],
+                                      withShift: Boolean,
+                                      withScale: Boolean):
+  (Int, Array[Int], Array[Double]) => (Int, Array[Int], Array[Double]) = {
+
+    (withShift, withScale) match {
+      case (true, true) =>
+        (size: Int, indices: Array[Int], values: Array[Double]) =>
+          val newValues = convertToArray(size, indices, values)
+          var i = 0
+          while (i < size) {
+            newValues(i) = (newValues(i) - shift(i)) * scale(i)
+            i += 1
+          }
+          (size, Array.emptyIntArray, newValues)
+
+      case (true, false) =>
+        (size: Int, indices: Array[Int], values: Array[Double]) =>
+          val newValues = convertToArray(size, indices, values)
+          var i = 0
+          while (i < size) {
+            newValues(i) -= shift(i)
+            i += 1
+          }
+          (size, Array.emptyIntArray, newValues)
+
+      case (true, false) =>
+        (size: Int, indices: Array[Int], values: Array[Double]) =>
+          val newValues = values.clone()
+          if (size == values.length) {
+            var i = 0
+            while (i < size) {
+              newValues(i) *= scale(i)
+              i += 1
+            }
+            (size, indices, newValues)
+          } else {
+            var i = 0
+            while (i < indices.length) {
+              newValues(indices(i)) *= scale(indices(i))
+              i += 1
+            }
+            (size, indices, newValues)
+          }
+
+      case (false, false) =>
+        (size: Int, indices: Array[Int], values: Array[Double]) =>
+          (size, indices, values)
+    }
+  }
+
+  private def convertToArray(size: Int,
+                             indices: Array[Int],
+                             values: Array[Double]): Array[Double] = {
+    if (size == values.length) {
+      values.clone()
+    } else {
+      require(indices.length == values.length)
+      require(indices.length < size)
+      val data = new Array[Double](size)
+      var i = 0
+      val nnz = indices.length
+      while (i < nnz) {
+        data(indices(i)) = values(i)
+        i += 1
+      }
+      data
+    }
+  }
 }
