@@ -703,9 +703,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
-          val supportAdaptive = conf.reducePostShufflePartitionsForRepartition
           ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), supportAdaptive) :: Nil
+            planLater(child), canChangeNumPartition = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -738,8 +737,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val supportAdaptive = conf.reducePostShufflePartitionsForRepartition
-        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), supportAdaptive) :: Nil
+        exchange.ShuffleExchangeExec(
+          r.partitioning, planLater(r.child), canChangeNumPartition = false) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

@@ -141,7 +141,7 @@ case class ShuffleQueryStageExec(
     }
   }
 
-  def supportAdaptive: Boolean = plan.supportAdaptive
+  def canChangeNumPartition: Boolean = plan.canChangeNumPartition
 }
 
 /**

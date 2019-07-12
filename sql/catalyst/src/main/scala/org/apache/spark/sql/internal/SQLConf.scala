@@ -312,16 +312,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val REDUCE_POST_SHUFFLE_PARTITIONS_FOR_REPARTITION =
-    buildConf("spark.sql.adaptive.reducePostShufflePartitionsForRepartition")
-    .doc("When true and reducePostShufflePartitions in adaptive execution is enabled, it also " +
-      "reduces the number of post-shuffle partitions for shuffles introduced by repartition. " +
-      "By default this is false, so users get the desired partition number by calling " +
-      "repartition even in adaptive execution.")
-    .internal()
-    .booleanConf
-    .createWithDefault(false)
-
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.minNumPostShufflePartitions")
       .doc("The advisory minimum number of post-shuffle partitions used in adaptive execution.")
@@ -1960,9 +1950,6 @@ class SQLConf extends Serializable with Logging {
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
-
-  def reducePostShufflePartitionsForRepartition: Boolean =
-    getConf(REDUCE_POST_SHUFFLE_PARTITIONS_FOR_REPARTITION)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
