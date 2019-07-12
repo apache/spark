@@ -234,8 +234,8 @@ class DecisionTreeRegressionModel private[ml] (
     if (predictionColNames.nonEmpty) {
       dataset.withColumns(predictionColNames, predictionColumns)
     } else {
-      this.logWarning(s"$uid: DecisionTreeRegressionModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: DecisionTreeRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
       dataset.toDF()
     }
   }

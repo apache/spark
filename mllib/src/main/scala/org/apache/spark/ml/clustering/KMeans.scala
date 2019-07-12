@@ -131,8 +131,8 @@ class KMeansModel private[ml] (
       dataset.withColumn($(predictionCol),
         predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
     } else {
-      this.logWarning(s"$uid: KMeansModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: KMeansModel.transform() does nothing" +
+        " because no output columns were set.")
       dataset.toDF()
     }
   }

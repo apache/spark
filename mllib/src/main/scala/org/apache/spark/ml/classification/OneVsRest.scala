@@ -170,8 +170,8 @@ final class OneVsRestModel private[ml] (
     transformSchema(dataset.schema, logging = true)
 
     if (getPredictionCol == "" && getRawPredictionCol == "") {
-      logWarning(s"$uid: OneVsRestModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
+        " because no output columns were set.")
       return dataset.toDF
     }
 
@@ -243,15 +243,9 @@ final class OneVsRestModel private[ml] (
         .as(getPredictionCol, labelMetadata)
     }
 
-    if (predictionColNames.nonEmpty) {
-      aggregatedDataset
-        .withColumns(predictionColNames, predictionColumns)
-        .drop(accColName)
-    } else {
-      this.logWarning(s"$uid: OneVsRestModel.transform() was called as NOOP" +
-        " since no output columns were set.")
-      dataset.toDF()
-    }
+    aggregatedDataset
+      .withColumns(predictionColNames, predictionColumns)
+      .drop(accColName)
   }
 
   @Since("1.4.1")

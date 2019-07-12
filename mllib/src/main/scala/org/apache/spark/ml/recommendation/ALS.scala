@@ -321,8 +321,8 @@ class ALSModel private[ml] (
           predictions
       }
     } else {
-      this.logWarning(s"$uid: ALSModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: ALSModel.transform() does nothing" +
+        " because no output columns were set.")
       dataset.toDF()
     }
   }

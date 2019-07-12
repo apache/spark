@@ -251,8 +251,8 @@ class IsotonicRegressionModel private[ml] (
       }
       dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
     } else {
-      this.logWarning(s"$uid: IsotonicRegressionModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: IsotonicRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
       dataset.toDF()
     }
   }

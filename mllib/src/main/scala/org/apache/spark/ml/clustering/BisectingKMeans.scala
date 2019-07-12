@@ -113,8 +113,8 @@ class BisectingKMeansModel private[ml] (
       dataset.withColumn($(predictionCol),
         predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
     } else {
-      this.logWarning(s"$uid: BisectingKMeansModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: BisectingKMeansModel.transform() does nothing" +
+        " because no output columns were set.")
       dataset.toDF()
     }
   }
