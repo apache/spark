@@ -139,8 +139,8 @@ class StandardScalerModel @Since("1.3.0") (
     // By default, Scala generates Java methods for member variables. So every time when
     // the member variables are accessed, `invokespecial` will be called which is expensive.
     // This can be avoid by having a local reference of `shift`.
-    val localShift = shift
-    val localScale = scale
+    val localShift = if (withMean) shift else Array.emptyDoubleArray
+    val localScale = if (withStd) scale else Array.emptyDoubleArray
     val func = NewStandardScalerModel.getTransformFunc(localShift, localScale, withMean, withStd)
     val (newSize, newIndices, newValues) = vector match {
       case DenseVector(values) =>
