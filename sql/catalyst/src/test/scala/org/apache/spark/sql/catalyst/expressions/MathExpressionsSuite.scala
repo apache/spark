@@ -202,7 +202,13 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("asinh") {
     testUnary(Asinh, (x: Double) => math.log(x + math.sqrt(x * x + 1.0)))
     checkConsistencyBetweenInterpretedAndCodegen(Asinh, DoubleType)
+
     checkEvaluation(Asinh(Double.NegativeInfinity), Double.NegativeInfinity)
+
+    val nullLit = Literal.create(null, NullType)
+    val doubleNullLit = Literal.create(null, DoubleType)
+    checkEvaluation(checkDataTypeAndCast(Asinh(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Asinh(doubleNullLit)), null, EmptyRow)
   }
 
   test("cos") {
@@ -224,6 +230,11 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("acosh") {
     testUnary(Acosh, (x: Double) => math.log(x + math.sqrt(x * x - 1.0)))
     checkConsistencyBetweenInterpretedAndCodegen(Cosh, DoubleType)
+
+    val nullLit = Literal.create(null, NullType)
+    val doubleNullLit = Literal.create(null, DoubleType)
+    checkEvaluation(checkDataTypeAndCast(Acosh(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Acosh(doubleNullLit)), null, EmptyRow)
   }
 
   test("tan") {
@@ -258,6 +269,11 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("atanh") {
     testUnary(Atanh, (x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)))
     checkConsistencyBetweenInterpretedAndCodegen(Atanh, DoubleType)
+
+    val nullLit = Literal.create(null, NullType)
+    val doubleNullLit = Literal.create(null, DoubleType)
+    checkEvaluation(checkDataTypeAndCast(Atanh(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Atanh(doubleNullLit)), null, EmptyRow)
   }
 
   test("toDegrees") {
