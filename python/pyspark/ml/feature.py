@@ -2612,6 +2612,8 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
     .. note:: null values from input array are preserved unless adding null to stopWords explicitly.
 
+    >>> locale = spark._jvm.java.util.Locale
+    >>> locale.setDefault(locale.forLanguageTag("en-US")) # Set a default local
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["text"])
     >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
     >>> remover.transform(df).head().words == ['a', 'c']

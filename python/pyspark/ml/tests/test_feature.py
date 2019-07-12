@@ -84,6 +84,11 @@ class FeatureTests(SparkSessionTestCase):
 
     def test_stopwordsremover(self):
         dataset = self.spark.createDataFrame([Row(input=["a", "panda"])])
+
+        # Set a default local to prevent possible invalid locale issue.
+        locale = self.spark._jvm.java.util.Locale
+        locale.setDefault(locale.forLanguageTag("en-US"))
+
         stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
         # Default
         self.assertEqual(stopWordRemover.getInputCol(), "input")
