@@ -74,7 +74,6 @@ public interface StagingTableCatalog extends TableCatalog {
       StructType schema,
       Transform[] partitions,
       Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
-  ;
 
   /**
    * Stage the replacement of a table, preparing it to be committed into the metastore when the

@@ -443,8 +443,10 @@ case class CreateTableAsSelect(
 /**
  * Replace a table with a v2 catalog.
  *
- * If the table does not exist, it will be created. The persisted table will have no contents
- * as a result of this operation.
+ * If the table does not exist, and orCreate is true, then it will be created.
+ * If the table does not exist, and orCreate is false, then an exception will be thrown.
+ *
+ * The persisted table will have no contents as a result of this operation.
  */
 case class ReplaceTable(
     catalog: TableCatalog,
@@ -457,7 +459,8 @@ case class ReplaceTable(
 /**
  * Replaces a table from a select query with a v2 catalog.
  *
- * If the table does not already exist, it will be created.
+ * If the table does not exist, and orCreate is true, then it will be created.
+ * If the table does not exist, and orCreate is false, then an exception will be thrown.
  */
 case class ReplaceTableAsSelect(
     catalog: TableCatalog,
