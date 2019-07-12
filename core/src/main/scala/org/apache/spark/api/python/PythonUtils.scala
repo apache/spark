@@ -83,6 +83,6 @@ private[spark] object PythonUtils {
   }
 
   def getBroadcastThreshold(sc: JavaSparkContext): Long = {
-    sc.conf.get(org.apache.spark.internal.config.BROADCAST_UDF_THRESHOLD)
+    sc.conf.get(org.apache.spark.internal.config.BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD)
   }
 }

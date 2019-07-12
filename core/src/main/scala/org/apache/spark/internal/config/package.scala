@@ -1246,11 +1246,13 @@ package object config {
       "mechanisms to guarantee data won't be corrupted during broadcast")
     .booleanConf.createWithDefault(true)
 
-  private[spark] val BROADCAST_UDF_THRESHOLD = ConfigBuilder("spark.broadcast.UDFThreshold")
-    .doc("The threshold at which a serialized command is compressed by broadcast, in " +
-      "bytes unless otherwise specified")
-    .bytesConf(ByteUnit.BYTE)
-    .createWithDefault(1 << 20)
+  private[spark] val BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD =
+    ConfigBuilder("spark.broadcast.UDFCompressionThreshold")
+      .doc("The threshold at which a a user-defined function (UDF) is compressed by broadcast, " +
+        "in bytes unless otherwise specified")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v >= 0, "The threshold should be non-negative.")
+      .createWithDefault(1L * 1024 * 1024)
 
   private[spark] val RDD_COMPRESS = ConfigBuilder("spark.rdd.compress")
     .doc("Whether to compress serialized RDD partitions " +
