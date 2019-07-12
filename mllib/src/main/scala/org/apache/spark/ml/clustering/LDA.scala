@@ -490,7 +490,7 @@ abstract class LDAModel private[ml] (
         Vectors.zeros(k)
       } else {
         val (ids: List[Int], cts: Array[Double]) = vector match {
-          case v: DenseVector => ((0 until v.size).toList, v.values)
+          case v: DenseVector => (List.range(0, v.size), v.values)
           case v: SparseVector => (v.indices.toList, v.values)
           case other =>
             throw new UnsupportedOperationException(
