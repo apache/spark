@@ -468,8 +468,8 @@ abstract class LDAModel private[ml] (
       dataset.withColumn($(topicDistributionCol),
         transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
     } else {
-      logWarning("LDAModel.transform was called without any output columns. Set an output column" +
-        " such as topicDistributionCol to produce results.")
+      logWarning("LDAModel.transform() does nothing " +
+        "because no output columns were set.")
       dataset.toDF()
     }
   }
