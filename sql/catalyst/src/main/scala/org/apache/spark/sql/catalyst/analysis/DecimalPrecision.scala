@@ -174,6 +174,20 @@ object DecimalPrecision extends TypeCoercionRule {
       CheckOverflow(Pmod(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
         resultType, nullOnOverflow)
 
+    case expr @ IntegralDivide(
+        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+      val widerType = widerDecimalType(p1, s1, p2, s2)
+      val promotedExpr =
+        IntegralDivide(promotePrecision(e1, widerType), promotePrecision(e2, widerType))
+      if (expr.dataType.isInstanceOf[DecimalType]) {
+        // This follows division rule
+        val intDig = p1 - s1 + s2
+        // No precision loss can happen as the result scale is 0, so only overflow can happen
+        CheckOverflow(promotedExpr, DecimalType.bounded(intDig, 0), nullOnOverflow)
+      } else {
+        promotedExpr
+      }
+
     case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
     e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
       val resultType = widerDecimalType(p1, s1, p2, s2)

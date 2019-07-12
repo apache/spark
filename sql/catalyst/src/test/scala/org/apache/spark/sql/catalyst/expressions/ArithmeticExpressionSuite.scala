@@ -376,4 +376,19 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     Greatest(Seq(Literal(1), Literal(1))).genCode(ctx2)
     assert(ctx2.inlinedMutableStates.size == 1)
   }
+
+  test("SPARK-28322: IntegralDivide supports decimal type") {
+    withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "false") {
+      checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), Decimal(0))
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.4)), Literal(Decimal(0.6))), Decimal(2))
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), Decimal(1))
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(0.0))), null)
+    }
+    withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "true") {
+      checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.4)), Literal(Decimal(0.6))), 2L)
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(0.0))), null)
+    }
+  }
 }
