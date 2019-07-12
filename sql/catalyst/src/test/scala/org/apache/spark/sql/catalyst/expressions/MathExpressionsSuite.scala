@@ -202,6 +202,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("asinh") {
     testUnary(Asinh, (x: Double) => math.log(x + math.sqrt(x * x + 1.0)))
     checkConsistencyBetweenInterpretedAndCodegen(Asinh, DoubleType)
+    checkEvaluation(Asinh(Double.NegativeInfinity), Double.NegativeInfinity)
   }
 
   test("cos") {

@@ -596,10 +596,14 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   """,
   since = "3.0.0")
 case class Asinh(child: Expression)
-  extends UnaryMathExpression((x: Double) => math.log(x + math.sqrt(x * x + 1.0)), "ASINH") {
+  extends UnaryMathExpression((x: Double) => x match {
+    case Double.NegativeInfinity => Double.NegativeInfinity
+    case _ => math.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c =>
-      s"${ev.value} = java.lang.Math.log($c + java.lang.Math.sqrt($c * $c + 1.0));")
+    defineCodeGen(ctx, ev, c => c match {
+      case "Double.NEGATIVE_INFINITY" => s"${ev.value} = java.lang.Double.NEGATIVE_INFINITY;"
+      case _ => s"${ev.value} = java.lang.Math.log($c + java.lang.Math.sqrt($c * $c + 1.0));"
+    })
   }
 }
 
