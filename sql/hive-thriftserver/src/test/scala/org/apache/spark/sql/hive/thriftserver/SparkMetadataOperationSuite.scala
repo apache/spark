@@ -168,10 +168,10 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
   }
 
   test("Spark's own GetTableTypesOperation(SparkGetTableTypesOperation)") {
-    def checkResult(rs: ResultSet, dbNames: Seq[String]): Unit = {
-      for (i <- dbNames.indices) {
+    def checkResult(rs: ResultSet, tableTypes: Seq[String]): Unit = {
+      for (i <- tableTypes.indices) {
         assert(rs.next())
-        assert(rs.getString("TABLE_TYPE") === dbNames(i))
+        assert(rs.getString("TABLE_TYPE") === tableTypes(i))
       }
       // Make sure there are no more elements
       assert(!rs.next())

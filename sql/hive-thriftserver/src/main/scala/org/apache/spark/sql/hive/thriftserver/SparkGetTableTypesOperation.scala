@@ -40,9 +40,16 @@ private[hive] class SparkGetTableTypesOperation(
     parentSession: HiveSession)
   extends GetTableTypesOperation(parentSession) with SparkMetadataOperationUtils with Logging {
 
+  private var statementId: String = _
+
+  override def close(): Unit = {
+    super.close()
+    HiveThriftServer2.listener.onOperationClosed(statementId)
+  }
+
   override def runInternal(): Unit = {
-    val statementId = UUID.randomUUID().toString
-    val logMsg = s"Listing table types"
+    statementId = UUID.randomUUID().toString
+    val logMsg = "Listing table types"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
