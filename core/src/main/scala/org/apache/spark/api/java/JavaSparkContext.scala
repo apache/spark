@@ -35,6 +35,7 @@ import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
+import org.apache.spark.resource.ResourceInformation
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -113,6 +114,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def master: String = sc.master
 
   def appName: String = sc.appName
+
+  def resources: JMap[String, ResourceInformation] = sc.resources.asJava
 
   def jars: util.List[String] = sc.jars.asJava
 
