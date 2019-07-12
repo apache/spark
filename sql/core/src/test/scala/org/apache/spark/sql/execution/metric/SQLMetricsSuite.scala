@@ -277,9 +277,9 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("ShuffledHashJoin metrics") {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "40",
-        "spark.sql.shuffle.partitions" -> "2",
-        "spark.sql.join.preferSortMergeJoin" -> "false") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
       // Assume the execution plan is

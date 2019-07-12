@@ -1322,7 +1322,7 @@ class JDBCSuite extends QueryTest
 
     testJdbcParitionColumn("THEID", "THEID")
     testJdbcParitionColumn("\"THEID\"", "THEID")
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       testJdbcParitionColumn("ThEiD", "THEID")
     }
     testJdbcParitionColumn("THE ID", "THE ID")
