@@ -281,6 +281,25 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     checkType(Multiply(b, c), DecimalType(37, 0))
   }
 
+
+  test("Decimal precision promotion for binary arithmetic with casted decimal type") {
+    val a = AttributeReference("a", DecimalType(38, 18))()
+    val b = AttributeReference("b", DecimalType(38, 18))()
+
+    val expectedTypes = Seq(DecimalType(38, 18), DecimalType(38, 2))
+    Seq(Add(a, b), Subtract(a, b), Multiply(a, b), Divide(a, b),
+      Remainder(a, b), Pmod(a, b)).foreach { binaryArithmetic =>
+      expectedTypes.foreach { expectedType =>
+        val withCast = Cast(binaryArithmetic, expectedType)
+        val plan = DecimalPrecision(Project(Seq(Alias(withCast, "c")()), LocalRelation(a, b)))
+        val dataType = plan.expressions.head.collect {
+          case c: CheckOverflow => c.dataType
+        }.head
+        assert(expectedType === dataType)
+      }
+    }
+  }
+
   /** strength reduction for integer/decimal comparisons */
   def ruleTest(initial: Expression, transformed: Expression): Unit = {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
