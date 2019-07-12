@@ -78,7 +78,7 @@ FROM (VALUES ('-Infinity'), ('Infinity')) v(x);
 -- test accuracy with a large input offset
 SELECT CAST(avg(udf(CAST(x AS DOUBLE))) AS int), CAST(udf(var_pop(CAST(x AS DOUBLE))) AS decimal(10,3))
 FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x);
-SELECT CAST(avg(udf(CAST(x AS DOUBLE))) AS long), CAST(udf(var_pop(CAST(x AS DOUBLE))) AS decimal(10,3))
+SELECT CAST(avg(udf(x)) AS long), CAST(udf(var_pop(CAST(x AS DOUBLE))) AS decimal(10,3))
 FROM (VALUES (7000000000005), (7000000000007)) v(x);
 
 -- SQL2003 binary aggregates [SPARK-23907]
