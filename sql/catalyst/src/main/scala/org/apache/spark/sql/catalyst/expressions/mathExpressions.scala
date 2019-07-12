@@ -601,9 +601,9 @@ case class Asinh(child: Expression)
     case _ => math.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"""${ev.value} = \"$c\" == \"Double.NEGATIVE_INFINITY\" ? """ +
-                        s"java.lang.Double.NEGATIVE_INFINITY : " +
-                        s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c + 1.0));")
+      s"${ev.value} = $c == Double.NEGATIVE_INFINITY ?"  +
+                    s"java.lang.Double.NEGATIVE_INFINITY : " +
+                    s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c + 1.0));")
   }
 }
 
