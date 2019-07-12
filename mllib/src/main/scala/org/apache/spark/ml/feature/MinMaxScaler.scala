@@ -121,7 +121,8 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       case Row(v: Vector) => OldVectors.fromML(v)
     }
     val summary = Statistics.colStats(input)
-    copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
+    copyValues(new MinMaxScalerModel(uid, summary.min.compressed,
+      summary.max.compressed).setParent(this))
   }
 
   @Since("1.5.0")
@@ -177,26 +178,27 @@ class MinMaxScalerModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
-    val minArray = originalMin.toArray
+    val scale = $(max) - $(min)
+    val minValue = $(min)
 
-    val reScale = udf { (vector: Vector) =>
-      val scale = $(max) - $(min)
-
+    val transformer = udf { vector: Vector =>
       // 0 in sparse vector will probably be rescaled to non-zero
       val values = vector.toArray
       val size = values.length
       var i = 0
       while (i < size) {
         if (!values(i).isNaN) {
-          val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
-          values(i) = raw * scale + $(min)
+          val raw = if (originalRange(i) != 0) {
+            (values(i) - originalMin(i)) / originalRange(i)
+          } else 0.5
+          values(i) = raw * scale + minValue
         }
         i += 1
       }
       Vectors.dense(values)
     }
 
-    dataset.withColumn($(outputCol), reScale(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
 
   @Since("1.5.0")
