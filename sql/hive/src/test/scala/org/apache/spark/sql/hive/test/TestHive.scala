@@ -534,8 +534,7 @@ private[hive] class TestHiveSparkSession(
       }
 
       // Clean out the Hive warehouse between each suite
-      val warehouseDir = new File(new URI(
-        sparkContext.conf.get(WAREHOUSE_PATH.key)).getPath)
+      val warehouseDir = new File(new URI(sparkContext.conf.get(WAREHOUSE_PATH.key)).getPath)
       Utils.deleteRecursively(warehouseDir)
       warehouseDir.mkdir()
 
