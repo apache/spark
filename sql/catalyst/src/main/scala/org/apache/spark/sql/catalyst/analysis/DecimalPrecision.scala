@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
-// scalastyle:off line.size.limit
+// scalastyle:off
 /**
  * Calculates and propagates precision for fixed-precision decimals. Hive has a number of
  * rules for this based on the SQL standard and MS SQL:
@@ -86,54 +86,9 @@ object DecimalPrecision extends TypeCoercionRule {
 
   override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // fix decimal precision for expressions
-    case q => q.transformExpressionsDown(decimalToDecimal).transformExpressionsUp(
+    case q => q.transformExpressionsUp(
       decimalAndDecimal.orElse(integralAndDecimalLiteral).orElse(nondecimalAndDecimal))
   }
-
-  // scalastyle:off line.size.limit
-  /** Decimal precision promotion for binary arithmetic with casted decimal type */
-  private[catalyst] val decimalToDecimal: PartialFunction[Expression, Expression] = {
-    // Skip nodes whose children have not been resolved yet
-    case e if !e.childrenResolved => e
-
-    // Skip nodes who is already promoted
-    case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
-
-    case c @ Cast(m @ Add(e1 @ DecimalType(), e2 @ DecimalType()), dt: DecimalType, _) =>
-      val withPromote = m.copy(promotePrecision(e1, dt), promotePrecision(e2, dt))
-      val withCheckOverflow = CheckOverflow(withPromote, dt, nullOnOverflow)
-      c.copy(child = withCheckOverflow)
-
-    case c @ Cast(m @ Subtract(e1 @ DecimalType(), e2 @ DecimalType()), dt: DecimalType, _) =>
-      val withPromote = m.copy(promotePrecision(e1, dt), promotePrecision(e2, dt))
-      val withCheckOverflow = CheckOverflow(withPromote, dt, nullOnOverflow)
-      c.copy(child = withCheckOverflow)
-
-    case c @ Cast(m @ Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)), dt: DecimalType, _) =>
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      val withPromote = m.copy(promotePrecision(e1, widerType), promotePrecision(e2, widerType))
-      val withCheckOverflow = CheckOverflow(withPromote, dt, nullOnOverflow)
-      c.copy(child = withCheckOverflow)
-
-    case c @ Cast(m @ Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)), dt: DecimalType, _) =>
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      val withPromote = m.copy(promotePrecision(e1, widerType), promotePrecision(e2, widerType))
-      val withCheckOverflow = CheckOverflow(withPromote, dt, nullOnOverflow)
-      c.copy(child = withCheckOverflow)
-
-    case c @ Cast(m @ Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)), dt: DecimalType, _) =>
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      val withPromote = m.copy(promotePrecision(e1, widerType), promotePrecision(e2, widerType))
-      val withCheckOverflow = CheckOverflow(withPromote, dt, nullOnOverflow)
-      c.copy(child = withCheckOverflow)
-
-    case c @ Cast(m @ Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)), dt: DecimalType, _) =>
-      val widerType = widerDecimalType(p1, s1, p2, s2)
-      val withPromote = m.copy(promotePrecision(e1, widerType), promotePrecision(e2, widerType))
-      val withCheckOverflow = CheckOverflow(withPromote, dt, nullOnOverflow)
-      c.copy(child = withCheckOverflow)
-  }
-  // scalastyle:on
 
   /** Decimal precision promotion for +, -, *, /, %, pmod, and binary comparison. */
   private[catalyst] val decimalAndDecimal: PartialFunction[Expression, Expression] = {

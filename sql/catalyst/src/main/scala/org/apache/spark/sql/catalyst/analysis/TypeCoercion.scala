@@ -51,6 +51,7 @@ object TypeCoercion {
       WidenSetOperationTypes ::
       PromoteStrings(conf) ::
       DecimalPrecision ::
+      CastAfterCheckOverflow ::
       BooleanEquality ::
       FunctionArgumentConversion ::
       ConcatCoercion(conf) ::
@@ -1049,6 +1050,17 @@ object TypeCoercion {
           Cast(e, t)
         case _ => boundary
       }
+    }
+  }
+
+  /**
+   * Replace CheckOverflow's dataType with Cast's dataType.
+   */
+  object CastAfterCheckOverflow extends TypeCoercionRule {
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case c @ Cast(m @ CheckOverflow(_, _: DecimalType, _), resultDecimalType: DecimalType, _) =>
+        c.copy(child = m.copy(dataType = resultDecimalType))
     }
   }
 }
