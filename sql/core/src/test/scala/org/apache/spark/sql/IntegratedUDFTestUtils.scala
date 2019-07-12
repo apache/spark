@@ -247,13 +247,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   /**
    * A Scala UDF that takes one column and returns a string column.
-   * Equivalent to `udf((input: Any) => input.toString)`.
+   * Equivalent to `udf((input: Any) => String.valueOf(input)`.
    */
   case class TestScalaUDF(name: String) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = SparkUserDefinedFunction(
-      (input: Any) => input.toString,
+      (input: Any) => String.valueOf(input),
       StringType,
-      inputSchemas = Seq.fill(1)(None))
+      inputSchemas = Seq.fill(1)(None),
+      name = Some(name))
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
 

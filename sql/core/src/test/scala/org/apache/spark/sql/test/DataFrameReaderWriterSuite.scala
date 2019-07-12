@@ -409,7 +409,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
   test("write path implements onTaskCommit API correctly") {
     withSQLConf(
-        "spark.sql.sources.commitProtocolClass" ->
+        SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
           classOf[MessageCapturingCommitProtocol].getCanonicalName) {
       withTempDir { dir =>
         val path = dir.getCanonicalPath
