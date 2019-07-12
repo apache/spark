@@ -128,7 +128,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val files = testRolling(appender, testOutputStream, textToAppend, 0, isCompressed = true)
     files.foreach { file =>
       logInfo(file.toString + ": " + file.length + " bytes")
-      assert(file.length < rolloverSize)
+      assert(file.length <= rolloverSize)
     }
   }
 
