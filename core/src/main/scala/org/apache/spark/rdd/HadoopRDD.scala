@@ -25,6 +25,7 @@ import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
@@ -196,6 +197,24 @@ class HadoopRDD[K, V](
     newInputFormat
   }
 
+  private val UNSPLITTABLE_FILE_SIZE_LOG_THRESHOLD = 1024 * 1024 * 1024
+
+  @transient private lazy val compressionCodecs = new CompressionCodecFactory(getJobConf())
+
+  private def checkAndLogUnsplittableLargeFile(split: InputSplit): Unit = {
+    if (split.isInstanceOf[FileSplit]) {
+      val fileSplit = split.asInstanceOf[FileSplit]
+      val path = fileSplit.getPath
+      val codec = compressionCodecs.getCodec(path)
+      if (codec != null && !codec.isInstanceOf[SplittableCompressionCodec]) {
+        if (fileSplit.getLength > UNSPLITTABLE_FILE_SIZE_LOG_THRESHOLD) {
+          logWarning(s"File ${path.toString} is large and unsplittable so the corresponding " +
+            s"rdd partition have to deal with the whole file and consume large time.")
+        }
+      }
+    }
+  }
+
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
@@ -206,6 +225,9 @@ class HadoopRDD[K, V](
         allInputSplits.filter(_.getLength > 0)
       } else {
         allInputSplits
+      }
+      if (inputSplits.length == 1) {
+        checkAndLogUnsplittableLargeFile(inputSplits(0))
       }
       val array = new Array[Partition](inputSplits.size)
       for (i <- 0 until inputSplits.size) {
