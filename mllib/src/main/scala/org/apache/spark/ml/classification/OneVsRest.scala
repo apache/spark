@@ -169,7 +169,7 @@ final class OneVsRestModel private[ml] (
     // Check schema
     transformSchema(dataset.schema, logging = true)
 
-    if (getPredictionCol == "" && getRawPredictionCol == "") {
+    if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
       logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
         " because no output columns were set.")
       return dataset.toDF
