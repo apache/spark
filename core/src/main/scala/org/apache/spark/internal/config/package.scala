@@ -1248,8 +1248,8 @@ package object config {
 
   private[spark] val BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD =
     ConfigBuilder("spark.broadcast.UDFCompressionThreshold")
-      .doc("The threshold at which a a user-defined function (UDF) is compressed by broadcast, " +
-        "in bytes unless otherwise specified")
+      .doc("The threshold at which user-defined functions (UDFs) and Python RDD commands " +
+        "are compressed by broadcast in bytes unless otherwise specified")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => v >= 0, "The threshold should be non-negative.")
       .createWithDefault(1L * 1024 * 1024)
