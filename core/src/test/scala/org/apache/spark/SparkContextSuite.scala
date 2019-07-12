@@ -165,6 +165,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("add jar files") {
+    try {
+      val jarPath = "hdfs:///no/path/to/TestUDTF.jar"
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      println(s"path => ${jarPath}")
+      sc.addJar(jarPath)
+      assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 0)
+    } finally {
+      sc.stop()
+    }
+  }
+
   test("SPARK-17650: malformed url's throw exceptions before bricking Executors") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
