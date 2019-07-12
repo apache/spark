@@ -160,6 +160,7 @@ def manager():
                 if pid == 0:
                     # in child process
                     listen_sock.close()
+                    stdin_bin.close()
                     try:
                         # Acknowledge that the fork was successful
                         outfile = sock.makefile(mode="wb")
