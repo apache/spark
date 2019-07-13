@@ -125,7 +125,7 @@ SELECT int('2') * smallint('2') = smallint('16') / int('4') AS true;
 
 SELECT smallint('2') * int('2') = int('16') / smallint('4') AS true;
 
-SELECT int('1000') < int('999') AS false;
+SELECT int('1000') < int('999') AS `false`;
 
 -- [SPARK-28027] Our ! and !! has different meanings
 -- SELECT 4! AS twenty_four;
