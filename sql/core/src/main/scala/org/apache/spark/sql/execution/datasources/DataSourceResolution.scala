@@ -23,19 +23,19 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Cast, EqualTo, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Cast, EqualTo, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateV2Table, DropTable, InsertIntoTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, InsertTableStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DropTableCommand}
 import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.sources.v2.TableProvider
+import org.apache.spark.sql.sources.v2.{Table, TableProvider}
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
 
 case class DataSourceResolution(
@@ -166,94 +166,39 @@ case class DataSourceResolution(
     case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
       UnresolvedCatalogRelation(catalogTable)
 
-    case i @ InsertTableStatement(UnresolvedRelation(CatalogObjectIdentifier(Some(catalog), ident)),
+    case i @ InsertIntoStatement(UnresolvedRelation(CatalogObjectIdentifier(Some(catalog), ident)),
         _, _, _, _) if i.query.resolved =>
       loadTable(catalog, ident)
         .map(DataSourceV2Relation.create)
-        .map(table => {
+        .map(relation => {
           // ifPartitionNotExists is append with validation, but validation is not supported
           if (i.ifPartitionNotExists) {
             throw new AnalysisException(
-              s"Cannot write, IF NOT EXISTS is not supported for table: ${table.table.name}")
+              s"Cannot write, IF NOT EXISTS is not supported for table: ${relation.table.name}")
           }
 
-          val staticPartitions = i.partition.filter(_._2.isDefined).mapValues(_.get)
+          val partCols = partitionColumnNames(relation.table)
+          validatePartitionSpec(partCols, i.partitionSpec)
 
-          val resolver = conf.resolver
-
-          // add any static value as a literal column
-          val staticPartitionProjectList = {
-            // check that the data column counts match
-            val numColumns = table.output.size
-            if (numColumns > staticPartitions.size + i.query.output.size) {
-              throw new AnalysisException(s"Cannot write: too many columns")
-            } else if (numColumns < staticPartitions.size + i.query.output.size) {
-              throw new AnalysisException(s"Cannot write: not enough columns")
-            }
-
-            val staticNames = staticPartitions.keySet
-
-            // for each static name, find the column name it will replace and check for unknowns.
-            val outputNameToStaticName = staticNames.map(staticName =>
-              table.output.find(col => resolver(col.name, staticName)) match {
-                case Some(attr) =>
-                  attr.name -> staticName
-                case _ =>
-                  throw new AnalysisException(
-                    s"Cannot add static value for unknown column: $staticName")
-              }).toMap
-
-            // for each output column, add the static value as a literal
-            // or use the next input column
-            val queryColumns = i.query.output.iterator
-            table.output.map { col =>
-              outputNameToStaticName.get(col.name).flatMap(staticPartitions.get) match {
-                case Some(staticValue) =>
-                  Alias(Cast(Literal(staticValue), col.dataType), col.name)()
-                case _ =>
-                  queryColumns.next
-              }
-            }
-          }
-
-          val dynamicPartitionOverwrite = table.table.partitioning.size > 0 &&
-            staticPartitions.size < table.table.partitioning.size &&
+          val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get)
+          val query = addStaticPartitionColumns(relation, i.query, staticPartitions)
+          val dynamicPartitionOverwrite = partCols.size > staticPartitions.size &&
             conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
-          val query =
-            if (staticPartitions.isEmpty) {
-              i.query
-            } else {
-              Project(staticPartitionProjectList, i.query)
-            }
-
-          val deleteExpr =
-            if (staticPartitions.isEmpty) {
-              Literal(true)
-            } else {
-              staticPartitions.map { case (name, value) =>
-                query.output.find(col => resolver(col.name, name)) match {
-                  case Some(attr) =>
-                    EqualTo(attr, Cast(Literal(value), attr.dataType))
-                  case None =>
-                    throw new AnalysisException(s"Unknown static partition column: $name")
-                }
-              }.toSeq.reduce(And)
-            }
-
           if (!i.overwrite) {
-            AppendData.byPosition(table, query)
+            AppendData.byPosition(relation, query)
           } else if (dynamicPartitionOverwrite) {
-            OverwritePartitionsDynamic.byPosition(table, query)
+            OverwritePartitionsDynamic.byPosition(relation, query)
           } else {
-            OverwriteByExpression.byPosition(table, query, deleteExpr)
+            OverwriteByExpression.byPosition(
+              relation, query, staticDeleteExpression(relation, staticPartitions))
           }
         })
         .getOrElse(i)
 
-    case i @ InsertTableStatement(UnresolvedRelation(AsTableIdentifier(_)), _, _, _, _)
+    case i @ InsertIntoStatement(UnresolvedRelation(AsTableIdentifier(_)), _, _, _, _)
         if i.query.resolved =>
-      InsertIntoTable(i.table, i.partition, i.query, i.overwrite, i.ifPartitionNotExists)
+      InsertIntoTable(i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists)
   }
 
   object V1WriteProvider {
@@ -441,5 +386,95 @@ case class DataSourceResolution(
       cleanedDataType,
       nullable = true,
       builder.build())
+  }
+
+  private def partitionColumnNames(table: Table): Seq[String] = {
+    // get partition column names. in v2, partition columns are columns that are stored using an
+    // identity partition transform because the partition values and the column values are
+    // identical. otherwise, partition values are produced by transforming one or more source
+    // columns and cannot be set directly in a query's PARTITION clause.
+    table.partitioning.flatMap {
+      case IdentityTransform(FieldReference(Seq(name))) => Some(name)
+      case _ => None
+    }
+  }
+
+  private def validatePartitionSpec(
+      partitionColumnNames: Seq[String],
+      partitionSpec: Map[String, Option[String]]): Unit = {
+    // check that each partition name is a partition column. otherwise, it is not valid
+    partitionSpec.keySet.foreach { partitionName =>
+      partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
+        case Some(_) =>
+        case None =>
+          throw new AnalysisException(
+            s"PARTITION clause cannot contain a non-partition column name: $partitionName")
+      }
+    }
+  }
+
+  private def addStaticPartitionColumns(
+      relation: DataSourceV2Relation,
+      query: LogicalPlan,
+      staticPartitions: Map[String, String]): LogicalPlan = {
+
+    if (staticPartitions.isEmpty) {
+      query
+
+    } else {
+      // add any static value as a literal column
+      val withStaticPartitionValues = {
+        // for each static name, find the column name it will replace and check for unknowns.
+        val outputNameToStaticName = staticPartitions.keySet.map(staticName =>
+          relation.output.find(col => conf.resolver(col.name, staticName)) match {
+            case Some(attr) =>
+              attr.name -> staticName
+            case _ =>
+              throw new AnalysisException(
+                s"Cannot add static value for unknown column: $staticName")
+          }).toMap
+
+        val queryColumns = query.output.iterator
+
+        // for each output column, add the static value as a literal, or use the next input
+        // column. this does not fail if input columns are exhausted and adds remaining columns
+        // at the end. both cases will be caught by ResolveOutputRelation and will fail the
+        // query with a helpful error message.
+        relation.output.flatMap { col =>
+          outputNameToStaticName.get(col.name).flatMap(staticPartitions.get) match {
+            case Some(staticValue) =>
+              Some(Alias(Cast(Literal(staticValue), col.dataType), col.name)())
+            case _ if queryColumns.hasNext =>
+              Some(queryColumns.next)
+            case _ =>
+              None
+          }
+        } ++ queryColumns
+      }
+
+      Project(withStaticPartitionValues, query)
+    }
+  }
+
+  private def staticDeleteExpression(
+      relation: DataSourceV2Relation,
+      staticPartitions: Map[String, String]): Expression = {
+    if (staticPartitions.isEmpty) {
+      Literal(true)
+    } else {
+      staticPartitions.map { case (name, value) =>
+        relation.output.find(col => conf.resolver(col.name, name)) match {
+          case Some(attr) =>
+            // the delete expression must reference the table's column names, but these attributes
+            // are not available when CheckAnalysis runs because the relation is not a child of the
+            // logical operation. instead, expressions are resolved after ResolveOutputRelation
+            // runs, using the query's column names that will match the table names at that point.
+            // because resolution happens after a future rule, create an UnresolvedAttribute.
+            EqualTo(UnresolvedAttribute(attr.name), Cast(Literal(value), attr.dataType))
+          case None =>
+            throw new AnalysisException(s"Unknown static partition column: $name")
+        }
+      }.reduce(And)
+    }
   }
 }

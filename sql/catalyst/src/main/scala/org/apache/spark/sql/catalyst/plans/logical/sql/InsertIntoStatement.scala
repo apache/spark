@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.plans.logical.sql
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * An INSERT TABLE statement, as parsed from SQL.
+ * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
  * @param query                the logical plan representing data to write to.
  * @param overwrite            overwrite existing table or partitions.
- * @param partition            a map from the partition key to the partition value (optional).
+ * @param partitionSpec        a map from the partition key to the partition value (optional).
  *                             If the value is missing, dynamic partition insert will be performed.
  *                             As an example, `INSERT INTO tbl PARTITION (a=1, b=2) AS` would have
  *                             Map('a' -> Some('1'), 'b' -> Some('2')),
@@ -34,17 +34,17 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * @param ifPartitionNotExists If true, only write if the partition does not exist.
  *                             Only valid for static partitions.
  */
-case class InsertTableStatement(
+case class InsertIntoStatement(
     table: LogicalPlan,
+    partitionSpec: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    partition: Map[String, Option[String]],
     ifPartitionNotExists: Boolean) extends ParsedStatement {
 
-  // IF NOT EXISTS is only valid in INSERT OVERWRITE
-  assert(overwrite || !ifPartitionNotExists)
-  // IF NOT EXISTS is only valid in static partitions
-  assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
+  require(overwrite || !ifPartitionNotExists,
+    "IF NOT EXISTS is only valid in INSERT OVERWRITE")
+  require(partitionSpec.values.forall(_.nonEmpty) || !ifPartitionNotExists,
+    "IF NOT EXISTS is only valid with static partitions")
 
   override def children: Seq[LogicalPlan] = query :: Nil
 }

@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -617,14 +617,27 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
-  test("insert table: append") {
-    parseCompare("INSERT INTO TABLE testcat.ns1.ns2.tbl TABLE source",
-      table("source").insertInto(table("testcat", "ns1", "ns2", "tbl")))
+  test("insert table: basic append") {
+    Seq(
+      "INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM source",
+      "INSERT INTO testcat.ns1.ns2.tbl SELECT * FROM source"
+    ).foreach { sql =>
+      parseCompare(sql,
+        InsertIntoStatement(
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          Map.empty,
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false, ifPartitionNotExists = false))
+    }
   }
 
   test("insert table: append from another catalog") {
-    parseCompare("INSERT INTO TABLE testcat.ns1.ns2.tbl TABLE testcat2.db.tbl",
-      table("testcat2", "db", "tbl").insertInto(table("testcat", "ns1", "ns2", "tbl")))
+    parseCompare("INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM testcat2.db.tbl",
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Map.empty,
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testcat2", "db", "tbl"))),
+        overwrite = false, ifPartitionNotExists = false))
   }
 
   test("insert table: append with partition") {
@@ -632,17 +645,27 @@ class DDLParserSuite extends AnalysisTest {
       """
         |INSERT INTO testcat.ns1.ns2.tbl
         |PARTITION (p1 = 3, p2)
-        |TABLE source
+        |SELECT * FROM source
       """.stripMargin,
-      table("source")
-          .insertInto(
-            table("testcat", "ns1", "ns2", "tbl"),
-            partition = Map("p1" -> Some("3"), "p2" -> None)))
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Map("p1" -> Some("3"), "p2" -> None),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = false, ifPartitionNotExists = false))
   }
 
   test("insert table: overwrite") {
-    parseCompare("INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl TABLE source",
-      table("source").insertInto(table("testcat", "ns1", "ns2", "tbl"), overwrite = true))
+    Seq(
+      "INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl SELECT * FROM source",
+      "INSERT OVERWRITE testcat.ns1.ns2.tbl SELECT * FROM source"
+    ).foreach { sql =>
+      parseCompare(sql,
+        InsertIntoStatement(
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          Map.empty,
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true, ifPartitionNotExists = false))
+    }
   }
 
   test("insert table: overwrite with partition") {
@@ -650,13 +673,13 @@ class DDLParserSuite extends AnalysisTest {
       """
         |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl
         |PARTITION (p1 = 3, p2)
-        |TABLE source
+        |SELECT * FROM source
       """.stripMargin,
-      table("source")
-          .insertInto(
-            table("testcat", "ns1", "ns2", "tbl"),
-            overwrite = true,
-            partition = Map("p1" -> Some("3"), "p2" -> None)))
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Map("p1" -> Some("3"), "p2" -> None),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true, ifPartitionNotExists = false))
   }
 
   test("insert table: overwrite with partition if not exists") {
@@ -664,14 +687,40 @@ class DDLParserSuite extends AnalysisTest {
       """
         |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl
         |PARTITION (p1 = 3) IF NOT EXISTS
-        |TABLE source
+        |SELECT * FROM source
       """.stripMargin,
-      table("source")
-          .insertInto(
-            table("testcat", "ns1", "ns2", "tbl"),
-            overwrite = true,
-            partition = Map("p1" -> Some("3")),
-            ifPartitionNotExists = true))
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Map("p1" -> Some("3")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true, ifPartitionNotExists = true))
+  }
+
+  test("insert table: if not exists with dynamic partition fails") {
+    val exc = intercept[AnalysisException] {
+      parsePlan(
+        """
+          |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl
+          |PARTITION (p1 = 3, p2) IF NOT EXISTS
+          |SELECT * FROM source
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("IF NOT EXISTS with dynamic partitions"))
+    assert(exc.getMessage.contains("p2"))
+  }
+
+  test("insert table: if not exists without overwrite fails") {
+    val exc = intercept[AnalysisException] {
+      parsePlan(
+        """
+          |INSERT INTO TABLE testcat.ns1.ns2.tbl
+          |PARTITION (p1 = 3) IF NOT EXISTS
+          |SELECT * FROM source
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("INSERT INTO ... IF NOT EXISTS"))
   }
 
   private case class TableSpec(
