@@ -3,7 +3,7 @@
 --
 --
 -- CASE
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/case.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/case.sql
 -- Test the CASE statement
 --
 CREATE TABLE CASE_TBL (

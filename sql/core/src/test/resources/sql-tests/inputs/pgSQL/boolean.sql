@@ -3,7 +3,7 @@
 --
 --
 -- BOOLEAN
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/boolean.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/boolean.sql
 
 --
 -- sanity check - if this fails go insane!
