@@ -49,4 +49,19 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val optimized = Optimize.execute(outerQuery)
     assert(optimized.resolved)
   }
+
+  test("SPARK-28375: PullupCorrelatedPredicates should not remove predicates on multiple runs") {
+    val correlatedSubquery =
+      testRelation2
+        .where('b < 'd)
+        .select('c)
+    val outerQuery =
+      testRelation
+        .where(InSubquery(Seq('a), ListQuery(correlatedSubquery)))
+        .select('a).analyze
+
+    val optimized = Optimize.execute(outerQuery)
+    val reoptimized = Optimize.execute(optimized)
+    comparePlans(optimized, reoptimized)
+  }
 }

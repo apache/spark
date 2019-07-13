@@ -246,10 +246,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     // In case of a collision, change the subquery plan's output to use
     // different attribute by creating alias(s).
     val baseConditions = predicateMap.values.flatten.toSeq
-    val (newPlan, newCond) = if (outer.nonEmpty) {
+    if (outer.nonEmpty) {
       val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
       val duplicates = transformed.outputSet.intersect(outputSet)
-      val (plan, deDuplicatedConditions) = if (duplicates.nonEmpty) {
+      if (duplicates.nonEmpty) {
         val aliasMap = AttributeMap(duplicates.map { dup =>
           dup -> Alias(dup, dup.toString)()
         }.toSeq)
@@ -264,11 +264,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       } else {
         (transformed, baseConditions)
       }
-      (plan, stripOuterReferences(deDuplicatedConditions))
     } else {
       (transformed, stripOuterReferences(baseConditions))
     }
-    (newPlan, newCond)
   }
 
   private def rewriteSubQueries(plan: LogicalPlan, outerPlans: Seq[LogicalPlan]): LogicalPlan = {
@@ -279,9 +277,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
         Exists(newPlan, newCond, exprId)
-      case ListQuery(sub, _, exprId, childOutputs) =>
+      case ListQuery(sub, children, exprId, childOutputs) =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        ListQuery(newPlan, newCond, exprId, childOutputs)
+        ListQuery(newPlan, children.filter(containsOuter) ++ newCond, exprId, childOutputs)
     }
   }
 
