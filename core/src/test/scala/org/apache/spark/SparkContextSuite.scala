@@ -165,7 +165,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("add hdfs jar files not exists") {
+  test("add FS jar files not exists") {
     try {
       val jarPath = "hdfs:///no/path/to/TestUDTF.jar"
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
