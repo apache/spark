@@ -2568,6 +2568,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Given a process id, return true if the process is still running.
+   */
+  def isProcessRunning(pid: Int): Boolean = {
+    val process = executeCommand(Seq("kill", "-0", pid.toString))
+    process.waitFor(10, TimeUnit.SECONDS)
+    process.exitValue() == 0
+  }
+
+  /**
    * Returns the pid of this JVM process.
    */
   def getProcessId: Int = {

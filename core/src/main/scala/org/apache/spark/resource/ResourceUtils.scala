@@ -31,7 +31,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Worker.SPARK_WORKER_PREFIX
 import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.executeAndGetOutput
 
@@ -109,53 +108,84 @@ private[spark] object ResourceUtils extends Logging {
     }
     val lock = acquireLock(conf)
     val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
-    val allocated = {
+    var origAllocation = Seq.empty[StandaloneResourceAllocation]
+    var allocated = {
       if (resourcesFile.exists()) {
-        val livingPids = livingWorkerAndDriverPids
-        val allocations = allocatedResources(resourcesFile.getPath).filter {
-          allocation => livingPids.contains(allocation.pid) || Utils.isTesting
-        }
+        origAllocation = allocatedResources(resourcesFile.getPath)
+        val allocations = origAllocation.map { resource =>
+          val thePid = resource.pid
+          val resourceMap = {
+            resource.allocations.map { allocation =>
+              allocation.id.resourceName -> allocation.addresses.toArray
+            }.toMap
+          }
+          thePid -> resourceMap
+        }.toMap
         allocations
       } else {
-        Seq.empty
+        Map.empty[Int, Map[String, Array[String]]]
       }
     }
 
-    // combine all allocated resources into a single Array by resource type
-    val allocatedAddresses = {
-      val rNameToAddresses = new mutable.HashMap[String, mutable.ArrayBuffer[String]]()
-      allocated.map(_.allocations).foreach { allocations =>
-        allocations.foreach { allocation =>
-          val addresses = rNameToAddresses.getOrElseUpdate(allocation.id.resourceName,
-            mutable.ArrayBuffer())
-          addresses ++= allocation.addresses
-        }
-      }
-      rNameToAddresses.map(r => r._1 -> r._2.toArray)
-    }
-
-    val newAllocated = {
-      val allocations = resourceRequirements.map{ req =>
+    var newAssignments: Map[String, Array[String]] = null
+    // Whether we've checked process status and we'll only do the check at most once.
+    var checked = false
+    // Whether we need to keep allocating for the worker/driver and we'll only go through
+    // the loop at most twice.
+    var keepAllocating = true
+    while(keepAllocating) {
+      keepAllocating = false
+      val pidsToCheck = mutable.Set[Int]()
+      newAssignments = resourceRequirements.map { req =>
         val rName = req.resourceName
         val amount = req.amount
-        val assigned = allocatedAddresses.getOrElse(rName, Array.empty)
-        val available = resources(rName).addresses.diff(assigned)
-        val newAssigned = {
-          if (available.length >= amount) {
-            available.take(amount)
-          } else {
+        // initially, we must have available.length >= amount as we've done pre-check previously
+        var available = resources(rName).addresses
+        allocated.foreach { a =>
+          val thePid = a._1
+          val resourceMap = a._2
+          val assigned = resourceMap.getOrElse(rName, Array.empty)
+          val retained = available.diff(assigned)
+          if (retained.length < available.length && !checked) {
+            pidsToCheck += thePid
+          }
+          if (retained.length >= amount) {
+            available = retained
+          } else if (checked) {
+            keepAllocating = false
             releaseLock(lock)
             throw new SparkException(s"No more resources available since they've already" +
               s" assigned to other workers/drivers.")
+          } else {
+            keepAllocating = true
           }
         }
-        ResourceAllocation(ResourceID(componentName, rName), newAssigned)
-      }
+        val assigned = {
+          if (keepAllocating) {
+            val (invalid, valid) = allocated.partition { a =>
+              pidsToCheck(a._1) && !(Utils.isTesting || Utils.isProcessRunning(a._1))}
+            allocated = valid
+            origAllocation = origAllocation.filter(allocation => !invalid.contains(allocation.pid))
+            checked = true
+            // note that this is a meaningless return value, just to avoid creating any new object
+            available
+          } else {
+            available.take(amount)
+          }
+        }
+        rName -> assigned
+      }.toMap
+
+    }
+    val newAllocation = {
+      val allocations = newAssignments.map{ case (rName, addresses) =>
+        ResourceAllocation(ResourceID(componentName, rName), addresses)
+      }.toSeq
       StandaloneResourceAllocation(pid, allocations)
     }
-    writeResourceAllocationJson(SPARK_WORKER_PREFIX, allocated ++ Seq(newAllocated), resourcesFile)
+    writeResourceAllocationJson(componentName, origAllocation ++ Seq(newAllocation), resourcesFile)
     val acquired = {
-      newAllocated.allocations.map { allocation =>
+      newAllocation.allocations.map { allocation =>
         allocation.id.resourceName -> allocation.toResourceInformation
       }.toMap
     }
@@ -275,19 +305,6 @@ private[spark] object ResourceUtils extends Logging {
       Utils.createDirectory(resourceDir)
     }
     resourceDir
-  }
-
-  private def livingWorkerAndDriverPids: Seq[Int] = {
-    val processIds = try {
-      Utils.executeAndGetOutput(Seq("jps"))
-        .split("\n")
-        .filter(p => p.contains("Worker") || p.contains("SparkSubmit"))
-        .map(_.split(" ")(0).toInt)
-    } catch {
-      case e: Exception =>
-        throw new SparkException("Error while fetching process ids of worker and driver", e)
-    }
-    processIds
   }
 
   def writeResourceAllocationJson[T](
