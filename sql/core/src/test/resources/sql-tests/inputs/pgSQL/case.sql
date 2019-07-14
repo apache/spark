@@ -6,9 +6,6 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/case.sql
 -- Test the CASE statement
 --
--- This test suite contains two Cartesian products without using explicit CROSS JOIN syntax.
--- Thus, we set spark.sql.crossJoin.enabled to true.
-set spark.sql.crossJoin.enabled=true;
 CREATE TABLE CASE_TBL (
   i integer,
   f double
@@ -264,4 +261,3 @@ SELECT CASE
 
 DROP TABLE CASE_TBL;
 DROP TABLE CASE2_TBL;
-set spark.sql.crossJoin.enabled=false;
