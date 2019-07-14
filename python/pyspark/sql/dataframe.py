@@ -22,8 +22,10 @@ if sys.version >= '3':
     basestring = unicode = str
     long = int
     from functools import reduce
+    from html import escape as html_escape
 else:
     from itertools import imap as map
+    from cgi import escape as html_escape
 
 import warnings
 
@@ -393,7 +395,6 @@ class DataFrame(object):
         by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
         using support eager evaluation with HTML.
         """
-        import cgi
         if not self._support_repr_html:
             self._support_repr_html = True
         if self.sql_ctx._conf.isReplEagerEvalEnabled():
@@ -408,11 +409,11 @@ class DataFrame(object):
 
             html = "<table border='1'>\n"
             # generate table head
-            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: html_escape(x), head))
             # generate table rows
             for row in row_data:
                 html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
-                    map(lambda x: cgi.escape(x), row))
+                    map(lambda x: html_escape(x), row))
             html += "</table>\n"
             if has_more_data:
                 html += "only showing top %d %s\n" % (
