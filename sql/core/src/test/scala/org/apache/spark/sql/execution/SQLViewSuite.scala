@@ -159,7 +159,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
       assertNoSuchTable(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
       assertNoSuchTable(s"TRUNCATE TABLE $viewName")
-      assertNoSuchTable(s"SHOW CREATE TABLE $viewName")
+      intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $viewName")
+      }
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
