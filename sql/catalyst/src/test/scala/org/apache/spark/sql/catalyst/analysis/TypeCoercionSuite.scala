@@ -1126,14 +1126,14 @@ class TypeCoercionSuite extends AnalysisTest {
       Concat(Seq(Cast(Literal(new java.sql.Date(0)), StringType),
         Cast(Literal(new Timestamp(0)), StringType))))
 
-    withSQLConf("spark.sql.function.concatBinaryAsString" -> "true") {
+    withSQLConf(SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
       ruleTest(rule,
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Cast(Literal("123".getBytes), StringType),
           Cast(Literal("456".getBytes), StringType))))
     }
 
-    withSQLConf("spark.sql.function.concatBinaryAsString" -> "false") {
+    withSQLConf(SQLConf.CONCAT_BINARY_AS_STRING.key -> "false") {
       ruleTest(rule,
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
@@ -1180,14 +1180,14 @@ class TypeCoercionSuite extends AnalysisTest {
       Elt(Seq(Literal(2), Cast(Literal(new java.sql.Date(0)), StringType),
         Cast(Literal(new Timestamp(0)), StringType))))
 
-    withSQLConf("spark.sql.function.eltOutputAsString" -> "true") {
+    withSQLConf(SQLConf.ELT_OUTPUT_AS_STRING.key -> "true") {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Cast(Literal("123".getBytes), StringType),
           Cast(Literal("456".getBytes), StringType))))
     }
 
-    withSQLConf("spark.sql.function.eltOutputAsString" -> "false") {
+    withSQLConf(SQLConf.ELT_OUTPUT_AS_STRING.key -> "false") {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
@@ -1498,7 +1498,7 @@ class TypeCoercionSuite extends AnalysisTest {
         DoubleType)))
     Seq(true, false).foreach { convertToTS =>
       withSQLConf(
-        "spark.sql.legacy.compareDateTimestampInTimestamp" -> convertToTS.toString) {
+        SQLConf.COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP.key -> convertToTS.toString) {
         val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
         val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
         val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))

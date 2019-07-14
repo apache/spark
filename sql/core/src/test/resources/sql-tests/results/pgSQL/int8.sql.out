@@ -351,7 +351,7 @@ struct<q1:bigint,q2:bigint>
 
 
 -- !query 37
-SELECT '' AS five, q1 AS plus, -q1 AS minus FROM INT8_TBL
+SELECT '' AS five, q1 AS plus, -q1 AS `minus` FROM INT8_TBL
 -- !query 37 schema
 struct<five:string,plus:bigint,minus:bigint>
 -- !query 37 output
@@ -375,7 +375,7 @@ struct<five:string,q1:bigint,q2:bigint,plus:bigint>
 
 
 -- !query 39
-SELECT '' AS five, q1, q2, q1 - q2 AS minus FROM INT8_TBL
+SELECT '' AS five, q1, q2, q1 - q2 AS `minus` FROM INT8_TBL
 -- !query 39 schema
 struct<five:string,q1:bigint,q2:bigint,minus:bigint>
 -- !query 39 output

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.internal.SQLConf.MAX_NESTED_VIEW_DEPTH
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSQLContext
@@ -665,17 +666,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql(s"CREATE VIEW view${idx + 1} AS SELECT * FROM view$idx")
       }
 
-      withSQLConf("spark.sql.view.maxNestedViewDepth" -> "10") {
+      withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "10") {
         val e = intercept[AnalysisException] {
           sql("SELECT * FROM view10")
         }.getMessage
         assert(e.contains("The depth of view `default`.`view0` exceeds the maximum view " +
           "resolution depth (10). Analysis is aborted to avoid errors. Increase the value " +
-          "of spark.sql.view.maxNestedViewDepth to work around this."))
+          s"of ${MAX_NESTED_VIEW_DEPTH.key} to work around this."))
       }
 
       val e = intercept[IllegalArgumentException] {
-        withSQLConf("spark.sql.view.maxNestedViewDepth" -> "0") {}
+        withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "0") {}
       }.getMessage
       assert(e.contains("The maximum depth of a view reference in a nested view must be " +
         "positive."))
