@@ -5,9 +5,6 @@
 -- NUMERIC
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/numeric.sql
 --
--- This test suite contains eight Cartesian products without using explicit CROSS JOIN syntax.
--- Thus, we set spark.sql.crossJoin.enabled to true.
-set spark.sql.crossJoin.enabled=true;
 
 CREATE TABLE num_data (id int, val decimal(38,10)) USING parquet;
 CREATE TABLE num_exp_add (id1 int, id2 int, expected decimal(38,10)) USING parquet;
@@ -489,6 +486,8 @@ INSERT INTO num_data VALUES (7, '-83028485');
 INSERT INTO num_data VALUES (8, '74881');
 INSERT INTO num_data VALUES (9, '-24926804.045047420');
 -- COMMIT TRANSACTION;
+
+SELECT * FROM num_data;
 
 -- ******************************
 -- * Create indices for faster checks
@@ -1094,5 +1093,3 @@ DROP TABLE num_exp_log10;
 DROP TABLE num_exp_power_10_ln;
 DROP TABLE num_result;
 DROP TABLE num_input_test;
-
-set spark.sql.crossJoin.enabled=false;
