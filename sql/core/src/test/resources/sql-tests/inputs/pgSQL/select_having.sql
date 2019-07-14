@@ -7,7 +7,7 @@
 --
 
 -- load test data
-CREATE TABLE test_having (a int, b int, c char(8), d char);
+CREATE TABLE test_having (a int, b int, c string, d string) USING parquet;
 INSERT INTO test_having VALUES (0, 1, 'XXXX', 'A');
 INSERT INTO test_having VALUES (1, 2, 'AAAA', 'b');
 INSERT INTO test_having VALUES (2, 2, 'AAAA', 'c');
@@ -26,9 +26,10 @@ SELECT b, c FROM test_having
 SELECT b, c FROM test_having
 	GROUP BY b, c HAVING b = 3 ORDER BY b, c;
 
-SELECT lower(c), count(c) FROM test_having
-	GROUP BY lower(c) HAVING count(*) > 2 OR min(a) = max(a)
-	ORDER BY lower(c);
+-- [SPARK-28386] Cannot resolve ORDER BY columns with GROUP BY and HAVING
+-- SELECT lower(c), count(c) FROM test_having
+-- 	GROUP BY lower(c) HAVING count(*) > 2 OR min(a) = max(a)
+-- 	ORDER BY lower(c);
 
 SELECT c, max(a) FROM test_having
 	GROUP BY c HAVING count(*) > 2 OR min(a) = max(a)
