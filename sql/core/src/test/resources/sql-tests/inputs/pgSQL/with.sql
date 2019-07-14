@@ -5,9 +5,6 @@
 -- WITH
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/with.sql
 --
--- This test suite contains two Cartesian products without using explicit CROSS JOIN syntax.
--- Thus, we set spark.sql.crossJoin.enabled to true.
-set spark.sql.crossJoin.enabled=true;
 -- This test uses the generate_series(...) function which is rewritten to EXPLODE(SEQUENCE(...)) as
 -- it's feature tracking ticket SPARK-27767 is closed as Won't Do.
 
@@ -1182,10 +1179,8 @@ SELECT * FROM parent;
 --DROP RULE y_rule ON y;
 
 -- check that parser lookahead for WITH doesn't cause any odd behavior
-set spark.sql.parser.ansi.enabled=true;
 create table foo (with baz);  -- fail, WITH is a reserved word
 create table foo (with ordinality);  -- fail, WITH is a reserved word
-set spark.sql.parser.ansi.enabled=false;
 with ordinality as (select 1 as x) select * from ordinality;
 
 -- check sane response to attempt to modify CTE relation
