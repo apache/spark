@@ -7,11 +7,11 @@
 -- This used to be called "junkfilter.sql".
 -- The parser uses the term "resjunk" to handle these cases.
 -- - thomas 1998-07-09
--- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/select.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/select_implicit.sql
 --
 
 -- load test data
-CREATE TABLE test_missing_target (a int, b int, c char(8), d char);
+CREATE TABLE test_missing_target (a int, b int, c string, d string) using parquet;
 INSERT INTO test_missing_target VALUES (0, 1, 'XXXX', 'A');
 INSERT INTO test_missing_target VALUES (1, 2, 'ABAB', 'b');
 INSERT INTO test_missing_target VALUES (2, 2, 'ABAB', 'c');
@@ -88,13 +88,14 @@ SELECT count(*) FROM test_missing_target x, test_missing_target y
 	WHERE x.a = y.a
 	GROUP BY x.b ORDER BY x.b;
 
+-- [SPARK-28329] SELECT INTO syntax
 --   group w/o existing GROUP BY target under ambiguous condition
 --   into a table
-SELECT count(*) INTO TABLE test_missing_target2
-FROM test_missing_target x, test_missing_target y
-	WHERE x.a = y.a
-	GROUP BY x.b ORDER BY x.b;
-SELECT * FROM test_missing_target2;
+-- SELECT count(*) INTO TABLE test_missing_target2
+-- FROM test_missing_target x, test_missing_target y
+-- 	WHERE x.a = y.a
+-- 	GROUP BY x.b ORDER BY x.b;
+-- SELECT * FROM test_missing_target2;
 
 
 --  Functions and expressions
@@ -144,15 +145,16 @@ SELECT count(b) FROM test_missing_target x, test_missing_target y
 	WHERE x.a = y.a
 	GROUP BY x.b/2;
 
+-- [SPARK-28329] SELECT INTO syntax
 --   group w/o existing GROUP BY target under ambiguous condition
 --   into a table
-SELECT count(x.b) INTO TABLE test_missing_target3
-FROM test_missing_target x, test_missing_target y
-	WHERE x.a = y.a
-	GROUP BY x.b/2 ORDER BY x.b/2;
-SELECT * FROM test_missing_target3;
+-- SELECT count(x.b) INTO TABLE test_missing_target3
+-- FROM test_missing_target x, test_missing_target y
+-- 	WHERE x.a = y.a
+-- 	GROUP BY x.b/2 ORDER BY x.b/2;
+-- SELECT * FROM test_missing_target3;
 
 --   Cleanup
 DROP TABLE test_missing_target;
-DROP TABLE test_missing_target2;
-DROP TABLE test_missing_target3;
+-- DROP TABLE test_missing_target2;
+-- DROP TABLE test_missing_target3;
