@@ -2517,6 +2517,28 @@ object functions {
   }
 
   /**
+   * Overlay the specified portion of `src` with `replaceString`,
+   *  starting from byte position `pos` of `inputString` and proceeding for `len` bytes.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replaceString: String, pos: Int, len: Int): Column = withExpr {
+    Overlay(src.expr, lit(replaceString).expr, lit(pos).expr, lit(len).expr)
+  }
+
+  /**
+   * Overlay the specified portion of `src` with `replaceString`,
+   *  starting from byte position `pos` of `inputString`.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replaceString: String, pos: Int): Column = withExpr {
+    new Overlay(src.expr, lit(replaceString).expr, lit(pos).expr)
+  }
+
+  /**
    * Translate any character in the src by a character in replaceString.
    * The characters in replaceString correspond to the characters in matchingString.
    * The translate will happen when any character in the string matches the character
@@ -3910,7 +3932,7 @@ object functions {
     val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
     val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
     val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
-    val funcCall = if (i == 0) "() => func" else "func"
+    val funcCall = if (i == 0) s"() => f$anyCast.call($anyParams)" else s"f$anyCast.call($anyParams)"
     println(s"""
       |/**
       | * Defines a Java UDF$i instance as user-defined function (UDF).
@@ -3922,8 +3944,8 @@ object functions {
       | * @since 2.3.0
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
-      |  val func = f$anyCast.call($anyParams)
-      |  SparkUserDefinedFunction($funcCall, returnType, inputSchemas = Seq.fill($i)(None))
+      |  val func = $funcCall
+      |  SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill($i)(None))
       |}""".stripMargin)
   }
 
@@ -4123,8 +4145,8 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF0[Any]].call()
-    SparkUserDefinedFunction(() => func, returnType, inputSchemas = Seq.fill(0)(None))
+    val func = () => f.asInstanceOf[UDF0[Any]].call()
+    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(0)(None))
   }
 
   /**

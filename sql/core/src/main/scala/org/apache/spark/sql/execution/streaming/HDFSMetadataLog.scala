@@ -231,7 +231,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * exceeds `maxSupportedVersion`, or when `text` is malformed (such as "xyz", "v", "v-1",
    * "v123xyz" etc.)
    */
-  private[sql] def parseVersion(text: String, maxSupportedVersion: Int): Int = {
+  private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int = {
     if (text.length > 0 && text(0) == 'v') {
       val version =
         try {
