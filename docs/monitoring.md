@@ -190,7 +190,11 @@ Security options for the Spark History Server are covered more detail in the
     <td>1d</td>
     <td>
       How often the filesystem job history cleaner checks for files to delete.
-      Files are only deleted if they are older than <code>spark.history.fs.cleaner.maxAge</code>
+      Files are deleted if at least one of two conditions holds.
+      First, they're deleted if they're older than <code>spark.history.fs.cleaner.maxAge</code>.
+      They are also deleted if the number of files is more than
+      <code>spark.history.fs.cleaner.maxNum</code>, Spark tries to clean up the completed attempts
+      from the applications based on the order of their oldest attempt time.
     </td>
   </tr>
   <tr>
@@ -198,6 +202,16 @@ Security options for the Spark History Server are covered more detail in the
     <td>7d</td>
     <td>
       Job history files older than this will be deleted when the filesystem history cleaner runs.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.maxNum</td>
+    <td>Int.MaxValue</td>
+    <td>
+      The maximum number of files in the event log directory.
+      Spark tries to clean up the completed attempt logs to maintain the log directory under this limit.
+      This should be smaller than the underlying file system limit like
+      `dfs.namenode.fs-limits.max-directory-items` in HDFS.
     </td>
   </tr>
   <tr>

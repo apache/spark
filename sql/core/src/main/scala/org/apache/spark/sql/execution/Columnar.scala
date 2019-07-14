@@ -53,8 +53,8 @@ class ColumnarRule {
  * Provides a common executor to translate an [[RDD]] of [[ColumnarBatch]] into an [[RDD]] of
  * [[InternalRow]]. This is inserted whenever such a transition is determined to be needed.
  *
- * The implementation is based off of similar implementations in [[ColumnarBatchScan]],
- * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]], and
+ * The implementation is based off of similar implementations in
+ * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]] and
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan)
@@ -96,9 +96,6 @@ case class ColumnarToRowExec(child: SparkPlan)
   /**
    * Generate [[ColumnVector]] expressions for our parent to consume as rows.
    * This is called once per [[ColumnVector]] in the batch.
-   *
-   * This code came unchanged from [[ColumnarBatchScan]] and will hopefully replace it
-   * at some point.
    */
   private def genCodeColumnVector(
       ctx: CodegenContext,
@@ -130,9 +127,6 @@ case class ColumnarToRowExec(child: SparkPlan)
    * Produce code to process the input iterator as [[ColumnarBatch]]es.
    * This produces an [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]] for each row in
    * each batch.
-   *
-   * This code came almost completely unchanged from [[ColumnarBatchScan]] and will
-   * hopefully replace it at some point.
    */
   override protected def doProduce(ctx: CodegenContext): String = {
     // PhysicalRDD always just has one input

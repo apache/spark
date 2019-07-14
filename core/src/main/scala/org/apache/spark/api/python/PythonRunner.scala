@@ -281,6 +281,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())
         dataOut.writeLong(context.taskAttemptId())
+        val resources = context.resources()
+        dataOut.writeInt(resources.size)
+        resources.foreach { case (k, v) =>
+          PythonRDD.writeUTF(k, dataOut)
+          PythonRDD.writeUTF(v.name, dataOut)
+          dataOut.writeInt(v.addresses.size)
+          v.addresses.foreach { case addr =>
+            PythonRDD.writeUTF(addr, dataOut)
+          }
+        }
         val localProps = context.getLocalProperties.asScala
         dataOut.writeInt(localProps.size)
         localProps.foreach { case (k, v) =>

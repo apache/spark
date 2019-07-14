@@ -50,7 +50,7 @@ class PartitionBatchPruningSuite
     // Enable in-memory partition pruning
     spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, true)
     // Enable in-memory table scan accumulators
-    spark.conf.set("spark.sql.inMemoryTableScanStatistics.enable", "true")
+    spark.conf.set(SQLConf.IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED.key, "true")
   }
 
   override protected def afterAll(): Unit = {

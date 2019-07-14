@@ -76,7 +76,7 @@ class QueryExecution(
   lazy val sparkPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
     SparkSession.setActiveSession(sparkSession)
     // Runtime re-optimization requires a unique instance of every node in the logical plan.
-    val logicalPlan = if (sparkSession.sessionState.conf.runtimeReoptimizationEnabled) {
+    val logicalPlan = if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
       optimizedPlan.clone()
     } else {
       optimizedPlan

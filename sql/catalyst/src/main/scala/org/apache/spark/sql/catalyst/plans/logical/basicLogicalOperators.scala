@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
@@ -432,7 +433,7 @@ case class CreateTableAsSelect(
 
   override def children: Seq[LogicalPlan] = Seq(query)
 
-  override lazy val resolved: Boolean = {
+  override lazy val resolved: Boolean = childrenResolved && {
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
@@ -506,6 +507,40 @@ case class DropTable(
     catalog: TableCatalog,
     ident: Identifier,
     ifExists: Boolean) extends Command
+
+/**
+ * Alter a table.
+ */
+case class AlterTable(
+    catalog: TableCatalog,
+    ident: Identifier,
+    table: NamedRelation,
+    changes: Seq[TableChange]) extends Command {
+
+  override def children: Seq[LogicalPlan] = Seq(table)
+
+  override lazy val resolved: Boolean = childrenResolved && {
+    changes.forall {
+      case add: AddColumn =>
+        add.fieldNames match {
+          case Array(_) =>
+            // a top-level field can always be added
+            true
+          case _ =>
+            // the parent field must exist
+            table.schema.findNestedField(add.fieldNames.init, includeCollections = true).isDefined
+        }
+
+      case colChange: ColumnChange =>
+        // the column that will be changed must exist
+        table.schema.findNestedField(colChange.fieldNames, includeCollections = true).isDefined
+
+      case _ =>
+        // property changes require no resolution checks
+        true
+    }
+  }
+}
 
 
 /**

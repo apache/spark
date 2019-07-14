@@ -265,6 +265,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
         // vol used by boolean.sql and case.sql.
         localSparkSession.udf.register("vol", (s: String) => s)
+        // PostgreSQL enabled cartesian product by default.
+        localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.ANSI_SQL_PARSER.key, true)
       case _ => // Don't add UDFs in Regular tests.
     }
 
