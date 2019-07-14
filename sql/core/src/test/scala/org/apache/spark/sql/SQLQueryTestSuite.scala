@@ -255,13 +255,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
     testCase match {
-      case udfTestCase: UDFTestCase => registerTestUDF(udfTestCase.udf, localSparkSession)
+      case udfTestCase: UDFTestCase =>
+        // vol used by udf-case.sql.
+        localSparkSession.udf.register("vol", (s: String) => s)
+        registerTestUDF(udfTestCase.udf, localSparkSession)
       case _: PgSQLTestCase =>
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
-        // vol used by boolean.sql
+        // vol used by boolean.sql and case.sql.
         localSparkSession.udf.register("vol", (s: String) => s)
+        // PostgreSQL enabled cartesian product by default.
+        localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.ANSI_SQL_PARSER.key, true)
       case _ => // Don't add UDFs in Regular tests.
     }
 
@@ -383,24 +389,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
       if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
-        Seq(
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFTestCase(
-            s"$testCaseName - Scala UDF",
+            s"$testCaseName - ${udf.prettyName}",
             absPath,
             resultFile,
-            TestScalaUDF(name = "udf")),
-
-          UDFTestCase(
-            s"$testCaseName - Python UDF",
-            absPath,
-            resultFile,
-            TestPythonUDF(name = "udf")),
-
-          UDFTestCase(
-            s"$testCaseName - Scalar Pandas UDF",
-            absPath,
-            resultFile,
-            TestScalarPandasUDF(name = "udf")))
+            udf)
+        }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {

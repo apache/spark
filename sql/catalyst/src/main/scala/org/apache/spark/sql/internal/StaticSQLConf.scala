@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.Locale
+
 import org.apache.spark.util.Utils
 
 
@@ -42,6 +44,7 @@ object StaticSQLConf {
   val GLOBAL_TEMP_DATABASE = buildStaticConf("spark.sql.globalTempDatabase")
     .internal()
     .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
   // This is used to control when we will split a schema's JSON string to multiple pieces
