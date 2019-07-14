@@ -22,8 +22,10 @@ if sys.version >= '3':
     basestring = unicode = str
     long = int
     from functools import reduce
+    from html import escape as html_escape
 else:
     from itertools import imap as map
+    from cgi import escape as html_escape
 
 import warnings
 
@@ -375,12 +377,6 @@ class DataFrame(object):
         by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
         using support eager evaluation with HTML.
         """
-        try:
-            from html import escape as html_escape
-        except ImportError:
-            # Python 2
-            from cgi import escape as html_escape
-
         if not self._support_repr_html:
             self._support_repr_html = True
         if self.sql_ctx._conf.isReplEagerEvalEnabled():
