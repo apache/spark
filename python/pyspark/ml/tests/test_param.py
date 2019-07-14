@@ -337,10 +337,6 @@ class DefaultValuesTests(PySparkTestCase):
         import pyspark.ml.recommendation
         import pyspark.ml.regression
 
-        # Set a default local to prevent possible invalid locale issue.
-        locale = self.sc._jvm.java.util.Locale
-        locale.setDefault(locale.forLanguageTag("en-US"))
-
         modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
                    pyspark.ml.evaluation, pyspark.ml.pipeline, pyspark.ml.recommendation,
                    pyspark.ml.regression]
