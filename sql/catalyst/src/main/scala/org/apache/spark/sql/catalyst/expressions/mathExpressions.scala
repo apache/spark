@@ -306,8 +306,7 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
 case class Acosh(child: Expression)
   extends UnaryMathExpression((x: Double) => math.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c =>
-      s"${ev.value} = java.lang.Math.log($c + java.lang.Math.sqrt($c * $c - 1.0));")
+    defineCodeGen(ctx, ev, c => s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
   }
 }
 
@@ -601,8 +600,8 @@ case class Asinh(child: Expression)
     case _ => math.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"${ev.value} = $c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
-                    s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c + 1.0));")
+      s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
+      s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
   }
 }
 
@@ -685,8 +684,7 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
 case class Atanh(child: Expression)
   extends UnaryMathExpression((x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)), "ATANH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c =>
-      s"${ev.value} = 0.5 * java.lang.Math.log((1.0 + $c)/(1.0 - $c));")
+    defineCodeGen(ctx, ev, c => s"0.5 * java.lang.Math.log((1.0 + $c)/(1.0 - $c))")
   }
 }
 
