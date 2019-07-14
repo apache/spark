@@ -17,6 +17,7 @@ SELECT 1 AS one;
 
 SELECT true AS true;
 
+-- [SPARK-28349] We do not need to follow PostgreSQL to support reserved words in column alias
 SELECT false AS `false`;
 
 SELECT boolean('t') AS true;
