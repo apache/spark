@@ -120,6 +120,7 @@ package object dsl {
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Set.empty)
+    def desc_nullsLast: SortOrder = SortOrder(expr, Descending, NullsLast, Set.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }

@@ -36,12 +36,12 @@ abstract sealed class NullOrdering {
 
 case object Ascending extends SortDirection {
   override def sql: String = "ASC"
-  override def defaultNullOrdering: NullOrdering = NullsFirst
+  override def defaultNullOrdering: NullOrdering = NullsLast
 }
 
 case object Descending extends SortDirection {
   override def sql: String = "DESC"
-  override def defaultNullOrdering: NullOrdering = NullsLast
+  override def defaultNullOrdering: NullOrdering = NullsFirst
 }
 
 case object NullsFirst extends NullOrdering{

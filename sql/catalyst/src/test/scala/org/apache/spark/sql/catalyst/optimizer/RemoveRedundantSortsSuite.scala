@@ -45,7 +45,7 @@ class RemoveRedundantSortsSuite extends PlanTest {
   }
 
   test("do not remove sort if the order is different") {
-    val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
+    val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsLast)
     val reorderedDifferently = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(reorderedDifferently.analyze)
     val correctAnswer = reorderedDifferently.analyze
