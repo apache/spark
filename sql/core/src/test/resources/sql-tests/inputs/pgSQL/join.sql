@@ -398,7 +398,7 @@ select count(*) from tenk1 x where
   x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1);
 -- rollback;
 
--- Skip this test because we do no know how to create table b
+-- Skip this test because table b inherits from table a and we do not support this feature, see inherits.sql
 --
 -- regression test: be sure we cope with proven-dummy append rels
 --
