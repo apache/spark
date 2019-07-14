@@ -24,10 +24,10 @@ import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.immutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -45,6 +45,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.memory.TestMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcTimeout}
 import org.apache.spark.scheduler.{FakeTask, ResultTask, Task, TaskDescription}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
@@ -279,13 +280,10 @@ class ExecutorSuite extends SparkFunSuite
     val heartbeats = ArrayBuffer[Heartbeat]()
     val mockReceiver = mock[RpcEndpointRef]
     when(mockReceiver.askSync(any[Heartbeat], any[RpcTimeout])(any))
-      .thenAnswer(new Answer[HeartbeatResponse] {
-        override def answer(invocation: InvocationOnMock): HeartbeatResponse = {
-          val args = invocation.getArguments()
-          val mock = invocation.getMock
-          heartbeats += args(0).asInstanceOf[Heartbeat]
-          HeartbeatResponse(false)
-        }
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val args = invocation.getArguments()
+        heartbeats += args(0).asInstanceOf[Heartbeat]
+        HeartbeatResponse(false)
       })
     val receiverRef = executorClass.getDeclaredField("heartbeatReceiverRef")
     receiverRef.setAccessible(true)
@@ -373,6 +371,7 @@ class ExecutorSuite extends SparkFunSuite
       addedFiles = Map[String, Long](),
       addedJars = Map[String, Long](),
       properties = new Properties,
+      resources = immutable.Map[String, ResourceInformation](),
       serializedTask)
   }
 

@@ -365,7 +365,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def dropTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
       sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false, blocking = true)
+        sparkSession, viewDef, cascade = false)
       sessionCatalog.dropTempView(viewName)
     }
   }
@@ -381,7 +381,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
       sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false, blocking = true)
+        sparkSession, viewDef, cascade = false)
       sessionCatalog.dropGlobalTempView(viewName)
     }
   }
@@ -492,11 +492,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
-    if (isCached(table)) {
-      // Uncache the logicalPlan.
-      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true, blocking = true)
-      // Cache it again.
-      sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableIdent.table))
+    val cache = sparkSession.sharedState.cacheManager.lookupCachedData(table)
+    if (cache.nonEmpty) {
+      // save the cache name and cache level for recreation
+      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
+
+      // uncache the logical plan.
+      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
+
+      // recache with the same name and cache level.
+      sparkSession.sharedState.cacheManager.cacheQuery(table, cacheName, cacheLevel)
     }
   }
 

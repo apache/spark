@@ -55,9 +55,31 @@ object InExpressionBenchmark extends SqlBasedBenchmark {
     runBenchmark(name, df, values, numRows, minNumIters)
   }
 
+  private def runNonCompactShortBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
+    val step = (Short.MaxValue.toInt - Short.MinValue.toInt) / numItems
+    val maxValue = Short.MinValue + numItems * step
+    val rangeSize = maxValue - Short.MinValue
+    require(isLookupSwitch(rangeSize, numItems))
+    val name = s"$numItems shorts (non-compact)"
+    val values = (Short.MinValue until maxValue by step).map(v => s"${v}S")
+    val df = spark.range(0, numRows).select($"id".cast(ShortType))
+    runBenchmark(name, df, values, numRows, minNumIters)
+  }
+
   private def runIntBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems ints"
     val values = 1 to numItems
+    val df = spark.range(0, numRows).select($"id".cast(IntegerType))
+    runBenchmark(name, df, values, numRows, minNumIters)
+  }
+
+  private def runNonCompactIntBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
+    val step = (Int.MaxValue.toLong - Int.MinValue.toLong) / numItems
+    val maxValue = Int.MinValue + numItems * step
+    val rangeSize = maxValue - Int.MinValue
+    require(isLookupSwitch(rangeSize, numItems))
+    val name = s"$numItems ints (non-compact)"
+    val values = Int.MinValue until maxValue.toInt by step.toInt
     val df = spark.range(0, numRows).select($"id".cast(IntegerType))
     runBenchmark(name, df, values, numRows, minNumIters)
   }
@@ -163,50 +185,66 @@ object InExpressionBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
+  // this logic is derived from visitSwitch in com.sun.tools.javac.jvm.Gen
+  private def isLookupSwitch(rangeSize: Long, numLabels: Int): Boolean = {
+    val tableSpaceCost = 4 + rangeSize
+    val tableTimeCost = 3
+    val lookupSpaceCost = 3 + 2 * numLabels
+    val lookupTimeCost = numLabels
+    lookupSpaceCost + 3 * lookupTimeCost < tableSpaceCost + 3 * tableTimeCost
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val numItemsSeq = Seq(5, 10, 25, 50, 100, 200)
+    val smallNumItemsSeq = Seq(5, 10, 25, 50, 100, 200)
+    val largeNumItemsSeq = Seq(300, 400, 500)
     val largeNumRows = 10000000
     val smallNumRows = 1000000
     val minNumIters = 5
 
     runBenchmark("In Expression Benchmark") {
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runByteBenchmark(numItems, largeNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      (smallNumItemsSeq ++ largeNumItemsSeq).foreach { numItems =>
         runShortBenchmark(numItems, largeNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      (smallNumItemsSeq ++ largeNumItemsSeq).foreach { numItems =>
+        runNonCompactShortBenchmark(numItems, largeNumRows, minNumIters)
+      }
+      (smallNumItemsSeq ++ largeNumItemsSeq).foreach { numItems =>
         runIntBenchmark(numItems, largeNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      (smallNumItemsSeq ++ largeNumItemsSeq).foreach { numItems =>
+        runNonCompactIntBenchmark(numItems, largeNumRows, minNumIters)
+      }
+      smallNumItemsSeq.foreach { numItems =>
         runLongBenchmark(numItems, largeNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runFloatBenchmark(numItems, largeNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runDoubleBenchmark(numItems, largeNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runSmallDecimalBenchmark(numItems, smallNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runLargeDecimalBenchmark(numItems, smallNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runStringBenchmark(numItems, smallNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runTimestampBenchmark(numItems, largeNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      (smallNumItemsSeq ++ largeNumItemsSeq).foreach { numItems =>
         runDateBenchmark(numItems, largeNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runArrayBenchmark(numItems, smallNumRows, minNumIters)
       }
-      numItemsSeq.foreach { numItems =>
+      smallNumItemsSeq.foreach { numItems =>
         runStructBenchmark(numItems, smallNumRows, minNumIters)
       }
     }

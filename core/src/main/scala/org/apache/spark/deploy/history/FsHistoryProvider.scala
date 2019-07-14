@@ -186,13 +186,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Return a runnable that performs the given operation on the event logs.
    * This operation is expected to be executed periodically.
    */
-  private def getRunner(operateFun: () => Unit): Runnable = {
-    new Runnable() {
-      override def run(): Unit = Utils.tryOrExit {
-        operateFun()
-      }
-    }
-  }
+  private def getRunner(operateFun: () => Unit): Runnable =
+    () => Utils.tryOrExit { operateFun() }
 
   /**
    * Fixed size thread pool to fetch and parse log files.
@@ -221,29 +216,25 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Cannot probe anything while the FS is in safe mode, so spawn a new thread that will wait
     // for the FS to leave safe mode before enabling polling. This allows the main history server
     // UI to be shown (so that the user can see the HDFS status).
-    val initThread = new Thread(new Runnable() {
-      override def run(): Unit = {
-        try {
-          while (isFsInSafeMode()) {
-            logInfo("HDFS is still in safe mode. Waiting...")
-            val deadline = clock.getTimeMillis() +
-              TimeUnit.SECONDS.toMillis(SAFEMODE_CHECK_INTERVAL_S)
-            clock.waitTillTime(deadline)
-          }
-          startPolling()
-        } catch {
-          case _: InterruptedException =>
+    val initThread = new Thread(() => {
+      try {
+        while (isFsInSafeMode()) {
+          logInfo("HDFS is still in safe mode. Waiting...")
+          val deadline = clock.getTimeMillis() +
+            TimeUnit.SECONDS.toMillis(SAFEMODE_CHECK_INTERVAL_S)
+          clock.waitTillTime(deadline)
         }
+        startPolling()
+      } catch {
+        case _: InterruptedException =>
       }
     })
     initThread.setDaemon(true)
     initThread.setName(s"${getClass().getSimpleName()}-init")
     initThread.setUncaughtExceptionHandler(errorHandler.getOrElse(
-      new Thread.UncaughtExceptionHandler() {
-        override def uncaughtException(t: Thread, e: Throwable): Unit = {
-          logError("Error initializing FsHistoryProvider.", e)
-          System.exit(1)
-        }
+      (_: Thread, e: Throwable) => {
+        logError("Error initializing FsHistoryProvider.", e)
+        System.exit(1)
       }))
     initThread.start()
     initThread
@@ -359,10 +350,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         return None
     }
 
-    val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
-      HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
-      attempt.info.startTime.getTime(),
-      attempt.info.appSparkVersion)
+    val ui = SparkUI.create(None, new HistoryAppStatusStore(conf, kvstore), conf, secManager,
+      app.info.name, HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
+      attempt.info.startTime.getTime(), attempt.info.appSparkVersion)
     loadPlugins().foreach(_.setupUI(ui))
 
     val loadedUI = LoadedAppUI(ui)
@@ -518,9 +508,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       val tasks = updated.flatMap { entry =>
         try {
-          val task: Future[Unit] = replayExecutor.submit(new Runnable {
-            override def run(): Unit = mergeApplicationListing(entry, newLastScanTime, true)
-          }, Unit)
+          val task: Future[Unit] = replayExecutor.submit(
+            () => mergeApplicationListing(entry, newLastScanTime, true))
           Some(task -> entry.getPath)
         } catch {
           // let the iteration over the updated entries break, since an exception on
@@ -547,6 +536,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // We don't have read permissions on the log file
             logWarning(s"Unable to read log $path", e.getCause)
             blacklist(path)
+            // SPARK-28157 We should remove this blacklisted entry from the KVStore
+            // to handle permission-only changes with the same file sizes later.
+            listing.delete(classOf[LogInfo], path.toString)
           case e: Exception =>
             logError("Exception while merging application listings", e)
         } finally {
@@ -813,6 +805,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private[history] def cleanLogs(): Unit = Utils.tryLog {
     val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
+    val maxNum = conf.get(MAX_LOG_NUM)
 
     val expired = listing.view(classOf[ApplicationInfoWrapper])
       .index("oldestAttempt")
@@ -825,23 +818,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val (remaining, toDelete) = app.attempts.partition { attempt =>
         attempt.info.lastUpdated.getTime() >= maxTime
       }
-
-      if (remaining.nonEmpty) {
-        val newApp = new ApplicationInfoWrapper(app.info, remaining)
-        listing.write(newApp)
-      }
-
-      toDelete.foreach { attempt =>
-        logInfo(s"Deleting expired event log for ${attempt.logPath}")
-        val logPath = new Path(logDir, attempt.logPath)
-        listing.delete(classOf[LogInfo], logPath.toString())
-        cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
-        deleteLog(fs, logPath)
-      }
-
-      if (remaining.isEmpty) {
-        listing.delete(app.getClass(), app.id)
-      }
+      deleteAttemptLogs(app, remaining, toDelete)
     }
 
     // Delete log files that don't have a valid application and exceed the configured max age.
@@ -859,8 +836,57 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         listing.delete(classOf[LogInfo], log.logPath)
       }
     }
+
+    // If the number of files is bigger than MAX_LOG_NUM,
+    // clean up all completed attempts per application one by one.
+    val num = listing.view(classOf[LogInfo]).index("lastProcessed").asScala.size
+    var count = num - maxNum
+    if (count > 0) {
+      logInfo(s"Try to delete $count old event logs to keep $maxNum logs in total.")
+      val oldAttempts = listing.view(classOf[ApplicationInfoWrapper])
+        .index("oldestAttempt")
+        .asScala
+      oldAttempts.foreach { app =>
+        if (count > 0) {
+          // Applications may have multiple attempts, some of which may not be completed yet.
+          val (toDelete, remaining) = app.attempts.partition(_.info.completed)
+          count -= deleteAttemptLogs(app, remaining, toDelete)
+        }
+      }
+      if (count > 0) {
+        logWarning(s"Fail to clean up according to MAX_LOG_NUM policy ($maxNum).")
+      }
+    }
+
     // Clean the blacklist from the expired entries.
     clearBlacklist(CLEAN_INTERVAL_S)
+  }
+
+  private def deleteAttemptLogs(
+      app: ApplicationInfoWrapper,
+      remaining: List[AttemptInfoWrapper],
+      toDelete: List[AttemptInfoWrapper]): Int = {
+    if (remaining.nonEmpty) {
+      val newApp = new ApplicationInfoWrapper(app.info, remaining)
+      listing.write(newApp)
+    }
+
+    var countDeleted = 0
+    toDelete.foreach { attempt =>
+      logInfo(s"Deleting expired event log for ${attempt.logPath}")
+      val logPath = new Path(logDir, attempt.logPath)
+      listing.delete(classOf[LogInfo], logPath.toString())
+      cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
+      if (deleteLog(fs, logPath)) {
+        countDeleted += 1
+      }
+    }
+
+    if (remaining.isEmpty) {
+      listing.delete(app.getClass(), app.id)
+    }
+
+    countDeleted
   }
 
   /**
@@ -1074,12 +1100,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       throw new NoSuchElementException(s"Cannot find attempt $attemptId of $appId."))
   }
 
-  private def deleteLog(fs: FileSystem, log: Path): Unit = {
+  private def deleteLog(fs: FileSystem, log: Path): Boolean = {
+    var deleted = false
     if (isBlacklisted(log)) {
       logDebug(s"Skipping deleting $log as we don't have permissions on it.")
     } else {
       try {
-        fs.delete(log, true)
+        deleted = fs.delete(log, true)
       } catch {
         case _: AccessControlException =>
           logInfo(s"No permission to delete $log, ignoring.")
@@ -1087,6 +1114,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           logError(s"IOException in cleaning $log", ioe)
       }
     }
+    deleted
   }
 
   private def isCompleted(name: String): Boolean = {

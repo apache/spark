@@ -67,7 +67,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
   test("Check atomic types: write allowed only when casting is safe") {
     atomicTypes.foreach { w =>
       atomicTypes.foreach { r =>
-        if (Cast.canSafeCast(w, r)) {
+        if (Cast.canUpCast(w, r)) {
           assertAllowed(w, r, "t", s"Should allow writing $w to $r because cast is safe")
 
         } else {
@@ -187,6 +187,14 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
   test("Check struct types: type promotion is allowed") {
     assertAllowed(point2, widerPoint2, "t",
       "Should allow widening float fields x and y to double")
+  }
+
+  test("Check struct type: ignore field name mismatch with byPosition mode") {
+    val nameMismatchFields = StructType(Seq(
+      StructField("a", FloatType, nullable = false),
+      StructField("b", FloatType, nullable = false)))
+    assertAllowed(nameMismatchFields, point2, "t",
+      "Should allow field name mismatch with byPosition mode", false)
   }
 
   ignore("Check struct types: missing optional field is allowed") {
@@ -370,10 +378,15 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
 
   // Helper functions
 
-  def assertAllowed(writeType: DataType, readType: DataType, name: String, desc: String): Unit = {
+  def assertAllowed(
+      writeType: DataType,
+      readType: DataType,
+      name: String,
+      desc: String,
+      byName: Boolean = true): Unit = {
     assert(
-      DataType.canWrite(writeType, readType, analysis.caseSensitiveResolution, name,
-        errMsg => fail(s"Should not produce errors but was called with: $errMsg")) === true, desc)
+      DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
+        errMsg => fail(s"Should not produce errors but was called with: $errMsg")), desc)
   }
 
   def assertSingleError(
@@ -392,13 +405,14 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       readType: DataType,
       name: String,
       desc: String,
-      numErrs: Int)
-      (errFunc: Seq[String] => Unit): Unit = {
+      numErrs: Int,
+      byName: Boolean = true)
+      (checkErrors: Seq[String] => Unit): Unit = {
     val errs = new mutable.ArrayBuffer[String]()
     assert(
-      DataType.canWrite(writeType, readType, analysis.caseSensitiveResolution, name,
+      DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
         errMsg => errs += errMsg) === false, desc)
     assert(errs.size === numErrs, s"Should produce $numErrs error messages")
-    errFunc(errs)
+    checkErrors(errs)
   }
 }

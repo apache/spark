@@ -207,6 +207,8 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
+   * The text files must be encoded as UTF-8.
+   *
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): JavaDStream[String] = {

@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import java.util.concurrent.TimeUnit._
+
+import scala.collection.mutable.HashMap
 
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -36,10 +37,11 @@ import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => 
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
+trait DataSourceScanExec extends LeafExecNode {
   val relation: BaseRelation
   val tableIdentifier: Option[TableIdentifier]
 
@@ -68,6 +70,12 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   private def redact(text: String): String = {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
+
+  /**
+   * The data being read in.  This is to provide input to the tests in a way compatible with
+   * [[InputRDDCodegen]] which all implementations used to extend.
+   */
+  def inputRDDs(): Seq[RDD[InternalRow]]
 }
 
 /** Physical plan node for scanning data from a relation. */
@@ -140,11 +148,11 @@ case class FileSourceScanExec(
     optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec with ColumnarBatchScan  {
+  extends DataSourceScanExec {
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
-  override lazy val supportsBatch: Boolean = {
+  override lazy val supportsColumnar: Boolean = {
     relation.fileFormat.supportBatch(relation.sparkSession, schema)
   }
 
@@ -175,14 +183,23 @@ case class FileSourceScanExec(
       metrics.filter(e => driverMetrics.contains(e._1)).values.toSeq)
   }
 
-  @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
+  @transient private lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
     driverMetrics("numFiles") = ret.map(_.files.size.toLong).sum
-    val timeTakenMs = ((System.nanoTime() - startTime) + optimizerMetadataTimeNs) / 1000 / 1000
+    val timeTakenMs = NANOSECONDS.toMillis(
+      (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
     driverMetrics("metadataTime") = timeTakenMs
     ret
+  }.toArray
+
+  /**
+   * [[partitionFilters]] can contain subqueries whose results are available only at runtime so
+   * accessing [[selectedPartitions]] should be guarded by this method during planning
+   */
+  private def hasPartitionsAvailableAtRunTime: Boolean = {
+    partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
   }
 
   override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
@@ -221,7 +238,7 @@ case class FileSourceScanExec(
           val sortColumns =
             spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
 
-          val sortOrder = if (sortColumns.nonEmpty) {
+          val sortOrder = if (sortColumns.nonEmpty && !hasPartitionsAvailableAtRunTime) {
             // In case of bucketing, its possible to have multiple files belonging to the
             // same bucket in a given relation. Each of these files are locally sorted
             // but those files combined together are not globally sorted. Given that,
@@ -265,17 +282,17 @@ case class FileSourceScanExec(
       Map(
         "Format" -> relation.fileFormat.toString,
         "ReadSchema" -> requiredSchema.catalogString,
-        "Batched" -> supportsBatch.toString,
+        "Batched" -> supportsColumnar.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedDownFilters),
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
-    val withOptPartitionCount =
-      relation.partitionSchemaOption.map { _ =>
-        metadata + ("PartitionCount" -> selectedPartitions.size.toString)
-      } getOrElse {
-        metadata
-      }
+    val withOptPartitionCount = if (relation.partitionSchemaOption.isDefined &&
+      !hasPartitionsAvailableAtRunTime) {
+      metadata + ("PartitionCount" -> selectedPartitions.size.toString)
+    } else {
+      metadata
+    }
 
     val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
       val numSelectedBuckets = optionalBucketSet.map { b =>
@@ -292,7 +309,7 @@ case class FileSourceScanExec(
     withSelectedBucketsCount
   }
 
-  private lazy val inputRDD: RDD[InternalRow] = {
+  lazy val inputRDD: RDD[InternalRow] = {
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
@@ -324,29 +341,30 @@ case class FileSourceScanExec(
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (supportsBatch) {
-      // in the case of fallback, this batched scan should never fail because of:
-      // 1) only primitive types are supported
-      // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
-      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
-    } else {
-      val numOutputRows = longMetric("numOutputRows")
+    val numOutputRows = longMetric("numOutputRows")
 
-      if (needsUnsafeRowConversion) {
-        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
-          val proj = UnsafeProjection.create(schema)
-          proj.initialize(index)
-          iter.map( r => {
-            numOutputRows += 1
-            proj(r)
-          })
-        }
-      } else {
-        inputRDD.map { r =>
+    if (needsUnsafeRowConversion) {
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        val proj = UnsafeProjection.create(schema)
+        proj.initialize(index)
+        iter.map( r => {
           numOutputRows += 1
-          r
-        }
+          proj(r)
+        })
       }
+    } else {
+      inputRDD.map { r =>
+        numOutputRows += 1
+        r
+      }
+    }
+  }
+
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val numOutputRows = longMetric("numOutputRows")
+    inputRDD.asInstanceOf[RDD[ColumnarBatch]].map { batch =>
+      numOutputRows += batch.numRows()
+      batch
     }
   }
 
@@ -367,12 +385,12 @@ case class FileSourceScanExec(
   private def createBucketedReadRDD(
       bucketSpec: BucketSpec,
       readFile: (PartitionedFile) => Iterator[InternalRow],
-      selectedPartitions: Seq[PartitionDirectory],
+      selectedPartitions: Array[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.filter(_.getLen > 0).map { f =>
+        p.files.map { f =>
           PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values)
         }
       }.groupBy { f =>
@@ -391,7 +409,7 @@ case class FileSourceScanExec(
     }
 
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Nil))
+      FilePartition(bucketId, prunedFilesGroupedToBuckets.getOrElse(bucketId, Array.empty))
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
@@ -407,7 +425,7 @@ case class FileSourceScanExec(
    */
   private def createNonBucketedReadRDD(
       readFile: (PartitionedFile) => Iterator[InternalRow],
-      selectedPartitions: Seq[PartitionDirectory],
+      selectedPartitions: Array[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
     val maxSplitBytes =
@@ -416,7 +434,7 @@ case class FileSourceScanExec(
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
     val splitFiles = selectedPartitions.flatMap { partition =>
-      partition.files.filter(_.getLen > 0).flatMap { file =>
+      partition.files.flatMap { file =>
         // getPath() is very expensive so we only want to call it once in this block:
         val filePath = file.getPath
         val isSplitable = relation.fileFormat.isSplitable(
@@ -430,7 +448,7 @@ case class FileSourceScanExec(
           partitionValues = partition.values
         )
       }
-    }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+    }.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 
     val partitions =
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)

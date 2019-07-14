@@ -345,7 +345,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("Tests of feature subset strategy") {
     val numClasses = 2
     val gbt = new GBTClassifier()
-      .setSeed(123)
+      .setSeed(42)
       .setMaxDepth(3)
       .setMaxIter(5)
       .setFeatureSubsetStrategy("all")
@@ -363,7 +363,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
     val mostIF = importanceFeatures.argmax
-    assert(mostImportantFeature !== mostIF)
+    assert(mostIF === 1)
+    assert(importances(mostImportantFeature) !== importanceFeatures(mostIF))
   }
 
   test("model evaluateEachIteration") {

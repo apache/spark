@@ -1961,9 +1961,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         spark.read.schema(schema).json(path).select("_corrupt_record").collect()
       }.getMessage
       assert(msg.contains("only include the internal corrupt record column"))
-      intercept[catalyst.errors.TreeNodeException[_]] {
-        spark.read.schema(schema).json(path).filter($"_corrupt_record".isNotNull).count()
-      }
+
       // workaround
       val df = spark.read.schema(schema).json(path).cache()
       assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
@@ -2043,8 +2041,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     // that whole test file is mapped to only one partition. This will guarantee
     // reliable sampling of the input file.
     withSQLConf(
-      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
-      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> (128 * 1024 * 1024).toString,
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (4 * 1024 * 1024).toString
     )(withTempPath { path =>
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
@@ -2424,6 +2422,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkCount(2)
     countForMalformedJSON(0, Seq(""))
+  }
+
+  test("SPARK-26745: count() for non-multiline input with empty lines") {
+    withTempPath { tempPath =>
+      val path = tempPath.getCanonicalPath
+      Seq("""{ "a" : 1 }""", "", """     { "a" : 2 }""", " \t ")
+        .toDS()
+        .repartition(1)
+        .write
+        .text(path)
+      assert(spark.read.json(path).count() === 2)
+    }
   }
 
   test("SPARK-25040: empty strings should be disallowed") {

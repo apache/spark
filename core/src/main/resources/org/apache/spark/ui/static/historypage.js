@@ -104,7 +104,7 @@ $(document).ready(function() {
     });
 
     var historySummary = $("#history-summary");
-    var searchString = historySummary["context"]["location"]["search"];
+    var searchString = window.location.search;
     var requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
@@ -121,6 +121,10 @@ $(document).ready(function() {
         if (app["attempts"][0]["completed"] == requestedIncomplete) {
           continue; // if we want to show for Incomplete, we skip the completed apps; otherwise skip incomplete ones.
         }
+        var version = "Unknown"
+        if (app["attempts"].length > 0) {
+            version = app["attempts"][0]["appSparkVersion"]
+        }
         var id = app["id"];
         var name = app["name"];
         if (app["attempts"].length > 1) {
@@ -136,7 +140,7 @@ $(document).ready(function() {
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
           attempt["durationMillisec"] = attempt["duration"];
           attempt["duration"] = formatDuration(attempt["duration"]);
-          var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
+          var app_clone = {"id" : id, "name" : name, "version": version, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
       }
@@ -161,6 +165,7 @@ $(document).ready(function() {
         var durationColumnName = 'duration';
         var conf = {
           "columns": [
+            {name: 'version'},
             {name: 'appId', type: "appid-numeric"},
             {name: 'appName'},
             {name: attemptIdColumnName},
@@ -177,6 +182,7 @@ $(document).ready(function() {
         if (hasMultipleAttempts) {
           conf.rowsGroup = [
             'appId:name',
+            'version:name',
             'appName:name'
           ];
         } else {

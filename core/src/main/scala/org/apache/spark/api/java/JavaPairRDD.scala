@@ -19,7 +19,7 @@ package org.apache.spark.api.java
 
 import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
-import java.util.{Comparator, Iterator => JIterator, List => JList}
+import java.util.{Comparator, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions

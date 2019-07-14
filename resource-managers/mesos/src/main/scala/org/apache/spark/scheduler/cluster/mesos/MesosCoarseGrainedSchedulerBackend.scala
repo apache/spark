@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
 import java.util.{Collections, List => JList}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.locks.ReentrantLock
 
@@ -76,15 +77,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     cores - (cores % minCoresPerExecutor)
   }
 
-  private val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
+  private val useFetcherCache = conf.get(ENABLE_FETCHER_CACHE)
 
-  private val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+  private val maxGpus = conf.get(MAX_GPUS)
 
-  private val taskLabels = conf.get("spark.mesos.task.labels", "")
+  private val taskLabels = conf.get(TASK_LABELS)
 
-  private[this] val shutdownTimeoutMS =
-    conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
-      .ensuring(_ >= 0, "spark.mesos.coarse.shutdownTimeout must be >= 0")
+  private[this] val shutdownTimeoutMS = conf.get(COARSE_SHUTDOWN_TIMEOUT)
 
   // Synchronization protected by stateLock
   private[this] var stopCalled: Boolean = false
@@ -109,9 +108,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private var totalGpusAcquired = 0
 
   // The amount of time to wait for locality scheduling
-  private val localityWait = conf.get(config.LOCALITY_WAIT)
+  private val localityWaitNs = TimeUnit.MILLISECONDS.toNanos(conf.get(config.LOCALITY_WAIT))
   // The start of the waiting, for data local scheduling
-  private var localityWaitStartTime = System.currentTimeMillis()
+  private var localityWaitStartTimeNs = System.nanoTime()
   // If true, the scheduler is in the process of launching executors to reach the requested
   // executor limit
   private var launchingExecutors = false
@@ -144,11 +143,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // may lead to deadlocks since the superclass might also try to lock
   private val stateLock = new ReentrantLock
 
-  private val extraCoresPerExecutor = conf.getInt("spark.mesos.extra.cores", 0)
+  private val extraCoresPerExecutor = conf.get(EXTRA_CORES_PER_EXECUTOR)
 
   // Offer constraints
   private val slaveOfferConstraints =
-    parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
+    parseConstraintString(sc.conf.get(CONSTRAINTS))
 
   // Reject offers with mismatched constraints in seconds
   private val rejectOfferDurationForUnmetConstraints =
@@ -208,10 +207,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.webUrl)),
+      sc.conf.get(DRIVER_WEBUI_URL).orElse(sc.ui.map(_.webUrl)),
       None,
       Some(sc.conf.get(DRIVER_FAILOVER_TIMEOUT)),
-      sc.conf.getOption("spark.mesos.driver.frameworkId").map(_ + suffix)
+      sc.conf.get(DRIVER_FRAMEWORK_ID).map(_ + suffix)
     )
 
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -264,10 +263,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val uri = conf.get(EXECUTOR_URI).orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
 
     if (uri.isEmpty) {
-      val executorSparkHome = conf.getOption("spark.mesos.executor.home")
+      val executorSparkHome = conf.get(EXECUTOR_HOME)
         .orElse(sc.getSparkHome())
         .getOrElse {
-          throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+          throw new SparkException(s"Executor Spark home `$EXECUTOR_HOME` is not set!")
         }
       val runScript = new File(executorSparkHome, "./bin/spark-class").getPath
       command.setValue(
@@ -293,7 +292,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetcherCache))
     }
 
-    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command, useFetcherCache))
+    setupUris(conf.get(URIS_TO_DOWNLOAD), command, useFetcherCache)
 
     command.build()
   }
@@ -359,7 +358,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       } else {
         if (!launchingExecutors) {
           launchingExecutors = true
-          localityWaitStartTime = System.currentTimeMillis()
+          localityWaitStartTimeNs = System.nanoTime()
         }
       }
 
@@ -593,7 +592,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     // increase coverage.
     val remainingHosts = allDesiredHosts -- currentHosts
     if (!remainingHosts.contains(offerHostname) &&
-      (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
+      (System.nanoTime() - localityWaitStartTimeNs <= localityWaitNs)) {
       logDebug("Skipping host and waiting for locality. host: " + offerHostname)
       return false
     }
@@ -752,7 +751,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     logInfo("Capping the total amount of executors to " + requestedTotal)
     executorLimitOption = Some(requestedTotal)
     // Update the locality wait start time to continue trying for locality.
-    localityWaitStartTime = System.currentTimeMillis()
+    localityWaitStartTimeNs = System.nanoTime()
     true
   }
 

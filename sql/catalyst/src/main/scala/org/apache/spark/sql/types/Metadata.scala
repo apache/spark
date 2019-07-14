@@ -88,7 +88,7 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
         map.keysIterator.forall { key =>
           that.map.get(key) match {
             case Some(otherValue) =>
-              val ourValue = map.get(key).get
+              val ourValue = map(key)
               (ourValue, otherValue) match {
                 case (v0: Array[Long], v1: Array[Long]) => java.util.Arrays.equals(v0, v1)
                 case (v0: Array[Double], v1: Array[Double]) => java.util.Arrays.equals(v0, v1)

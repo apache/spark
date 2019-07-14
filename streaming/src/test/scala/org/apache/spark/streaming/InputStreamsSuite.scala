@@ -293,8 +293,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val textPath = new Path(generatedSubDir, "renamed.txt")
         write(textPath, "renamed\n")
         val now = clock.getTimeMillis()
-        val modTime = now + durationMs / 2
-        fs.setTimes(textPath, modTime, modTime)
+        fs.setTimes(textPath, now, now)
         val textFilestatus = fs.getFileStatus(existingFile)
         assert(textFilestatus.getModificationTime < now + durationMs)
 
@@ -335,9 +334,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Let the data from the receiver be received
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      val startTime = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       while ((!MultiThreadTestReceiver.haveAllThreadsFinished || output.sum < numTotalRecords) &&
-        System.currentTimeMillis() - startTime < 5000) {
+        System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(5)) {
         Thread.sleep(100)
         clock.advance(batchDuration.milliseconds)
       }

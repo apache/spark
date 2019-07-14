@@ -135,7 +135,7 @@ private[ml] object TreeEnsembleModel {
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree to sum to 1.
+   *     - Normalize importances for tree to sum to 1 (only if `perTreeNormalization` is `true`).
    *  - Normalize feature importance vector to sum to 1.
    *
    *  References:
@@ -145,9 +145,15 @@ private[ml] object TreeEnsembleModel {
    * @param numFeatures  Number of features in model (even if not all are explicitly used by
    *                     the model).
    *                     If -1, then numFeatures is set based on the max feature index in all trees.
+   * @param perTreeNormalization By default this is set to `true` and it means that the importances
+   *                             of each tree are normalized before being summed. If set to `false`,
+   *                             the normalization is skipped.
    * @return  Feature importance values, of length numFeatures.
    */
-  def featureImportances[M <: DecisionTreeModel](trees: Array[M], numFeatures: Int): Vector = {
+  def featureImportances[M <: DecisionTreeModel](
+      trees: Array[M],
+      numFeatures: Int,
+      perTreeNormalization: Boolean = true): Vector = {
     val totalImportances = new OpenHashMap[Int, Double]()
     trees.foreach { tree =>
       // Aggregate feature importance vector for this tree
@@ -155,10 +161,19 @@ private[ml] object TreeEnsembleModel {
       computeFeatureImportance(tree.rootNode, importances)
       // Normalize importance vector for this tree, and add it to total.
       // TODO: In the future, also support normalizing by tree.rootNode.impurityStats.count?
-      val treeNorm = importances.map(_._2).sum
+      val treeNorm = if (perTreeNormalization) {
+        importances.map(_._2).sum
+      } else {
+        // We won't use it
+        Double.NaN
+      }
       if (treeNorm != 0) {
         importances.foreach { case (idx, impt) =>
-          val normImpt = impt / treeNorm
+          val normImpt = if (perTreeNormalization) {
+            impt / treeNorm
+          } else {
+            impt
+          }
           totalImportances.changeValue(idx, normImpt, _ + normImpt)
         }
       }

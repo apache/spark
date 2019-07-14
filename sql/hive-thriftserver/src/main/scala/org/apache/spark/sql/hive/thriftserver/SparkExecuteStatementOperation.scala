@@ -70,11 +70,12 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def close(): Unit = {
+  override def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
     logDebug(s"CLOSING $statementId")
     cleanup(OperationState.CLOSED)
     sqlContext.sparkContext.clearJobGroup()
+    HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
@@ -109,11 +110,12 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
+  def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = withSchedulerPool {
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
-    val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+    val resultRowSet: RowSet =
+      ThriftserverShimUtils.resultRowSet(getResultSetSchema, getProtocolVersion)
 
     // Reset iter to header when fetching start from first row
     if (order.equals(FetchOrientation.FETCH_FIRST)) {
@@ -205,12 +207,12 @@ private[hive] class SparkExecuteStatementOperation(
         case NonFatal(e) =>
           logError(s"Error executing query in background", e)
           setState(OperationState.ERROR)
-          throw e
+          throw new HiveSQLException(e)
       }
     }
   }
 
-  private def execute(): Unit = {
+  private def execute(): Unit = withSchedulerPool {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
@@ -225,10 +227,6 @@ private[hive] class SparkExecuteStatementOperation(
       statementId,
       parentSession.getUsername)
     sqlContext.sparkContext.setJobGroup(statementId, statement)
-    val pool = sessionToActivePool.get(parentSession.getSessionHandle)
-    if (pool != null) {
-      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
-    }
     try {
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -289,6 +287,20 @@ private[hive] class SparkExecuteStatementOperation(
     }
     if (statementId != null) {
       sqlContext.sparkContext.cancelJobGroup(statementId)
+    }
+  }
+
+  private def withSchedulerPool[T](body: => T): T = {
+    val pool = sessionToActivePool.get(parentSession.getSessionHandle)
+    if (pool != null) {
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
+    }
+    try {
+      body
+    } finally {
+      if (pool != null) {
+        sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, null)
+      }
     }
   }
 }

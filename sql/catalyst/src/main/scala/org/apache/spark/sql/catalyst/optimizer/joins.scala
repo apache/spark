@@ -180,8 +180,8 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case j @ Join(_, _, joinType, Some(cond), _) if hasUnevaluablePythonUDF(cond, j) =>
-      if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
-        // The current strategy only support InnerLike and LeftSemi join because for other type,
+      if (!joinType.isInstanceOf[InnerLike]) {
+        // The current strategy supports only InnerLike join because for other types,
         // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
         // the plan here, it'll still get a an invalid PythonUDF RuntimeException with message
         // `requires attributes from more than one child`, we throw firstly here for better
@@ -202,10 +202,6 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
       val newJoin = j.copy(condition = newCondition)
       joinType match {
         case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
-        case LeftSemi =>
-          Project(
-            j.left.output.map(_.toAttribute),
-            Filter(udf.reduceLeft(And), newJoin.copy(joinType = Inner)))
         case _ =>
           throw new AnalysisException("Using PythonUDF in join condition of join type" +
             s" $joinType is not supported.")

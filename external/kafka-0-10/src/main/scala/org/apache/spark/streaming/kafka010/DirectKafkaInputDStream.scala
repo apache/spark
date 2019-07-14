@@ -229,8 +229,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
-    val useConsumerCache = context.conf.getBoolean("spark.streaming.kafka.consumer.cache.enabled",
-      true)
+    val useConsumerCache = context.conf.get(CONSUMER_CACHE_ENABLED)
     val rdd = new KafkaRDD[K, V](context.sparkContext, executorKafkaParams, offsetRanges.toArray,
       getPreferredHosts, useConsumerCache)
 

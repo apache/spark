@@ -21,6 +21,7 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.collection.immutable.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
@@ -29,6 +30,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
@@ -38,7 +40,8 @@ import org.apache.spark.util.collection.MedianHeap
  * each task, retries tasks if they fail (up to a limited number of times), and
  * handles locality-aware scheduling for this TaskSet via delay scheduling. The main interfaces
  * to it are resourceOffer, which asks the TaskSet whether it wants to run a task on one node,
- * and statusUpdate, which tells it that one of its tasks changed state (e.g. finished).
+ * and handleSuccessfulTask/handleFailedTask, which tells it that one of its tasks changed state
+ *  (e.g. finished/failed).
  *
  * THREADING: This class is designed to only be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
@@ -61,13 +64,7 @@ private[spark] class TaskSetManager(
   private val addedJars = HashMap[String, Long](sched.sc.addedJars.toSeq: _*)
   private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
 
-  // Quantile of tasks at which to start speculation
-  val speculationQuantile = conf.get(SPECULATION_QUANTILE)
-  val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
-
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
-
-  val speculationEnabled = conf.get(SPECULATION_ENABLED)
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -78,6 +75,12 @@ private[spark] class TaskSetManager(
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
+
+  val speculationEnabled = conf.get(SPECULATION_ENABLED)
+  // Quantile of tasks at which to start speculation
+  val speculationQuantile = conf.get(SPECULATION_QUANTILE)
+  val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
+  val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -185,8 +188,24 @@ private[spark] class TaskSetManager(
 
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
-  for (i <- (0 until numTasks).reverse) {
-    addPendingTask(i)
+  addPendingTasks()
+
+  private def addPendingTasks(): Unit = {
+    val (_, duration) = Utils.timeTakenMs {
+      for (i <- (0 until numTasks).reverse) {
+        addPendingTask(i, resolveRacks = false)
+      }
+      // Resolve the rack for each host. This can be slow, so de-dupe the list of hosts,
+      // and assign the rack to all relevant task indices.
+      val (hosts, indicesForHosts) = pendingTasksForHost.toSeq.unzip
+      val racks = sched.getRacksForHosts(hosts)
+      racks.zip(indicesForHosts).foreach {
+        case (Some(rack), indices) =>
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) ++= indices
+        case (None, _) => // no rack, nothing to do
+      }
+    }
+    logDebug(s"Adding pending tasks took $duration ms")
   }
 
   /**
@@ -213,7 +232,9 @@ private[spark] class TaskSetManager(
   private[scheduler] var emittedTaskSizeWarning = false
 
   /** Add a task to all the pending-task lists that it should be on. */
-  private[spark] def addPendingTask(index: Int) {
+  private[spark] def addPendingTask(
+      index: Int,
+      resolveRacks: Boolean = true): Unit = {
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -233,8 +254,11 @@ private[spark] class TaskSetManager(
         case _ =>
       }
       pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
-      for (rack <- sched.getRackForHost(loc.host)) {
-        pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+
+      if (resolveRacks) {
+        sched.getRackForHost(loc.host).foreach { rack =>
+          pendingTasksForRack.getOrElseUpdate(rack, new ArrayBuffer) += index
+        }
       }
     }
 
@@ -330,7 +354,7 @@ private[spark] class TaskSetManager(
         val executors = prefs.flatMap(_ match {
           case e: ExecutorCacheTaskLocation => Some(e.executorId)
           case _ => None
-        });
+        })
         if (executors.contains(execId)) {
           speculatableTasks -= index
           return Some((index, TaskLocality.PROCESS_LOCAL))
@@ -445,7 +469,8 @@ private[spark] class TaskSetManager(
   def resourceOffer(
       execId: String,
       host: String,
-      maxLocality: TaskLocality.TaskLocality)
+      maxLocality: TaskLocality.TaskLocality,
+      availableResources: Map[String, Seq[String]] = Map.empty)
     : Option[TaskDescription] =
   {
     val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
@@ -510,6 +535,17 @@ private[spark] class TaskSetManager(
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
           s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
+        val extraResources = sched.resourcesReqsPerTask.map { taskReq =>
+          val rName = taskReq.resourceName
+          val count = taskReq.amount
+          val rAddresses = availableResources.getOrElse(rName, Seq.empty)
+          assert(rAddresses.size >= count, s"Required $count $rName addresses, but only " +
+            s"${rAddresses.size} available.")
+          // We'll drop the allocated addresses later inside TaskSchedulerImpl.
+          val allocatedAddresses = rAddresses.take(count)
+          (rName, new ResourceInformation(rName, allocatedAddresses.toArray))
+        }.toMap
+
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
           taskId,
@@ -521,6 +557,7 @@ private[spark] class TaskSetManager(
           addedFiles,
           addedJars,
           task.localProperties,
+          extraResources,
           serializedTask)
       }
     } else {
@@ -784,9 +821,6 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
-    // There may be multiple tasksets for this stage -- we let all of them know that the partition
-    // was completed.  This may result in some of the tasksets getting completed.
-    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -797,12 +831,9 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: TaskInfo): Unit = {
+  private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
-        if (speculationEnabled && !isZombie) {
-          successfulTaskDurations.insert(taskInfo.duration)
-        }
         tasksSuccessful += 1
         successful(index) = true
         if (tasksSuccessful == numTasks) {
@@ -1016,10 +1047,13 @@ private[spark] class TaskSetManager(
       return false
     }
     var foundTasks = false
-    val minFinishedForSpeculation = (speculationQuantile * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
 
-    if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
+    // It's possible that a task is marked as completed by the scheduler, then the size of
+    // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
+    // tasks that are submitted by this `TaskSetManager` and are completed successfully.
+    val numSuccessfulTasks = successfulTaskDurations.size()
+    if (numSuccessfulTasks >= minFinishedForSpeculation) {
       val time = clock.getTimeMillis()
       val medianDuration = successfulTaskDurations.median
       val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
@@ -1101,5 +1135,5 @@ private[spark] class TaskSetManager(
 private[spark] object TaskSetManager {
   // The user will be warned if any stages contain a task that has a serialized size greater than
   // this.
-  val TASK_SIZE_TO_WARN_KIB = 100
+  val TASK_SIZE_TO_WARN_KIB = 1000
 }

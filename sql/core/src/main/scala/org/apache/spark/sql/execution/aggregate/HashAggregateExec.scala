@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import java.util.concurrent.TimeUnit._
+
 import org.apache.spark.TaskContext
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rdd.RDD
@@ -28,10 +30,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.Utils
@@ -135,7 +139,7 @@ case class HashAggregateExec(
           aggregationIterator
         }
       }
-      aggTime += (System.nanoTime() - beforeAgg) / 1000000
+      aggTime += NANOSECONDS.toMillis(System.nanoTime() - beforeAgg)
       res
     }
   }
@@ -240,7 +244,7 @@ case class HashAggregateExec(
        |   $initAgg = true;
        |   long $beforeAgg = System.nanoTime();
        |   $doAggFuncName();
-       |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
+       |   $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
        |
        |   // output the result
        |   ${genResult.trim}
@@ -466,10 +470,13 @@ case class HashAggregateExec(
       val resultVars = bindReferences[Expression](
         resultExpressions,
         inputAttrs).map(_.genCode(ctx))
+      val evaluateNondeterministicResults =
+        evaluateNondeterministicVariables(output, resultVars, resultExpressions)
       s"""
        $evaluateKeyVars
        $evaluateBufferVars
        $evaluateAggResults
+       $evaluateNondeterministicResults
        ${consume(ctx, resultVars)}
        """
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
@@ -506,10 +513,15 @@ case class HashAggregateExec(
       // generate result based on grouping key
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
-      val eval = bindReferences[Expression](
+      val resultVars = bindReferences[Expression](
         resultExpressions,
         groupingAttributes).map(_.genCode(ctx))
-      consume(ctx, eval)
+      val evaluateNondeterministicResults =
+        evaluateNondeterministicVariables(output, resultVars, resultExpressions)
+      s"""
+       $evaluateNondeterministicResults
+       ${consume(ctx, resultVars)}
+       """
     }
     ctx.addNewFunction(funcName,
       s"""
@@ -548,7 +560,7 @@ case class HashAggregateExec(
   private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {
     if (!checkIfFastHashMapSupported(ctx)) {
       if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
-        logInfo("spark.sql.codegen.aggregate.map.twolevel.enabled is set to true, but"
+        logInfo(s"${SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key} is set to true, but"
           + " current version of codegened fast hashmap does not support this aggregate.")
       }
     } else {
@@ -556,8 +568,7 @@ case class HashAggregateExec(
 
       // This is for testing/benchmarking only.
       // We enforce to first level to be a vectorized hashmap, instead of the default row-based one.
-      isVectorizedHashMapEnabled = sqlContext.getConf(
-        "spark.sql.codegen.aggregate.map.vectorized.enable", "false") == "true"
+      isVectorizedHashMapEnabled = sqlContext.conf.enableVectorizedHashMap
     }
   }
 
@@ -565,12 +576,8 @@ case class HashAggregateExec(
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
-    } else {
-      sqlContext.getConf("spark.sql.codegen.aggregate.map.vectorized.enable", null) match {
-        case "true" =>
-          logWarning("Two level hashmap is disabled but vectorized hashmap is enabled.")
-        case _ =>
-      }
+    } else if (sqlContext.conf.enableVectorizedHashMap) {
+      logWarning("Two level hashmap is disabled but vectorized hashmap is enabled.")
     }
     val bitMaxCapacity = sqlContext.conf.fastHashAggregateRowMaxCapacityBit
 
@@ -718,7 +725,7 @@ case class HashAggregateExec(
        $initAgg = true;
        long $beforeAgg = System.nanoTime();
        $doAggFuncName();
-       $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
+       $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
      }
 
      // output the result
@@ -734,6 +741,7 @@ case class HashAggregateExec(
     val fastRowKeys = ctx.generateExpressions(
       bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
+    val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")
 
@@ -746,13 +754,6 @@ case class HashAggregateExec(
           e.aggregateFunction.asInstanceOf[DeclarativeAggregate].mergeExpressions
       }
     }
-
-    // generate hash code for key
-    // SPARK-24076: HashAggregate uses the same hash algorithm on the same expressions
-    // as ShuffleExchange, it may lead to bad hash conflict when shuffle.partitions=8192*n,
-    // pick a different seed to avoid this conflict
-    val hashExpr = Murmur3Hash(groupingExpressions, 48)
-    val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
@@ -769,11 +770,11 @@ case class HashAggregateExec(
       s"""
          |// generate grouping key
          |${unsafeRowKeyCode.code}
-         |${hashEval.code}
+         |int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();
          |if ($checkFallbackForBytesToBytesMap) {
          |  // try to get the buffer from hash map
          |  $unsafeRowBuffer =
-         |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
+         |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
          |}
          |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
          |// aggregation after processing all input rows.
@@ -787,7 +788,7 @@ case class HashAggregateExec(
          |  // the hash map had be spilled, it should have enough memory now,
          |  // try to allocate buffer again.
          |  $unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-         |    $unsafeRowKeys, ${hashEval.value});
+         |    $unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
          |    throw new $oomeClassName("No enough memory for aggregation");

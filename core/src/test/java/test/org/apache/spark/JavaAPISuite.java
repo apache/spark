@@ -32,6 +32,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
@@ -156,13 +158,16 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void sample() {
-    List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    List<Integer> ints = IntStream.iterate(1, x -> x + 1)
+      .limit(20)
+      .boxed()
+      .collect(Collectors.toList());
     JavaRDD<Integer> rdd = sc.parallelize(ints);
     // the seeds here are "magic" to make this work out nicely
     JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 8);
     assertEquals(2, sample20.count());
     JavaRDD<Integer> sample20WithoutReplacement = rdd.sample(false, 0.2, 2);
-    assertEquals(2, sample20WithoutReplacement.count());
+    assertEquals(4, sample20WithoutReplacement.count());
   }
 
   @Test

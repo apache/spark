@@ -18,9 +18,9 @@
 package org.apache.spark
 
 import java.lang.ref.WeakReference
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.HashSet
-import scala.language.existentials
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfter
@@ -42,7 +42,7 @@ import org.apache.spark.storage._
 abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[SortShuffleManager])
   extends SparkFunSuite with BeforeAndAfter with LocalSparkContext
 {
-  implicit val defaultTimeout = timeout(10000 millis)
+  implicit val defaultTimeout = timeout(10.seconds)
   val conf = new SparkConf()
     .setMaster("local[2]")
     .setAppName("ContextCleanerSuite")
@@ -69,10 +69,11 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
   protected def newShuffleRDD() = newPairRDD().reduceByKey(_ + _)
   protected def newBroadcast() = sc.broadcast(1 to 100)
 
-  protected def newRDDWithShuffleDependencies(): (RDD[_], Seq[ShuffleDependency[_, _, _]]) = {
-    def getAllDependencies(rdd: RDD[_]): Seq[Dependency[_]] = {
+  protected def newRDDWithShuffleDependencies():
+      (RDD[(Int, Int)], Seq[ShuffleDependency[Int, Int, Int]]) = {
+    def getAllDependencies(rdd: RDD[(Int, Int)]): Seq[Dependency[_]] = {
       rdd.dependencies ++ rdd.dependencies.flatMap { dep =>
-        getAllDependencies(dep.rdd)
+        getAllDependencies(dep.rdd.asInstanceOf[RDD[(Int, Int)]])
       }
     }
     val rdd = newShuffleRDD()
@@ -80,7 +81,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
     // Get all the shuffle dependencies
     val shuffleDeps = getAllDependencies(rdd)
       .filter(_.isInstanceOf[ShuffleDependency[_, _, _]])
-      .map(_.asInstanceOf[ShuffleDependency[_, _, _]])
+      .map(_.asInstanceOf[ShuffleDependency[Int, Int, Int]])
     (rdd, shuffleDeps)
   }
 
@@ -98,10 +99,10 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
   /** Run GC and make sure it actually has run */
   protected def runGC() {
     val weakRef = new WeakReference(new Object())
-    val startTime = System.currentTimeMillis
+    val startTimeNs = System.nanoTime()
     System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
     // Wait until a weak reference object has been GCed
-    while (System.currentTimeMillis - startTime < 10000 && weakRef.get != null) {
+    while (System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(10) && weakRef.get != null) {
       System.gc()
       Thread.sleep(200)
     }
@@ -158,7 +159,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC causes RDD cleanup after dereferencing the RDD
@@ -177,7 +178,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, shuffleIds = Seq(0))
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
     rdd.count()  // Defeat early collection by the JVM
 
@@ -195,7 +196,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC causes broadcast cleanup after dereferencing the broadcast variable
@@ -271,7 +272,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that RDD going out of scope does cause the checkpoint blocks to be cleaned up
@@ -293,7 +294,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC triggers the cleanup of all variables after the dereferencing them
@@ -333,7 +334,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
     intercept[Exception] {
-      preGCTester.assertCleanup()(timeout(1000 millis))
+      preGCTester.assertCleanup()(timeout(1.second))
     }
 
     // Test that GC triggers the cleanup of all variables after the dereferencing them
@@ -407,7 +408,7 @@ class CleanerTester(
   /** Assert that all the stuff has been cleaned up */
   def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout) {
     try {
-      eventually(waitTimeout, interval(100 millis)) {
+      eventually(waitTimeout, interval(100.milliseconds)) {
         assert(isAllCleanedUp,
           "The following resources were not cleaned up:\n" + uncleanedResourcesToString)
       }

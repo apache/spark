@@ -19,17 +19,17 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
  * Test suite to handle metadata cache related.
  */
-class MetadataCacheSuite extends QueryTest with SharedSQLContext {
+abstract class MetadataCacheSuite extends QueryTest with SharedSQLContext {
 
   /** Removes one data file in the given directory. */
-  private def deleteOneFileInDirectory(dir: File): Unit = {
+  protected def deleteOneFileInDirectory(dir: File): Unit = {
     assert(dir.isDirectory)
     val oneFile = dir.listFiles().find { file =>
       !file.getName.startsWith("_") && !file.getName.startsWith(".")
@@ -38,14 +38,14 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
     oneFile.foreach(_.delete())
   }
 
-  test("SPARK-16336 Suggest doing table refresh when encountering FileNotFoundException") {
+  test("SPARK-16336,SPARK-27961 Suggest fixing FileNotFoundException") {
     withTempPath { (location: File) =>
-      // Create a Parquet directory
+      // Create an ORC directory
       spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
-        .write.parquet(location.getAbsolutePath)
+        .write.orc(location.getAbsolutePath)
 
       // Read the directory in
-      val df = spark.read.parquet(location.getAbsolutePath)
+      val df = spark.read.orc(location.getAbsolutePath)
       assert(df.count() == 100)
 
       // Delete a file
@@ -56,18 +56,25 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
         df.count()
       }
       assert(e.getMessage.contains("FileNotFoundException"))
-      assert(e.getMessage.contains("REFRESH"))
+      assert(e.getMessage.contains("recreating the Dataset/DataFrame involved"))
     }
   }
+}
+
+class MetadataCacheV1Suite extends MetadataCacheSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
 
   test("SPARK-16337 temporary view refresh") {
     withTempView("view_refresh") { withTempPath { (location: File) =>
-      // Create a Parquet directory
+      // Create an ORC directory
       spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
-        .write.parquet(location.getAbsolutePath)
+        .write.orc(location.getAbsolutePath)
 
       // Read the directory in
-      spark.read.parquet(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
+      spark.read.orc(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
       assert(sql("select count(*) from view_refresh").first().getLong(0) == 100)
 
       // Delete a file
@@ -93,10 +100,10 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
         withTempPath { (location: File) =>
           // Create a Parquet directory
           spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
-            .write.parquet(location.getAbsolutePath)
+            .write.orc(location.getAbsolutePath)
 
           // Read the directory in
-          spark.read.parquet(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
+          spark.read.orc(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
 
           // Delete a file
           deleteOneFileInDirectory(location)
@@ -110,4 +117,11 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+}
+
+class MetadataCacheV2Suite extends MetadataCacheSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
 }

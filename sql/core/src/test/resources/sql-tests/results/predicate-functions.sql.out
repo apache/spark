@@ -85,7 +85,7 @@ false
 -- !query 10
 select to_date('2009-07-30 04:17:52') > '2009-07-30 04:17:52'
 -- !query 10 schema
-struct<(CAST(to_date('2009-07-30 04:17:52') AS STRING) > 2009-07-30 04:17:52):boolean>
+struct<(to_date('2009-07-30 04:17:52') > CAST(2009-07-30 04:17:52 AS DATE)):boolean>
 -- !query 10 output
 false
 
@@ -141,9 +141,9 @@ true
 -- !query 17
 select to_date('2009-07-30 04:17:52') >= '2009-07-30 04:17:52'
 -- !query 17 schema
-struct<(CAST(to_date('2009-07-30 04:17:52') AS STRING) >= 2009-07-30 04:17:52):boolean>
+struct<(to_date('2009-07-30 04:17:52') >= CAST(2009-07-30 04:17:52 AS DATE)):boolean>
 -- !query 17 output
-false
+true
 
 
 -- !query 18
@@ -197,9 +197,9 @@ false
 -- !query 24
 select to_date('2009-07-30 04:17:52') < '2009-07-30 04:17:52'
 -- !query 24 schema
-struct<(CAST(to_date('2009-07-30 04:17:52') AS STRING) < 2009-07-30 04:17:52):boolean>
+struct<(to_date('2009-07-30 04:17:52') < CAST(2009-07-30 04:17:52 AS DATE)):boolean>
 -- !query 24 output
-true
+false
 
 
 -- !query 25
@@ -253,7 +253,7 @@ true
 -- !query 31
 select to_date('2009-07-30 04:17:52') <= '2009-07-30 04:17:52'
 -- !query 31 schema
-struct<(CAST(to_date('2009-07-30 04:17:52') AS STRING) <= 2009-07-30 04:17:52):boolean>
+struct<(to_date('2009-07-30 04:17:52') <= CAST(2009-07-30 04:17:52 AS DATE)):boolean>
 -- !query 31 output
 true
 

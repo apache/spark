@@ -32,6 +32,9 @@ if sys.version_info[0] >= 3:
     xrange = range
 
 
+global_func = lambda: "Hi"
+
+
 class RDDTests(ReusedPySparkTestCase):
 
     def test_range(self):
@@ -57,15 +60,12 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(6, self.sc.parallelize([1, 2, 3]).sum())
 
     def test_to_localiterator(self):
-        from time import sleep
         rdd = self.sc.parallelize([1, 2, 3])
         it = rdd.toLocalIterator()
-        sleep(5)
         self.assertEqual([1, 2, 3], sorted(it))
 
         rdd2 = rdd.repartition(1000)
         it2 = rdd2.toLocalIterator()
-        sleep(5)
         self.assertEqual([1, 2, 3], sorted(it2))
 
     def test_save_as_textfile_with_unicode(self):
@@ -324,7 +324,7 @@ class RDDTests(ReusedPySparkTestCase):
         bdata.unpersist()
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEqual(N, m)
-        bdata.destroy()
+        bdata.destroy(blocking=True)
         try:
             self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         except Exception as e:
@@ -605,7 +605,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
-        N = 200001
+        N = 2000001
         kv = self.sc.parallelize(xrange(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
@@ -726,6 +726,41 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
                                 seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
+    def test_overwritten_global_func(self):
+        # Regression test for SPARK-27000
+        global global_func
+        self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Hi")
+        global_func = lambda: "Yeah"
+        self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Yeah")
+
+    def test_to_local_iterator_failure(self):
+        # SPARK-27548 toLocalIterator task failure not propagated to Python driver
+
+        def fail(_):
+            raise RuntimeError("local iterator error")
+
+        rdd = self.sc.range(10).map(fail)
+
+        with self.assertRaisesRegexp(Exception, "local iterator error"):
+            for _ in rdd.toLocalIterator():
+                pass
+
+    def test_to_local_iterator_collects_single_partition(self):
+        # Test that partitions are not computed until requested by iteration
+
+        def fail_last(x):
+            if x == 9:
+                raise RuntimeError("This should not be hit")
+            return x
+
+        rdd = self.sc.range(12, numSlices=4).map(fail_last)
+        it = rdd.toLocalIterator()
+
+        # Only consume first 4 elements from partitions 1 and 2, this should not collect the last
+        # partition which would trigger the error
+        for i in range(4):
+            self.assertEqual(i, next(it))
+
 
 if __name__ == "__main__":
     import unittest
@@ -733,7 +768,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -1012,7 +1012,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       codec: Class[_ <: CompressionCodec]): Unit = self.withScope {
     saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass,
-      new JobConf(self.context.hadoopConfiguration), Some(codec))
+      new JobConf(self.context.hadoopConfiguration), Option(codec))
   }
 
   /**

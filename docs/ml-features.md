@@ -2,6 +2,21 @@
 layout: global
 title: Extracting, transforming and selecting features
 displayTitle: Extracting, transforming and selecting features
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 This section covers algorithms for working with features, roughly divided into these groups:
@@ -907,6 +922,14 @@ Refer to the [Interaction Java docs](api/java/org/apache/spark/ml/feature/Intera
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaInteractionExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Interaction Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Interaction)
+for more details on the API.
+
+{% include_example python/ml/interaction_example.py %}
 </div>
 </div>
 

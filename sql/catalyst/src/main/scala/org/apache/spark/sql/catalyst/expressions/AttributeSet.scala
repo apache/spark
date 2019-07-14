@@ -63,7 +63,7 @@ object AttributeSet {
  * when the transformation was a no-op).
  */
 class AttributeSet private (val baseSet: Set[AttributeEquals])
-  extends Traversable[Attribute] with Serializable {
+  extends Iterable[Attribute] with Serializable {
 
   override def hashCode: Int = baseSet.hashCode()
 
@@ -99,7 +99,7 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
    * Returns a new [[AttributeSet]] that does not contain any of the [[Attribute Attributes]] found
    * in `other`.
    */
-  def --(other: Traversable[NamedExpression]): AttributeSet = {
+  def --(other: Iterable[NamedExpression]): AttributeSet = {
     other match {
       case otherSet: AttributeSet =>
         new AttributeSet(baseSet -- otherSet.baseSet)

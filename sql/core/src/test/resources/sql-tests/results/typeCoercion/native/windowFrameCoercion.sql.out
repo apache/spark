@@ -177,7 +177,7 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast('1' as binary) DESC RANGE BET
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY 1 ORDER BY CAST('1' AS BINARY) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: The data type 'binary' used in the order specification does not match the data type 'int' which is used in the range frame.; line 1 pos 21
+cannot resolve 'RANGE BETWEEN CURRENT ROW AND CAST(1 AS BINARY) FOLLOWING' due to data type mismatch: The data type of the upper bound 'binary' does not match the expected data type '(numeric or calendarinterval)'.; line 1 pos 21
 
 
 -- !query 22
