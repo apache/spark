@@ -837,9 +837,9 @@ object TypeCoercion {
         Cast(TimeAdd(l, r), l.dataType)
       case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeSub(l, r), l.dataType)
-      case Multiply(l @ CalendarIntervalType(), r @ IntegerType()) =>
+      case Multiply(l @ CalendarIntervalType(), r) =>
         MultiplyInterval(l, r)
-      case Multiply(l @ IntegerType(), r @ CalendarIntervalType()) =>
+      case Multiply(l, r @ CalendarIntervalType()) =>
         MultiplyInterval(r, l)
     }
   }
