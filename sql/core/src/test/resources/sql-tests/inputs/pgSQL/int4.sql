@@ -33,7 +33,7 @@ INSERT INTO INT4_TBL VALUES ('-2147483647');
 -- INSERT INTO INT4_TBL(f1) VALUES ('123       5');
 -- INSERT INTO INT4_TBL(f1) VALUES ('');
 
--- We cannot test this when checkOverflow=false here
+-- We cannot test this when checkOverflow=true here
 -- because exception happens in the executors and the
 -- output stacktrace cannot have an exact match
 set spark.sql.arithmetic.checkOverflow=false;
