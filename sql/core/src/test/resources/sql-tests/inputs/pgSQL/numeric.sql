@@ -648,8 +648,8 @@ SELECT t1.id1, t1.result, t2.expected
 -- * miscellaneous checks for things that have been broken in the past...
 -- ******************************
 -- numeric AVG used to fail on some platforms
--- [SPARK-28316] AVG, STDDEV and VARIANCE returns double type
 SELECT AVG(val) FROM num_data;
+-- [SPARK-28316] STDDEV and VARIANCE returns double type
 -- Skip it because: Expected "2.779120328758835[]E7", but got "2.779120328758835[4]E7"
 -- SELECT STDDEV(val) FROM num_data;
 -- Skip it because: Expected "7.72350980172061[8]E14", but got "7.72350980172061[6]E14"
