@@ -36,9 +36,9 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
     super.beforeAll()
 
     // median = [2.0, -2.0]
-    // 1st quartile = [1.0, -2.0]
+    // 1st quartile = [1.0, -3.0]
     // 3st quartile = [3.0, -1.0]
-    // IQR = [2.0, 2.0]
+    // quantile range = IQR = [2.0, 2.0]
     data = Array(
       Vectors.dense(0.0, 0.0),
       Vectors.dense(1.0, -1.0),
@@ -47,6 +47,26 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(4.0, -4.0)
     )
 
+    /*
+      Using the following Python code to load the data and train the model using
+      scikit-learn package.
+
+      from sklearn.preprocessing import RobustScaler
+      import numpy as np
+      X = np.array([[0, 0], [1, -1], [2, -2], [3, -3], [4, -4]], dtype=np.float)
+      scaler = RobustScaler(with_centering=True, with_scaling=False).fit(X)
+
+      >>> scaler.center_
+      array([ 2., -2.])
+      >>> scaler.scale_
+      array([2., 2.])
+      >>> scaler.transform(X)
+      array([[-2.,  2.],
+             [-1.,  1.],
+             [ 0.,  0.],
+             [ 1., -1.],
+             [ 2., -2.]])
+     */
     resWithCentering = Array(
       Vectors.dense(-2.0, 2.0),
       Vectors.dense(-1.0, 1.0),
@@ -55,6 +75,21 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(2.0, -2.0)
     )
 
+    /*
+      Python code:
+
+      scaler = RobustScaler(with_centering=False, with_scaling=True).fit(X)
+      >>> scaler.center_
+      array([ 2., -2.])
+      >>> scaler.scale_
+      array([2., 2.])
+      >>> scaler.transform(X)
+      array([[ 0. ,  0. ],
+             [ 0.5, -0.5],
+             [ 1. , -1. ],
+             [ 1.5, -1.5],
+             [ 2. , -2. ]])
+     */
     resWithScaling = Array(
       Vectors.dense(0.0, 0.0),
       Vectors.dense(0.5, -0.5),
@@ -63,6 +98,21 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(2.0, -2.0)
     )
 
+    /*
+      Python code:
+
+      scaler = RobustScaler(with_centering=True, with_scaling=True).fit(X)
+      >>> scaler.center_
+      array([ 2., -2.])
+      >>> scaler.scale_
+      array([2., 2.])
+      >>> scaler.transform(X)
+      array([[-1. ,  1. ],
+            [-0.5,  0.5],
+            [ 0. ,  0. ],
+            [ 0.5, -0.5],
+            [ 1. , -1. ]])
+     */
     resWithBoth = Array(
       Vectors.dense(-1.0, 1.0),
       Vectors.dense(-0.5, 0.5),

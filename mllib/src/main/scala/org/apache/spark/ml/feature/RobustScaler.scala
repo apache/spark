@@ -205,7 +205,7 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
 /**
  * Model fitted by [[RobustScaler]].
  *
- * @param range interquartile range for each original column during fitting
+ * @param range quantile range for each original column during fitting
  * @param median median value for each original column during fitting
  */
 @Since("3.0.0")
