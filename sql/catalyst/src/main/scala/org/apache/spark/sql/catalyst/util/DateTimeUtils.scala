@@ -506,59 +506,11 @@ object DateTimeUtils {
   }
 
   /**
-   * The number of days for each month (not leap year)
-   */
-  private val monthDays = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-
-  /**
-   * Returns the date value for the first day of the given month.
-   * The month is expressed in months since year zero (17999 BC), starting from 0.
-   */
-  private def firstDayOfMonth(absoluteMonth: Int): SQLDate = {
-    val absoluteYear = absoluteMonth / 12
-    var monthInYear = absoluteMonth - absoluteYear * 12
-    var date = getDateFromYear(absoluteYear)
-    if (monthInYear >= 2 && isLeap(absoluteYear + YearZero)) {
-      date += 1
-    }
-    while (monthInYear > 0) {
-      date += monthDays(monthInYear - 1)
-      monthInYear -= 1
-    }
-    date
-  }
-
-  /**
-   * Returns the date value for January 1 of the given year.
-   * The year is expressed in years since year zero (17999 BC), starting from 0.
-   */
-  private def getDateFromYear(absoluteYear: Int): SQLDate = {
-    val absoluteDays = (absoluteYear * 365 + absoluteYear / 400 - absoluteYear / 100
-      + absoluteYear / 4)
-    absoluteDays - toYearZero
-  }
-
-  /**
    * Add date and year-month interval.
    * Returns a date value, expressed in days since 1.1.1970.
    */
   def dateAddMonths(days: SQLDate, months: Int): SQLDate = {
-    val (year, monthInYear, dayOfMonth, daysToMonthEnd) = splitDate(days)
-    val absoluteMonth = (year - YearZero) * 12 + monthInYear - 1 + months
-    val nonNegativeMonth = if (absoluteMonth >= 0) absoluteMonth else 0
-    val currentMonthInYear = nonNegativeMonth % 12
-    val currentYear = nonNegativeMonth / 12
-
-    val leapDay = if (currentMonthInYear == 1 && isLeap(currentYear + YearZero)) 1 else 0
-    val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
-
-    val currentDayInMonth = if (daysToMonthEnd == 0 || dayOfMonth >= lastDayOfMonth) {
-      // last day of the month
-      lastDayOfMonth
-    } else {
-      dayOfMonth
-    }
-    firstDayOfMonth(nonNegativeMonth) + currentDayInMonth - 1
+    LocalDate.ofEpochDay(days).plusMonths(months).toEpochDay.toInt
   }
 
   /**
