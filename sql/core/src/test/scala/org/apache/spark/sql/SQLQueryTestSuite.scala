@@ -259,6 +259,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         // vol used by udf-case.sql.
         localSparkSession.udf.register("vol", (s: String) => s)
         registerTestUDF(udfTestCase.udf, localSparkSession)
+        // UDF ported PostgreSQL tests partially. Keep matched.
+        localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.ANSI_SQL_PARSER.key, true)
       case _: PgSQLTestCase =>
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
