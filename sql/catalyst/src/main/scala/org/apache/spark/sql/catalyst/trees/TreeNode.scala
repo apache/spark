@@ -319,7 +319,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
-    if (children.nonEmpty) {
+    if (containsChild.nonEmpty) {
       mapChildren(f, forceCopy = false)
     } else {
       this

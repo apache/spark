@@ -149,7 +149,7 @@ public class ExternalShuffleBlockResolverSuite {
 
   private void assertPathsMatch(String p1, String p2, String p3, String expectedPathname) {
     String normPathname =
-      ExternalShuffleBlockResolver.createNormalizedInternedPathname(p1, p2, p3);
+      ExecutorDiskUtils.createNormalizedInternedPathname(p1, p2, p3);
     assertEquals(expectedPathname, normPathname);
     File file = new File(normPathname);
     String returnedPath = file.getPath();
