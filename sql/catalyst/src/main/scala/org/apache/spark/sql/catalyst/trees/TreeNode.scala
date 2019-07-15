@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 
 import java.util.UUID
 
-import scala.collection.{mutable, Map}
+import scala.collection.Map
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -88,18 +88,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
    */
-  private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
+  private val tags = new java.util.concurrent.ConcurrentHashMap[TreeNodeTag[_], Any]()
 
   protected def copyTagsFrom(other: BaseType): Unit = {
-    tags ++= other.tags
+    tags.putAll(other.tags)
   }
 
   def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
-    tags(tag) = value
+    tags.put(tag, value)
   }
 
   def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
-    tags.get(tag).map(_.asInstanceOf[T])
+    Option(tags.get(tag)).map(_.asInstanceOf[T])
   }
 
   /**
@@ -287,7 +287,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       mapChildren(_.transformDown(rule))
     } else {
       // If the transform function replaces this node with a new one, carry over the tags.
-      afterRule.tags ++= this.tags
+      afterRule.copyTagsFrom(this)
       afterRule.mapChildren(_.transformDown(rule))
     }
   }
@@ -311,7 +311,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       }
     }
     // If the transform function replaces this node with a new one, carry over the tags.
-    newNode.tags ++= this.tags
+    newNode.copyTagsFrom(this)
     newNode
   }
 
