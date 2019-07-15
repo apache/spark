@@ -187,7 +187,7 @@ case class IsNotNull(attribute: String) extends Filter {
  */
 @Stable
 case class And(left: Filter, right: Filter) extends Filter {
-  override def sql: String = s"${left.sql} AND ${right.sql}"
+  override def sql: String = s"(${left.sql}) AND (${right.sql})"
   override def references: Array[String] = left.references ++ right.references
 }
 
@@ -198,7 +198,7 @@ case class And(left: Filter, right: Filter) extends Filter {
  */
 @Stable
 case class Or(left: Filter, right: Filter) extends Filter {
-  override def sql: String = s"${left.sql} OR ${right.sql}"
+  override def sql: String = s"(${left.sql}) OR (${right.sql})"
   override def references: Array[String] = left.references ++ right.references
 }
 
@@ -209,7 +209,7 @@ case class Or(left: Filter, right: Filter) extends Filter {
  */
 @Stable
 case class Not(child: Filter) extends Filter {
-  override def sql: String = s"NOT ${child.sql}"
+  override def sql: String = s"NOT (${child.sql})"
   override def references: Array[String] = child.references
 }
 
