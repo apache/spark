@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{InSubquery, ListQuery}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
@@ -48,5 +48,24 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
 
     val optimized = Optimize.execute(outerQuery)
     assert(optimized.resolved)
+  }
+
+  test("SPARK-28375 this rule should not remove predicates for multiple runs") {
+    val correlatedSubquery =
+      testRelation2
+      .where('b < 'd)
+      .select('c)
+    val outerQuery =
+      testRelation
+      .where(InSubquery(Seq('a), ListQuery(correlatedSubquery)))
+      .select('a).analyze
+    assert(outerQuery.resolved)
+
+    val optimized = Optimize.execute(outerQuery)
+    val doubleOptimized = Optimize.execute(optimized)
+
+    val listQuery = doubleOptimized.collect { case x: Filter => x }.head.condition
+      .asInstanceOf[InSubquery].query
+    assert(listQuery.children.nonEmpty)
   }
 }
