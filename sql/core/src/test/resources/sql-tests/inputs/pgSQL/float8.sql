@@ -48,10 +48,10 @@ SELECT double('N A N');
 SELECT double('NaN x');
 SELECT double(' INFINITY    x');
 
--- [SPARK-28060] Double type can not accept some special inputs
 SELECT double('Infinity') + 100.0;
+-- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
 SELECT double('Infinity') / double('Infinity');
-SELECT double('nan') / double('nan');
+SELECT double('NaN') / double('NaN');
 SELECT double(decimal('nan'));
 
 SELECT '' AS five, * FROM FLOAT8_TBL;
@@ -180,16 +180,16 @@ SELECT '' AS bad, f.f1 * '1e200' from UPDATED_FLOAT8_TBL f;
 
 SELECT '' AS five, * FROM UPDATED_FLOAT8_TBL;
 
--- [SPARK-28133] Missing hyperbolic functions
 -- hyperbolic functions
 -- we run these with extra_float_digits = 0 too, since different platforms
 -- tend to produce results that vary in the last place.
--- SELECT sinh(float8 '1');
--- SELECT cosh(float8 '1');
--- SELECT tanh(float8 '1');
--- SELECT asinh(float8 '1');
--- SELECT acosh(float8 '2');
--- SELECT atanh(float8 '0.5');
+SELECT sinh(double('1'));
+SELECT cosh(double('1'));
+SELECT tanh(double('1'));
+SELECT asinh(double('1'));
+SELECT acosh(double('2'));
+SELECT atanh(double('0.5'));
+-- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
 -- test Inf/NaN cases for hyperbolic functions
 -- SELECT sinh(float8 'infinity');
 -- SELECT sinh(float8 '-infinity');
