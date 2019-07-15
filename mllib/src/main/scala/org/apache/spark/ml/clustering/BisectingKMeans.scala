@@ -108,15 +108,9 @@ class BisectingKMeansModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf((vector: Vector) => predict(vector))
-      dataset.withColumn($(predictionCol),
-        predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
-    } else {
-      this.logWarning(s"$uid: BisectingKMeansModel.transform() does nothing" +
-        " because no output columns were set.")
-      dataset.toDF()
-    }
+    val predictUDF = udf((vector: Vector) => predict(vector))
+    dataset.withColumn($(predictionCol),
+      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
   }
 
   @Since("2.0.0")

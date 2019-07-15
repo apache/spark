@@ -305,25 +305,19 @@ class ALSModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
-    if ($(predictionCol).nonEmpty) {
-      // create a new column named map(predictionCol) by running the predict UDF.
-      val predictions = dataset
-        .join(userFactors,
-          checkedCast(dataset($(userCol))) === userFactors("id"), "left")
-        .join(itemFactors,
-          checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
-        .select(dataset("*"),
-          predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
-      getColdStartStrategy match {
-        case ALSModel.Drop =>
-          predictions.na.drop("all", Seq($(predictionCol)))
-        case ALSModel.NaN =>
-          predictions
-      }
-    } else {
-      this.logWarning(s"$uid: ALSModel.transform() does nothing" +
-        " because no output columns were set.")
-      dataset.toDF()
+    // create a new column named map(predictionCol) by running the predict UDF.
+    val predictions = dataset
+      .join(userFactors,
+        checkedCast(dataset($(userCol))) === userFactors("id"), "left")
+      .join(itemFactors,
+        checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
+      .select(dataset("*"),
+        predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
+    getColdStartStrategy match {
+      case ALSModel.Drop =>
+        predictions.na.drop("all", Seq($(predictionCol)))
+      case ALSModel.NaN =>
+        predictions
     }
   }
 

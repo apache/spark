@@ -461,17 +461,10 @@ abstract class LDAModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    if ($(topicDistributionCol).nonEmpty) {
-      val func = getTopicDistributionMethod
-      val transformer = udf(func)
-
-      dataset.withColumn($(topicDistributionCol),
-        transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
-    } else {
-      logWarning("LDAModel.transform() does nothing " +
-        "because no output columns were set.")
-      dataset.toDF()
-    }
+    val func = getTopicDistributionMethod
+    val transformer = udf(func)
+    dataset.withColumn($(topicDistributionCol),
+      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
   }
 
   /**
