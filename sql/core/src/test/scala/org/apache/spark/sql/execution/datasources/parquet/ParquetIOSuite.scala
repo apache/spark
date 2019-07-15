@@ -475,7 +475,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       val extraOptions = Map(
         SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
-        "spark.sql.parquet.output.committer.class" ->
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
           classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
       )
       withTempPath { dir =>
@@ -505,7 +505,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       // Using a output committer that always fail when committing a task, so that both
       // `commitTask()` and `abortTask()` are invoked.
       val extraOptions = Map[String, String](
-        "spark.sql.parquet.output.committer.class" ->
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
           classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
       )
 

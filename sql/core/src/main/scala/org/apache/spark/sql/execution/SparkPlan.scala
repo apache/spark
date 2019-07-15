@@ -409,12 +409,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       return new Array[InternalRow](0)
     }
 
-    val childRDD = getByteArrayRdd(n).map(_._2)
+    val childRDD = getByteArrayRdd(n)
 
     val buf = new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
     var partsScanned = 0
-    while (buf.size < n && partsScanned < totalParts) {
+    while (buf.length < n && partsScanned < totalParts) {
       // The number of partitions to try in this iteration. It is ok for this number to be
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1L
@@ -426,28 +426,32 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
-          val left = n - buf.size
+          val left = n - buf.length
           // As left > 0, numPartsToTry is always >= 1
-          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.size).toInt
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.length).toInt
           numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
       }
 
       val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
       val sc = sqlContext.sparkContext
-      val res = sc.runJob(childRDD,
-        (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty[Byte], p)
+      val res = sc.runJob(childRDD, (it: Iterator[(Long, Array[Byte])]) =>
+        if (it.hasNext) it.next() else (0L, Array.empty[Byte]), p)
 
-      buf ++= res.flatMap(decodeUnsafeRows)
-
+      var i = 0
+      while (buf.length < n && i < res.length) {
+        val rows = decodeUnsafeRows(res(i)._2)
+        val rowsToTake = if (n - buf.length >= res(i)._1) {
+          rows.toArray
+        } else {
+          rows.take(n - buf.length).toArray
+        }
+        buf ++= rowsToTake
+        i += 1
+      }
       partsScanned += p.size
     }
-
-    if (buf.size > n) {
-      buf.take(n).toArray
-    } else {
-      buf.toArray
-    }
+    buf.toArray
   }
 
   protected def newMutableProjection(

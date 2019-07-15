@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
+import org.apache.spark.sql.execution.adaptive.rule.ReduceNumShufflePartitions
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
@@ -82,6 +83,9 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
+    ReduceNumShufflePartitions(conf),
+    ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
+      session.sessionState.columnarRules),
     CollapseCodegenStages(conf)
   )
 

@@ -162,7 +162,8 @@ public class CalendarIntervalSuite {
     assertEquals(fromDayTimeString(input), i);
 
     input = "10 0:12:0.888";
-    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE);
+    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE +
+      888 * MICROS_PER_MILLI);
     assertEquals(fromDayTimeString(input), i);
 
     input = "-3 0:0:0";
@@ -183,6 +184,14 @@ public class CalendarIntervalSuite {
       fail("Expected to throw an exception for the invalid input");
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("not match day-time format"));
+    }
+
+    try {
+      input = "5 1:12:20";
+      fromDayTimeString(input, "hour", "microsecond");
+      fail("Expected to throw an exception for the invalid convention type");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("Cannot support (interval"));
     }
   }
 

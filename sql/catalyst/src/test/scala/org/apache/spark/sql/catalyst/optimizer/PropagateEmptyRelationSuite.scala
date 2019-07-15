@@ -35,7 +35,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PruneFilters,
         PropagateEmptyRelation,
         CollapseProject) :: Nil
@@ -48,7 +48,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PruneFilters,
         CollapseProject) :: Nil
   }
