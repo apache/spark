@@ -186,8 +186,6 @@ case class InMemoryRelation(
       cacheBuilder,
       outputOrdering)
 
-  override def producedAttributes: AttributeSet = outputSet
-
   @transient val partitionStatistics = new PartitionStatistics(output)
 
   def cachedPlan: SparkPlan = cacheBuilder.cachedPlan

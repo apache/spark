@@ -27,9 +27,12 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SecurityManager, SparkConf, TestUtils}
+import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
@@ -184,11 +187,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       val args = Seq(
         "--name", "prepare testing tables",
         "--master", "local[2]",
-        "--conf", "spark.ui.enabled=false",
-        "--conf", "spark.master.rest.enabled=false",
-        "--conf", "spark.sql.hive.metastore.version=1.2.1",
-        "--conf", "spark.sql.hive.metastore.jars=maven",
-        "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
+        "--conf", s"${UI_ENABLED.key}=false",
+        "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+        "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
         tempPyFile.getCanonicalPath)
@@ -203,11 +206,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
       "--master", "local[2]",
-      "--conf", "spark.ui.enabled=false",
-      "--conf", "spark.master.rest.enabled=false",
-      "--conf", "spark.sql.hive.metastore.version=1.2.1",
-      "--conf", "spark.sql.hive.metastore.jars=maven",
-      "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
+      "--conf", s"${UI_ENABLED.key}=false",
+      "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+      "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
       unusedJar.toString)
     runSparkSubmit(args)
