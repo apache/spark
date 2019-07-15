@@ -79,10 +79,6 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       Python code:
 
       scaler = RobustScaler(with_centering=False, with_scaling=True).fit(X)
-      >>> scaler.center_
-      array([ 2., -2.])
-      >>> scaler.scale_
-      array([2., 2.])
       >>> scaler.transform(X)
       array([[ 0. ,  0. ],
              [ 0.5, -0.5],
@@ -102,10 +98,6 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       Python code:
 
       scaler = RobustScaler(with_centering=True, with_scaling=True).fit(X)
-      >>> scaler.center_
-      array([ 2., -2.])
-      >>> scaler.scale_
-      array([2., 2.])
       >>> scaler.transform(X)
       array([[-1. ,  1. ],
             [-0.5,  0.5],
