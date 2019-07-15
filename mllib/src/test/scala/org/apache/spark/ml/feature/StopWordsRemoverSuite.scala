@@ -204,15 +204,17 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("SPARK-28365: Fallback to en_US if default locale isn't in available locales") {
-    val dummyLocale = Locale.forLanguageTag("test")
     val oldDefault = Locale.getDefault()
-    Locale.setDefault(dummyLocale)
+    try {
+      val dummyLocale = Locale.forLanguageTag("test")
+      Locale.setDefault(dummyLocale)
 
-    val remover = new StopWordsRemover()
-      .setInputCol("raw")
-      .setOutputCol("filtered")
-    assert(remover.getLocale == "en_US")
-
-    Locale.setDefault(oldDefault)
+      val remover = new StopWordsRemover()
+        .setInputCol("raw")
+        .setOutputCol("filtered")
+      assert(remover.getLocale == "en_US")
+    } finally {
+      Locale.setDefault(oldDefault)
+    }
   }
 }

@@ -90,7 +90,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
    * Locale of the input for case insensitive matching. Ignored when [[caseSensitive]]
    * is true.
    * Default: the string of default locale (`Locale.getDefault`), or `Locale.US` if default locale
-   * isn't in available locales in JVM.
+   * is not in available locales in JVM.
    * @group param
    */
   @Since("2.4.0")
@@ -107,7 +107,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   def getLocale: String = $(locale)
 
   /**
-   * Returns system default locale, or `Locale.US` if the default locale isn't in available locales
+   * Returns system default locale, or `Locale.US` if the default locale is not in available locales
    * in JVM.
    */
   private val getDefaultOrUS: Locale = {
