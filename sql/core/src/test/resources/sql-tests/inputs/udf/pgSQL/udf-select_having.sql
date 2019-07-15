@@ -2,11 +2,10 @@
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 --
--- This test file was converted from inputs/pgSQL/select_having.sql
---
 -- SELECT_HAVING
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/select_having.sql
 --
+-- This test file was converted from inputs/pgSQL/select_having.sql
 
 -- load test data
 CREATE TABLE test_having (a int, b int, c string, d string) USING parquet;
@@ -48,8 +47,8 @@ SELECT udf(a) FROM test_having HAVING udf(min(a)) < udf(max(a));
 SELECT 1 AS one FROM test_having HAVING udf(a) > 1;
 
 -- the really degenerate case: need not scan table at all
-SELECT 1 AS one FROM test_having HAVING 1 > 2;
-SELECT 1 AS one FROM test_having HAVING 1 < 2;
+SELECT 1 AS one FROM test_having HAVING udf(1 > 2);
+SELECT 1 AS one FROM test_having HAVING udf(1 < 2);
 
 -- and just to prove that we aren't scanning the table:
 SELECT 1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2;

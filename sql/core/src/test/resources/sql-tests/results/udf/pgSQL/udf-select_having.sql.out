@@ -156,7 +156,7 @@ cannot resolve '`a`' given input columns: [one]; line 1 pos 44
 
 
 -- !query 18
-SELECT 1 AS one FROM test_having HAVING 1 > 2
+SELECT 1 AS one FROM test_having HAVING udf(1 > 2)
 -- !query 18 schema
 struct<one:int>
 -- !query 18 output
@@ -164,7 +164,7 @@ struct<one:int>
 
 
 -- !query 19
-SELECT 1 AS one FROM test_having HAVING 1 < 2
+SELECT 1 AS one FROM test_having HAVING udf(1 < 2)
 -- !query 19 schema
 struct<one:int>
 -- !query 19 output
