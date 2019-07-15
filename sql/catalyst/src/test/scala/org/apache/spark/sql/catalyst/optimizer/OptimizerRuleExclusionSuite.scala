@@ -96,21 +96,21 @@ class OptimizerRuleExclusionSuite extends PlanTest {
     val optimizer = new SimpleTestOptimizer() {
       override def defaultBatches: Seq[Batch] =
         Batch("push", Once,
-          PushDownPredicate,
+          PushPredicateThroughNonJoin,
           PushPredicateThroughJoin,
           PushProjectionThroughUnion) ::
         Batch("pull", Once,
           PullupCorrelatedPredicates) :: Nil
 
       override def nonExcludableRules: Seq[String] =
-        PushDownPredicate.ruleName ::
+        PushPredicateThroughNonJoin.ruleName ::
           PullupCorrelatedPredicates.ruleName :: Nil
     }
 
     verifyExcludedRules(
       optimizer,
       Seq(
-        PushDownPredicate.ruleName,
+        PushPredicateThroughNonJoin.ruleName,
         PushProjectionThroughUnion.ruleName,
         PullupCorrelatedPredicates.ruleName))
   }

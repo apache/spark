@@ -35,7 +35,7 @@ class LeftSemiPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         BooleanSimplification,

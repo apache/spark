@@ -88,6 +88,12 @@ class TestInMemoryTableCatalog extends TableCatalog {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
         val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+
+        // fail if the last column in the schema was dropped
+        if (schema.fields.isEmpty) {
+          throw new IllegalArgumentException(s"Cannot drop all fields")
+        }
+
         val newTable = new InMemoryTable(table.name, schema, properties, table.data)
 
         tables.put(ident, newTable)
