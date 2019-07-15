@@ -30,6 +30,9 @@ SELECT DISTINCT string4 FROM tmp ORDER BY 1;
 -- awk '{print $3,$16,$5;}' onek.data | sort -d | uniq |
 -- sort +0n -1 +1d -2 +2n -3
 --
+-- SELECT DISTINCT two, string4, ten
+--    FROM tmp
+--    ORDER BY two using <, string4 using <, ten using <;
 SELECT DISTINCT two, string4, ten
    FROM tmp
    ORDER BY two ASC, string4 ASC, ten ASC;
