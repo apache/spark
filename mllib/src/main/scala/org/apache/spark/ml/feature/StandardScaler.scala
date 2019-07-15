@@ -160,8 +160,10 @@ class StandardScalerModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val shift = mean.toArray
-    val scale = std.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
+    val shift = if ($(withMean)) mean.toArray else Array.emptyDoubleArray
+    val scale = if ($(withStd)) {
+      std.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
+    } else Array.emptyDoubleArray
 
     val func = getTransformFunc(shift, scale, $(withMean), $(withStd))
     val transformer = udf(func)

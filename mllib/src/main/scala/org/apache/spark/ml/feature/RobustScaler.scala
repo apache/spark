@@ -226,8 +226,10 @@ class RobustScalerModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    val shift = median.toArray
-    val scale = range.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
+    val shift = if ($(withCentering)) median.toArray else Array.emptyDoubleArray
+    val scale = if ($(withScaling)) {
+      range.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
+    } else Array.emptyDoubleArray
 
     val func = StandardScalerModel.getTransformFunc(shift, scale,
       $(withCentering), $(withScaling))
