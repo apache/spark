@@ -908,7 +908,6 @@ class JDBCSuite extends QueryTest
       metadata).get == FloatType)
   }
 
-
   test("table exists query by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
