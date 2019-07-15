@@ -29,8 +29,8 @@ struct<>
 
 -- !query 2
 create or replace temporary view FLOAT8_TBL as select * from
-  (values (0.0), (1004.30), (-34.84),
-    (cast('1.2345678901234e+200' as double)), (cast('1.2345678901234e-200' as double)))
+  (values (0.0), (-34.84), (-1004.30),
+    (cast('-1.2345678901234e+200' as double)), (cast('-1.2345678901234e-200' as double)))
   as v(f1)
 -- !query 2 schema
 struct<>
@@ -201,11 +201,11 @@ ORDER BY 1
 -- !query 20 schema
 struct<five:double>
 -- !query 20 output
+-1.2345678901234E200
+-1004.3
 -34.84
+-1.2345678901234E-200
 0.0
-1.2345678901234E-200
-1004.3
-1.2345678901234E200
 
 
 -- !query 21
@@ -215,16 +215,16 @@ SELECT f1 FROM FLOAT8_TBL
 -- !query 21 schema
 struct<ten:double>
 -- !query 21 output
+-1.2345678901234E-200
+-1.2345678901234E-200
+-1.2345678901234E200
+-1.2345678901234E200
+-1004.3
+-1004.3
 -34.84
 -34.84
 0.0
 0.0
-1.2345678901234E-200
-1.2345678901234E-200
-1.2345678901234E200
-1.2345678901234E200
-1004.3
-1004.3
 
 
 -- !query 22
@@ -235,15 +235,15 @@ ORDER BY 1
 -- !query 22 schema
 struct<nine:double>
 -- !query 22 output
+-1.2345678901234E200
 -2.147483647E9
 -123456.0
+-1004.3
 -34.84
+-1.2345678901234E-200
 0.0
-1.2345678901234E-200
-1004.3
 123456.0
 2.147483647E9
-1.2345678901234E200
 
 
 -- !query 23
@@ -253,14 +253,14 @@ SELECT f1 FROM INT4_TBL
 -- !query 23 schema
 struct<ten:double>
 -- !query 23 output
+-1.2345678901234E-200
+-1.2345678901234E200
+-1004.3
 -123456.0
 -2.147483647E9
 -34.84
 0.0
 0.0
-1.2345678901234E-200
-1.2345678901234E200
-1004.3
 123456.0
 2.147483647E9
 
@@ -275,10 +275,10 @@ ORDER BY 1
 -- !query 24 schema
 struct<five:double>
 -- !query 24 output
+-1004.3
 -34.84
+-1.2345678901234E-200
 0.0
-1.2345678901234E-200
-1004.3
 123456.0
 
 
@@ -435,10 +435,10 @@ SELECT f1 FROM float8_tbl EXCEPT SELECT f1 FROM int4_tbl ORDER BY 1
 -- !query 42 schema
 struct<f1:double>
 -- !query 42 output
+-1.2345678901234E200
+-1004.3
 -34.84
-1.2345678901234E-200
-1004.3
-1.2345678901234E200
+-1.2345678901234E-200
 
 
 -- !query 43

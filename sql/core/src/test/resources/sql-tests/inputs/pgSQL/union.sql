@@ -18,8 +18,8 @@ create or replace temporary view INT8_TBL as select * from
     (4567890123456789, -4567890123456789))
   as v(q1, q2);
 create or replace temporary view FLOAT8_TBL as select * from
-  (values (0.0), (1004.30), (-34.84),
-    (cast('1.2345678901234e+200' as double)), (cast('1.2345678901234e-200' as double)))
+  (values (0.0), (-34.84), (-1004.30),
+    (cast('-1.2345678901234e+200' as double)), (cast('-1.2345678901234e-200' as double)))
   as v(f1);
 
 -- Simple UNION constructs
