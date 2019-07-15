@@ -6,6 +6,7 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/numeric.sql
 --
 
+-- [SPARK-28318] Decimal can only support precision up to 38. We rewrite numeric(210,10) to decimal(38,10).
 CREATE TABLE num_data (id int, val decimal(38,10)) USING parquet;
 CREATE TABLE num_exp_add (id1 int, id2 int, expected decimal(38,10)) USING parquet;
 CREATE TABLE num_exp_sub (id1 int, id2 int, expected decimal(38,10)) USING parquet;
