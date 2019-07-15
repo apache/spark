@@ -344,6 +344,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     String ipAddress = getIpAddress();
     TProtocolVersion protocol = getMinVersion(CLIService.SERVER_VERSION,
         req.getClient_protocol());
+    res.setServerProtocolVersion(protocol);
     SessionHandle sessionHandle;
     if (cliService.getHiveConf().getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
         (userName != null)) {
@@ -354,7 +355,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       sessionHandle = cliService.openSession(protocol, userName, req.getPassword(),
           ipAddress, req.getConfiguration());
     }
-    res.setServerProtocolVersion(protocol);
     return sessionHandle;
   }
 
