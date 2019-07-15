@@ -44,7 +44,7 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordCo
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    canChangeNumPartition: Boolean = true) extends Exchange {
+    canChangeNumPartitions: Boolean = true) extends Exchange {
 
   // NOTE: coordinator can be null after serialization/deserialization,
   //       e.g. it can be null on the Executor side

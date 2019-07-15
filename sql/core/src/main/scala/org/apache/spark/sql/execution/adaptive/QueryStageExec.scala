@@ -140,8 +140,6 @@ case class ShuffleQueryStageExec(
       case _ =>
     }
   }
-
-  def canChangeNumPartition: Boolean = plan.canChangeNumPartition
 }
 
 /**

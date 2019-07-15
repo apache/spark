@@ -580,7 +580,7 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
       val resultDf = ds.repartition(2, ds.col("id")).toDF()
 
       checkAnswer(resultDf,
-        Seq((0), (1), (2)).map(i => Row(i)))
+        Seq(0, 1, 2).map(i => Row(i)))
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 0)
