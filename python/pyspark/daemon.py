@@ -160,7 +160,15 @@ def manager():
                 if pid == 0:
                     # in child process
                     listen_sock.close()
-                    stdin_bin.close()
+
+                    # close stdin for child process, see SPARK-26175
+                    # but we cannot just close it, because it make fileno "0" unallocated
+                    # and cause later new created file descriptor use fileno "0"
+                    # so here I close fd 0 and reopen it on "/dev/null"
+                    dummy_input = open(os.devnull, 'r')
+                    os.dup2(dummy_input.fileno(), 0)
+                    dummy_input.close()
+
                     try:
                         # Acknowledge that the fork was successful
                         outfile = sock.makefile(mode="wb")
