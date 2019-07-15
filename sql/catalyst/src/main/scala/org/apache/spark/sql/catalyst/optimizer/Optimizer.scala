@@ -147,7 +147,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
-    Batch("Pullup Correlated Expressions", Once,
+    Batch("Pullup Correlated Expressions", FixedPoint(1),
       PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
       OptimizeSubqueries) ::
