@@ -1792,7 +1792,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
 
-    def addRemoteJarFile(path: String): String = {
+    def checkRemoteJarFile(path: String): String = {
       val hadoopPath = new Path(path)
       val scheme = new URI(path).getScheme
       if (!Array("http", "https", "ftp").contains(scheme)) {
@@ -1835,7 +1835,7 @@ class SparkContext(config: SparkConf) extends Logging {
           case "file" => addLocalJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
           case "local" => "file:" + uri.getPath
-          case _ => addRemoteJarFile(path)
+          case _ => checkRemoteJarFile(path)
         }
       }
       if (key != null) {
