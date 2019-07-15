@@ -136,22 +136,49 @@ class StandardScalerModel @Since("1.3.0") (
   @Since("1.1.0")
   override def transform(vector: Vector): Vector = {
     require(mean.size == vector.size)
-    // By default, Scala generates Java methods for member variables. So every time when
-    // the member variables are accessed, `invokespecial` will be called which is expensive.
-    // This can be avoid by having a local reference of `shift`.
-    val localShift = if (withMean) shift else Array.emptyDoubleArray
-    val localScale = if (withStd) scale else Array.emptyDoubleArray
-    val func = NewStandardScalerModel.getTransformFunc(localShift, localScale, withMean, withStd)
-    val (newSize, newIndices, newValues) = vector match {
-      case DenseVector(values) =>
-        func(values.length, Array.emptyIntArray, values)
-      case SparseVector(size, indices, values) =>
-        func(size, indices, values)
-    }
-    if (newSize == newValues.length) {
-      Vectors.dense(newValues)
-    } else {
-      Vectors.sparse(newSize, newIndices, newValues)
+
+    (withMean, withStd) match {
+      case (true, true) =>
+        // By default, Scala generates Java methods for member variables. So every time when
+        // the member variables are accessed, `invokespecial` will be called which is expensive.
+        // This can be avoid by having a local reference of `shift`.
+        val localShift = shift
+        val localScale = scale
+        val values = vector match {
+          // specially handle DenseVector because its toArray does not clone already
+          case d: DenseVector => d.values.clone()
+          case v: Vector => v.toArray
+        }
+        val newValues = NewStandardScalerModel
+          .transformWithBoth(localShift, localScale, values)
+        Vectors.dense(newValues)
+
+      case (true, false) =>
+        val localShift = shift
+        val values = vector match {
+          case d: DenseVector => d.values.clone()
+          case v: Vector => v.toArray
+        }
+        val newValues = NewStandardScalerModel
+          .transformWithShift(localShift, values)
+        Vectors.dense(newValues)
+
+      case (false, true) =>
+        val localScale = scale
+        vector match {
+          case DenseVector(values) =>
+            val newValues = NewStandardScalerModel
+              .transformDenseWithScale(localScale, values.clone())
+            Vectors.dense(newValues)
+          case SparseVector(size, indices, values) =>
+            // For sparse vector, the `index` array inside sparse vector object will not be changed,
+            // so we can re-use it to save memory.
+            val newValues = NewStandardScalerModel
+              .transformSparseWithScale(localScale, indices, values.clone())
+            Vectors.sparse(size, indices, newValues)
+        }
+
+      case _ => vector
     }
   }
 }

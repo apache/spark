@@ -28,32 +28,47 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   @transient var data: Array[Vector] = _
-  @transient var resWithStd: Array[Vector] = _
-  @transient var resWithMean: Array[Vector] = _
+  @transient var resWithScaling: Array[Vector] = _
+  @transient var resWithCentering: Array[Vector] = _
   @transient var resWithBoth: Array[Vector] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
+    // median = [2.0, -2.0]
+    // 1st quartile = [1.0, -2.0]
+    // 3st quartile = [3.0, -1.0]
+    // IQR = [2.0, 2.0]
     data = Array(
-      Vectors.dense(-2.0, 2.3, 0.0),
-      Vectors.dense(0.0, -5.1, 1.0),
-      Vectors.dense(1.7, -0.6, 3.3)
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(1.0, -1.0),
+      Vectors.dense(2.0, -2.0),
+      Vectors.dense(3.0, -3.0),
+      Vectors.dense(4.0, -4.0)
     )
-    resWithMean = Array(
-      Vectors.dense(-1.9, 3.433333333333, -1.433333333333),
-      Vectors.dense(0.1, -3.966666666667, -0.433333333333),
-      Vectors.dense(1.8, 0.533333333333, 1.866666666667)
+
+    resWithCentering = Array(
+      Vectors.dense(-2.0, 2.0),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(1.0, -1.0),
+      Vectors.dense(2.0, -2.0)
     )
-    resWithStd = Array(
-      Vectors.dense(-1.079898494312, 0.616834091415, 0.0),
-      Vectors.dense(0.0, -1.367762550529, 0.590968109266),
-      Vectors.dense(0.917913720165, -0.160913241239, 1.950194760579)
+
+    resWithScaling = Array(
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(0.5, -0.5),
+      Vectors.dense(1.0, -1.0),
+      Vectors.dense(1.5, -1.5),
+      Vectors.dense(2.0, -2.0)
     )
+
     resWithBoth = Array(
-      Vectors.dense(-1.0259035695965, 0.920781324866, -0.8470542899497),
-      Vectors.dense(0.0539949247156, -1.063815317078, -0.256086180682),
-      Vectors.dense(0.9719086448809, 0.143033992212, 1.103140470631)
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-0.5, 0.5),
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(0.5, -0.5),
+      Vectors.dense(1.0, -1.0)
     )
   }
 
@@ -61,7 +76,7 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
   def assertResult: Row => Unit = {
     case Row(vector1: Vector, vector2: Vector) =>
       assert(vector1 ~== vector2 absTol 1E-5,
-        "The vector value is not correct after standardization.")
+        "The vector value is not correct after transformation.")
   }
 
   test("params") {
@@ -71,66 +86,64 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Scaling with default parameter") {
-    val df0 = data.zip(resWithStd).toSeq.toDF("features", "expected")
+    val df0 = data.zip(resWithScaling).toSeq.toDF("features", "expected")
 
-    val standardScalerEst0 = new StandardScaler()
+    val robustScalerEst0 = new RobustScaler()
       .setInputCol("features")
-      .setOutputCol("standardized_features")
-    val standardScaler0 = standardScalerEst0.fit(df0)
-    MLTestingUtils.checkCopyAndUids(standardScalerEst0, standardScaler0)
+      .setOutputCol("scaled_features")
+    val robustScaler0 = robustScalerEst0.fit(df0)
+    MLTestingUtils.checkCopyAndUids(robustScalerEst0, robustScaler0)
 
-    testTransformer[(Vector, Vector)](df0, standardScaler0, "standardized_features", "expected")(
+    testTransformer[(Vector, Vector)](df0, robustScaler0, "scaled_features", "expected")(
       assertResult)
   }
 
   test("Scaling with setter") {
     val df1 = data.zip(resWithBoth).toSeq.toDF("features", "expected")
-    val df2 = data.zip(resWithMean).toSeq.toDF("features", "expected")
+    val df2 = data.zip(resWithCentering).toSeq.toDF("features", "expected")
     val df3 = data.zip(data).toSeq.toDF("features", "expected")
 
-    val standardScaler1 = new StandardScaler()
+    val robustScaler1 = new RobustScaler()
       .setInputCol("features")
-      .setOutputCol("standardized_features")
-      .setWithMean(true)
-      .setWithStd(true)
+      .setOutputCol("scaled_features")
+      .setWithCentering(true)
+      .setWithScaling(true)
       .fit(df1)
 
-    val standardScaler2 = new StandardScaler()
+    val robustScaler2 = new RobustScaler()
       .setInputCol("features")
-      .setOutputCol("standardized_features")
-      .setWithMean(true)
-      .setWithStd(false)
+      .setOutputCol("scaled_features")
+      .setWithCentering(true)
+      .setWithScaling(false)
       .fit(df2)
 
-    val standardScaler3 = new StandardScaler()
+    val robustScaler3 = new RobustScaler()
       .setInputCol("features")
-      .setOutputCol("standardized_features")
-      .setWithMean(false)
-      .setWithStd(false)
+      .setOutputCol("scaled_features")
+      .setWithCentering(false)
+      .setWithScaling(false)
       .fit(df3)
 
-    testTransformer[(Vector, Vector)](df1, standardScaler1, "standardized_features", "expected")(
+    testTransformer[(Vector, Vector)](df1, robustScaler1, "scaled_features", "expected")(
       assertResult)
-    testTransformer[(Vector, Vector)](df2, standardScaler2, "standardized_features", "expected")(
+    testTransformer[(Vector, Vector)](df2, robustScaler2, "scaled_features", "expected")(
       assertResult)
-    testTransformer[(Vector, Vector)](df3, standardScaler3, "standardized_features", "expected")(
+    testTransformer[(Vector, Vector)](df3, robustScaler3, "scaled_features", "expected")(
       assertResult)
   }
 
-  test("sparse data and withMean") {
-    val someSparseData = Array(
-      Vectors.sparse(3, Array(0, 1), Array(-2.0, 2.3)),
-      Vectors.sparse(3, Array(1, 2), Array(-5.1, 1.0)),
-      Vectors.dense(1.7, -0.6, 3.3)
-    )
-    val df = someSparseData.zip(resWithMean).toSeq.toDF("features", "expected")
-    val standardScaler = new StandardScaler()
+  test("sparse data and withCentering") {
+    val someSparseData = data.zipWithIndex.map {
+      case (vec, i) => if (i % 2 == 0) vec.toSparse else vec
+    }
+    val df = someSparseData.zip(resWithCentering).toSeq.toDF("features", "expected")
+    val robustScaler = new RobustScaler()
       .setInputCol("features")
-      .setOutputCol("standardized_features")
-      .setWithMean(true)
-      .setWithStd(false)
+      .setOutputCol("scaled_features")
+      .setWithCentering(true)
+      .setWithScaling(false)
       .fit(df)
-    testTransformer[(Vector, Vector)](df, standardScaler, "standardized_features", "expected")(
+    testTransformer[(Vector, Vector)](df, robustScaler, "scaled_features", "expected")(
       assertResult)
   }
 

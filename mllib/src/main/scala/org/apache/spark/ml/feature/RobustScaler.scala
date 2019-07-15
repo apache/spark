@@ -25,8 +25,6 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature.{StandardScalerModel => OldStandardScalerModel}
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
@@ -233,19 +231,7 @@ class RobustScalerModel private[ml] (
 
     val func = StandardScalerModel.getTransformFunc(shift, scale,
       $(withCentering), $(withScaling))
-    val transformer = udf { vector: Vector =>
-      val (newSize, newIndices, newValues) = vector match {
-        case DenseVector(values) =>
-          func(values.length, Array.emptyIntArray, values)
-        case SparseVector(size, indices, values) =>
-          func(size, indices, values)
-      }
-      if (newSize == newValues.length) {
-        Vectors.dense(newValues)
-      } else {
-        Vectors.sparse(newSize, newIndices, newValues)
-      }
-    }
+    val transformer = udf(func)
 
     dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
@@ -288,7 +274,7 @@ object RobustScalerModel extends MLReadable[RobustScalerModel] {
       val data = sparkSession.read.parquet(dataPath)
       val Row(range: Vector, median: Vector) = MLUtils
         .convertVectorColumnsToML(data, "range", "median")
-        .select("std", "mean")
+        .select("range", "median")
         .head()
       val model = new RobustScalerModel(metadata.uid, range, median)
       metadata.getAndSetParams(model)
