@@ -37,10 +37,11 @@ import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => 
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
+trait DataSourceScanExec extends LeafExecNode {
   val relation: BaseRelation
   val tableIdentifier: Option[TableIdentifier]
 
@@ -69,6 +70,12 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   private def redact(text: String): String = {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
+
+  /**
+   * The data being read in.  This is to provide input to the tests in a way compatible with
+   * [[InputRDDCodegen]] which all implementations used to extend.
+   */
+  def inputRDDs(): Seq[RDD[InternalRow]]
 }
 
 /** Physical plan node for scanning data from a relation. */
@@ -141,11 +148,11 @@ case class FileSourceScanExec(
     optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec with ColumnarBatchScan  {
+  extends DataSourceScanExec {
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
-  override lazy val supportsBatch: Boolean = {
+  override lazy val supportsColumnar: Boolean = {
     relation.fileFormat.supportBatch(relation.sparkSession, schema)
   }
 
@@ -275,7 +282,7 @@ case class FileSourceScanExec(
       Map(
         "Format" -> relation.fileFormat.toString,
         "ReadSchema" -> requiredSchema.catalogString,
-        "Batched" -> supportsBatch.toString,
+        "Batched" -> supportsColumnar.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedDownFilters),
         "DataFilters" -> seqToString(dataFilters),
@@ -302,7 +309,7 @@ case class FileSourceScanExec(
     withSelectedBucketsCount
   }
 
-  private lazy val inputRDD: RDD[InternalRow] = {
+  lazy val inputRDD: RDD[InternalRow] = {
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
@@ -334,29 +341,30 @@ case class FileSourceScanExec(
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (supportsBatch) {
-      // in the case of fallback, this batched scan should never fail because of:
-      // 1) only primitive types are supported
-      // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
-      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
-    } else {
-      val numOutputRows = longMetric("numOutputRows")
+    val numOutputRows = longMetric("numOutputRows")
 
-      if (needsUnsafeRowConversion) {
-        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
-          val proj = UnsafeProjection.create(schema)
-          proj.initialize(index)
-          iter.map( r => {
-            numOutputRows += 1
-            proj(r)
-          })
-        }
-      } else {
-        inputRDD.map { r =>
+    if (needsUnsafeRowConversion) {
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        val proj = UnsafeProjection.create(schema)
+        proj.initialize(index)
+        iter.map( r => {
           numOutputRows += 1
-          r
-        }
+          proj(r)
+        })
       }
+    } else {
+      inputRDD.map { r =>
+        numOutputRows += 1
+        r
+      }
+    }
+  }
+
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val numOutputRows = longMetric("numOutputRows")
+    inputRDD.asInstanceOf[RDD[ColumnarBatch]].map { batch =>
+      numOutputRows += batch.numRows()
+      batch
     }
   }
 

@@ -121,7 +121,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     withTempDir { tempDir =>
       withTable("t1") {
         spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
-        val dataSize = getDataSize(tempDir)
+        val dataSize = getLocalDirSize(tempDir)
         spark.sql(
           s"""
              |CREATE EXTERNAL TABLE t1(id BIGINT)

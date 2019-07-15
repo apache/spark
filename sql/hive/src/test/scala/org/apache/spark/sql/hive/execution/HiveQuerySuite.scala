@@ -1190,19 +1190,20 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-28054: Unable to insert partitioned table when partition name is upper case") {
-    withTable("spark_28054_test") {
-      sql("set hive.exec.dynamic.partition.mode=nonstrict")
-      sql("CREATE TABLE spark_28054_test (KEY STRING, VALUE STRING) PARTITIONED BY (DS STRING)")
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("spark_28054_test") {
+        sql("CREATE TABLE spark_28054_test (KEY STRING, VALUE STRING) PARTITIONED BY (DS STRING)")
 
-      sql("INSERT INTO TABLE spark_28054_test PARTITION(DS) SELECT 'k' KEY, 'v' VALUE, '1' DS")
+        sql("INSERT INTO TABLE spark_28054_test PARTITION(DS) SELECT 'k' KEY, 'v' VALUE, '1' DS")
 
-      assertResult(Array(Row("k", "v", "1"))) {
-        sql("SELECT * from spark_28054_test").collect()
-      }
+        assertResult(Array(Row("k", "v", "1"))) {
+          sql("SELECT * from spark_28054_test").collect()
+        }
 
-      sql("INSERT INTO TABLE spark_28054_test PARTITION(ds) SELECT 'k' key, 'v' value, '2' ds")
-      assertResult(Array(Row("k", "v", "1"), Row("k", "v", "2"))) {
-        sql("SELECT * from spark_28054_test").collect()
+        sql("INSERT INTO TABLE spark_28054_test PARTITION(ds) SELECT 'k' key, 'v' value, '2' ds")
+        assertResult(Array(Row("k", "v", "1"), Row("k", "v", "2"))) {
+          sql("SELECT * from spark_28054_test").collect()
+        }
       }
     }
   }
