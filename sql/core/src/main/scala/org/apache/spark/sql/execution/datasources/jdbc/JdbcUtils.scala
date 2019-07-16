@@ -75,14 +75,14 @@ object DefaultConnectionFactoryProvider extends ConnectionFactoryProvider {
  */
 object JdbcUtils extends Logging {
   /**
-    * Returns a factory for creating connections to the given JDBC URL.
-    * You can provide a custom factory by setting the classname in JDBCOptions
-    * using JDBCOption.JDBC_CONNECTION_FACTORY_PROVIDER. This class must implement
-    * the ConnectionFactoryProvider trait. If not specified DefaultConnectionFactoryProvider
-    * will be used.
-    *
-    * @param options - JDBC options that contains url, table and other information.
-    */
+   * Returns a factory for creating connections to the given JDBC URL.
+   * You can provide a custom factory by setting the classname in JDBCOptions
+   * using JDBCOption.JDBC_CONNECTION_FACTORY_PROVIDER. This class must implement
+   * the ConnectionFactoryProvider trait. If not specified DefaultConnectionFactoryProvider
+   * will be used.
+   *
+   * @param options - JDBC options that contains url, table and other information.
+   */
   def createConnectionFactory(options: JDBCOptions): () => Connection = {
     options.connectionFactoryProvider.createConnectionFactory(options)
   }
