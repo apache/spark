@@ -229,12 +229,13 @@ SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1)))
 -- explain (costs off)
 -- select from generate_series(1,5) intersect select from generate_series(1,3);
 
--- select from generate_series(1,5) union select from generate_series(1,3);
--- select from generate_series(1,5) union all select from generate_series(1,3);
--- select from generate_series(1,5) intersect select from generate_series(1,3);
--- select from generate_series(1,5) intersect all select from generate_series(1,3);
--- select from generate_series(1,5) except select from generate_series(1,3);
--- select from generate_series(1,5) except all select from generate_series(1,3);
+-- [SPARK-28409] SELECT FROM syntax
+select * from range(1,5) union select * from range(1,3);
+select * from range(1,6) union all select * from range(1,4);
+select * from range(1,6) intersect select * from range(1,4);
+select * from range(1,6) intersect all select * from range(1,4);
+select * from range(1,6) except select * from range(1,4);
+select * from range(1,6) except all select * from range(1,4);
 
 -- check sorted implementation
 -- set enable_hashagg = false;
@@ -245,12 +246,12 @@ SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1)))
 -- explain (costs off)
 -- select from generate_series(1,5) intersect select from generate_series(1,3);
 
--- select from generate_series(1,5) union select from generate_series(1,3);
--- select from generate_series(1,5) union all select from generate_series(1,3);
--- select from generate_series(1,5) intersect select from generate_series(1,3);
--- select from generate_series(1,5) intersect all select from generate_series(1,3);
--- select from generate_series(1,5) except select from generate_series(1,3);
--- select from generate_series(1,5) except all select from generate_series(1,3);
+select * from range(1,6) union select * from range(1,4);
+select * from range(1,6) union all select * from range(1,4);
+select * from range(1,6) intersect select * from range(1,4);
+select * from range(1,6) intersect all select * from range(1,4);
+select * from range(1,6) except select * from range(1,4);
+select * from range(1,6) except all select * from range(1,4);
 
 -- reset enable_hashagg;
 -- reset enable_sort;
