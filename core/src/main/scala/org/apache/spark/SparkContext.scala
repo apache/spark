@@ -553,22 +553,6 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
 
-    // Optionally scale number of executors dynamically based on workload. Exposed for testing.
-    val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
-    _executorAllocationManager =
-      if (dynamicAllocationEnabled) {
-        schedulerBackend match {
-          case b: ExecutorAllocationClient =>
-            Some(new ExecutorAllocationManager(
-              schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf))
-          case _ =>
-            None
-        }
-      } else {
-        None
-      }
-    _executorAllocationManager.foreach(_.start())
-
     _cleaner =
       if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
         Some(new ContextCleaner(this))
@@ -576,6 +560,22 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
     _cleaner.foreach(_.start())
+
+    val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
+    _executorAllocationManager =
+      if (dynamicAllocationEnabled) {
+        schedulerBackend match {
+          case b: ExecutorAllocationClient =>
+            Some(new ExecutorAllocationManager(
+              schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
+              cleaner = cleaner))
+          case _ =>
+            None
+        }
+      } else {
+        None
+      }
+    _executorAllocationManager.foreach(_.start())
 
     setupAndStartListenerBus()
     postEnvironmentUpdate()
