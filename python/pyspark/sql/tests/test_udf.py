@@ -616,6 +616,20 @@ class UDFTests(ReusedSQLTestCase):
 
         self.spark.range(1).select(f()).collect()
 
+    def test_worker_original_stdin_closed(self):
+        # Test the original stdin of worker inherit from daemon is closed
+        # and is replaced with '/dev/null'.
+        # See SPARK-26175
+        def task(iterator):
+            import sys
+            res = sys.stdin.read()
+            # Because the stdin is replaced with '/dev/null'
+            # Read data from it will get EOF
+            assert res == '', "Expect read EOF from stdin."
+            return iterator
+
+        self.sc.parallelize(range(1), 1).mapPartitions(task).count()
+
 
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
