@@ -462,13 +462,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal(1)), null)
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    // Valid range of DateType is [0001-01-01, 9999-12-31]
+    val maxMonthInterval = 10000 * 12
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(Int.MinValue)), -7293498)
+      AddMonths(Literal(Date.valueOf("0001-01-01")), Literal(maxMonthInterval)), 2933261)
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 1014213)
-    checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -980528)
-    checkConsistencyBetweenInterpretedAndCodegen(AddMonths, DateType, IntegerType)
+      AddMonths(Literal(Date.valueOf("9999-12-31")), Literal(-1 * maxMonthInterval)), -719529)
+    // Test evaluation results between Interpreted mode and Codegen mode
+    forAll (
+      LiteralGenerator.randomGen(DateType),
+      LiteralGenerator.monthIntervalLiterGen
+    ) { (l1: Literal, l2: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, AddMonths(l1, l2))
+    }
   }
 
   test("months_between") {
