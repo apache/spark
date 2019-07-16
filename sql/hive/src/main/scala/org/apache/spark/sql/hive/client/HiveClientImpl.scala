@@ -181,6 +181,13 @@ private[hive] class HiveClientImpl(
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
     SessionState.start(state)
+    // SPARK-21067: Initialize the HdfsEncryptionShim and the underlying FileSystem(FS) eagerly.
+    // The underlying FS is cached and shared among sessions if the sessions request for FS with
+    // the same schema, authority and ugi. If we don't do this, the initialization of the FS will
+    // be delayed to when one session call `getHdfsEncryptionShim` explicitly. However the FS is
+    // auto-closable, which would be closed when the session is closed. The subsequent sessions use
+    // the same FS will throw "Filesystem closed Exception".
+    state.getHdfsEncryptionShim
     state.out = new PrintStream(outputBuffer, true, "UTF-8")
     state.err = new PrintStream(outputBuffer, true, "UTF-8")
     state
