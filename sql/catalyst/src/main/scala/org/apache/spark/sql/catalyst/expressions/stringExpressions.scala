@@ -472,6 +472,19 @@ object Overlay {
     builder.append(input.substringSQL(pos + length, Int.MaxValue))
     builder.build()
   }
+
+  def calculate(input: Array[Byte], replace: Array[Byte], pos: Int, len: Int): Array[Byte] = {
+    // If you specify length, it must be a positive whole number or zero.
+    // Otherwise it will be ignored.
+    // The default value for length is the length of replace.
+    val length = if (len >= 0) {
+      len
+    } else {
+      replace.length
+    }
+    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
+      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -496,19 +509,28 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     this(str, replace, pos, Literal.create(-1, IntegerType))
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = input.dataType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, StringType, IntegerType, IntegerType)
+    Seq(input.dataType, replace.dataType, IntegerType, IntegerType)
 
   override def children: Seq[Expression] = input :: replace :: pos :: len :: Nil
 
   override def nullSafeEval(inputEval: Any, replaceEval: Any, posEval: Any, lenEval: Any): Any = {
-    val inputStr = inputEval.asInstanceOf[UTF8String]
-    val replaceStr = replaceEval.asInstanceOf[UTF8String]
-    val position = posEval.asInstanceOf[Int]
-    val length = lenEval.asInstanceOf[Int]
-    Overlay.calculate(inputStr, replaceStr, position, length)
+    input.dataType match {
+      case StringType =>
+        val inputStr = inputEval.asInstanceOf[UTF8String]
+        val replaceStr = replaceEval.asInstanceOf[UTF8String]
+        val position = posEval.asInstanceOf[Int]
+        val length = lenEval.asInstanceOf[Int]
+        Overlay.calculate(inputStr, replaceStr, position, length)
+      case BinaryType =>
+        val inputArr = inputEval.asInstanceOf[Array[Byte]]
+        val replaceArr = replaceEval.asInstanceOf[Array[Byte]]
+        val position = posEval.asInstanceOf[Int]
+        val length = lenEval.asInstanceOf[Int]
+        Overlay.calculate(inputArr, replaceArr, position, length)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

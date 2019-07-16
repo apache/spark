@@ -428,7 +428,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
-  test("overlay") {
+  test("overlay for string") {
     checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
       Literal.create(6, IntegerType)), "Spark_SQL")
     checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("CORE"),
@@ -449,6 +449,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     checkEvaluation(new Overlay(Literal("Spark的SQL"), Literal("_"),
       Literal.create(6, IntegerType)), "Spark_SQL")
+    // scalastyle:on
+  }
+
+  test("overlay for byte array") {
+    checkEvaluation(new Overlay(Literal("Spark SQL".getBytes), Literal("_".getBytes),
+      Literal.create(6, IntegerType)), "Spark_SQL".getBytes)
+    checkEvaluation(new Overlay(Literal("Spark SQL".getBytes), Literal("CORE".getBytes),
+      Literal.create(7, IntegerType)), "Spark CORE".getBytes)
+    checkEvaluation(Overlay(Literal("Spark SQL".getBytes), Literal("ANSI ".getBytes),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), "Spark ANSI SQL".getBytes)
+    checkEvaluation(Overlay(Literal("Spark SQL".getBytes), Literal("tructured".getBytes),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), "Structured SQL".getBytes)
+    checkEvaluation(new Overlay(Literal.create(null, BinaryType), Literal("_".getBytes),
+      Literal.create(6, IntegerType)), null)
+    checkEvaluation(new Overlay(Literal.create(null, BinaryType), Literal("CORE".getBytes),
+      Literal.create(7, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, BinaryType), Literal("ANSI ".getBytes),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, BinaryType), Literal("tructured".getBytes),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), null)
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(new Overlay(Literal("Spark的SQL".getBytes), Literal("_".getBytes),
+      Literal.create(6, IntegerType)), "Spark_SQL".getBytes)
     // scalastyle:on
   }
 

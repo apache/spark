@@ -1428,6 +1428,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitOverlay(ctx: OverlayContext): Expression = withOrigin(ctx) {
     val input = expression(ctx.input)
     val replace = expression(ctx.replace)
+    (input.dataType, replace.dataType) match {
+      case (StringType, StringType) | (BinaryType, BinaryType) =>
+      case (inputType, replaceType) =>
+        throw new ParseException(s"Invalid data type $inputType and $replaceType. " +
+          "The result type of the input expression and the output expression are " +
+          "either String or Byte Array.", ctx)
+    }
     val position = expression(ctx.position)
     val lengthOpt = Option(ctx.length).map(expression)
     lengthOpt match {

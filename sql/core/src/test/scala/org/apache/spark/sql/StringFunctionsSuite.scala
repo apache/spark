@@ -129,7 +129,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("AQIDBA==", bytes))
   }
 
-  test("overlay function") {
+  test("string overlay function") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val df = Seq(("Spark SQL", "Spark的SQL")).toDF("a", "b")
@@ -138,6 +138,18 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(overlay($"a", "ANSI ", 7, 0)), Row("Spark ANSI SQL"))
     checkAnswer(df.select(overlay($"a", "tructured", 2, 4)), Row("Structured SQL"))
     checkAnswer(df.select(overlay($"b", "_", 6)), Row("Spark_SQL"))
+    // scalastyle:on
+  }
+
+  test("binary overlay function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("Spark SQL".getBytes, "Spark的SQL".getBytes)).toDF("a", "b")
+    checkAnswer(df.select(overlay($"a", "_", 6)), Row("Spark_SQL".getBytes))
+    checkAnswer(df.select(overlay($"a", "CORE", 7)), Row("Spark CORE".getBytes))
+    checkAnswer(df.select(overlay($"a", "ANSI ", 7, 0)), Row("Spark ANSI SQL".getBytes))
+    checkAnswer(df.select(overlay($"a", "tructured", 2, 4)), Row("Structured SQL".getBytes))
+    checkAnswer(df.select(overlay($"b", "_", 6)), Row("Spark_SQL".getBytes))
     // scalastyle:on
   }
 
