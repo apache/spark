@@ -422,8 +422,11 @@ private[kafka010] class KafkaOffsetReader(
     val startTimeMs = System.currentTimeMillis()
     while (partitions.isEmpty && System.currentTimeMillis() - startTimeMs < pollTimeoutMs) {
       // Poll to get the latest assigned partitions
-      consumer.poll(jt.Duration.ofMillis(100))
+      consumer.poll(jt.Duration.ZERO)
       partitions = consumer.assignment()
+      if (partitions.isEmpty) {
+        Thread.sleep(100)
+      }
     }
     require(!partitions.isEmpty)
     logDebug(s"Partitions assigned to consumer: $partitions")
