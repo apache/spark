@@ -191,25 +191,25 @@ SELECT acosh(double('2'));
 SELECT atanh(double('0.5'));
 -- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
 -- test Inf/NaN cases for hyperbolic functions
--- SELECT sinh(float8 'infinity');
--- SELECT sinh(float8 '-infinity');
--- SELECT sinh(float8 'nan');
--- SELECT cosh(float8 'infinity');
--- SELECT cosh(float8 '-infinity');
--- SELECT cosh(float8 'nan');
--- SELECT tanh(float8 'infinity');
--- SELECT tanh(float8 '-infinity');
--- SELECT tanh(float8 'nan');
--- SELECT asinh(float8 'infinity');
--- SELECT asinh(float8 '-infinity');
--- SELECT asinh(float8 'nan');
+SELECT sinh(double('Infinity'));
+SELECT sinh(double('-Infinity'));
+SELECT sinh(double('NaN'));
+SELECT cosh(double('Infinity'));
+SELECT cosh(double('-Infinity'));
+SELECT cosh(double('NaN'));
+SELECT tanh(double('Infinity'));
+SELECT tanh(double('-Infinity'));
+SELECT tanh(double('NaN'));
+SELECT asinh(double('Infinity'));
+SELECT asinh(double('-Infinity'));
+SELECT asinh(double('NaN'));
 -- acosh(Inf) should be Inf, but some mingw versions produce NaN, so skip test
--- SELECT acosh(float8 'infinity');
--- SELECT acosh(float8 '-infinity');
--- SELECT acosh(float8 'nan');
--- SELECT atanh(float8 'infinity');
--- SELECT atanh(float8 '-infinity');
--- SELECT atanh(float8 'nan');
+SELECT acosh(double('Infinity'));
+SELECT acosh(double('-Infinity'));
+SELECT acosh(double('NaN'));
+SELECT atanh(double('Infinity'));
+SELECT atanh(double('-Infinity'));
+SELECT atanh(double('NaN'));
 
 -- RESET extra_float_digits;
 
