@@ -21,17 +21,15 @@ import java.util.{Locale, OptionalLong}
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.config.IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 abstract class FileScan(
