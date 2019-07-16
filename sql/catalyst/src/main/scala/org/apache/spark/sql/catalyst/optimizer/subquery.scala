@@ -275,16 +275,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     plan transformExpressions {
       case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        val conds = newCond ++ children.filter(_.isInstanceOf[Predicate])
-        ScalarSubquery(newPlan, conds, exprId)
+        ScalarSubquery(newPlan, newCond, exprId)
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        val conds = newCond ++ children.filter(_.isInstanceOf[Predicate])
-        Exists(newPlan, conds, exprId)
-      case ListQuery(sub, children, exprId, childOutputs) =>
+        Exists(newPlan, newCond, exprId)
+      case ListQuery(sub, children, exprId, childOutputs) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        val conds = newCond ++ children.filter(_.isInstanceOf[Predicate])
-        ListQuery(newPlan, conds, exprId, childOutputs)
+        ListQuery(newPlan, newCond, exprId, childOutputs)
     }
   }
 
